@@ -49,7 +49,28 @@ from core.models.sound_box import TRANSITION_CUT
 
 # Les rendus gardés : assez pour les états d'une boîte, pas pour chaque cran d'un curseur.
 _TRACK_CACHE = 12
-_SINK_BUFFER_SECONDS = 0.05      # le tampon de la carte son : plus court, le scrub colle au geste ; trop court, il craque
+GBA_OUTPUT_RATE = 32768          # Hz — la cadence à laquelle la GBA (et mGBA) échantillonne la sortie de son mixeur
+
+def _output_kernel() -> np.ndarray:
+    """Deux passe-bas du premier ordre en cascade, à 9 250 Hz sur la grille de sortie, en réponse impulsionnelle tronquée.
+
+    Mesuré le 2026-11-01 : le bruit blanc joué par une ROM dans mGBA 0.10.5 perd 0,3 dB à 1 kHz, 2,4 à 7 kHz et 7 dB à 15 kHz
+    par rapport à la même sortie tenue à 32 768 Hz ; ce modèle reste à ±1 dB de ces mesures (musiques et bruit)."""
+    a = 1.0 - np.exp(-2.0 * np.pi * 9250.0 / GBA_OUTPUT_RATE)
+    pole = a * (1.0 - a) ** np.arange(16)
+    return np.convolve(pole, pole)[:24].astype(np.float32)
+
+
+_OUTPUT_KERNEL = _output_kernel()
+_ROM_OUTPUT_STEP = 256            # un pas de la sortie 8 bits du mixeur, en unités du rendu int16 (la pleine échelle des deux coïncide)
+
+
+def _to_rom_output(pcm: np.ndarray) -> np.ndarray:
+    """La sortie du mixeur de maxmod : ce qu'il somme (en 16 bits) est tronqué vers le bas à 8 bits SIGNÉS et borné à −128..127
+    (`asrs` puis bornes, en fin de `mmMixerMix`) avant de partir au DMA. Les canaux sont déjà sommés ici : un seul passage."""
+    steps = np.clip(pcm.astype(np.int32) >> 8, -128, 127)
+    return (steps * _ROM_OUTPUT_STEP).astype(np.int16)
+_SINK_BUFFER_SECONDS = 0.05    # le tampon de la carte son : plus court, le scrub colle au geste ; trop court, il craque
 _SCOPE_TAIL = 8192               # trames gardées derrière le deck pour l'oscilloscope : de quoi couvrir l'avance sur l'oreille
 
 
@@ -95,6 +116,11 @@ class _DeckDevice(QIODevice):
         # Les dernières trames tirées, pour l'oscilloscope de l'écran Son. Le thread audio REMPLACE ce tableau d'un
         # bloc (jamais il ne l'écrit en place) : l'interface en lit une référence, sans verrou.
         self.tail = np.zeros((0, 2), dtype=np.int16)
+        self._out_frames = 0                                   # trames de sortie (32 768 Hz) déjà rendues
+        self._held = np.zeros((0, 2), dtype=np.int16)          # trames du deck tirées et pas encore dépassées
+        self._held_base = 0                                    # l'indice (depuis l'ouverture) de la première de `_held`
+        self.eight_bit = False                                 # option d'écoute : la sortie du mixeur de la ROM, sur 8 bits (cf. `_to_rom_output`)
+        self._smooth_tail = np.zeros((_OUTPUT_KERNEL.size - 1, 2), dtype=np.float32)   # les dernières trames tenues, pour le lissage
 
     def isSequential(self) -> bool:
         return True
@@ -108,17 +134,38 @@ class _DeckDevice(QIODevice):
         if n <= 0:
             return b""
         was_playing = self._deck.playing
-        try:
-            pcm = self._deck.pull(n)
-        except Exception:
-            # Ici on est dans le thread audio : une exception qui remonterait à Qt arrêterait tout le programme.
-            traceback.print_exc(file=sys.stderr)
-            pcm = np.zeros((n, 2), dtype=np.int16)
-        self.pulled_frames += pcm.shape[0]
+        # La console échantillonne la sortie de son mixeur à 32 768 Hz et tient chaque échantillon jusqu'au suivant
+        # (pas d'interpolation) : la trame de sortie `o` rend la trame du deck qui vient d'être jouée à cet instant.
+        index = (np.arange(self._out_frames, self._out_frames + n, dtype=np.int64) * GBA_MIX_RATE) // GBA_OUTPUT_RATE
+        need = int(index[-1]) + 1 - self.pulled_frames
+        if need > 0:
+            try:
+                pcm = self._deck.pull(need)
+            except Exception:
+                # Ici on est dans le thread audio : une exception qui remonterait à Qt arrêterait tout le programme.
+                traceback.print_exc(file=sys.stderr)
+                pcm = np.zeros((need, 2), dtype=np.int16)
+            if self.eight_bit:
+                pcm = _to_rom_output(pcm)
+            self._held = np.concatenate((self._held, pcm))
+            self.pulled_frames += pcm.shape[0]
+            self.tail = np.concatenate((self.tail, pcm))[-_SCOPE_TAIL:]
         if was_playing:
             self.sound_frames = self.pulled_frames
-        self.tail = np.concatenate((self.tail, pcm))[-_SCOPE_TAIL:]
-        return pcm.tobytes()
+        out = self._held[index - self._held_base]
+        self._out_frames += n
+        keep = int(index[-1])                       # la prochaine trame de sortie ne remonte jamais avant celle-ci
+        self._held, self._held_base = self._held[keep - self._held_base:], keep
+        return self._smooth(out).tobytes()
+
+    def _smooth(self, block: np.ndarray) -> np.ndarray:
+        """Le lissage que mGBA applique à la sortie de la console (mesuré sur sa sortie : cf. `_OUTPUT_KERNEL`). Un FIR court,
+        donc sans état récursif : seules les dernières trames du bloc précédent se gardent."""
+        wide = np.concatenate((self._smooth_tail, block.astype(np.float32)))
+        taps = _OUTPUT_KERNEL.size
+        out = np.stack([np.convolve(wide[:, c], _OUTPUT_KERNEL)[taps - 1:taps - 1 + block.shape[0]] for c in range(2)], axis=1)
+        self._smooth_tail = wide[-(taps - 1):]
+        return np.clip(np.rint(out), -32768, 32767).astype(np.int16)
 
     def writeData(self, data) -> int:
         return 0
@@ -137,20 +184,22 @@ class _AudioOutput(QObject):
         self._timer: Optional[QTimer] = None
         # Publiés pour l'interface, qui ne touche pas à la carte son depuis son thread.
         self.queued_frames = 0          # tiré du deck mais pas encore joué
+        self.eight_bit = False          # l'option d'écoute, reprise par chaque périphérique à son ouverture
         self.published = False          # `queued_frames` a été mesuré depuis l'ouverture (avant, il vaut 0 par défaut, pas par mesure)
         self.active = False
 
     @pyqtSlot(float)
     def open(self, volume: float):
         fmt = QAudioFormat()
-        fmt.setSampleRate(GBA_MIX_RATE)
+        fmt.setSampleRate(GBA_OUTPUT_RATE)
         fmt.setChannelCount(2)
         fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
         self._sink = QAudioSink(QMediaDevices.defaultAudioOutput(), fmt)
         # Un tampon court : ce qu'on entend suit le geste (scrub, saut) au lieu de traîner derrière lui.
-        self._sink.setBufferSize(round(GBA_MIX_RATE * _SINK_BUFFER_SECONDS) * 4)
+        self._sink.setBufferSize(round(GBA_OUTPUT_RATE * _SINK_BUFFER_SECONDS) * 4)
         self._sink.setVolume(volume)
         self._device = _DeckDevice(self._deck)
+        self._device.eight_bit = self.eight_bit
         self._device.open(QIODevice.OpenModeFlag.ReadOnly)
         self._sink.start(self._device)
         self._timer = QTimer(self)
@@ -173,6 +222,11 @@ class _AudioOutput(QObject):
             self._device.close()
             self._device = None
         self.queued_frames = 0
+
+    def set_eight_bit(self, on: bool) -> None:
+        self.eight_bit = bool(on)
+        if self._device is not None:
+            self._device.eight_bit = self.eight_bit
 
     @pyqtSlot(float)
     def set_volume(self, volume: float):
@@ -242,7 +296,15 @@ class BoxPlayer(QObject):
         self._previewed = None       # (asset, section) que l'aperçu joue, ou None
         self._hold = None            # (seconde, échantillon d'atterrissage) : la tête s'affiche là tant que le saut ne s'entend pas
         self._last_seek = None       # (ordre, ligne) où le dernier saut a posé la tête : un glisser n'en relance pas le même
+        self._eight_bit = False      # option d'écoute : la sortie du mixeur sur 8 bits (cf. `_to_rom_output`)
         self._original_rate = False  # écoute A/B d'un effet : le fichier à son propre taux, sans le taux de la ROM
+
+    def set_eight_bit(self, on: bool) -> None:
+        """Option d'écoute : le son passe par la sortie 8 bits du mixeur de la ROM (bruit de quantification et écrêtage compris).
+        Éteinte par défaut ; ne change que l'aperçu, jamais le build."""
+        self._eight_bit = bool(on)
+        if self._output is not None:
+            self._output.set_eight_bit(on)
 
     def set_original_rate(self, on: bool) -> None:
         """Écoute A/B du taux (cf. `SfxEditor`) : les effets se rendent au taux de leur FICHIER au lieu de celui du build,
@@ -295,6 +357,7 @@ class BoxPlayer(QObject):
             self._thread = QThread()
             self._thread.setObjectName("backstage-audio")
             self._output = _AudioOutput(self._deck)
+            self._output.eight_bit = self._eight_bit
             self._output.moveToThread(self._thread)
             blocking = Qt.ConnectionType.BlockingQueuedConnection
             self._output_open.connect(self._output.open, blocking)
@@ -349,7 +412,7 @@ class BoxPlayer(QObject):
         if isinstance(asset, Sfx) and asset.pitch_variation:
             # Chaque ▶ d'un effet à variation tire sa hauteur, comme `sfx_play` à chaque lecture sur la console.
             played = replace(asset, pitch=varied_pitch(asset))
-        track = self._live_track(project, played)
+        track = self._live_track(project, played, bounded=section is not None)
         if track is None:
             return False
         if not self.running:
@@ -429,9 +492,11 @@ class BoxPlayer(QObject):
             track.reference = self._track_of_asset(project, replace(asset, loop_section=section.name)
                                                    if section is not None else asset)
 
-    def _live_track(self, project, asset) -> Optional[StreamTrack]:
+    def _live_track(self, project, asset, bounded: bool = True) -> Optional[StreamTrack]:
         """Le module de cet asset joué en direct : même fichier, mêmes réglages que le rendu entier, mais produit tick
-        par tick. Le rendu entier (en cache : l'éditeur l'a déjà fait pour dessiner l'onde) lui sert de frise."""
+        par tick. Le rendu entier (en cache : l'éditeur l'a déjà fait pour dessiner l'onde) lui sert de frise.
+        `bounded` faux : la section de boucle de l'asset ne retient pas la lecture, qui suit le morceau d'une traite
+        (aucune section sélectionnée dans l'éditeur)."""
         prepared = self._prepare(project, asset, asset.name)
         reference = self._track_of_asset(project, asset)
         if prepared is None or reference is None:
@@ -446,7 +511,7 @@ class BoxPlayer(QObject):
         return StreamTrack(mod, GBA_MIX_RATE,
                            tempo=(params["tempo_q"] or MODULE_FULL) / MODULE_FULL,
                            pitch=(params["pitch_q"] or MODULE_FULL) / MODULE_FULL,
-                           loop_orders=(start, end) if end > 0 else None, fade_in=fade_in, fade_out=fade_out,
+                           loop_orders=(start, end) if bounded and end > 0 else None, fade_in=fade_in, fade_out=fade_out,
                            reference=reference)
 
     def stop(self):

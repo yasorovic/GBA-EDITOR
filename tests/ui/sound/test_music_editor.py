@@ -407,3 +407,25 @@ def test_un_wav_rogne_ne_fait_pas_defiler_l_ecran_aux_hauteurs_courantes(editor,
     qapp.processEvents()
 
     assert editor._scroll.verticalScrollBar().maximum() == 0, (height, editor._scroll.verticalScrollBar().maximum())
+
+
+def test_la_poignee_de_depart_suit_entre_l_onde_et_la_structure(editor, project):
+    music = _module(project)
+    editor.load(project, music)
+    editor._wave.set_cue(0.0)
+    editor._on_wave_cue(1.0, False, True)                            # posée sur l'onde : la structure la suit
+    order, fraction = editor._playhead_in_order(1.0)
+    assert editor._strip._start == pytest.approx(order + fraction)
+    editor._on_strip_start(3.0, False)                               # posée sur la structure : l'onde la suit
+    order, fraction = editor._playhead_in_order(editor.cue_seconds)
+    assert order + fraction == pytest.approx(3.0, abs=0.05)
+
+
+def test_le_depart_pose_est_retrouve_en_revenant_sur_la_musique(editor, project):
+    first, second = _module(project, "Theme"), _module(project, "Other")
+    editor.load(project, first)
+    editor._on_wave_cue(2.0, False, True)
+    editor.load(project, second)
+    assert editor.cue_seconds == 0.0
+    editor.load(project, first)
+    assert editor.cue_seconds == pytest.approx(2.0)

@@ -90,6 +90,7 @@ class MusicEditor(QWidget):
         self._file_ms = 0                          # la durée du FICHIER WAV entier : l'axe de la barre de découpe
         self._file_peaks: dict = {}                # (chemin, date) -> crêtes du fichier entier, pour la barre de découpe
         self._baked_fades = False                  # un jingle WAV : ses fondus sont cuits dans la piste, donc l'onde se refait
+        self._remembered_cues: dict[str, float] = {}   # nom de la musique -> poignée de départ, le temps de la session
         self._scope = None                         # la `MusicSection` sélectionnée : celle que le ▶ fait boucler ; None = tout le morceau
         self._sections_on = True                   # faux pour un jingle : il ne boucle pas, il n'a pas de section
         self.setStyleSheet(f"background:{C.BG_PANEL};")
@@ -238,6 +239,7 @@ class MusicEditor(QWidget):
         self._strip.cue_context_requested.connect(self._on_cue_menu)
         self._strip.cue_moving.connect(self._on_cue_moving)
         self._strip.cue_moved.connect(self._on_cue_moved)
+        self._strip.start_requested.connect(self._on_strip_start)
         m_lay.addWidget(self._strip)
         s_lay.addWidget(self._strip_zone)
 
@@ -304,10 +306,14 @@ class MusicEditor(QWidget):
         """`sections=False` pour un jingle : on montre la forme d'onde, pas de quoi régler une boucle
         que la ROM ne jouera pas."""
         self.flush_pending()
+        if project is not self._project:
+            self._remembered_cues.clear()
         self._project, self._music, self._sections_on = project, music, sections
         self._wave.set_cue(0.0)
+        self._strip.set_start(0.0)
         self._scope = None
         self.reload()
+        self._restore_cue()
 
     def flush_pending(self) -> None:
         """Une écriture attend son minuteur : elle part maintenant, tant que l'écran vise encore la musique qui l'a causée
@@ -663,6 +669,7 @@ class MusicEditor(QWidget):
                 self._table.load(music, self._duration_ms, UNIT_MS)
         self._strip.set_sections(music.sections)
         self._strip.set_cues(music.cues)
+        self._sync_strip_start()
         self._refresh_bands()
 
     def _refresh_bands(self) -> None:
@@ -901,6 +908,46 @@ class MusicEditor(QWidget):
         elif snap:
             seconds = float(round(seconds))
         self._wave.set_cue(seconds)
+        self._sync_strip_start()
+        if self._music is not None:
+            self._remembered_cues[self._music.name] = self._wave.cue
+
+    def _restore_cue(self) -> None:
+        """Le départ que l'auteur avait posé sur cette musique, tant que l'éditeur est ouvert (rien n'est écrit dans le
+        projet) ; borné à la durée du rendu, que le fichier ait changé entre-temps."""
+        seconds = self._remembered_cues.get(self._music.name, 0.0) if self._music is not None else 0.0
+        if self._track is None or seconds <= 0:
+            return
+        self._wave.set_cue(min(seconds, self._track.pcm.shape[0] / GBA_MIX_RATE))
+        self._sync_strip_start()
+
+    def _on_strip_start(self, position: float, snap: bool) -> None:
+        """La poignée de départ est saisie sur la structure : même geste que sur la règle de l'onde, en ordres (module)
+        ou en millisecondes (WAV)."""
+        if self._track is None:
+            return
+        if self._module is None or not self._sections_on:
+            self._on_wave_cue(position / 1000.0, snap, True)
+            return
+        marks = self._track.marks
+        order = next((o for o in sorted(marks) if o >= int(position)), None)
+        if order is None:
+            return
+        start = marks[order]
+        end = min((m for m in marks.values() if m > start), default=self._track.pcm.shape[0])
+        fraction = position - order if order == int(position) else 0.0
+        self._on_wave_cue((start + fraction * (end - start)) / GBA_MIX_RATE, snap, True)
+
+    def _sync_strip_start(self) -> None:
+        """La poignée de la structure suit celle de l'onde : la même seconde, dans l'unité de la bande."""
+        if self._track is None:
+            return
+        seconds = self._wave.cue
+        if self._module is not None and self._sections_on:
+            order, fraction = self._playhead_in_order(seconds)
+            self._strip.set_start(order + fraction)
+        else:
+            self._strip.set_start(seconds * 1000.0)
 
     # ── Divers ────────────────────────────────────────────────────
 

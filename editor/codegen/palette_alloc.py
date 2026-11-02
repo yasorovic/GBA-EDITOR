@@ -16,7 +16,6 @@ cohérents sans se coordonner explicitement.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -24,6 +23,7 @@ from typing import Optional
 from core.models.palette import OWN_PAL_BANK
 from core.models.scene import Scene, scene_font_pal_bank
 from core.project import Project
+from codegen.layout_cache import layout_memo
 from codegen.oam_alloc import scene_has_model
 from core.models.gba_color import extract_palette_from_image
 from core.models.gba_color import RESERVED_SLOT_COLOR
@@ -31,31 +31,6 @@ from core.palette_presets import DEFAULT_PAL_BANK_COLORS
 
 # Cache des palettes propres, invalidé par mtime du PNG.
 _own_cache: dict[tuple[str, float], list[int]] = {}
-
-# Cache OPTIONNEL de `scene_bank_layout`, à PORTÉE DE CONTEXTE. Éteint par
-# défaut : le build — et tout appelant hors du canvas — recalcule toujours,
-# aucun risque de servir une allocation périmée. Le canvas l'active le seul
-# temps de PRÉ-CHAUFFER les items d'une scène (cf. GBAScene.set_ui_regions) :
-# plusieurs régions d'une même scène partagent alors UNE allocation au lieu
-# d'en refaire une chacune (la résolution des polices y coûte cher). Clé par
-# IDENTITÉ — le contexte ne vit que le temps d'un lot de calculs sur des objets
-# figés, jamais à travers une édition.
-_layout_cache: "dict | None" = None
-
-
-@contextmanager
-def scene_layout_cache():
-    """Active la mémoïsation de `scene_bank_layout` pour la durée du bloc.
-    Réentrant : seul le contexte le plus externe crée et jette le cache."""
-    global _layout_cache
-    outer = _layout_cache
-    if outer is None:
-        _layout_cache = {}
-    try:
-        yield
-    finally:
-        _layout_cache = outer
-
 
 def own_palette(png_path) -> list[int]:
     """Palette propre d'un PNG (couleurs d'origine, index 0 transparent),
@@ -491,15 +466,13 @@ def scene_bank_layout(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
     (1) palettes référencées à leur index fixe ; (2) pour OBJ, palettes propres
     des acteurs, des prefabs QUE LA SCÈNE POOLE (per-scène depuis T1, cf.
     `_scene_prefab_own_palettes`) et des images d'UI, dans les slots libres
-    (dédup par couleurs) ; (3) pour BG, fonds/animés/polices."""
-    # Mémoïsation à portée de contexte (cf. `scene_layout_cache`) : sans contexte
-    # actif, `_layout_cache` est None et rien n'est caché — le build recalcule.
-    if _layout_cache is not None:
-        _ck = (id(p), id(scene), pool)
-        _hit = _layout_cache.get(_ck)
-        if _hit is not None:
-            return _hit
+    (dédup par couleurs) ; (3) pour BG, fonds/animés/polices.
 
+    Mémoïsée à portée de contexte (cf. `layout_cache`) : sans contexte actif, elle recalcule."""
+    return layout_memo("bank", (p, scene), lambda: _allocate_scene_banks(p, scene, pool), (pool,))
+
+
+def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
     # (clé de dédup, contenu de banque) : la clé reste la liste BRUTE — c'est
     # elle que `bank_index` reçoit de ses appelants — mais le contenu écrit dans
     # la banque dépend de la FORME de la source, cf. `_own_bank_content`.
@@ -604,10 +577,7 @@ def scene_bank_layout(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
     if slots[0] is None and overflow:
         slots[0] = list(DEFAULT_PAL_BANK_COLORS)
 
-    layout = SceneBankLayout(slots, own_slot, bg_block)
-    if _layout_cache is not None:
-        _layout_cache[(id(p), id(scene), pool)] = layout
-    return layout
+    return SceneBankLayout(slots, own_slot, bg_block)
 
 
 def scene_font_runtime_banks(p: Project, scene: Scene) -> dict:

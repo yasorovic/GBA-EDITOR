@@ -1145,10 +1145,14 @@ class _KindTree(QTreeWidget):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             ) != QMessageBox.StandardButton.Yes:
                 return
-        get_history().push(RefreshAfterCmd(kind.delete(project, obj), self._panel.refresh))
-        self._panel.refresh()
+        get_history().push(RefreshAfterCmd(kind.delete(project, obj), self._after_delete))
         self._panel.emptied.emit(kind.label)
         get_dispatcher().status(label('assetlibrary.deleted', n=1))
+
+    def _after_delete(self):
+        """La library se relit, et l'onglet Disk avec elle : l'asset supprimé (ou rendu par Ctrl+Z) y change aussi."""
+        self._panel.refresh()
+        get_dispatcher().notify_disk_changed()
 
     def _delete_many(self, objs):
         """Supprime un lot en UNE entrée d'historique (`MacroCmd`) : un seul
@@ -1167,8 +1171,7 @@ class _KindTree(QTreeWidget):
             return
         cmds = [kind.delete(project, o) for o in objs]
         get_history().push(RefreshAfterCmd(
-            MacroCmd(cmds, f"Delete {n} {kind.label.lower()}"), self._panel.refresh))
-        self._panel.refresh()
+            MacroCmd(cmds, f"Delete {n} {kind.label.lower()}"), self._after_delete))
         self._panel.emptied.emit(kind.label)
         get_dispatcher().status(label('assetlibrary.deleted', n=n))
 

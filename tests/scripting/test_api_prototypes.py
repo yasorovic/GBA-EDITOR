@@ -58,6 +58,36 @@ def test_block_from_real_engine_is_complete():
     assert all(d.startswith("extern ") and d.endswith(");") for d in decls)
 
 
+def test_block_equals_per_name_extraction_on_real_engine():
+    """Le bloc est bâti sur un index en une passe ; il doit rendre EXACTEMENT ce que donnerait `extract_prototype` nom
+    par nom sur le vrai moteur et le vrai catalogue (mêmes lignes, même ordre, mêmes illisibles)."""
+    import re
+    from core.app_paths import RUNTIME_DIR
+    from codegen.runtime_codegen.api_prototypes import _CALL, _strip_comments
+    eng = (RUNTIME_DIR / "include" / "gba_engine.h").read_text(encoding="utf-8", errors="ignore")
+    names = exposed_engine_names()
+    src = _strip_comments(eng)
+    want_decls, want_unparsed = [], []
+    for name in sorted(names):
+        d = extract_prototype(src, name)
+        if d:
+            want_decls.append(f"extern {d};")
+        elif re.search(_CALL % re.escape(name), src):
+            want_unparsed.append(name)
+    assert build_prototype_block(eng, names) == (want_decls, want_unparsed)
+
+
+def test_block_skips_calls_and_finds_later_declaration():
+    # La déclaration vient APRÈS un appel : l'index garde toutes les occurrences, dans l'ordre.
+    src = "void other(void){ baz(1); }\nint baz(int n);\n"
+    assert build_prototype_block(src, {"baz", "absent"}) == (["extern int baz(int n);"], [])
+
+
+def test_block_reports_present_but_unreadable_name():
+    # Un nom seulement APPELÉ (jamais déclaré) est signalé, pas ignoré.
+    assert build_prototype_block("void f(void){ g(1); }\n", {"g"}) == ([], ["g"])
+
+
 # ── Les #define d'énums, générés depuis api.py ────────────────────
 def test_enum_defines_couvrent_le_catalogue():
     from scripting.api import hardware_enum_defines

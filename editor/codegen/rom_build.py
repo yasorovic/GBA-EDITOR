@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path, PureWindowsPath
 from typing import Optional
 
@@ -31,6 +32,7 @@ from codegen.grit_conversion import (
     bg_layer_sym, bg_layer_sym_for, bg_map_geometry, bg_map_sbb_count,
     resolve_palette_bank,
 )
+from codegen.layout_cache import scene_layout_cache
 from codegen.palette_alloc import (
     scene_bank_layout, effective_palette_colors, ui_image_sprite_pools,
 )
@@ -46,7 +48,7 @@ from core.models.palette import OWN_PAL_BANK
 from core.models.components import SpriteComponent
 from core.models.sprite import SpriteAsset
 from core.models.scene import Actor
-from core.project import Project
+from core.project import Project, forget_resolved_asset_paths
 from core.diagnostic import build_error, build_warning
 from core.validator import validate_project
 import codegen.build_output as build_output
@@ -210,6 +212,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             self._build_log = None
 
     def run(self):
+        layouts = ExitStack()
         try:
             # Ferme mGBA si encore ouvert (sinon objcopy ne peut pas écraser rom.gba)
             if BuildWorker._mgba_proc and BuildWorker._mgba_proc.poll() is None:
@@ -223,6 +226,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             p = self.project
             build_started = time.monotonic()
             self._open_build_log(p)
+            forget_resolved_asset_paths()    # un build repart de résolutions fraîches (cf. `_resolve_under`)
 
             if not p.scenes:
                 self._emit("diagnostic", build_error("no scene in the project", "build"))
@@ -262,6 +266,9 @@ class BuildWorker(EventEmitter, threading.Thread):
             # seulement (cf. font_emit) : les scripts changent entre deux builds.
             from codegen.font_emit import clear_font_scan_cache
             clear_font_scan_cache()
+            # Les dispositions (banques de palettes, OAM, entrées) sont relues des dizaines de fois par les générateurs :
+            # calculées une fois par build, le projet ne changeant pas pendant qu'il tourne (cf. `layout_cache`).
+            layouts.enter_context(scene_layout_cache())
             sound_assets = self._resolve_sound_assets(p)
 
             # ── Résolution par scène ───────────────────────────────
@@ -550,6 +557,9 @@ class BuildWorker(EventEmitter, threading.Thread):
             self._emit("log_line", f"[build] details are in {crash_log.LOG_FILE} (Help → Open the log"
                                    " folder)")
             self._emit("finished", False)
+
+        finally:
+            layouts.close()
 
     # ── Utilitaires ───────────────────────────────────────────────
 

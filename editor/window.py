@@ -746,6 +746,7 @@ class MainWindow(QMainWindow):
         self._inspector.text_editor_requested.connect(
             lambda: self._switch_screen("Texts"))
         self._inspector.actor_changed.connect(self._on_inspector_actor_changed)
+        self._inspector.project_renamed.connect(self._show_project_name)
         self._inspector.groups_changed.connect(_graph.reload_groups)
         self._inspector.groups_changed.connect(self.scene_library_panel.refresh)
         self._inspector.edge_presentation_changed.connect(
@@ -1153,13 +1154,12 @@ class MainWindow(QMainWindow):
         self._save_indicator.set_saved(not self._has_pending_changes())
 
     def _open_project_settings(self):
-        """Menu Game → Project Settings — cartouche, audio, debug build,
-        transition par défaut, langues, collisions (`ProjectSettingsDialog`,
-        même squelette que `SettingsDialog`). L'identité du projet (auteur,
-        version, scène de départ, backdrop) reste dans `ProjectInspector`,
-        visible en permanence dans le Scene Manager quand rien n'est
-        sélectionné : ce n'est pas un réglage qu'on va chercher, c'est ce
-        qu'on garde sous les yeux."""
+        """Menu Game → Project Settings — général (nom, auteur, version, scène de
+        départ), cartouche, audio, debug build, transition par défaut, langues,
+        collisions (`ProjectSettingsDialog`, même squelette que `SettingsDialog`).
+        L'identité du projet reste aussi dans `ProjectInspector`, visible en
+        permanence dans le Scene Manager quand rien n'est sélectionné : ce
+        n'est pas un réglage qu'on va chercher, c'est ce qu'on garde sous les yeux."""
         if not self.project:
             return
         from ui.scene_manager.inspectors.project_settings_dialog import ProjectSettingsDialog
@@ -1195,6 +1195,7 @@ class MainWindow(QMainWindow):
         # à sa première visite (`load_project`).
         if (te := getattr(self, "_text_editor", None)) is not None:
             te.refresh()
+        self._show_project_name()
         cart_mib = getattr(self.project.settings, "cartridge_mib", 4)
         self.build_panel.set_cartridge_mib(cart_mib)
         # L'inspecteur de scène dit ce que la scène HÉRITE du projet (transition « From project (…) ») :
@@ -2059,11 +2060,14 @@ class MainWindow(QMainWindow):
         self.build_panel.btn_build.setEnabled(can_build)
         self.build_panel.btn_build.setToolTip(tooltip)
 
-    def _refresh_ui(self):
-        if not self.project: return
+    def _show_project_name(self):
         name = self.project.settings.name
         self.setWindowTitle(label("win.window_title", app_name=APP_NAME, name=name))
         self._tb_project_lbl.setText(name)   # QPushButton.setText
+
+    def _refresh_ui(self):
+        if not self.project: return
+        self._show_project_name()
         self._update_build_state()
         cart_mib = getattr(self.project.settings, "cartridge_mib", 4)
         self.build_panel.set_cartridge_mib(cart_mib)

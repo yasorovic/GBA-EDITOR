@@ -135,9 +135,9 @@ def test_le_peripherique_garde_les_dernieres_trames_tirees(qapp):
     device = _DeckDevice(_Deck())
     for _ in range(3):
         device.readData(1000 * 4)
-    assert device.tail.shape[0] == 3000
-    assert device.tail[-1, 0] == 2999 and device.tail[0, 0] == 0
-    for _ in range(20):
+    assert device.tail.shape[0] == device.pulled_frames            # les trames du DECK, pas celles de la sortie (32 768 Hz)
+    assert device.tail[-1, 0] == device.pulled_frames - 1 and device.tail[0, 0] == 0
+    for _ in range(40):
         device.readData(1000 * 4)
     assert device.tail.shape[0] == box_playback._SCOPE_TAIL           # plafonné : il ne grossit pas sans fin
 
@@ -146,12 +146,13 @@ def test_la_fenetre_entendue_retire_ce_que_le_deck_a_tire_en_avance(qapp):
     output = _AudioOutput(_Deck())
     output._device = _DeckDevice(_Deck())
     output.active = True
-    output._device.readData(4000 * 4)                                  # 4000 trames tirées : 0..3999
+    output._device.readData(8000 * 4)
+    pulled = output._device.pulled_frames                              # les trames du deck tirées : 0..pulled-1
     output.queued_frames = 600                                         # dont 600 que la carte son n'a pas jouées
     window = output.heard_window(100)
     assert len(window) == 100
-    assert window[-1] == pytest.approx(3399 / 32768, abs=1e-6)         # la dernière trame ENTENDUE, pas la dernière tirée
-    assert output.heard_window(4000) is None                           # pas assez de son entendu pour cette fenêtre
+    assert window[-1] == pytest.approx((pulled - 601) / 32768, abs=1e-6)   # la dernière trame ENTENDUE, pas la dernière tirée
+    assert output.heard_window(pulled) is None                         # pas assez de son entendu pour cette fenêtre
     output.active = False
     assert output.heard_window(100) is None
 
@@ -289,3 +290,58 @@ def test_le_curseur_de_volume_regle_les_barres(screen):
     assert editor._meters._gain == pytest.approx(0.4)
     editor._on_fader("volume", 100)
     assert editor._meters._gain == 1.0
+
+
+def test_la_sortie_tient_chaque_trame_du_mixeur_a_32768_hz(qapp):
+    """Sans interpolation : la trame de sortie `o` est la trame du deck `o × taux du mixeur / 32 768`, arrondie vers le bas."""
+    device = _DeckDevice(_Deck())
+    device._smooth = lambda block: block                               # le lissage de sortie a son propre test
+    out = np.concatenate([np.frombuffer(device.readData(777 * 4), dtype=np.int16).reshape(-1, 2) for _ in range(6)])
+    expected = np.arange(out.shape[0]) * box_playback.GBA_MIX_RATE // box_playback.GBA_OUTPUT_RATE
+    assert (out[:, 0] == expected.astype(np.int16)).all()
+
+
+def test_le_lissage_de_sortie_garde_le_continu_et_attenue_les_aigus(qapp):
+    """Le modèle de mGBA : gain 1 en continu, environ -2 dB à 7 kHz et -6 à -7 dB à 15 kHz (mesures du 2026-11-01)."""
+    kernel = box_playback._OUTPUT_KERNEL
+    assert kernel.sum() == pytest.approx(1.0, abs=1e-4)
+    def gain_db(freq):
+        n = np.arange(kernel.size)
+        response = abs((kernel * np.exp(-2j * np.pi * freq / box_playback.GBA_OUTPUT_RATE * n)).sum())
+        return 20 * np.log10(response)
+    assert gain_db(1000) > -0.5
+    assert -3.5 < gain_db(7000) < -1.5
+    assert -9.0 < gain_db(15000) < -5.0
+
+
+def test_le_lissage_ne_change_pas_un_signal_continu_d_un_paquet_a_l_autre(qapp):
+    device = _DeckDevice(_Deck())
+    block = np.full((500, 2), 1000, dtype=np.int16)
+    first = device._smooth(block)
+    second = device._smooth(block)
+    assert second[:, 0].min() == 1000 and second[:, 0].max() == 1000     # le 2e paquet reprend l'historique du 1er
+    assert first[0, 0] < 1000                                           # le 1er démarre depuis le silence
+
+
+def test_la_sortie_8_bits_tronque_et_borne_comme_le_mixeur(qapp):
+    """`asrs` vers le bas puis bornes −128..127 : un pas de 256 en int16, tronqué vers −∞."""
+    pcm = np.array([[0, 0], [255, -1], [256, -256], [-257, 40000 // 2], [32767, -32768]], dtype=np.int16)
+    out = box_playback._to_rom_output(pcm)
+    assert out[0].tolist() == [0, 0]
+    assert out[1].tolist() == [0, -256]                    # 255 → 0 ; −1 → −1 pas (la troncature va vers le bas)
+    assert out[2].tolist() == [256, -256]
+    assert out[3].tolist() == [-512, 19968]                # 20000 → 78 pas
+    assert out[4].tolist() == [127 * 256, -128 * 256]      # la pleine échelle : bornée à 127 / −128
+
+
+def test_la_sortie_8_bits_est_une_option_eteinte_par_defaut(qapp):
+    device = _DeckDevice(_Deck())
+    assert device.eight_bit is False
+    raw = np.frombuffer(device.readData(500 * 4), dtype=np.int16)
+    device.eight_bit = True
+    quantized = np.frombuffer(_DeckDevice(_Deck()).readData(500 * 4), dtype=np.int16)
+    assert (raw == quantized).all()                         # une autre instance, option éteinte : même son
+    player = BoxPlayer()
+    assert player._eight_bit is False
+    player.set_eight_bit(True)
+    assert player._eight_bit is True

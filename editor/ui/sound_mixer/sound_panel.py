@@ -1065,6 +1065,22 @@ class SoundMixerScreen(QWidget):
             lambda enabled: self._box_player.set_looping(enabled))
         lay.addWidget(self._btn_rom_loop)
 
+        self._btn_rom_8bit = QToolButton()
+        self._btn_rom_8bit.setText(label("sndpanel.rom_8bit_text"))
+        self._btn_rom_8bit.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
+        self._btn_rom_8bit.setCheckable(True)
+        self._btn_rom_8bit.setFixedSize(30, 24)
+        self._btn_rom_8bit.setToolTip(tooltip(
+            title=label("sndpanel.rom_8bit_title"), body=label("sndpanel.rom_8bit_tip")))
+        self._btn_rom_8bit.setStyleSheet(
+            f"QToolButton{{background:{C.BG_BASE}; color:{C.TEXT_DIM};"
+            f"border:1px solid {C.BORDER_MID}; padding:0;}}"
+            f"QToolButton:hover{{background:{C.BG_HOVER}; border-color:{C.ACCENT};}}"
+            f"QToolButton:checked{{background:{C.BG_SEL}; color:{C.ACCENT};"
+            f"border-color:{C.ACCENT};}}")
+        self._btn_rom_8bit.toggled.connect(self._box_player.set_eight_bit)
+        lay.addWidget(self._btn_rom_8bit)
+
         self._rom_volume = QSlider(Qt.Orientation.Horizontal)
         self._rom_volume.setRange(0, 100)
         self._rom_volume.setValue(80)

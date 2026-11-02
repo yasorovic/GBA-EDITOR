@@ -3047,6 +3047,8 @@
     "projset.drag_to_reorder": { "text": "Reorder by dragging" },
     "projinsp.start_scene_title": { "text": "Start scene" },
     "projinsp.start_scene_note": { "text": "It is independent of the scene open in the editor." },
+    "projset.project_name_title": { "text": "Project name" },
+    "projset.project_name_tip": { "text": "Names the project and its .project file. The project folder keeps its name." },
     "projset.backdrop_title": { "text": "Project backdrop color" },
     "projset.backdrop_note": { "text": "Every scene that does not set its own backdrop inherits it. The value is quantized to the GBA’s BGR555 color format." },
     "projset.cartridge_title": { "text": "Cartridge size" },
@@ -4314,6 +4316,12 @@
     },
     "langcard.font_replacements": { "singular": "{n} font replacement.", "plural": "{n} font replacements." },
     "langcard.no_font_replacement": { "text": "No font replacement: this language uses the fonts of the project." },
+    "projset.general": {
+      "text": "General"
+    },
+    "projset.project_name": {
+      "text": "Name"
+    },
     "projset.build": {
       "text": "Build"
     },
@@ -4737,6 +4745,9 @@
     "sndpanel.delete_box_warning": { "text": "The box and its states are removed from the project." },
     "sndpanel.rom_stop_title": { "text": "Stop preview" },
     "sndpanel.rom_loop_title": { "text": "Loop preview state" },
+    "sndpanel.rom_8bit_text": { "text": "Q8" },
+    "sndpanel.rom_8bit_title": { "text": "8-bit quantize" },
+    "sndpanel.rom_8bit_tip": { "text": "Plays the preview through the 8-bit signed output of the ROM mixer: truncated to 8 bits and clipped to -128..127, as the DMA sound receives it. Off by default. Changes the editor preview only." },
     "sndpanel.preview_volume_title": { "text": "Preview volume" },
     "sndpanel.preview_volume_tip": { "text": "Changes the editor preview volume only. It does not change the asset." },
     "sndpanel.rom_progress_title": { "text": "Preview progress" },

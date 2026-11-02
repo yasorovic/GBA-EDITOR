@@ -64,6 +64,7 @@ import json
 import shutil
 import copy
 from contextlib import nullcontext
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -134,6 +135,20 @@ DATA_COLUMN_SOURCES = {
     "prefab":  lambda p: [pf.name for pf in p.prefabs],
     "image":   lambda p: p.image_names(),
 }
+
+
+# ── La résolution d'un chemin d'asset ─────────────────────────────────────
+# `Path.resolve()` interroge le système de fichiers (0,66 ms sous Windows) et un build demande la même centaine de chemins
+# des centaines de fois (une analyse de scène relit les scripts de tous les prefabs). Le résultat ne dépend que de la racine
+# et du chemin relatif : gardé par ce couple, et vidé au début de chaque build (cf. `forget_resolved_asset_paths`), pour
+# qu'un fichier devenu lien ou renommé entre deux builds ne serve jamais une résolution ancienne.
+@lru_cache(maxsize=4096)
+def _resolve_under(root: Path, rel: str) -> Path:
+    return (root / Path(rel)).resolve()
+
+
+def forget_resolved_asset_paths() -> None:
+    _resolve_under.cache_clear()
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -300,7 +315,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         if not rel:
             return None
         p = Path(rel)
-        return (self.root / p).resolve() if not p.is_absolute() else p
+        return _resolve_under(self.root, rel) if not p.is_absolute() else p
 
     def asset_rel(self, abs_path: Path) -> str:
         try:

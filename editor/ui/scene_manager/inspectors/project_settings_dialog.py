@@ -5,9 +5,10 @@ Settings », ouverte depuis Game → Project Settings. Même pattern que
 gauche, un panneau à droite, chaque champ se sauvegarde à l'instant où il
 change (undo par `SetFieldCmd`, écriture de project.json après un court silence — cf. `deferred_writes`).
 
-Ce que cette fenêtre regroupe (2026-08-25) — tout ce que `ProjectSettings`
-porte SAUF l'identité du projet :
+Ce que cette fenêtre regroupe — tout ce que `ProjectSettings` porte :
 
+  - **General** — l'identité du projet : nom (renomme le manifeste), auteur, version,
+    scène de départ. Les mêmes champs que `ProjectInspector`.
   - **Build** — emplacements de sauvegarde, cartouche visée, debug build.
   - **Visual** — backdrop par défaut du projet ENTIER (pas de la scène) et
     transition de scène par défaut. Ce que le rendu montre sans qu'un script
@@ -20,11 +21,9 @@ porte SAUF l'identité du projet :
     quelle.
   - **Physics & Collisions** : simulation par défaut, tags et matrice de filtrage.
 
-Ce qui RESTE dans `ProjectInspector` (panneau latéral du Scene Manager, visible
-en permanence quand rien n'est sélectionné) : auteur, version, scène de
-départ — l'identité du projet, pas sa configuration. Ainsi que la carte
-Content (compteurs d'assets, lecture seule) : ce n'est pas un réglage, juste
-un aperçu utile à garder sous les yeux.
+`ProjectInspector` (panneau latéral du Scene Manager, visible en permanence quand
+rien n'est sélectionné) garde l'identité sous les yeux, avec le nom éditable dans son
+en-tête, ainsi que la carte Content (compteurs d'assets, lecture seule).
 
 Le dialogue suppose un projet déjà chargé (`window._open_project_settings`
 garde contre `self.project is None` avant de l'ouvrir) : contrairement à
@@ -95,6 +94,94 @@ def _row(label: str, widget: QWidget, layout: QVBoxLayout, stretch: bool = True)
     if not stretch:
         row.addStretch(1)
     layout.addLayout(row)
+
+
+# ── General ─────────────────────────────────────────────────────────────
+
+class GeneralPanel(QWidget):
+    """L'identité du projet — nom, auteur, version, scène de départ. Les mêmes champs
+    que la carte Identité de `ProjectInspector`, qui reste le raccourci du Scene Manager.
+    Le nom est celui du manifeste : le renommer renomme `<Nom>.project` (`Project.rename_project`)."""
+
+    def __init__(self, project: Project, parent=None):
+        super().__init__(parent)
+        self._project = project
+        self._blocking = False
+
+        lay = QVBoxLayout(self)
+        lay.setSpacing(10)
+        lay.addWidget(_category_title(label('projset.general')))
+
+        self._ed_name = QLineEdit()
+        self._ed_name.setToolTip(tooltip(
+            title=label('projset.project_name_title'), body=label('projset.project_name_tip')))
+        self._ed_name.editingFinished.connect(self._commit_name)
+        _row(label('projset.project_name'), self._ed_name, lay)
+
+        self._ed_author = QLineEdit()
+        self._ed_author.setPlaceholderText(label('projinsp.anonymous'))
+        self._ed_author.editingFinished.connect(
+            lambda: self._set_setting("author", self._ed_author.text().strip()))
+        _row(label('projinsp.author'), self._ed_author, lay)
+
+        self._ed_version = QLineEdit()
+        self._ed_version.setPlaceholderText("0.1")
+        self._ed_version.setMaximumWidth(110)
+        self._ed_version.editingFinished.connect(
+            lambda: self._set_setting("version", self._ed_version.text().strip()))
+        _row(label('projinsp.version'), self._ed_version, lay, stretch=False)
+
+        self._combo_start = QComboBox()
+        self._combo_start.setFont(QFont(T.UI, T.MD))
+        self._combo_start.setStyleSheet(QSS.combobox)
+        self._combo_start.setToolTip(tooltip(
+            title=label('projinsp.start_scene_title'), body=label('projinsp.start_scene_tip'),
+            note=label('projinsp.start_scene_note')))
+        self._combo_start.currentIndexChanged.connect(
+            lambda: self._set_setting("start_scene", self._combo_start.currentData()))
+        _row(label('projinsp.start'), self._combo_start, lay)
+
+        lay.addStretch()
+        self._refresh_fields()
+
+    def _refresh_fields(self):
+        s = self._project.settings
+        self._blocking = True
+        try:
+            self._ed_name.setText(s.name)
+            self._ed_author.setText(s.author)
+            self._ed_version.setText(s.version)
+            self._combo_start.clear()
+            names = [scene.name for scene in self._project.scenes]
+            if s.start_scene and s.start_scene not in names:
+                # Scène de démarrage disparue : visible plutôt que réécrite en silence.
+                self._combo_start.addItem(
+                    label('projinsp.start_not_found', start=s.start_scene), s.start_scene)
+            for name in names:
+                self._combo_start.addItem(name, name)
+            self._combo_start.setCurrentIndex(max(0, self._combo_start.findData(s.start_scene)))
+        finally:
+            self._blocking = False
+
+    def _commit_name(self):
+        if self._blocking:
+            return
+        self._ed_name.setText(self._project.rename_project(self._ed_name.text()))   # le nom appliqué, pas celui tapé
+
+    def _persist(self):
+        _save_settings_soon(self._project)
+        self._refresh_fields()
+
+    def _set_setting(self, field: str, value):
+        if self._blocking or value is None:
+            return
+        old = getattr(self._project.settings, field, None)
+        if old == value:
+            return
+        get_history().push(SetFieldCmd(
+            self._project.settings, field, old, value,
+            label=f"Projet.{field}", persist_fn=self._persist,
+        ))
 
 
 # ── Build ───────────────────────────────────────────────────────────────
@@ -1547,11 +1634,11 @@ class ProjectSettingsDialog(QDialog):
     """Colonne de catégories à gauche, panneau à droite — même squelette que
     SettingsDialog (ui/common/settings_dialog.py)."""
 
-    _CATEGORY_KEYS = {'Build': 'projset.build', 'Visual': 'projset.visual', 'Sound': 'projset.sound', 'Input': 'projset.input', 'Languages': 'projset.languages', 'Physics & Collisions': 'projset.physics_collisions'}
+    _CATEGORY_KEYS = {'General': 'projset.general', 'Build': 'projset.build', 'Visual': 'projset.visual', 'Sound': 'projset.sound', 'Input': 'projset.input', 'Languages': 'projset.languages', 'Physics & Collisions': 'projset.physics_collisions'}
 
-    _CATEGORIES = ("Build", "Visual", "Sound", "Input", "Languages", "Physics & Collisions")
+    _CATEGORIES = ("General", "Build", "Visual", "Sound", "Input", "Languages", "Physics & Collisions")
 
-    def __init__(self, project: Project, initial_category: str = "Build", parent=None):
+    def __init__(self, project: Project, initial_category: str = "General", parent=None):
         super().__init__(parent)
         self.setWindowTitle(label('projset.project_settings'))
         self.setStyleSheet(QSS.dialog)
@@ -1571,7 +1658,7 @@ class ProjectSettingsDialog(QDialog):
 
         self._stack = QStackedWidget()
         panels = [
-            BuildPanel(project), VisualPanel(project), SoundPanel(project),
+            GeneralPanel(project), BuildPanel(project), VisualPanel(project), SoundPanel(project),
             InputsPanel(project), LanguagesPanel(project), PhysicsCollisionsPanel(project),
         ]
         for panel in panels:

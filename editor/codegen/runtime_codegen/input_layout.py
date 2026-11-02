@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from codegen.layout_cache import layout_memo
 from core.models.input_expression import InputExpressionError, parse_input_expression
 from core.models.settings import DEFAULT_INTERACT_BUTTONS, INTERACT_INPUT_NAME
 
@@ -116,6 +117,11 @@ def _scan_buffered(p):
 
 
 def compute_input_layout(p) -> InputLayout:
+    """Mémoïsée à portée de contexte (cf. `layout_cache`) : le résultat est partagé, le lire sans le modifier."""
+    return layout_memo("input", (p,), lambda: _compute_input_layout(p))
+
+
+def _compute_input_layout(p) -> InputLayout:
     settings = getattr(p, "settings", None)
     bindings = list(getattr(settings, "inputs", []) or [])
     seq_decls = list(getattr(settings, "sequences", []) or [])
