@@ -46,13 +46,13 @@ from __future__ import annotations
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QSpinBox, QDoubleSpinBox, QToolButton, QLabel, QMenu,
+    QWidget, QHBoxLayout, QSpinBox, QToolButton, QLabel, QMenu,
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.common.theme import C, T, QSS
-from ui.common.unit_spin import QuietSpin, MIN_SPIN_WIDTH
+from ui.common.unit_spin import QuietDoubleSpin, QuietSpin
 from core.models.field_value import FieldValue, TILE_SIZE, is_ref_raw
 
 
@@ -225,20 +225,6 @@ class ValueField(QWidget):
                     lambda _=False, s=src, n=name, i=vid: self._set_mode_ref(s, n, i))
 
 
-class _QuietDoubleSpin(QDoubleSpinBox):
-    """Pendant de `QuietSpin` pour les flottants."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMinimumWidth(MIN_SPIN_WIDTH)
-
-    def wheelEvent(self, e):
-        if self.hasFocus():
-            super().wheelEvent(e)
-        else:
-            e.ignore()
-
-
 class NumberField(QWidget):
     """Champ numérique SANS unité (rotation, échelle, priorité) : un littéral
     (`int` ou `float`) ou une référence de variable.
@@ -265,7 +251,7 @@ class NumberField(QWidget):
         lay.setSpacing(3)
 
         if kind == "float":
-            self._spin = _QuietDoubleSpin()
+            self._spin = QuietDoubleSpin()
             self._spin.setDecimals(2)
             self._spin.setSingleStep(step)
         else:

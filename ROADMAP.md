@@ -9,7 +9,7 @@ pas des promesses : l'ordre et le contenu peuvent bouger au fil des retours.
 
 ## Prochaines versions
 
-Il n'y a pas encore de release publique : la version du logiciel est `0.1.x-alpha`. Le moment et le
+Il n'y a pas encore de release publique : la version du logiciel est `0.2.x-alpha`. Le moment et le
 numéro de la première release publique seront décidés plus tard ; l'alpha dure jusqu'à la première
 version stable, `1.0.0-stable`.
 
@@ -18,8 +18,9 @@ d'un plan. Le numéro `0.Y.0` n'est attribué qu'à la sortie (voir [Workflow de
 
 | Étape | État |
 | --- | --- |
-| Le moteur physique 2D | Développé, en vérification avant la fusion |
 | Jouer son jeu dans le navigateur (itch.io) | Conception faite, développement non commencé |
+| Nodal background editor | Conception en cours, développement non commencé |
+| Nodal soundbox et soundmixer | À concevoir |
 | Le pipeline 2D complet (`1.0.0-stable`, affirmation de capacité) | En route |
 
 ### Workflow de release
@@ -33,22 +34,6 @@ d'un plan. Le numéro `0.Y.0` n'est attribué qu'à la sortie (voir [Workflow de
 - Le nom de l'étape reste dans le CHANGELOG, qui relie chaque numéro à son contenu.
 - Les correctifs et petits chantiers qui suivent incrémentent le dernier chiffre.
 
-### Le moteur physique 2D
-
-Des corps qui tombent, se portent, se poussent et s'empilent, sans écrire la physique à la main.
-Chaque acteur reçoit un mode (statique, personnage, cinématique, rigide), la gravité se règle pour le
-projet puis par scène, et le moteur prend en charge les plateformes mobiles qui portent un personnage,
-les caisses qui s'empilent et s'endorment, les sols qu'on traverse par en dessous, les matériaux
-(rebond, frottement) et les couches de collision. Un acteur créé par un script se comporte comme un
-acteur posé dans la scène.
-
-- Fait : les quatre modes de corps, la gravité héritée ou surchargée, les impulsions et le sommeil des
-  corps rigides, le transport par plateforme, les faces à sens unique et la descente à travers elles, la
-  parité entre acteurs posés et créés par script (testée), un banc de six scènes jouables et le guide
-  utilisateur.
-- Reste à faire : la vérification sur mGBA et la mesure du coût en charge, l'événement d'écrasement pour un
-  personnage créé par script, un plafond de vitesse de chute pour les personnages, puis la fusion dans `main`.
-
 ### Jouer son jeu dans le navigateur
 
 Un jeu fini doit pouvoir se jouer sans installer d'émulateur. Cette version ajoute un outil qui
@@ -57,6 +42,26 @@ compilé pour le navigateur. La ROM n'est pas modifiée.
 
 - Faisabilité vérifiée.
 - Reste à faire : tout le développement, puis la vérification sur les principaux navigateurs.
+
+### Nodal background editor
+
+L'écran Fond concentre beaucoup de fonctions dans un ordre figé. Il devient un graphe : des images
+en entrée, des nœuds pour chaque étape (taille, pose, miroir, ajustements, réduction de couleurs,
+dithering, masque, composition, animation) dans l'ordre choisi, et des fonds en sortie. Un clic sur
+un nœud montre son résultat. Un fond sans graphe reçoit un graphe minimal, qui donne exactement le
+même résultat qu'aujourd'hui.
+
+- Principe arrêté, détails encore ouverts.
+- Reste à faire : le moteur, l'interface nodale, les nouveaux nœuds (composition, masque, sorties
+  multiples), puis le retrait de l'ancien écran.
+
+### Nodal soundbox et soundmixer
+
+Refonte presque complète de la partie son : l'existant est mis de côté. La SoundBox devient un module
+unique qui réunit les effets, les jingles et la musique. Les séquences de sons se configurent
+directement dans son écran, sous forme de nœuds, et le mixage s'affine canal par canal.
+
+- Reste à faire : la conception, puis le développement.
 
 ### 1.0.0-stable : le pipeline 2D complet
 

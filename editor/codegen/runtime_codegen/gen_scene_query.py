@@ -15,7 +15,7 @@ couche reste à la base (cf. TodoTechnique, A3).
 """
 from __future__ import annotations
 
-from core.models.components import CollisionShapeComponent, collision_shapes_collide
+from core.models.components import CollisionShapeComponent
 from codegen.grit_conversion import (bg_layer_sym, bg_layer_sym_for,
                                      bg_map_geometry, bg_map_sbb_count,
                                      count_frames)
@@ -85,8 +85,7 @@ def actor_collision_shapes(owner) -> list[CollisionShapeComponent]:
 def collision_pair_mask(a, b, settings) -> int:
     """Bits de contacts autorisés pour une paire d'acteurs, cuits au build.
 
-    Les tags gardent leur matrice historique. Les couches et masques ajoutent
-    un filtre propre à chaque CollisionShape, sans agrandir `Actor`.
+    La matrice des tags décide quels couples se rencontrent, sans agrandir `Actor`.
     """
     from core.models.settings import tags_collide
     aa, bb = actor_collision_shapes(a), actor_collision_shapes(b)
@@ -97,8 +96,7 @@ def collision_pair_mask(a, b, settings) -> int:
         for j, box_b in enumerate(bb):
             tag_b = box_b.tag or "body"
             cj = next(k for k, prior in enumerate(bb[:j + 1]) if (prior.tag or "body") == tag_b)
-            if (tags_collide(settings, tag_a, tag_b)
-                    and collision_shapes_collide(box_a, box_b)):
+            if tags_collide(settings, tag_a, tag_b):
                 mask |= 1 << (ci * 4 + cj)
     return mask
 

@@ -267,6 +267,7 @@
     "common.browse": {
       "text": "Parcourir…"
     },
+    "common.reset_to_default": { "text": "Rétablir par défaut" },
     "common.cancel": {
       "text": "Annuler"
     },
@@ -1513,7 +1514,6 @@
     "bgedit.adj_brightness_tip": { "text": "Éclaircit ou assombrit toute l’image." },
     "bgedit.adj_contrast": { "text": "Contraste" },
     "bgedit.adj_contrast_tip": { "text": "Écarte ou resserre l’écart entre les zones claires et sombres." },
-    "bgedit.adj_reset": { "text": "Réinitialiser les ajustements" },
     "bgedit.adj_reset_tip": { "text": "Remet teinte, saturation, luminosité et contraste au neutre." },
     "bgedit.dither_kind": { "text": "Type de dithering" },
     "bgedit.dither_kind_tip": { "text": "La façon dont la réduction de couleurs répartit son erreur. La diffusion suit l’image ; les trames ordonnées sont régulières, donc propres une fois tuilées." },
@@ -1548,9 +1548,6 @@
     },
     "bgedit.comp_method_tip": {
       "text": "Comment les couleurs sont fusionnées dans une tuile qui en a trop."
-    },
-    "bgedit.comp_reset": {
-      "text": "Réinitialiser"
     },
     "bgedit.comp_reset_tip": { "text": "Rétablit les réglages de compression par défaut." },
     "bgedit.comp_off": {
@@ -1943,10 +1940,6 @@
     "comped.one_way_right": { "text": "Droite" },
     "comped.collision_blocks_tip": { "text": "Bloquer repousse un Character en mouvement hors de cette boîte (un coffre, un PNJ, une caisse). Sans cette case, la boîte est un capteur : elle signale seulement les contacts. La matrice de collision décide quels tags se rencontrent." },
     "comped.collision_solid": { "text": "Collision avec la carte" },
-      "comped.collision_layer": { "text": "Couches" },
-      "comped.collision_layer_tip": { "text": "Catégories de collision sous forme de masque sur 16 bits. Chaque bit activé est une couche de cette CollisionShape." },
-      "comped.collision_mask": { "text": "Masque de collision" },
-      "comped.collision_mask_tip": { "text": "Catégories que cette CollisionShape accepte de rencontrer. Un contact exige que chaque masque accepte la couche de l'autre." },
     "comped.material_restitution": { "text": "Restitution" },
     "comped.material_restitution_tip": { "text": "Rebond de ce matériau. Le contact conserve le coefficient le plus élevé." },
     "comped.material_friction": { "text": "Friction" },
@@ -1959,6 +1952,7 @@
     "comped.collision_material_none": { "text": "Par défaut (ni rebond, ni frottement)" },
     "comped.collision_material_missing": { "text": "PhysicMaterial [{name}] introuvable" },
     "comped.physics_mode": { "text": "Mode" },
+    "comped.physics_mode_tip": { "text": "Façon dont cet acteur se déplace et entre en collision : StaticBody ne bouge jamais, CharacterBody est conduit par son script, KinematicBody applique sa vélocité et transporte les autres corps, RigidBody est simulé avec la gravité et les impulsions." },
     "comped.physics_collider": { "text": "Collider physique" },
     "comped.physics_choose_collider": { "text": "Choisir une CollisionShape…" },
     "comped.physics_collider_tip": { "text": "CollisionShape utilisée comme forme physique de ce corps. Une fois sélectionnée, les autres boîtes restent disponibles pour les contacts et les capteurs, mais ne servent pas à résoudre ce corps." },
@@ -1970,7 +1964,7 @@
     "comped.physics_rigid": { "text": "RigidBody" },
     "comped.physics_mass": { "text": "Masse" },
     "comped.physics_mass_tip": { "text": "Masse relative utilisée pour répartir le mouvement entre deux RigidBody en collision. Elle n’a aucun effet contre un StaticBody." },
-    "comped.physics_gravity_scale": { "text": "Influence de la gravité" },
+    "comped.physics_gravity_scale": { "text": "Échelle de gravité" },
     "comped.physics_gravity_scale_tip": { "text": "Multiplicateur appliqué à la gravité de la scène. Zéro désactive la gravité pour ce corps ; une valeur négative l’inverse." },
     "comped.physics_can_sleep": { "text": "Peut dormir" },
     "comped.physics_can_sleep_tip": { "text": "Autorise la règle de sommeil de la scène à arrêter la simulation de ce corps tant qu’il reste au repos." },
@@ -2064,13 +2058,11 @@
     "sceneinsp.physics_sleep_threshold_prefix": { "text": "Seuil " },
     "sceneinsp.physics_sleep_frames_prefix": { "text": "Après " },
     "sceneinsp.card.physics": { "text": "Physique" },
-    "sceneinsp.physics_use_project": { "text": "Utiliser les réglages physiques du projet" },
-    "sceneinsp.physics_use_project_tip": { "text": "Utilise la gravité et les valeurs de simulation des paramètres du projet. La décocher crée des valeurs propres à cette scène." },
+    "sceneinsp.physics_reset_tip": { "text": "Rétablit la gravité et les valeurs de simulation des paramètres du projet pour cette scène. Disponible dès que la scène a ses propres valeurs." },
     "sceneinsp.backdrop": { "text": "Arrière-plan :" },
     "sceneinsp.backdrop_tip": { "text": "Choisit la couleur affichée lorsqu’aucun calque de fond ni sprite ne dessine." },
     "sceneinsp.backdrop_note": { "text": "La valeur est quantifiée au format de couleur BGR555 de la GBA." },
     "sceneinsp.backdrop_title": { "text": "Couleur d’arrière-plan" },
-    "sceneinsp.backdrop_reset": { "text": "Réinitialiser" },
     "sceneinsp.backdrop_reset_tip": { "text": "Réutilise la couleur d’arrière-plan définie au niveau du projet." },
     "sceneinsp.transition": { "text": "Transition :" },
     "sceneinsp.transition_tip": { "text": "Choisit le fondu joué à l’ouverture et à la fermeture de cette scène." },
@@ -2721,7 +2713,6 @@
     "sfxedit.ab": { "text": "Taux du fichier" },
     "sfxedit.ab_tip": { "text": "Fait entendre l’effet au taux d’échantillonnage de son fichier plutôt qu’à celui de la ROM, pour juger ce que coûte le taux plus bas. Seul l’aperçu change ; le build garde le taux de l’effet ou du projet. Disponible quand les deux taux diffèrent ; le poids au taux du fichier est affiché dessous." },
     "sfxedit.summary_rate": { "text": " · {kb} Kio au taux du fichier ({rate} Hz)" },
-    "sfxedit.reset": { "text": "Réinitialiser la découpe" },
     "sfxedit.reset_tip": { "text": "Garde de nouveau le fichier entier." },
     "sfxedit.summary": { "text": "Garde {start}–{end} ms ({kept} sur {total} ms) · {kb} Kio en ROM au lieu de {whole} Kio" },
     "sfxedit.summary_whole": { "text": "Fichier entier · {total} ms · {kb} Kio en ROM" },

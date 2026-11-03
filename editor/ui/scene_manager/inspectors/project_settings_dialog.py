@@ -53,7 +53,7 @@ from core.command_dispatcher import get_dispatcher
 from core.models.gba_color import bgr555_to_rgb888, rgb888_to_bgr555
 from ui.common.deferred_writes import schedule_unwatched
 from ui.common.theme import C, T, QSS
-from ui.common.unit_spin import UnitSpin
+from ui.common.unit_spin import UnitDoubleSpin, UnitSpin
 from ui.common.widgets import W
 from ui.common.cartridge_preview import CartridgePreview, save_preview_profiles, save_capacity_text
 from ui.common.notice import note, tip
@@ -1109,8 +1109,8 @@ class PhysicsCollisionsPanel(QWidget):
         gravity_row = QHBoxLayout(gravity_host)
         gravity_row.setContentsMargins(0, 0, 0, 0)
         gravity_row.setSpacing(8)
-        self._spin_gravity_x = QDoubleSpinBox()
-        self._spin_gravity_y = QDoubleSpinBox()
+        self._spin_gravity_x = UnitDoubleSpin()
+        self._spin_gravity_y = UnitDoubleSpin()
         for spin, axis, field in (
             (self._spin_gravity_x, "X", "physics_gravity_x"),
             (self._spin_gravity_y, "Y", "physics_gravity_y"),
@@ -1141,12 +1141,20 @@ class PhysicsCollisionsPanel(QWidget):
         simulation_title.setStyleSheet(f"color:{C.TEXT_HI}; margin-top:6px;")
         lay.addWidget(simulation_title)
 
-        def simulation_row(key: str, control: QWidget):
+        def dim_caption(text: str) -> QLabel:
+            caption = QLabel(text.strip()); caption.setFont(QFont(T.UI, T.SM))
+            caption.setStyleSheet(f"color:{C.TEXT_DIM};")
+            return caption
+
+        def simulation_row(key: str, control: QWidget, unit: str = ""):
             host = QWidget(); row = QHBoxLayout(host)
             row.setContentsMargins(0, 0, 0, 0); row.setSpacing(8)
             title = QLabel(label(key)); title.setFont(QFont(T.UI, T.SM))
             title.setStyleSheet(f"color:{C.TEXT_DIM};"); title.setFixedWidth(150)
-            row.addWidget(title); row.addWidget(control); row.addStretch()
+            row.addWidget(title); row.addWidget(control)
+            if unit:
+                row.addWidget(dim_caption(unit))
+            row.addStretch()
             lay.addWidget(host)
 
         self._spin_physics_iterations = QSpinBox()
@@ -1163,14 +1171,13 @@ class PhysicsCollisionsPanel(QWidget):
         self._spin_physics_max_fall = QDoubleSpinBox()
         self._spin_physics_max_fall.setRange(0.0, 64.0)
         self._spin_physics_max_fall.setSingleStep(0.25); self._spin_physics_max_fall.setDecimals(2)
-        self._spin_physics_max_fall.setSuffix(" px/f")
         self._spin_physics_max_fall.setFont(QFont(T.MONO, T.SM)); self._spin_physics_max_fall.setStyleSheet(QSS.spinbox)
         self._spin_physics_max_fall.setToolTip(tooltip(
             title=label('projset.physics_max_fall_speed'),
             body=label('projset.physics_max_fall_speed_tip')))
         self._spin_physics_max_fall.valueChanged.connect(
             lambda value: self._set_physics("physics_max_fall_speed", float(value)))
-        simulation_row('projset.physics_max_fall_speed', self._spin_physics_max_fall)
+        simulation_row('projset.physics_max_fall_speed', self._spin_physics_max_fall, "px/f")
 
         self._spin_physics_damping = QDoubleSpinBox()
         self._spin_physics_damping.setRange(0.0, 1.0)
@@ -1197,17 +1204,15 @@ class PhysicsCollisionsPanel(QWidget):
         self._spin_physics_sleep_threshold.setRange(0.0, 4.0)
         self._spin_physics_sleep_threshold.setSingleStep(0.01)
         self._spin_physics_sleep_threshold.setDecimals(2)
-        self._spin_physics_sleep_threshold.setPrefix(label('projset.physics_sleep_threshold_prefix'))
-        self._spin_physics_sleep_threshold.setSuffix(" px/f")
         self._spin_physics_sleep_frames = QSpinBox()
         self._spin_physics_sleep_frames.setRange(1, 255)
-        self._spin_physics_sleep_frames.setPrefix(label('projset.physics_sleep_frames_prefix'))
-        self._spin_physics_sleep_frames.setSuffix(" f")
-        for spin in (self._spin_physics_sleep_threshold, self._spin_physics_sleep_frames):
+        for lead, spin, unit in (
+                (label('projset.physics_sleep_threshold_prefix'), self._spin_physics_sleep_threshold, "px/f"),
+                (label('projset.physics_sleep_frames_prefix'), self._spin_physics_sleep_frames, "f")):
             spin.setFont(QFont(T.MONO, T.SM)); spin.setStyleSheet(QSS.spinbox)
             spin.setToolTip(tooltip(
                 title=label('projset.physics_sleep'), body=label('projset.physics_sleep_tip')))
-            sleep_row.addWidget(spin)
+            sleep_row.addWidget(dim_caption(lead)); sleep_row.addWidget(spin); sleep_row.addWidget(dim_caption(unit))
         self._spin_physics_sleep_threshold.valueChanged.connect(
             lambda value: self._set_physics("physics_sleep_threshold", float(value)))
         self._spin_physics_sleep_frames.valueChanged.connect(

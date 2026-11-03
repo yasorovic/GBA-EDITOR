@@ -4,7 +4,7 @@ from __future__ import annotations
 from PyQt6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QWidget
 from PyQt6.QtGui import QFont
 
-from . import BaseComponentEditor, register
+from . import BaseComponentEditor, register, LABEL_WIDTH
 from ui.common import icons
 from ui.common.widgets import AssetPickerPopup, ScriptSlot, W
 from ui.common.notice import notice
@@ -53,19 +53,7 @@ class CollisionEditor(BaseComponentEditor):
             proj.collision_tags(), current, COLOR_SPRITE, _commit_tag, _create_tag, parent=self.insp)
         notice("collision.tag", tag_slot, layout)
         self.register_syncer("tag", lambda v, w=tag_slot: w.set_script(str(v) or "body"))
-        W.row(label("comped.tag"), tag_slot, layout)
-
-        layer = W.spinbox(comp.layer, 1, 65535)
-        layer.setObjectName("collisionLayer")
-        layer.setToolTip(tooltip(title=label("comped.collision_layer"),
-                                 body=label("comped.collision_layer_tip")))
-        W.row(label("comped.collision_layer"), layer, layout)
-
-        mask = W.spinbox(comp.mask, 0, 65535)
-        mask.setObjectName("collisionMask")
-        mask.setToolTip(tooltip(title=label("comped.collision_mask"),
-                                body=label("comped.collision_mask_tip")))
-        W.row(label("comped.collision_mask"), mask, layout)
+        W.row(label("comped.tag"), tag_slot, layout, LABEL_WIDTH)
 
         # ── Mode Solid / Trigger ──────────────────────────────────
         chk_solid = QCheckBox()
@@ -78,7 +66,7 @@ class CollisionEditor(BaseComponentEditor):
         lbl.setFont(QFont(T.UI, T.SM))
         lbl.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent; border:none;")
         hl.addWidget(chk_solid); hl.addWidget(lbl); hl.addStretch()
-        W.row(label("common.mode"), mode_lbl, layout)
+        W.row(label("common.mode"), mode_lbl, layout, LABEL_WIDTH)
 
         # ── Blocage entre acteurs ─────────────────────────────────
         # Une réponse à part de « Solid » (qui ne parle que de la carte) : Block repousse le Character
@@ -89,7 +77,7 @@ class CollisionEditor(BaseComponentEditor):
         chk_blocks.setChecked(getattr(comp, "response", "sensor") == "block")
         chk_blocks.setToolTip(tooltip(title=label("comped.collision_blocks"),
                                       body=label("comped.collision_blocks_tip")))
-        W.row(label("comped.collision_blocks_row"), chk_blocks, layout)
+        W.row(label("comped.collision_blocks_row"), chk_blocks, layout, LABEL_WIDTH)
         chk_blocks.toggled.connect(lambda v: self.set_field(comp, "response", "block" if v else "sensor"))
         self.register_syncer("response", lambda v, w=chk_blocks: (
             w.blockSignals(True), w.setChecked(v == "block"), w.blockSignals(False)))
@@ -101,7 +89,7 @@ class CollisionEditor(BaseComponentEditor):
         one_way.setCurrentIndex(max(0, one_way.findData(comp.one_way)))
         one_way.setToolTip(tooltip(title=label("comped.collision_one_way"),
                                    body=label("comped.collision_one_way_tip")))
-        W.row(label("comped.collision_one_way"), one_way, layout)
+        W.row(label("comped.collision_one_way"), one_way, layout, LABEL_WIDTH)
         one_way.currentIndexChanged.connect(lambda _: self.set_field(comp, "one_way", one_way.currentData()))
         self.register_syncer("one_way", lambda v, w=one_way: (
             w.blockSignals(True), w.setCurrentIndex(max(0, w.findData(v))), w.blockSignals(False)))
@@ -135,7 +123,7 @@ class CollisionEditor(BaseComponentEditor):
             on_open=open_material_picker,
             on_clear=lambda: (self.set_field(comp, "material_id", ""), show_material("")),
         )
-        W.row(label("comped.collision_material"), material, layout)
+        W.row(label("comped.collision_material"), material, layout, LABEL_WIDTH)
         show_material(comp.material_id)
         self.register_syncer("material_id", show_material)
 
@@ -158,8 +146,8 @@ class CollisionEditor(BaseComponentEditor):
             self.register_syncer(fname, lambda v, w=vf: w.set_raw(v))
             notice(key, vf, layout)
 
-        W.pair(label("comped.offset"), "X", C.AXIS_X, vf_x, "Y", C.AXIS_Y, vf_y, layout)
-        W.pair(label("common.size"), "W", C.AXIS_X, vf_w, "H", C.AXIS_Y, vf_h, layout)
+        W.pair(label("comped.offset"), "X", C.AXIS_X, vf_x, "Y", C.AXIS_Y, vf_y, layout, LABEL_WIDTH)
+        W.pair(label("common.size"), "W", C.AXIS_X, vf_w, "H", C.AXIS_Y, vf_h, layout, LABEL_WIDTH)
 
         def _on_solid(v):
             self.set_field(comp, "solid", v)
@@ -167,8 +155,4 @@ class CollisionEditor(BaseComponentEditor):
         chk_solid.toggled.connect(_on_solid)
         self.register_syncer("solid", lambda v, w=chk_solid: (
             w.blockSignals(True), w.setChecked(bool(v)), w.blockSignals(False)))
-        layer.valueChanged.connect(lambda v: self.set_field(comp, "layer", int(v)))
-        mask.valueChanged.connect(lambda v: self.set_field(comp, "mask", int(v)))
-        self.register_syncer("layer", lambda v, w=layer: w.setValue(int(v)))
-        self.register_syncer("mask", lambda v, w=mask: w.setValue(int(v)))
 

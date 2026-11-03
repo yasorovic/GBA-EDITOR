@@ -11,7 +11,7 @@ from ui.common.notice import note
 from ui.common.theme import C
 from ui.common.tooltip import tooltip
 from ui.common.widgets import AssetPickerPopup, ScriptSlot, W
-from . import BaseComponentEditor, register
+from . import BaseComponentEditor, register, LABEL_WIDTH
 
 
 @register("physics_body")
@@ -27,7 +27,9 @@ class PhysicsBodyEditor(BaseComponentEditor):
         for value in PHYSICS_BODY_MODES:
             mode.addItem(labels[value], value)
         mode.setCurrentIndex(max(0, mode.findData(comp.mode)))
-        row(label("comped.physics_mode"), mode)
+        mode.setToolTip(tooltip(title=label("comped.physics_mode"),
+                                body=label("comped.physics_mode_tip")))
+        W.row(label("comped.physics_mode"), mode, layout, LABEL_WIDTH)
 
         owner = getattr(self.insp, "_actor", None)
         colliders = [c for c in getattr(owner, "components", [])
@@ -62,7 +64,7 @@ class PhysicsBodyEditor(BaseComponentEditor):
             on_open=open_collider_picker,
             on_clear=lambda: (self.set_field(comp, "collider_id", ""), show_collider("")),
         )
-        row(label("comped.physics_collider"), collider)
+        W.row(label("comped.physics_collider"), collider, layout, LABEL_WIDTH)
         static_note = note(layout, "physics.static_body")
         character_note = note(layout, "physics.character_body")
         kinematic_note = note(layout, "physics.kinematic_body")
@@ -71,14 +73,14 @@ class PhysicsBodyEditor(BaseComponentEditor):
         mass.setObjectName("physicsMass")
         mass.setToolTip(tooltip(title=label("comped.physics_mass"),
                                 body=label("comped.physics_mass_tip")))
-        row(label("comped.physics_mass"), mass)
+        W.row(label("comped.physics_mass"), mass, layout, LABEL_WIDTH)
         mass_row = layout.itemAt(layout.count() - 1).widget()
 
         gravity_scale = W.double_spinbox(comp.gravity_scale, -8.0, 8.0, 0.1, 2)
         gravity_scale.setObjectName("physicsGravityScale")
         gravity_scale.setToolTip(tooltip(title=label("comped.physics_gravity_scale"),
                                          body=label("comped.physics_gravity_scale_tip")))
-        row(label("comped.physics_gravity_scale"), gravity_scale)
+        W.row(label("comped.physics_gravity_scale"), gravity_scale, layout, LABEL_WIDTH)
         gravity_row = layout.itemAt(layout.count() - 1).widget()
 
         can_sleep = QCheckBox()
@@ -86,7 +88,7 @@ class PhysicsBodyEditor(BaseComponentEditor):
         can_sleep.setChecked(comp.can_sleep)
         can_sleep.setToolTip(tooltip(title=label("comped.physics_can_sleep"),
                                      body=label("comped.physics_can_sleep_tip")))
-        row(label("comped.physics_can_sleep"), can_sleep)
+        W.row(label("comped.physics_can_sleep"), can_sleep, layout, LABEL_WIDTH)
         sleep_row = layout.itemAt(layout.count() - 1).widget()
 
         def sync_number(widget, value):

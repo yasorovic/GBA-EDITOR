@@ -15,7 +15,6 @@ from core.models.components import (
     PHYSICS_BODY_RIGID,
     PHYSICS_BODY_STATIC,
     CollisionShapeComponent,
-    collision_shapes_collide,
     shape_material,
 )
 from core.models.settings import tags_collide
@@ -202,8 +201,7 @@ def _pair_contacts(p, scene, actor_a, sprite_a, actor_b, sprite_b) -> list[tuple
                 pairs[(rank_a, rank_b)] = (box_a, box_b)
     rows = []
     for (rank_a, rank_b), (box_a, box_b) in pairs.items():
-        if (tags_collide(p.settings, box_a.tag or "body", box_b.tag or "body")
-                and collision_shapes_collide(box_a, box_b)):
+        if tags_collide(p.settings, box_a.tag or "body", box_b.tag or "body"):
             restitution, friction = _contact_material(actor_a, box_a, actor_b, box_b)
             rows.append((rank_a, rank_b, inv_mass_a, inv_mass_b, restitution, friction))
     return rows

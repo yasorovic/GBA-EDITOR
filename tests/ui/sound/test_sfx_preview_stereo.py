@@ -103,7 +103,7 @@ def test_each_preview_of_a_varied_effect_plays_a_fresh_draw(qapp, project, coin,
     player = BoxPlayer()
     coin.pitch, coin.pitch_variation = 100, 20
     played = []
-    monkeypatch.setattr(player, "_live_track", lambda _project, asset: played.append(asset.pitch))   # rien à jouer : on lit le tirage
+    monkeypatch.setattr(player, "_live_track", lambda _project, asset, bounded=False: played.append(asset.pitch))   # rien à jouer : on lit le tirage
     monkeypatch.setattr(sfx_render.random, "randint", lambda low, high: high)
 
     player.preview(project, coin)

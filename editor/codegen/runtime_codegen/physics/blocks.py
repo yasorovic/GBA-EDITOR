@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from core.models.components import (
     COLLISION_RESPONSE_BLOCK, PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
-    PHYSICS_BODY_STATIC, CollisionShapeComponent, collision_shapes_collide,
+    PHYSICS_BODY_STATIC, CollisionShapeComponent,
 )
 from core.models.settings import tags_collide
 from codegen.runtime_codegen.physics.body import (
@@ -213,7 +213,6 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
 
     def can_stop(mover_owner, mover_sprite, blocker):
         return any(tags_collide(p.settings, mover.tag or "body", blocker.tag or "body")
-                   and collision_shapes_collide(mover, blocker)
                    for mover in _body_colliders(mover_owner, mover_sprite))
 
     def moving_flag(blocker_mode) -> int:

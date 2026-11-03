@@ -34,6 +34,7 @@ from ui.common.labels import label
 from ui.common.theme import C, T
 from ui.common.tooltip import tooltip
 from ui.common.unit_spin import UnitSpin
+from ui.common.widgets import ResetToDefaultButton
 from ui.sound_mixer.channel_meters import ChannelMeters
 from ui.sound_mixer.mix_faders import SFX_FADERS, SFX_FADES, SFX_PAN, MixFaders, mix_panel
 from ui.sound_mixer.trim_bar import TrimBar
@@ -104,11 +105,16 @@ class SfxEditor(QWidget):
         row.setSpacing(6)
         self._start = self._spin("sfxedit.start", "sfxedit.start_tip", row)
         self._end = self._spin("sfxedit.end", "sfxedit.end_tip", row)
-        self._reset = QPushButton(label("sfxedit.reset"))
-        self._reset.setFont(QFont(T.UI, T.MD))
-        self._reset.setToolTip(tooltip(title=label("sfxedit.reset"), body=label("sfxedit.reset_tip")))
+        row.addStretch(1)
+        layout.addLayout(row)
+        # En bas de la section qu'il remet à zéro : la découpe (barre, poignées, champs).
+        self._reset = ResetToDefaultButton()
+        self._reset.setToolTip(tooltip(title=label("common.reset_to_default"), body=label("sfxedit.reset_tip")))
         self._reset.clicked.connect(lambda: self._commit(0, self._total_ms))
-        row.addWidget(self._reset)
+        layout.addWidget(self._reset)
+
+        row = QHBoxLayout()
+        row.setSpacing(6)
         # Écoute A/B du taux : le même effet au taux de son fichier, pour juger ce que le taux de la ROM lui coûte.
         self._ab = QPushButton(label("sfxedit.ab"))
         self._ab.setFont(QFont(T.UI, T.MD))
@@ -274,7 +280,7 @@ class SfxEditor(QWidget):
         else:
             self._wave.set_ramp(None)
         self._trim_bar.setVisible(ready)
-        self._reset.setEnabled(ready and (self._sfx.trim_start > 0 or self._sfx.trim_end > 0))
+        self._reset.set_modified(ready and (self._sfx.trim_start > 0 or self._sfx.trim_end > 0))
         self._blocking = False
         self._sync_ab()
         self._update_summary()

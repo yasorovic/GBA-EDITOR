@@ -34,6 +34,10 @@ if TYPE_CHECKING:
 
 _REGISTRY: dict[str, type["BaseComponentEditor"]] = {}
 
+# Largeur de la colonne des libellés des éditeurs physique/collision (« Collides with map »,
+# « Physics collider » se coupaient à la largeur par défaut de W.row).
+LABEL_WIDTH = 176
+
 
 def register(comp_type: str):
     """Décorateur : @register('sprite') lie un éditeur à un type de component."""

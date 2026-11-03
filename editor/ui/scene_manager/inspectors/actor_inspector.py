@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from core.models.unique_name import unique_name
 from core.models.resource import MIME_SCRIPT
 from core.models.components import (
-    SpriteComponent, component_type_name, competing_sprite_components,
+    SpriteComponent, component_type_name, competing_sprite_components, SINGLETON_COMPONENTS,
     displayed_sprite_component, sprite_components,
 )
 from core.models.scene import Actor, Scene, Prefab
@@ -511,12 +511,11 @@ class ActorInspector(QWidget):
         self._comp_card.add_header_widget(btn_del)
 
         self._comp_list = ComponentListWidget()
-        self._comp_list.setFixedHeight(100)
         self._comp_list.setFont(QFont(T.UI, T.MD))
         self._comp_list.setStyleSheet(
             f"QListWidget{{background:{C.BG_DEEP};color:{C.TEXT_NORM};"
             f"border:none;border-radius:0;}}"
-            f"QListWidget::item{{padding:4px 8px;border-bottom:1px solid {C.BORDER_DARK};}}"
+            f"QListWidget::item{{padding:2px 8px;border-bottom:1px solid {C.BORDER_DARK};}}"
             f"QListWidget::item:selected{{background:{C.BG_SEL};color:{C.ACCENT};"
             f"border-left:2px solid {C.ACCENT};}}"
             f"QListWidget::item:hover:!selected{{background:{C.BG_HOVER};}}"
@@ -610,7 +609,7 @@ class ActorInspector(QWidget):
         self._comp_list.setStyleSheet(
             f"QListWidget{{background:{C.BG_DEEP};color:{C.TEXT_NORM};"
             f"border:none;border-radius:0;}}"
-            f"QListWidget::item{{padding:4px 8px;border-bottom:1px solid {C.BORDER_DARK};}}"
+            f"QListWidget::item{{padding:2px 8px;border-bottom:1px solid {C.BORDER_DARK};}}"
             f"QListWidget::item:selected{{background:{sel_bg};color:{color};"
             f"border-left:2px solid {color};}}"
             f"QListWidget::item:hover:!selected{{background:{C.BG_HOVER};}}"
@@ -1159,17 +1158,32 @@ class ActorInspector(QWidget):
 
     # ── Components ───────────────────────────────────────────────
 
+    @staticmethod
+    def _component_text(comp) -> str:
+        """Une ligne de la liste : « Type [id] » ; l'id se tait pour un composant unique par acteur."""
+        type_name = component_type_name(comp)
+        text = label(COMPONENT_LABEL_KEYS.get(type_name, type_name))
+        if type_name not in SINGLETON_COMPONENTS:
+            text += f" [{comp.id}]"
+        if not comp.active:
+            text += "  " + label("actorinsp.comp_inactive")
+        return text
+
+    def _fit_comp_list(self):
+        """La liste suit son contenu (2 à 8 lignes) au lieu d'un cadre fixe de trois lignes."""
+        rows = self._comp_list.count()
+        row_h = self._comp_list.sizeHintForRow(0) if rows else 24
+        shown = max(2, min(rows, 8))
+        self._comp_list.setFixedHeight(shown * max(row_h, 1) + 2 * self._comp_list.frameWidth())
+
     def _refresh_component_list(self, keep_row: int = 0):
         self._comp_list.blockSignals(True)
         self._comp_list.clear()
         if self._actor:
             for comp in self._actor.components:
-                type_name = component_type_name(comp)
-                disp = label(COMPONENT_LABEL_KEYS.get(type_name, type_name))
-                text = f"{disp} [{comp.id}]" + (
-                    "  " + label("actorinsp.comp_inactive") if not comp.active else "")
-                self._comp_list.addItem(QListWidgetItem(text))
+                self._comp_list.addItem(QListWidgetItem(self._component_text(comp)))
         self._comp_list.blockSignals(False)
+        self._fit_comp_list()
         if self._comp_list.count():
             row = max(0, min(keep_row, self._comp_list.count() - 1))
             # setCurrentRow() (signaux débloqués ci-dessus) déclenche déjà
@@ -1184,16 +1198,13 @@ class ActorInspector(QWidget):
         if not self._actor: return
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
-        existing_script = self._actor.get_component("script")
-        has_active_script = existing_script is not None and existing_script.active
         for type_name, key in COMPONENT_LABEL_KEYS.items():
-            # Un seul ScriptComponent actif à la fois : le compilateur Lua->C
-            # (lua_compiler._actor_script) n'en lit de toute façon qu'un seul.
-            if type_name == "script" and has_active_script:
-                continue
-            # Un seul composant Interactive par acteur : un second serait ignoré (même règle).
-            if type_name == "interactive" and self._actor.get_component("interactive"):
-                continue
+            # Un seul composant par acteur pour ces types (le compilateur Lua->C ne lit qu'un
+            # ScriptComponent actif ; un second Interactive ou PhysicsBody serait ignoré).
+            if type_name in SINGLETON_COMPONENTS:
+                existing = self._actor.get_component(type_name)
+                if existing is not None and (type_name != "script" or existing.active):
+                    continue
             menu.addAction(label(key), lambda t=type_name: self._add_component(t))
         menu.exec(QCursor.pos())
 
@@ -1308,11 +1319,7 @@ class ActorInspector(QWidget):
             item = self._comp_list.item(i)
             if item is None:
                 continue
-            type_name = component_type_name(comp)
-            disp = label(COMPONENT_LABEL_KEYS.get(type_name, type_name))
-            text = f"{disp} [{comp.id}]" + (
-                "  " + label("actorinsp.comp_inactive") if not comp.active else "")
-            item.setText(text)
+            item.setText(self._component_text(comp))
         self._comp_list.blockSignals(False)
 
     def _clear_editor(self):
@@ -1359,7 +1366,8 @@ class ActorInspector(QWidget):
             return _W.row(label, widget, self._editor_layout)
 
         # ── Méta-header Id + Active (via W) ──────────────────────
-        _W.meta_bar(comp, self._field_syncers, self._set_comp, self._editor_layout)
+        _W.meta_bar(comp, self._field_syncers, self._set_comp, self._editor_layout,
+                    show_id=component_type_name(comp) not in SINGLETON_COMPONENTS)
         _W.separator(self._editor_layout, margin_v=2)
 
         from ui.scene_manager.inspectors.component_editors import get_editor

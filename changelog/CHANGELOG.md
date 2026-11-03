@@ -1,12 +1,28 @@
 # Changelog
 
 > **Numérotation.** Aucune release publique n'existe encore : la version du logiciel est
-> `0.1.x` (le numéro de la première release publique sera décidé plus tard ; l'alpha dure jusqu'à `1.0.0-stable`). Les titres `v0.2` à `v0.28` ci-dessous
+> `0.2.x` (le numéro de la première release publique sera décidé plus tard ; l'alpha dure jusqu'à `1.0.0-stable`). Les titres `v0.2` à `v0.28` ci-dessous
 > sont les **jalons de développement** livrés avant, gardés tels quels ; ils ne sont pas des
 > versions du logiciel. Les entrées de release suivront en tête de ce fichier, à partir de `0.1.0-alpha`.
 
 Une entrée courte par jalon **livré**, dans l'ordre numérique des versions (une version
 reste une identité, pas un rang). Pour ce qui reste à faire, voir [ROADMAP.md](../ROADMAP.md).
+
+## 0.2.0-alpha - Le moteur physique 2D
+
+Faire tomber, porter, pousser et empiler des corps sans écrire la physique à la main.
+
+- **Corps** : quatre modes (statique, personnage, cinématique, rigide), forme physique explicite,
+  matériaux (rebond, frottement). La matrice de tags décide seule quelles boîtes se rencontrent.
+- **Gravité** : réglée pour le projet puis surchargée par scène ; lue par les scripts avec
+  `scene.gravity`, qu'un script peut aussi écrire.
+- **Plateformes et caisses** : plateformes mobiles qui portent et poussent un personnage, événement
+  `on_crushed`, caisses qui s'empilent et s'endorment, solveur à passes réglables.
+- **Sols** : faces à sens unique (tuiles et boîtes d'acteur), `drop_through`, `grounded` et `floor`
+  qui suivent la gravité.
+- **Acteurs créés par un script** : même comportement que les acteurs posés dans la scène.
+- **Correction** : `scene:switch` vers une scène dont le nom commence par un chiffre.
+- **Documentation** : guide « Corps physiques » et page des types de tuile de collision.
 
 ## 0.1.0-alpha - Version de départ (pas encore publiée)
 

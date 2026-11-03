@@ -363,7 +363,8 @@ def test_le_tick_est_decoupe_en_quatre_phases_et_un_repartiteur(project):
     corps = text[text.index(f"static void scene_tick_{sym}(void) {{"):]
     assert corps.index("_hooks();") < corps.index("_physics();") < corps.index("_late();") < corps.index("_render();")
     render = text[text.index(f"static void scene_tick_{sym}_render(void) {{"):text.index(f"static void scene_tick_{sym}(void) {{")]
-    assert "int _oamn" in render and "oam_update();" in render
+    assert "int _oamn" in render and "scene_render_end(_oamn);" in render     # `oam_update()` vit dans le noyau partagé
+    assert "oam_update();" in text[text.index("static void scene_render_end(int oamn) {"):]
     hooks = text[text.index(f"static void scene_tick_{sym}_hooks(void) {{"):text.index(f"static void scene_tick_{sym}_physics(void) {{")]
     assert "_oamn" not in hooks
 

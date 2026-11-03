@@ -1,4 +1,4 @@
 {
-  "importance": "normal",
-  "reasons": []
+  "importance": "major",
+  "reasons": ["feature"]
 }

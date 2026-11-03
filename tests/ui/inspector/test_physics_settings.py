@@ -40,20 +40,21 @@ def test_la_carte_scene_affiche_l_heritage_et_cree_une_surcharge(qapp, tmp_path)
     inspector = SceneInspector()
     inspector.load(scene, project)
 
-    assert inspector._chk_physics_project.isChecked()
-    assert not inspector._spin_gravity_x.isEnabled()
+    assert not scene.physics_gravity_override
+    assert inspector._spin_gravity_x.isEnabled()
+    assert not inspector._btn_physics_reset.isEnabled()
     assert (inspector._spin_gravity_x.value(),
             inspector._spin_gravity_y.value()) == (0.25, 0.5)
 
-    inspector._chk_physics_project.setChecked(False)
-    assert scene.physics_gravity_override
-    assert (scene.physics_gravity_x, scene.physics_gravity_y) == (0.25, 0.5)
-    assert inspector._spin_gravity_x.isEnabled()
-
     inspector._spin_gravity_y.setValue(0.75)
-    assert scene.physics_gravity_y == 0.75
-    inspector._chk_physics_project.setChecked(True)
+    assert scene.physics_gravity_override
+    assert (scene.physics_gravity_x, scene.physics_gravity_y) == (0.25, 0.75)
+    assert inspector._btn_physics_reset.isEnabled()
+
+    inspector._btn_physics_reset.click()
+    assert not scene.physics_gravity_override
     assert scene.effective_physics_gravity(project.settings) == (0.25, 0.5)
+    assert inspector._spin_gravity_y.value() == 0.5
 
     history.undo()
     assert scene.physics_gravity_override
@@ -72,8 +73,7 @@ def test_la_carte_scene_edite_les_parametres_de_simulation(qapp, tmp_path):
     inspector = SceneInspector()
     inspector.load(scene, project)
 
-    assert not inspector._spin_physics_iterations.isEnabled()
-    inspector._chk_physics_project.setChecked(False)
+    assert inspector._spin_physics_iterations.isEnabled()
 
     inspector._spin_physics_iterations.setValue(6)
     inspector._spin_physics_max_fall.setValue(8.0)

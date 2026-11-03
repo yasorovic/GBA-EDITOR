@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSpinBox, QWidget
+from PyQt6.QtWidgets import QDoubleSpinBox, QHBoxLayout, QLabel, QSpinBox, QWidget
 
 from ui.common.theme import C, QSS, T
 
@@ -24,8 +24,8 @@ MIN_SPIN_WIDTH = 56      # quatre chiffres + les flèches : en dessous, la valeu
 _UNIT_WIDTH = 30    # la largeur du bouton d'unité de `ValueField`
 
 
-class QuietSpin(QSpinBox):
-    """N'attrape la molette que s'il a déjà le focus : sinon il vole le défilement du panneau d'inspecteur."""
+class _QuietMixin:
+    """Ce que `QuietSpin` et `QuietDoubleSpin` partagent : molette et sélection."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -33,6 +33,7 @@ class QuietSpin(QSpinBox):
         self.setMinimumWidth(MIN_SPIN_WIDTH)
 
     def wheelEvent(self, event):
+        # N'attrape la molette que s'il a déjà le focus : sinon il vole le défilement du panneau d'inspecteur.
         if self.hasFocus():
             super().wheelEvent(event)
         else:
@@ -45,12 +46,20 @@ class QuietSpin(QSpinBox):
         QTimer.singleShot(0, self.selectAll)
 
 
+class QuietSpin(_QuietMixin, QSpinBox):
+    pass
+
+
+class QuietDoubleSpin(_QuietMixin, QDoubleSpinBox):
+    pass
+
+
 class UnitSpin(QWidget):
     valueChanged = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.field = QuietSpin()
+        self.field = self._make_field()
         self.field.setStyleSheet(QSS.spinbox)
         self.field.setFont(QFont(T.MONO, T.MD))
         self._lead = self._dim_label()
@@ -65,6 +74,9 @@ class UnitSpin(QWidget):
         self.field.valueChanged.connect(self._on_changed)
         self.setFocusProxy(self.field)
         self._sync()
+
+    def _make_field(self) -> QSpinBox | QDoubleSpinBox:
+        return QuietSpin()
 
     @staticmethod
     def _dim_label() -> QLabel:
@@ -138,3 +150,14 @@ class UnitSpin(QWidget):
         showing_word = bool(self.field.specialValueText()) and self.field.value() == self.field.minimum()
         self._unit.setVisible(bool(self._unit.text()) and not showing_word)
         self._lead.setVisible(bool(self._lead.text()))
+
+
+class UnitDoubleSpin(UnitSpin):
+    """`UnitSpin` pour les flottants : gravité, vitesse, amortissement. Même mise en page, même interface."""
+    valueChanged = pyqtSignal(float)
+
+    def _make_field(self) -> QDoubleSpinBox:
+        return QuietDoubleSpin()
+
+    def setDecimals(self, decimals: int) -> None:
+        self.field.setDecimals(decimals)

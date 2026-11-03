@@ -9,7 +9,6 @@ from core.models.components import (
     PHYSICS_BODY_KINEMATIC,
     PHYSICS_BODY_RIGID,
     PHYSICS_BODY_STATIC,
-    collision_shapes_collide,
 )
 from core.models.settings import tags_collide
 from codegen.runtime_codegen.shared_pool_gen import shared_models
@@ -116,8 +115,7 @@ def floor_tick_lines(p, scene_actors, actor_offset: int, scene=None, pi=(), show
             for si, model, sb, floor, floor_mode, guard, oneway in floors:
                 if ((si is not None and si == body_actor)
                         or not (mode == PHYSICS_BODY_RIGID or floor_mode in (PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC))
-                        or not tags_collide(p.settings, box.tag or "body", floor.tag or "body")
-                        or not collision_shapes_collide(box, floor)):
+                        or not tags_collide(p.settings, box.tag or "body", floor.tag or "body")):
                     continue
                 inner = pad + ("" if si is not None else "    ")
                 if dynamic:

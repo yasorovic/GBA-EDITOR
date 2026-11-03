@@ -81,10 +81,6 @@ def test_une_valeur_inconnue_est_refusee_au_lieu_d_etre_remplacee():
         PhysicMaterialComponent(restitution=1.1)
     with pytest.raises(ValueError, match="friction"):
         PhysicMaterialComponent(friction=-0.1)
-    with pytest.raises(ValueError, match="layer"):
-        CollisionShapeComponent(layer=0)
-    with pytest.raises(ValueError, match="mask"):
-        CollisionShapeComponent(mask=65536)
 
 
 def test_le_materiau_physique_est_un_composant_designe_par_la_forme():
@@ -115,18 +111,12 @@ def test_une_ancienne_boite_avec_materiau_est_scindee_a_la_lecture():
     assert isinstance(plain, CollisionShapeComponent) and plain.material_id == ""
 
 
-def test_les_couches_et_masques_de_collision_sont_serialises_et_reciproques():
-    from core.models.components import collision_shapes_collide, components_from_list, components_to_list
+def test_les_anciens_champs_layer_et_mask_sont_perdus_a_la_lecture():
+    from core.models.components import components_from_list, components_to_list
 
-    left = CollisionShapeComponent(layer=0b0010, mask=0b0100)
-    right = CollisionShapeComponent(layer=0b0100, mask=0b0010)
-    hidden = CollisionShapeComponent(layer=0b1000, mask=0b0010)
-    data = components_to_list([left])[0]
-    (reloaded,) = components_from_list([data])
-
-    assert (reloaded.layer, reloaded.mask) == (0b0010, 0b0100)
-    assert collision_shapes_collide(left, right)
-    assert not collision_shapes_collide(left, hidden)
+    (relu,) = components_from_list([{"component_type": "collision_shape", "id": "b", "layer": 2, "mask": 4}])
+    assert not hasattr(relu, "layer") and not hasattr(relu, "mask")
+    assert "layer" not in components_to_list([relu])[0]
 
 
 def test_les_anciens_noms_sont_relus_puis_serialises_avec_les_noms_canoniques():

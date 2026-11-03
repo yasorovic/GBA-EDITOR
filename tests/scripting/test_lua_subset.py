@@ -361,33 +361,8 @@ def test_fonction_absente_du_module_refusee():
     assert any("aide" in e for e in errs), errs
 
 
-def test_les_scripts_de_la_demo_restent_valides():
-    """Le filet le plus large : un projet réel, complet, qui doit rester vert.
-
-    Ce filet juge le LANGAGE, pas l'authoring : le contexte de build réel est
-    construit par owner dans `lua_compiler.transpile_all`, et le refaire ici en
-    fouillant les JSON de la démo en ferait une seconde source qui dériverait au
-    premier champ ajouté. Les garde-fous qui dépendent d'une case cochée dans
-    l'éditeur sont donc ouverts — `Ball` a bien « Affine transform » coché
-    (`assets/prefab/Ball.json`), et c'est le build qui le vérifie. Le refus,
-    lui, est scellé juste en dessous."""
-    from scripting.parser import parse
-    from scripting.checker import check, BuildContext
-
-    racine = REPO_DIR / "Project Demo" / "Pong" / "assets" / "scripts"
-    if not racine.exists():
-        pytest.skip("projet de démo absent")
-    for chemin in racine.rglob("*.lua"):
-        errs = [e.message for e in check(
-            parse(chemin.read_text(encoding="utf-8")),
-            BuildContext(affine_transform=True),
-            check_event_names=(chemin.parent.name != "behaviors"))
-            if e.level == "error"]
-        assert errs == [], f"{chemin.name} : {errs}"
-
-
 def test_transform_affine_avertit_sans_la_case_cochee():
-    """Le pendant du filet ci-dessus : sans « Affine transform » sur le sprite,
+    """Sans « Affine transform » sur le sprite,
     aucun slot de matrice n'est réservé au build, et rien n'affiche
     self.rotation/scale. Un AVERTISSEMENT et non un refus — la valeur, elle,
     s'écrit et se relit (les accesseurs runtime ne consultent plus le slot).

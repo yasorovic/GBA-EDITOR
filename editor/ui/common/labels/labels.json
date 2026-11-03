@@ -192,6 +192,7 @@
     "common.browse": {
       "text": "Browse…"
     },
+    "common.reset_to_default": { "text": "Reset to default" },
     "common.cancel": {
       "text": "Cancel"
     },
@@ -758,6 +759,7 @@
     "comped.collision_material_none": { "text": "Default (no bounce, no friction)" },
     "comped.collision_material_missing": { "text": "Missing PhysicMaterial [{name}]" },
     "comped.physics_mode": { "text": "Mode" },
+    "comped.physics_mode_tip": { "text": "How this actor moves and collides: StaticBody never moves, CharacterBody is driven by its script, KinematicBody applies its velocity and carries other bodies, RigidBody is simulated with gravity and impulses." },
     "comped.physics_collider": { "text": "Physics collider" },
     "comped.physics_choose_collider": { "text": "Choose a CollisionShape..." },
     "comped.physics_collider_tip": { "text": "CollisionShape used as this body’s physical shape. Once selected, the other boxes remain available for contacts and sensors but are not used to resolve this body." },
@@ -916,8 +918,7 @@
     "sceneinsp.card.physics": {
       "text": "Physics"
     },
-    "sceneinsp.physics_use_project": { "text": "Use project physics settings" },
-    "sceneinsp.physics_use_project_tip": { "text": "Uses gravity and simulation defaults from Project Settings. Unchecking it creates values specific to this scene." },
+    "sceneinsp.physics_reset_tip": { "text": "Restores the gravity and simulation values from Project Settings for this scene. Available once the scene has its own values." },
     "sceneinsp.physics_gravity": { "text": "Gravity:" },
     "sceneinsp.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors, in pixels per frame squared. Character and Kinematic actors ignore it." },
     "sceneinsp.physics_solver_iterations": { "text": "Solver passes:" },
@@ -990,9 +991,6 @@
     },
     "sceneinsp.backdrop_title": {
       "text": "Backdrop color"
-    },
-    "sceneinsp.backdrop_reset": {
-      "text": "Project default"
     },
     "sceneinsp.backdrop_reset_tip": { "text": "Reuses the backdrop color defined at project level." },
     "sceneinsp.backdrop_dialog": {
@@ -1677,10 +1675,6 @@
     "comped.tag": {
       "text": "Tag"
     },
-      "comped.collision_layer": { "text": "Layers" },
-      "comped.collision_layer_tip": { "text": "Collision categories as a 16-bit mask. Each enabled bit is a layer this CollisionShape belongs to." },
-      "comped.collision_mask": { "text": "Collision mask" },
-      "comped.collision_mask_tip": { "text": "Collision categories this CollisionShape can meet. A contact needs both masks to accept the other layer." },
     "comped.offset": {
       "text": "Offset"
     },
@@ -3310,7 +3304,6 @@
     "bgedit.adj_brightness_tip": { "text": "Lightens or darkens the whole image." },
     "bgedit.adj_contrast": { "text": "Contrast" },
     "bgedit.adj_contrast_tip": { "text": "Widens or narrows the gap between light and dark areas." },
-    "bgedit.adj_reset": { "text": "Reset adjustments" },
     "bgedit.adj_reset_tip": { "text": "Puts hue, saturation, brightness and contrast back to neutral." },
     "bgedit.dither_kind": { "text": "Dithering type" },
     "bgedit.dither_kind_tip": { "text": "How the color reduction spreads its error. Diffusion follows the image; ordered patterns are regular, so they tile cleanly." },
@@ -3345,9 +3338,6 @@
     },
     "bgedit.comp_method_tip": {
       "text": "How colors are merged inside a tile that has too many."
-    },
-    "bgedit.comp_reset": {
-      "text": "Reset"
     },
     "bgedit.comp_reset_tip": { "text": "Restores the default compression settings." },
     "bgedit.comp_off": {
@@ -5123,7 +5113,6 @@
     "sfxedit.ab": { "text": "File rate" },
     "sfxedit.ab_tip": { "text": "Plays the effect at the sample rate of its file instead of the rate the ROM will use, to hear what the lower rate costs. Only the preview changes; the build keeps the rate of the effect or of the project. Available when the two rates differ; the weight at the file's rate is shown below." },
     "sfxedit.summary_rate": { "text": " · {kb} KiB at the file's rate ({rate} Hz)" },
-    "sfxedit.reset": { "text": "Reset trim" },
     "sfxedit.reset_tip": { "text": "Keeps the whole file again." },
     "sfxedit.summary": { "text": "Keeps {start}–{end} ms ({kept} of {total} ms) · {kb} KiB in ROM instead of {whole} KiB" },
     "sfxedit.summary_whole": { "text": "Whole file · {total} ms · {kb} KiB in ROM" },

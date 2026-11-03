@@ -17,7 +17,7 @@ Convention : `X.Y.Z-<étiquette>`, l'étiquette toujours écrite.
 produit), `Y` = jalon standard de la roadmap, `Z` = tout ce qui avance d'autre
 (chantier technique, correction, optimisation). Tant que le produit n'est pas
 stable, l'étiquette est `-alpha` et l'alpha dure jusqu'à `1.0.0-stable`. Le
-compteur est reparti de zéro (2026-10-21) : la version actuelle est `0.1.x`.
+compteur est reparti de zéro (2026-10-21) : la version actuelle est `0.2.x`.
 Il n'y a pas encore eu de release publique ; son numéro sera décidé plus tard.
 
 Stdlib seule, et aucune importation : ce module est lu par les scripts de
@@ -26,7 +26,7 @@ packaging, qui n'ont pas les dépendances de l'éditeur.
 
 APP_NAME = "Backstage"
 APP_AUTHOR = "Yasorovic"
-APP_VERSION = "0.1.1-alpha"
+APP_VERSION = "0.2.0-alpha"
 
 # Adresses publiques du produit. Le code qui les lit sait s'en passer si l'une
 # est VIDE (le menu « Documentation » ou l'onglet « Modèles » ne s'affichent

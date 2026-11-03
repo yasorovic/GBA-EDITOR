@@ -194,6 +194,33 @@ def make_add_menu_button(button: HoverIconButton) -> None:
     button.setStyleSheet(BTN_ICON + "QToolButton::menu-indicator{image:none;width:0;}")
 
 
+class ResetToDefaultButton(QPushButton):
+    """Bouton « Reset to default », pleine largeur, icône circulaire.
+
+    Toujours placé en bas de la section qu'il remet à zéro. Grisé et non cliquable tant que les
+    valeurs de la section sont celles par défaut ; `set_modified(True)` le rend cliquable dès
+    qu'elles diffèrent. Le parent décide de ce qui compte comme « différent » et branche
+    `clicked` sur sa propre remise à zéro."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(label("common.reset_to_default"), parent)
+        self.setFont(_FONT_UI_SM)
+        self.setStyleSheet(BTN_GHOST)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setIconSize(QSize(14, 14))
+        # Un clic se grise lui-même le bouton : s'il avait le focus, Qt le donne à un autre champ
+        # et la zone de défilement saute vers lui. Sans focus, l'inspecteur reste où il est.
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.set_modified(False)
+
+    def set_modified(self, modified: bool):
+        self.setEnabled(modified)
+        self.setCursor(Qt.CursorShape.PointingHandCursor if modified
+                       else Qt.CursorShape.ArrowCursor)
+        from ui.common import icons
+        self.setIcon(icons.get("reset", C.TEXT_NORM if modified else C.TEXT_MUTED))
+
+
 # ── Factory class (namespace) ─────────────────────────────────────────
 
 class _W:
@@ -503,10 +530,12 @@ class _W:
     def meta_bar(self, comp: Any,
                  field_syncers: dict,
                  set_comp_fn: Callable,
-                 layout: QVBoxLayout) -> tuple[QLineEdit, QCheckBox]:
+                 layout: QVBoxLayout,
+                 show_id: bool = True) -> tuple[QLineEdit | None, QCheckBox]:
         """
         Barre horizontale compacte :  id [ … ]  ☑ Active
         Enregistre automatiquement les syncers pour 'id' et 'active'.
+        `show_id=False` : pas de champ id (composant unique par acteur), seul Active reste.
         Retourne (id_edit, active_cb).
         """
         meta = QWidget()
@@ -515,14 +544,16 @@ class _W:
         )
         ml = QHBoxLayout(meta); ml.setContentsMargins(8, 4, 8, 4); ml.setSpacing(10)
 
-        id_lbl = QLabel("id"); id_lbl.setFont(_FONT_UI_SM)
-        id_lbl.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent; border:none;")
+        id_edit = None
+        if show_id:
+            id_lbl = QLabel("id"); id_lbl.setFont(_FONT_UI_SM)
+            id_lbl.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent; border:none;")
 
-        id_edit = QLineEdit(comp.id); id_edit.setFont(_FONT_MONO_SM)
-        id_edit.setPlaceholderText("id…")
-        id_edit.editingFinished.connect(lambda: set_comp_fn(comp, "id", id_edit.text()))
-        field_syncers["id"] = lambda v, w=id_edit: (
-            w.blockSignals(True), w.setText(str(v)), w.blockSignals(False))
+            id_edit = QLineEdit(comp.id); id_edit.setFont(_FONT_MONO_SM)
+            id_edit.setPlaceholderText("id…")
+            id_edit.editingFinished.connect(lambda: set_comp_fn(comp, "id", id_edit.text()))
+            field_syncers["id"] = lambda v, w=id_edit: (
+                w.blockSignals(True), w.setText(str(v)), w.blockSignals(False))
 
         active_cb = QCheckBox(label('wdg.active')); active_cb.setFont(_FONT_UI_SM)
         active_cb.setChecked(comp.active)
@@ -530,7 +561,11 @@ class _W:
         field_syncers["active"] = lambda v, w=active_cb: (
             w.blockSignals(True), w.setChecked(bool(v)), w.blockSignals(False))
 
-        ml.addWidget(id_lbl); ml.addWidget(id_edit, 1); ml.addWidget(active_cb)
+        if show_id:
+            ml.addWidget(id_lbl); ml.addWidget(id_edit, 1)
+        else:
+            ml.addStretch(1)
+        ml.addWidget(active_cb)
         layout.addWidget(meta)
         return id_edit, active_cb
 

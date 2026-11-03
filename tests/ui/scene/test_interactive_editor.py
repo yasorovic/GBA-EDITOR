@@ -74,7 +74,7 @@ def test_la_taille_n_apparait_que_pour_la_boite_propre(qapp):
 # ── Collision : la case « Bloque les acteurs » ──
 
 def test_la_boite_de_collision_a_sa_case_de_blocage(qapp):
-    from PyQt6.QtWidgets import QCheckBox, QSpinBox
+    from PyQt6.QtWidgets import QCheckBox
     from ui.scene_manager.inspectors.component_editors.collision import CollisionEditor
 
     class _Inspecteur(QWidget):
@@ -102,12 +102,6 @@ def test_la_boite_de_collision_a_sa_case_de_blocage(qapp):
     assert ("response", "block") in written and comp.response == "block"
     insp._field_syncers["response"]("sensor")
     assert not case.isChecked()                    # le syncer repeuple sans écrire
-
-    layer = host.findChild(QSpinBox, "collisionLayer")
-    mask = host.findChild(QSpinBox, "collisionMask")
-    layer.setValue(2)
-    mask.setValue(4)
-    assert ("layer", 2) in written and ("mask", 4) in written
 
 
 def test_le_materiau_physique_ecrit_son_rebond_et_son_frottement(qapp):

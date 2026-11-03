@@ -28,7 +28,7 @@ from ui.common.import_collision import ask_overwrite
 from ui.common.import_folder import import_folder
 from ui.common.theme import C, T, QSS, ui_font
 from ui.common.unit_spin import QuietSpin, UnitSpin
-from ui.common.widgets import W, LibrarySection, AssetHeaderBar, CollapsibleCard
+from ui.common.widgets import W, LibrarySection, AssetHeaderBar, CollapsibleCard, ResetToDefaultButton
 from ui.common.responsive import InspectorScrollArea
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -513,10 +513,9 @@ class BgPropertiesPanel(QWidget):
         # Les lignes propres à un mode : la boîte montre celles du mode courant.
         self._rows_4bpp = [self._sl_palettes._row, self._sl_colors._row, self._sl_global._row]
         self._rows_8bpp = [self._sl_pal8._row]
-        self._btn_comp_reset = self._mini_btn(
-            label("bgedit.comp_reset"),
-            tooltip(title=label("bgedit.comp_reset"), body=label("bgedit.comp_reset_tip")),
-        )
+        self._btn_comp_reset = ResetToDefaultButton()
+        self._btn_comp_reset.setToolTip(tooltip(
+            title=label("common.reset_to_default"), body=label("bgedit.comp_reset_tip")))
         self._btn_comp_reset.clicked.connect(self._on_comp_reset)
         comp.addWidget(self._btn_comp_reset)
         # ── AJUSTEMENTS de l'image : avant la compression, parce qu'ils dirigent ce qu'elle reçoit.
@@ -528,8 +527,9 @@ class BgPropertiesPanel(QWidget):
         self._sl_sat = self._slider_row(adj, label("bgedit.adj_saturation"), label("bgedit.adj_saturation_tip"), -100, 100)
         self._sl_bri = self._slider_row(adj, label("bgedit.adj_brightness"), label("bgedit.adj_brightness_tip"), -100, 100)
         self._sl_con = self._slider_row(adj, label("bgedit.adj_contrast"), label("bgedit.adj_contrast_tip"), -100, 100)
-        self._btn_adj_reset = self._mini_btn(
-            label("bgedit.adj_reset"), tooltip(title=label("bgedit.adj_reset"), body=label("bgedit.adj_reset_tip")))
+        self._btn_adj_reset = ResetToDefaultButton()
+        self._btn_adj_reset.setToolTip(tooltip(
+            title=label("common.reset_to_default"), body=label("bgedit.adj_reset_tip")))
         self._btn_adj_reset.clicked.connect(self._on_adjust_reset)
         adj.addWidget(self._btn_adj_reset)
         adj_card.addWidget(self._adj_host)
@@ -897,6 +897,10 @@ class BgPropertiesPanel(QWidget):
         """Un réglage a bougé : après une pause, le service d'encodage en est averti (`preview_requested`). Un réglage en
         attente ouvre la carte de la compression, pour qu'on voie ce qui est en attente."""
         pending = self._is_pending()
+        self._btn_adj_reset.set_modified(not self._current_adjust().is_default())
+        self._btn_comp_reset.set_modified(
+            not self._current_compression().is_default()
+            or self._cmb_method.currentData() not in (None, "median_cut"))
         self._request_timer.start()
         if pending and not self._tune_open:
             self._tune_open = True

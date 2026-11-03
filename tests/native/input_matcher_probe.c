@@ -44,6 +44,7 @@
    définition (cf. text_layout_probe.c pour la même remarque). */
 vu16    gba_shim_registers[16];
 OBJATTR gba_shim_oam[128];
+Actor   g_actors[1];     /* `runtime_api_inline.h` le déclare extern ; le matcheur n'y touche pas */
 
 void CpuFastSet(const void *source, void *dest, u32 mode) {
     (void)source; (void)dest; (void)mode;

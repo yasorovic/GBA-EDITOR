@@ -461,30 +461,21 @@ def test_la_matrice_de_collision_laisse_passer_un_couple_desactive():
     assert any("actors_resolve_blocks(&g_actors[0]" in l for l in bloque)
 
 
-def test_les_couches_et_masques_eliminent_les_paires_physiques_au_build():
-    hero = _acteur("Hero", tag="Player", layer=0b0001, mask=0b0010)
-    coffre = _acteur("Chest", tag="body", response="block", layer=0b0100, mask=0b0001)
-
-    assert _lignes(_projet(), [hero, coffre]) == []
-
-    coffre.components[0].mask = 0b0001
-    coffre.components[0].layer = 0b0010
-    assert "actors_resolve_blocks(&g_actors[0]" in "\n".join(_lignes(_projet(), [hero, coffre]))
-
-
 def test_le_masque_de_contact_est_cuit_par_couple_de_boites():
     from codegen.runtime_codegen.gen_scene_query import collision_pair_mask
+    from core.models.settings import pair_key
 
     left = Actor(name="Left", components=[
-        CollisionShapeComponent(id="visible", tag="first", layer=1, mask=2),
-        CollisionShapeComponent(id="hidden", tag="second", layer=4, mask=8),
+        CollisionShapeComponent(id="visible", tag="first"),
+        CollisionShapeComponent(id="hidden", tag="second"),
     ])
     right = Actor(name="Right", components=[
-        CollisionShapeComponent(id="target", tag="first", layer=2, mask=1),
-        CollisionShapeComponent(id="other", tag="second", layer=8, mask=4),
+        CollisionShapeComponent(id="target", tag="first"),
+        CollisionShapeComponent(id="other", tag="second"),
     ])
 
-    assert collision_pair_mask(left, right, _projet().settings) == 0b100001
+    settings = _projet([pair_key("first", "second")]).settings
+    assert collision_pair_mask(left, right, settings) == 0b100001
 
 
 def test_le_blocage_est_refuse_par_defaut_et_survit_a_la_serialisation():

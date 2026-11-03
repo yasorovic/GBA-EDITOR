@@ -26,8 +26,6 @@ COLLISION_RESPONSES: tuple[str, ...] = (
 ONE_WAY_OFF = "off"
 ONE_WAY_GRAVITY = "gravity"
 ONE_WAY_MODES: tuple[str, ...] = (ONE_WAY_OFF, ONE_WAY_GRAVITY, "up", "down", "left", "right")
-COLLISION_LAYER_BITS = 16
-COLLISION_ALL_LAYERS = (1 << COLLISION_LAYER_BITS) - 1
 PHYSICS_BODY_STATIC = "StaticBody"
 PHYSICS_BODY_CHARACTER = "CharacterBody"
 PHYSICS_BODY_KINEMATIC = "KinematicBody"
@@ -92,8 +90,6 @@ class CollisionShapeComponent:
     solid: bool = True      # arrêté par la carte de collision (cf. docstring)
     response: str = COLLISION_RESPONSE_SENSOR   # "block" ou "sensor" (cf. docstring)
     tag: str = "body"       # ex: "body", "ground_check", "hitbox", "hurtbox"
-    layer: int = 1            # bits de catégories émises au build
-    mask: int = COLLISION_ALL_LAYERS  # couches qu'elle accepte de rencontrer
     material_id: str = ""   # id d'un PhysicMaterialComponent du même acteur ; vide = matériau par défaut
     one_way: str = ONE_WAY_OFF   # face à sens unique (cf. ONE_WAY_MODES) ; sans effet si la réponse est `sensor`
     # Offset de la boîte depuis la POSITION DE L'ACTEUR, en pixels : le coin haut-gauche du sprite, ou le centre de son cadre
@@ -107,10 +103,6 @@ class CollisionShapeComponent:
     def __post_init__(self):
         if self.response not in COLLISION_RESPONSES:
             raise ValueError(f"unknown collision response {self.response!r}, expected one of {COLLISION_RESPONSES}")
-        if not isinstance(self.layer, int) or not 0 < self.layer <= COLLISION_ALL_LAYERS:
-            raise ValueError("collision layer must be a non-zero 16-bit mask")
-        if not isinstance(self.mask, int) or not 0 <= self.mask <= COLLISION_ALL_LAYERS:
-            raise ValueError("collision mask must be a 16-bit mask")
         self.material_id = str(self.material_id or "")
         if self.one_way not in ONE_WAY_MODES:
             raise ValueError(f"unknown one_way mode {self.one_way!r}, expected one of {ONE_WAY_MODES}")
@@ -144,11 +136,6 @@ def shape_material(owner, shape: CollisionShapeComponent) -> PhysicMaterialCompo
             if isinstance(c, PhysicMaterialComponent) and c.active and c.id == shape.material_id:
                 return c
     return PhysicMaterialComponent()
-
-
-def collision_shapes_collide(a: CollisionShapeComponent, b: CollisionShapeComponent) -> bool:
-    """Les deux boîtes se voient-elles par leurs couches et masques ?"""
-    return bool((a.mask & b.layer) and (b.mask & a.layer))
 
 
 @dataclass
@@ -390,6 +377,11 @@ COMPONENT_REGISTRY: dict = {
     "interactive":   InteractiveComponent,
     "script":        ScriptComponent,
 }
+
+
+# Un seul composant de ces types par acteur : le script et le moteur les adressent par leur
+# type (`self:physics_body()`), jamais par un id. L'inspecteur n'en montre donc pas.
+SINGLETON_COMPONENTS = frozenset({"physics_body", "interactive", "script"})
 
 
 def component_type_name(comp) -> str:

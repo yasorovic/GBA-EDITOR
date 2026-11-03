@@ -64,20 +64,15 @@ glissement tangent et le contact emploie la moyenne géométrique des deux valeu
 Ces coefficients sont combinés au build puis écrits dans les paires physiques de la scène. Ils n'ajoutent
 donc aucun état à l'`Actor` au runtime. Plusieurs formes d'un même acteur peuvent partager un matériau.
 
-## Couches et masques de collision
+## Quelles boîtes se rencontrent
 
-Une `CollisionShape` porte aussi des **couches** et un **masque de collision**, chacun sur 16 bits. Une
-boîte peut appartenir à plusieurs couches. Elle rencontre une autre boîte seulement si son masque accepte
-une couche de l'autre, et réciproquement. Les valeurs par défaut, couche `1` et masque `65535`, conservent
-le comportement historique : toutes les boîtes se rencontrent.
-
-Les couches et masques s'ajoutent à la matrice de tags de **Project Settings > Physics & Collisions** : les
-deux filtres doivent accepter le contact. Le build calcule les couples de boîtes autorisés et ne les émet
-pas dans les tables de contacts, de blocage, de contact au sol ou d'impulsions. Ils n'ajoutent donc aucun champ à
-l'`Actor` ni de lecture dynamique de couches ou de masques dans la ROM.
+Le `tag` d'une `CollisionShape` est son groupe de collision. La matrice de **Project Settings > Physics &
+Collisions** dit, pour chaque couple de tags, s'ils se rencontrent. Le build calcule les couples de boîtes
+autorisés et ne les émet pas dans les tables de contacts, de blocage, de contact au sol ou d'impulsions. Il
+n'ajoute donc aucun champ à l'`Actor` ni de lecture dynamique de la matrice dans la ROM.
 
 Les méthodes Lua de requête géométrique, telles que `collision_shape:overlaps`, restent des tests de forme
-explicites. Elles ne sont pas des événements automatiques et ne consultent pas ces filtres.
+explicites. Elles ne sont pas des événements automatiques et ne consultent pas la matrice.
 
 ## 3. Ajouter l'impulsion de saut
 

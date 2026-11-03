@@ -7,7 +7,6 @@ from core.models.components import (
     PHYSICS_BODY_KINEMATIC,
     PHYSICS_BODY_RIGID,
     PHYSICS_BODY_STATIC,
-    collision_shapes_collide,
 )
 from core.models.settings import tags_collide
 from core.models.collision_tiles import ONEWAY_UP
@@ -77,8 +76,7 @@ def _carry_pairs(p, kinematic, kinematic_sprite, target, target_sprite) -> list[
         return []
     return [(kb, ab) for kb, kbox in _block_boxes(kinematic, kinematic_sprite)
             for ab, abox in _body_boxes(target, target_sprite)
-            if (tags_collide(p.settings, kbox.tag or "body", abox.tag or "body")
-                and collision_shapes_collide(kbox, abox))]
+            if tags_collide(p.settings, kbox.tag or "body", abox.tag or "body")]
 
 
 def _carry_groups(p, scene_actors, actor_offset: int, pi, shown):
@@ -224,7 +222,6 @@ def kinematic_crush_pairs(p, scene_actors, actor_offset: int) -> dict[int, list[
             continue
         for cb, cbox in _body_boxes(character, sprite):
             for si, sb, sbox in statics:
-                if (tags_collide(p.settings, cbox.tag or "body", sbox.tag or "body")
-                        and collision_shapes_collide(cbox, sbox)):
+                if tags_collide(p.settings, cbox.tag or "body", sbox.tag or "body"):
                     pairs.setdefault(actor_offset + ci, []).append((cb, si, sb))
     return pairs
