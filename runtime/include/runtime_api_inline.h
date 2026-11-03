@@ -1042,7 +1042,7 @@ typedef struct { u8 a, b; u16 allowed; ContactFn on_a[3], on_b[3]; } ContactPair
 /* `prev` garde d'une frame à l'autre les couples de tags en contact (cf. `actors_overlap_mask`) : un contact qui naît appelle
    enter, un qui dure collide, un qui se défait exit, chacun avec les tags de CE couple. */
 BS_ATTR_IWRAM
-static void contact_pair_run(const ContactPair* c, u16* prev) {
+static void __attribute__((unused)) contact_pair_run(const ContactPair* c, u16* prev) {
     Actor *a = &g_actors[c->a], *b = &g_actors[c->b];
     u16 cur = (a->active && b->active) ? actors_overlap_mask(a, b, c->allowed) : 0;
     u16 prv = *prev;

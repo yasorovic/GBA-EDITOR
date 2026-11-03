@@ -135,7 +135,7 @@ def character_solver_lines(one_way_tiles=frozenset()) -> list[str]:
     # Sens de la face d'une tuile à sens unique : 0 aucune, 1 haut, 2 bas,
     # 3 gauche, 4 droite. Émis comme le reste depuis `collision_tiles.py`.
     oneway = ", ".join(str(oneway_dir(t)) for t in range(TILE_COUNT))
-    L.append(f"static const u8 g_tile_oneway[{TILE_COUNT}] = {{ {oneway} }};")
+    L.append(f"static const u8 __attribute__((unused)) g_tile_oneway[{TILE_COUNT}] = {{ {oneway} }};")
     L.append(f"static const u8 g_tile_surface[{TILE_COUNT}][TILE_SIZE] = {{")
     for t in range(TILE_COUNT):
         row = ", ".join(f"{v}" for v in column_surfaces(t))

@@ -1,16 +1,24 @@
-"""Mouvement automatique des KinematicBody et RigidBody."""
+"""Mouvement automatique : gravité de scène des Character et Kinematic qui la suivent, intégration des Kinematic et Rigid."""
 from __future__ import annotations
 
 from codegen.runtime_codegen.physics.body import physics_body, physics_body_mode
 from codegen.runtime_codegen.shared_pool_gen import shared_models
-from core.models.components import PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID
+from core.models.components import PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID
 
 
 def _move_lines(target: str, mode: str, gravity_x: int | str, gravity_y: int | str,
                 damping_retain: int, max_fall: int, sleep_frames: int,
                 indent: str) -> list[str]:
-    if mode == PHYSICS_BODY_KINEMATIC:
-        return [f"{indent}actor_apply_velocity({target});"]
+    if mode in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC):
+        # gravity_x et gravity_y valent 0 quand le corps ignore la gravité de scène.
+        body = []
+        if gravity_x != 0 or gravity_y != 0:
+            body.append(f"{indent}({target})->vx+={gravity_x}; ({target})->vy+={gravity_y};")
+            if max_fall:
+                body.append(f"{indent}if(({target})->vy>{max_fall}) ({target})->vy={max_fall};")
+        if mode == PHYSICS_BODY_KINEMATIC:
+            body.append(f"{indent}actor_apply_velocity({target});")
+        return body
     if mode == PHYSICS_BODY_RIGID:
         body = [f"{indent}({target})->vx+={gravity_x}; ({target})->vy+={gravity_y};"]
         if damping_retain == 0:
@@ -41,7 +49,9 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
     gy = round(gravity_y * 256)
 
     def gravity_terms(body, mode):
-        scale = body.gravity_scale if body and mode == PHYSICS_BODY_RIGID else 1.0
+        if mode in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC) and not (body and body.use_scene_gravity):
+            return 0, 0
+        scale = body.gravity_scale if body else 1.0
         if not dynamic_gravity:
             return round(gx * scale), round(gy * scale)
         if scale == 1.0:

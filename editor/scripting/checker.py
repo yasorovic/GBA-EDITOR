@@ -328,23 +328,12 @@ class Checker:
             f"`self` does not exist in a {_OWNER_LABELS.get(kind, kind)} script: it designates the instance the "
             f"script is attached to, and only an actor or a prefab has one. {conseil}"))
 
-    # Types d'exports gérés par le générateur C.
-    _EXPORT_WIRED_TYPES = frozenset({
-        "int", "float", "bool", "enum",
-        "string", "actor_ref", "scene_ref", "sfx_ref",
-        "vec2", "vec3", "rect",
-    })
-
     def _check_export_names(self, script: LuaScript) -> None:
         """Un export est émis comme variable C à NOM NU (chantier « Les exports de
         script, câblés au jeu »). Son nom ne doit donc rien masquer : ni un champ
         FIXE de la struct Actor (`self.position`…), ni un global du projet, ni un
         namespace/fonction de l'API : sinon le C émis casse ou trompe l'auteur.
         C'est la contrepartie du choix du nom nu (pas de préfixe `export.`).
-
-        Signale aussi, en avertissement, un export d'un type dont la valeur
-        d'instance n'est pas ENCORE câblée au build (le premier jet ne règle par
-        instance que int/bool/float/enum) : le défaut du script s'applique alors.
         """
         from .expr_types import _ACTOR_PROP_FIELDS
         globals_ = set(self.ctx.global_names or [])
@@ -373,11 +362,6 @@ class Checker:
                     "error",
                     f"export \"{name}\": unknown type '{loc.export_type}'.{hint} The types are: "
                     f"{', '.join(sorted(KNOWN_EXPORT_TYPES))}."))
-            elif loc.export_type not in self._EXPORT_WIRED_TYPES:
-                self.errors.append(CheckError(
-                    "warning",
-                    f"export \"{name}\" of type '{loc.export_type}': the value set per instance is not "
-                    "applied at build yet; the script default applies."))
 
     def _check_export_values(self, script: LuaScript) -> None:
         """Ce qu'un export déclare doit tenir debout : un `enum` a des étiquettes
@@ -2081,15 +2065,10 @@ class Checker:
                     _key, api = self._method_of(ref, e.method)
                     self._check_args(_key, api, e.args, receiver=chain_label(e.obj),
                                      library=self._library_of(e.obj))
-                elif self._method_of(ref, e.method)[1] is None:
+                elif ref and self._method_of(ref, e.method)[1] is None:
                     shown = f"{chain_label(e.obj)}:{e.method}"
-                    if ref:
-                        if not self._unknown_element(e.obj):
-                            self._unknown_ref_method(shown, ref, "it returns")
-                    else:
-                        self.errors.append(CheckError(
-                            "error",
-                            f"Unknown method: {shown}() : an actor has no such method."))
+                    if not self._unknown_element(e.obj):
+                        self._unknown_ref_method(shown, ref, "it returns")
 
         elif isinstance(e, ExprCall):
             # module:func(args), math.func(args) ou func(args)

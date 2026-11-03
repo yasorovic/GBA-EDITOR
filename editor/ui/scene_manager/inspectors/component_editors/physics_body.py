@@ -76,6 +76,14 @@ class PhysicsBodyEditor(BaseComponentEditor):
         W.row(label("comped.physics_mass"), mass, layout, LABEL_WIDTH)
         mass_row = layout.itemAt(layout.count() - 1).widget()
 
+        use_gravity = QCheckBox()
+        use_gravity.setObjectName("physicsUseSceneGravity")
+        use_gravity.setChecked(comp.use_scene_gravity)
+        use_gravity.setToolTip(tooltip(title=label("comped.physics_use_scene_gravity"),
+                                       body=label("comped.physics_use_scene_gravity_tip")))
+        W.row(label("comped.physics_use_scene_gravity"), use_gravity, layout, LABEL_WIDTH)
+        use_gravity_row = layout.itemAt(layout.count() - 1).widget()
+
         gravity_scale = W.double_spinbox(comp.gravity_scale, -8.0, 8.0, 0.1, 2)
         gravity_scale.setObjectName("physicsGravityScale")
         gravity_scale.setToolTip(tooltip(title=label("comped.physics_gravity_scale"),
@@ -106,7 +114,10 @@ class PhysicsBodyEditor(BaseComponentEditor):
             static_note.show_text() if value == PHYSICS_BODY_STATIC else static_note.clear()
             character_note.show_text() if value == PHYSICS_BODY_CHARACTER else character_note.clear()
             kinematic_note.show_text() if value == PHYSICS_BODY_KINEMATIC else kinematic_note.clear()
-            for widget in (mass_row, gravity_row, sleep_row):
+            has_gravity_option = value in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC)
+            use_gravity_row.setVisible(has_gravity_option)
+            gravity_row.setVisible(is_rigid or (has_gravity_option and use_gravity.isChecked()))
+            for widget in (mass_row, sleep_row):
                 widget.setVisible(is_rigid)
 
         def show_value(value):
@@ -125,10 +136,14 @@ class PhysicsBodyEditor(BaseComponentEditor):
         gravity_scale.valueChanged.connect(
             lambda value: self.set_field(comp, "gravity_scale", float(value)))
         can_sleep.toggled.connect(lambda value: self.set_field(comp, "can_sleep", bool(value)))
+        use_gravity.toggled.connect(lambda value: (
+            self.set_field(comp, "use_scene_gravity", bool(value)), show_mode(mode.currentData())))
         self.register_syncer("mode", show_value)
         self.register_syncer("collider_id", show_collider)
         self.register_syncer("mass", lambda value: sync_number(mass, value))
         self.register_syncer("gravity_scale", lambda value: sync_number(gravity_scale, value))
         self.register_syncer("can_sleep", lambda value: sync_check(can_sleep, value))
+        self.register_syncer("use_scene_gravity", lambda value: (
+            sync_check(use_gravity, value), show_mode(mode.currentData())))
         show_collider(comp.collider_id)
         show_value(comp.mode)

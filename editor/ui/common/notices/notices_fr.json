@@ -4,10 +4,10 @@
       "text": "StaticBody n’a aucun mouvement automatique et ignore les impulsions. Modifier la position de l’Actor téléporte sa géométrie de collision ; utiliser KinematicBody pour un déplacement continu."
     },
     "physics.character_body": {
-      "text": "CharacterBody est piloté par son script : obtenir self:physics_body(), définir sa vélocité, puis appeler body:apply_velocity(). Il ne reçoit ni gravité automatique ni impulsion ; la carte de collision et les colliders Block l’arrêtent."
+      "text": "CharacterBody est piloté par son script : obtenir self:physics_body(), définir sa vélocité, puis appeler body:apply_velocity(). Il suit la gravité de la scène sauf si « Gravité de la scène » est décoché, et ne reçoit aucune impulsion ; la carte de collision et les colliders Block l’arrêtent."
     },
     "physics.kinematic_body": {
-      "text": "KinematicBody applique automatiquement sa vélocité, sans gravité ni impulsion. Les StaticBody et la carte de collision peuvent l’arrêter ; ses colliders Block poussent les corps dynamiques et transportent ceux qui reposent dessus."
+      "text": "KinematicBody applique automatiquement sa vélocité, ajoute la gravité de la scène sauf si « Gravité de la scène » est décoché, et ignore les impulsions. Les StaticBody et la carte de collision peuvent l’arrêter ; ses colliders Block poussent les corps dynamiques et transportent ceux qui reposent dessus."
     },
     "ui.text.key_none": {
       "text": "Texte local · affiché au démarrage de la scène. Créez une entrée pour le partager ou le traduire."

@@ -12,8 +12,8 @@ Le champ **Mode** du composant dit qui déplace l'acteur et comment il rencontre
 | Mode | Qui le déplace | Ce qu'il fait |
 | --- | --- | --- |
 | `StaticBody` | personne | décor solide : sol, mur, bloc. Écrire `self.position` le téléporte avec sa forme. |
-| `CharacterBody` | le script, par `body.velocity` puis `body:apply_velocity()` | personnage : arrêté par la carte et par les boîtes **Block**, donne `grounded` et `floor`. Aucune gravité automatique. |
-| `KinematicBody` | lui-même : sa `velocity` s'applique à chaque frame | plateforme mobile. Elle porte ce qui repose dessus. |
+| `CharacterBody` | le script, par `body.velocity` puis `body:apply_velocity()` | personnage : arrêté par la carte et par les boîtes **Block**, donne `grounded` et `floor`. Suit la gravité de la scène (option **Use scene gravity**). |
+| `KinematicBody` | lui-même : sa `velocity` s'applique à chaque frame | plateforme mobile. Elle porte ce qui repose dessus. Suit aussi la gravité de la scène, à décocher pour une plateforme qui flotte. |
 | `RigidBody` | le moteur | caisse : tombe, rebondit, s'empile, s'endort au repos. |
 
 Une boîte de collision a une **réponse** : **Block** arrête les autres acteurs, **Sensor** ne bloque rien et
@@ -31,21 +31,24 @@ Deux réglages, tous deux en pixels par frame au carré :
 - La carte **Physics** de l'inspecteur d'une scène hérite de tout cela (case **Use project physics settings**)
   ou le remplace par un jeu local complet.
 
-Seul un `RigidBody` reçoit cette gravité automatiquement (multipliée par son champ **Gravity scale**). Un
-`CharacterBody` la lit dans `scene.gravity` et l'applique lui-même :
+Un `RigidBody` reçoit toujours cette gravité (multipliée par son champ **Gravity scale**). Un `CharacterBody` et
+un `KinematicBody` la reçoivent aussi tant que leur case **Use scene gravity** est cochée, ce qui est le cas par
+défaut : le moteur ajoute la gravité à leur vitesse à chaque frame, multipliée par **Gravity scale** et bornée par
+la vitesse maximale de chute. Le script d'un personnage n'a donc qu'à conserver la vitesse verticale :
 
 ```lua
 function on_update()
     local body = self:physics_body()
-    local g = scene.gravity                     -- Q8 : 256 vaut 1 pixel par frame au carré
 
-    local vitesse_y = body.velocity.y
-    if not body.grounded then vitesse_y = vitesse_y + g.y end
-
-    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, vitesse_y)
+    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, body.velocity.y)
     body:apply_velocity()
 end
 ```
+
+Décochez **Use scene gravity** pour un corps qui ne doit pas tomber (une plateforme mobile, un personnage vu de
+dessus) ou dont le script gère lui-même la chute. Dans ce cas, `scene.gravity` reste lisible (Q8 : 256 vaut 1 pixel
+par frame au carré) et le script peut l'ajouter à sa vitesse. Ne l'ajoutez pas quand la case est cochée : la
+gravité serait comptée deux fois.
 
 Une gravité de `0,25` px/frame² vaut `64` en Q8. Un script peut aussi écrire `scene.gravity = vec2(0, 64)` :
 les Rigid suivent, et les notions de sol (`grounded`, `floor`, transport par une plateforme) suivent l'axe
@@ -56,7 +59,8 @@ par frame. Le moteur en tient compte pour le sol, mais borner `vitesse_y` dans l
 
 ## 3. Plateformes mobiles (KinematicBody)
 
-Donnez une `velocity` au `KinematicBody` ; il avance seul. Les Character et les Rigid posés sur sa face qui regarde la
+Donnez une `velocity` au `KinematicBody` ; il avance seul. Décochez **Use scene gravity** pour qu'une plateforme
+ne tombe pas. Les Character et les Rigid posés sur sa face qui regarde la
 gravité sont **portés** : ils suivent le déplacement réel de la plateforme, une seule fois par frame, même si un mur
 a raccourci son trajet.
 
@@ -116,8 +120,9 @@ appelé pour un passager né pendant le jeu.
 
 ## Si le comportement surprend
 
-- un Character reste dans les airs : sa gravité est peut-être nulle. Lisez `scene.gravity` et vérifiez le réglage du
-  projet et de la scène ;
+- un Character reste dans les airs : sa gravité est peut-être nulle, ou **Use scene gravity** est décochée. Lisez
+  `scene.gravity` et vérifiez le réglage du projet et de la scène ;
+- une plateforme `KinematicBody` tombe : décochez **Use scene gravity** ;
 - un Rigid ne tombe pas : même cause, ou **Gravity scale** à `0` ;
 - un personnage ne descend pas d'une plateforme : appelez `body:drop_through(frames)`, et vérifiez qu'elle est à sens
   unique (une face pleine le porte toujours) ;

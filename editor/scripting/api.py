@@ -2137,8 +2137,8 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             "(the project default or the scene override). Writing it changes the gravity of every RigidBody (scaled "
             "by its gravity_scale) and the side a body rests on: grounded, floor and the carrying of a "
             "KinematicBody follow the dominant axis (the bottom when the gravity is zero). A one-way face set to "
-            "`gravity` keeps the direction it had when the scene started. A CharacterBody applies no gravity of "
-            "its own: read it here to apply it. Ex: scene.gravity = vec2(0, 0 - 64)",
+            "`gravity` keeps the direction it had when the scene started. A CharacterBody and a KinematicBody follow it "
+            "automatically unless their Use scene gravity option is off; then read it here to apply it. Ex: scene.gravity = vec2(0, 0 - 64)",
     ),
     "scene.size": ApiProp(
         lua_name="scene.size", c_getter="", ptype=PARAM_RECT, read_only=True,

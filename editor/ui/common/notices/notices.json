@@ -12,11 +12,11 @@
     },
     "physics.character_body": {
       "tone": "info",
-      "text": "CharacterBody is driven by its script: get self:physics_body(), set its velocity, then call body:apply_velocity(). It receives no automatic gravity or impulse; the collision map and Block colliders stop it."
+      "text": "CharacterBody is driven by its script: get self:physics_body(), set its velocity, then call body:apply_velocity(). It follows the scene gravity unless Use scene gravity is off. It receives no impulse; the collision map and Block colliders stop it."
     },
     "physics.kinematic_body": {
       "tone": "info",
-      "text": "KinematicBody applies its velocity automatically without gravity or impulses. StaticBody actors and the collision map can stop it; its Block colliders push dynamic bodies and carry bodies resting on top."
+      "text": "KinematicBody applies its velocity automatically, adds the scene gravity unless Use scene gravity is off, and ignores impulses. StaticBody actors and the collision map can stop it; its Block colliders push dynamic bodies and carry bodies resting on top."
     },
     "actor.priority": {
       "tone": "accent",

@@ -1,9 +1,6 @@
 """Des diagnostics du checker Lua qu'aucun test ne déclenchait (la liste d'exemptions de la couverture : cf.
 `tools/diagnostic_coverage_exemptions.json`). Chaque test écrit le script fautif et lit ce que le checker en dit.
-
-Restent exemptés, avec leur raison dans le fichier d'exemptions : deux branches que leur condition rend inatteintes
-(« export … not applied at build yet » : tous les types connus sont câblés ; « an actor has no such method » : un
-récepteur qui rend un acteur est toujours typé, et c'est l'autre message qui parle)."""
+"""
 from __future__ import annotations
 
 from scripting.checker import BuildContext, check

@@ -154,7 +154,10 @@ class PhysicsBodyComponent:
     `solid`. Pour un `RigidBody`, `mass` répartit les impulsions entre deux
     corps, `gravity_scale` module la gravité de scène et `can_sleep` autorise
     la règle de sommeil de la scène. Ces valeurs sont intégrées au code généré
-    et n'ajoutent aucun champ à l'Actor runtime. `collider_id` relie le corps à
+    et n'ajoutent aucun champ à l'Actor runtime. `use_scene_gravity` (vrai par
+    défaut) fait réagir un CharacterBody ou un KinematicBody à la gravité de
+    scène, multipliée par `gravity_scale`; un RigidBody la reçoit toujours.
+    `collider_id` relie le corps à
     sa CollisionShape physique. Une valeur vide conserve provisoirement la
     sélection historique des boîtes `solid`.
     """
@@ -165,6 +168,7 @@ class PhysicsBodyComponent:
     mass: float = 1.0
     gravity_scale: float = 1.0
     can_sleep: bool = True
+    use_scene_gravity: bool = True
 
     def __post_init__(self):
         self.mode = _LEGACY_PHYSICS_BODY_MODES.get(self.mode, self.mode)

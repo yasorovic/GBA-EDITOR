@@ -2,7 +2,5 @@
  "codegen/runtime_codegen/lua_compiler.py::transpile_all::572de0d2": "couvert par un test slow seulement (test_un_avertissement_du_generateur_nomme_le_script_de_chaque_famille), hors run par défaut",
  "codegen/runtime_codegen/lua_compiler.py::transpile_all::572de0d2#2": "couvert par un test slow seulement (test_un_avertissement_du_generateur_nomme_le_script_de_chaque_famille), hors run par défaut",
  "codegen/runtime_codegen/lua_compiler.py::transpile_all::572de0d2#3": "couvert par un test slow seulement (test_un_avertissement_du_generateur_nomme_le_script_de_chaque_famille), hors run par défaut",
- "codegen/runtime_codegen/lua_compiler.py::transpile_all::572de0d2#4": "couvert par un test slow seulement (test_un_avertissement_du_generateur_nomme_le_script_de_chaque_famille), hors run par défaut",
- "scripting/checker.py::_check_call_expr::76e3bf3f#6": "branche morte : un récepteur qui rend un acteur est toujours typé (REF_ACTOR), l'autre message parle",
- "scripting/checker.py::_check_export_names::60f45752": "branche morte : tous les types connus (KNOWN_TYPES) sont dans _EXPORT_WIRED_TYPES"
+ "codegen/runtime_codegen/lua_compiler.py::transpile_all::572de0d2#4": "couvert par un test slow seulement (test_un_avertissement_du_generateur_nomme_le_script_de_chaque_famille), hors run par défaut"
 }

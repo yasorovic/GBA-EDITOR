@@ -4,29 +4,29 @@ Ce guide donne à un acteur le comportement d'un personnage de jeu de plateforme
 sur le sol et saute.
 
 **Ce qu'il vous faut :** une scène avec un sol peint dans la carte de collision, et un acteur avec
-une boîte **Collision** en mode **Solid** et un script. Ces deux éléments se préparent dans
+une boîte **Collision** (Collision shape) et un script. Le corps physique est un `CharacterBody` dont le
+collider est cette boîte. Ces deux éléments se préparent dans
 [Collisions](collisions.md).
 
 ## 1. Ajouter la gravité
 
-La carte de collision arrête l'acteur contre un mur, un sol ou un plafond, mais un `CharacterBody` ne
-reçoit aucune gravité automatique : un acteur immobile dans les airs y reste. La gravité se règle une
+La carte de collision arrête l'acteur contre un mur, un sol ou un plafond. La gravité se règle une
 fois pour le projet (**Game > Project Settings > Physics & Collisions**, en pixels par frame au carré) et
-peut être remplacée par scène. Le script la lit dans `scene.gravity` et l'ajoute à chaque frame
-quand l'acteur est en l'air :
+peut être remplacée par scène. Un `CharacterBody` la suit tant que la case **Use scene gravity** de son composant
+est cochée (c'est le cas par défaut) : le moteur l'ajoute à sa vitesse verticale, le script n'a qu'à conserver
+cette vitesse en écrivant la sienne :
 
 ```lua
 function on_update()
     local body = self:physics_body()
-    local g = scene.gravity                      -- la gravité de la scène, en Q8
 
-    local vitesse_y = body.velocity.y
-    if not body.grounded then vitesse_y = vitesse_y + g.y end
-
-    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, vitesse_y)
+    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, body.velocity.y)
     body:apply_velocity()
 end
 ```
+
+Si la case est décochée, l'acteur ne tombe pas de lui-même et le script gère la chute : il lit `scene.gravity`
+(la gravité de la scène, en Q8) et l'ajoute à chaque frame quand l'acteur est en l'air.
 
 `scene.gravity` s'exprime dans la même échelle que `body.velocity` : `256` vaut 1 pixel par frame (une
 gravité de `0,25` px/frame² vaut donc `64`). Quand la boîte touche le sol peint, le moteur annule la
@@ -84,10 +84,8 @@ exports = {
 
 function on_update()
     local body = self:physics_body()
-    local g = scene.gravity
     local vitesse_x = input:get_axis("horizontal") * vitesse * 256
-    local vitesse_y = body.velocity.y
-    if not body.grounded then vitesse_y = vitesse_y + g.y end
+    local vitesse_y = body.velocity.y            -- la gravité de la scène est déjà dedans
 
     if body.grounded and input:pressed("a") then
         vitesse_y = -force_saut
@@ -118,7 +116,7 @@ Lancez **Run**, déplacez l'acteur avec gauche et droite, puis appuyez sur `A` :
 - il retombe et s'arrête sur le sol peint ;
 - les murs peints l'arrêtent.
 
-Si le saut ne fonctionne pas, vérifiez que la boîte est en mode **Solid** et que le sol est bien
-peint. Si l'acteur reste dans les airs au départ, vérifiez la gravité du projet et de la scène : à `0`, `scene.gravity`
-rend `0` et rien ne le fait tomber. `body.grounded` décrit la fin de la frame précédente : juste après avoir quitté une
+Si le saut ne fonctionne pas, vérifiez que le composant Physics body désigne la boîte comme collider
+(sélecteur **Physics collider**) et que le sol est bien peint. Si l'acteur reste dans les airs au départ, vérifiez la gravité du projet et de la scène : à `0`, `scene.gravity`
+rend `0` et rien ne le fait tomber. Vérifiez aussi que **Use scene gravity** est cochée. `body.grounded` décrit la fin de la frame précédente : juste après avoir quitté une
 plateforme, il peut rester vrai une frame.

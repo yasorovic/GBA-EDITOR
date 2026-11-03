@@ -189,10 +189,35 @@ def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
     lines = "\n".join(physics_motion_lines(
         scene, settings, [(character, None), (kinematic, None), (rigid, None)], 3, []))
 
-    assert "g_actors[3]" not in lines       # Character reste piloté explicitement par son script.
+    assert "(&g_actors[3])->vx+=64; (&g_actors[3])->vy+=128;" in lines   # Character : gravité seule, son script l'applique.
+    assert "actor_apply_velocity(&g_actors[3]);" not in lines
+    assert "(&g_actors[4])->vx+=64; (&g_actors[4])->vy+=128;" in lines
     assert "actor_apply_velocity(&g_actors[4]);" in lines
     assert "(&g_actors[5])->vx+=64; (&g_actors[5])->vy+=128;" in lines
     assert "actor_apply_velocity(&g_actors[5]);" in lines
+
+
+def test_character_et_kinematic_peuvent_ignorer_la_gravite_de_scene():
+    from types import SimpleNamespace
+    from codegen.runtime_codegen.physics.motion import physics_motion_lines
+    from core.models.components import components_from_list, components_to_list
+    from core.models.scene import Scene
+
+    assert PhysicsBodyComponent(mode="CharacterBody").use_scene_gravity is True
+    assert PhysicsBodyComponent(mode="KinematicBody").use_scene_gravity is True
+    off = PhysicsBodyComponent(mode="KinematicBody", use_scene_gravity=False)
+    assert components_from_list(components_to_list([off]))[0].use_scene_gravity is False
+
+    character = _actor("Hero", mode="CharacterBody")
+    character.components[-1].use_scene_gravity = False
+    kinematic = _actor("Lift", mode="KinematicBody")
+    kinematic.components[-1].use_scene_gravity = False
+    settings = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
+    lines = "\n".join(physics_motion_lines(
+        Scene(name="Platform"), settings, [(character, None), (kinematic, None)], 0, []))
+    assert "g_actors[0]" not in lines
+    assert "vy+=" not in lines
+    assert "actor_apply_velocity(&g_actors[1]);" in lines
 
 
 def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():

@@ -35,6 +35,7 @@ def test_l_editeur_affiche_et_ecrit_les_quatre_noms_canoniques(qapp):
     mass = host.findChild(QDoubleSpinBox, "physicsMass")
     gravity_scale = host.findChild(QDoubleSpinBox, "physicsGravityScale")
     can_sleep = host.findChild(QCheckBox, "physicsCanSleep")
+    use_gravity = host.findChild(QCheckBox, "physicsUseSceneGravity")
     collider = host.findChild(ScriptSlot)
 
     expected = ["StaticBody", "CharacterBody", "KinematicBody", "RigidBody"]
@@ -45,7 +46,12 @@ def test_l_editeur_affiche_et_ecrit_les_quatre_noms_canoniques(qapp):
     assert "apply_velocity" in character_note.text()
     assert kinematic_note.isHidden()
     assert mass.parentWidget().isHidden()
+    assert not gravity_scale.parentWidget().isHidden()      # actif par défaut pour un Character
+    assert not use_gravity.parentWidget().isHidden()
+    use_gravity.setChecked(False)
+    assert comp.use_scene_gravity is False
     assert gravity_scale.parentWidget().isHidden()
+    use_gravity.setChecked(True)
     assert can_sleep.parentWidget().isHidden()
     assert collider._lbl.text() == "feet [Feet]"
 
@@ -72,6 +78,7 @@ def test_l_editeur_affiche_et_ecrit_les_quatre_noms_canoniques(qapp):
     assert not mass.parentWidget().isHidden()
     assert not gravity_scale.parentWidget().isHidden()
     assert not can_sleep.parentWidget().isHidden()
+    assert use_gravity.parentWidget().isHidden()
     assert written[-1] == ("mode", "RigidBody")
     assert comp.mode == "RigidBody"
 
