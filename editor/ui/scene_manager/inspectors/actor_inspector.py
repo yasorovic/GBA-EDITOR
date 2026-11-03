@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QFrame, QCheckBox, QListWidget, QListWidgetItem, QMenu, QScrollArea,
     QTreeWidget, QTreeWidgetItem, QAbstractItemView,
 )
-from PyQt6.QtGui import QFont, QCursor, QPixmap, QPainter
+from PyQt6.QtGui import QColor, QFont, QCursor, QPixmap, QPainter
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 
 from core.models.unique_name import unique_name
@@ -43,6 +43,9 @@ COMPONENT_LABEL_KEYS = {
     "interactive":   "actorinsp.comp.interactive",
     "script":        "actorinsp.comp.script",
 }
+
+# Composants que le build ignore dans une scène sans physique.
+SCENE_PHYSICS_COMPONENTS = frozenset({"physic_material", "physics_body"})
 
 # ──────────────────────────────────────────────────────────────────
 #  Liste de components qui accepte le drop d'un Script
@@ -1158,8 +1161,12 @@ class ActorInspector(QWidget):
 
     # ── Components ───────────────────────────────────────────────
 
-    @staticmethod
-    def _component_text(comp) -> str:
+    def _component_ignored(self, type_name: str) -> bool:
+        """Le build ignore ce type : la scène affichée n'a pas de physique."""
+        return (type_name in SCENE_PHYSICS_COMPONENTS and self._scene is not None
+                and not self._scene.physics_enabled)
+
+    def _component_text(self, comp) -> str:
         """Une ligne de la liste : « Type [id] » ; l'id se tait pour un composant unique par acteur."""
         type_name = component_type_name(comp)
         text = label(COMPONENT_LABEL_KEYS.get(type_name, type_name))
@@ -1167,7 +1174,16 @@ class ActorInspector(QWidget):
             text += f" [{comp.id}]"
         if not comp.active:
             text += "  " + label("actorinsp.comp_inactive")
+        if self._component_ignored(type_name):
+            text += "  " + label("actorinsp.comp_ignored")
         return text
+
+    def _component_item(self, comp) -> QListWidgetItem:
+        item = QListWidgetItem(self._component_text(comp))
+        if self._component_ignored(component_type_name(comp)):
+            item.setForeground(QColor(C.TEXT_MUTED))
+            item.setToolTip(tooltip(title=item.text(), body=label("actorinsp.comp_ignored_tip")))
+        return item
 
     def _fit_comp_list(self):
         """La liste suit son contenu (2 à 8 lignes) au lieu d'un cadre fixe de trois lignes."""
@@ -1181,7 +1197,7 @@ class ActorInspector(QWidget):
         self._comp_list.clear()
         if self._actor:
             for comp in self._actor.components:
-                self._comp_list.addItem(QListWidgetItem(self._component_text(comp)))
+                self._comp_list.addItem(self._component_item(comp))
         self._comp_list.blockSignals(False)
         self._fit_comp_list()
         if self._comp_list.count():
@@ -1205,7 +1221,10 @@ class ActorInspector(QWidget):
                 existing = self._actor.get_component(type_name)
                 if existing is not None and (type_name != "script" or existing.active):
                     continue
-            menu.addAction(label(key), lambda t=type_name: self._add_component(t))
+            action = menu.addAction(label(key), lambda t=type_name: self._add_component(t))
+            if self._component_ignored(type_name):
+                action.setEnabled(False)
+                action.setToolTip(label("actorinsp.comp_ignored_tip"))
         menu.exec(QCursor.pos())
 
     def _reveal_components(self):

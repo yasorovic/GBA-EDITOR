@@ -44,6 +44,7 @@ from core.app_paths import RUNTIME_DIR
 from codegen.runtime_codegen.headers import generate_actor_types, generate_runtime_api
 from codegen.runtime_codegen.lua_compiler import transpile_all
 from codegen.runtime_codegen.main_gen import generate_main
+from codegen.runtime_codegen.physics.body import without_scene_physics
 from codegen.runtime_codegen.gen_scene_query import ui_image_sprites
 from core.models.palette import OWN_PAL_BANK
 from core.models.components import SpriteComponent
@@ -298,7 +299,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                         apps = owner_appearances(p, actor)
                         if sprite is None and apps:
                             sprite = apps[0][1]
-                        scene_actors.append((actor, sprite))
+                        scene_actors.append((actor if scene.physics_enabled else without_scene_physics(actor), sprite))
                         extra_sprites += [(actor, sp) for _c, sp in apps if sp is not sprite]
 
                 all_scene_data.append({

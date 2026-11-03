@@ -634,6 +634,10 @@ class Scene(Resource):
     collision_layer: int = 0  # index BG (0-3) portant la carte de collisions
     # Grille de collision en tiles 8×8 — list[row][col] de TILE_* constants
     collision_map: list = field(default_factory=list)
+    # Physique de scène : option avancée. Désactivée, la carte Physics disparaît, PhysicsBody et PhysicMaterial
+    # sont ignorés (acteurs et prefabs), et la CollisionShape se simplifie (ni sens unique, ni matériau).
+    # Une scène écrite avant l'option garde sa physique : la clé absente se lit comme activée.
+    physics_enabled: bool = False
     # Surcharge locale des réglages physiques du projet. Le nom historique
     # `physics_gravity_override` est conservé dans le format de scène.
     # Le booléen distingue « hériter » de valeurs locales égales aux défauts.
@@ -773,6 +777,7 @@ class Scene(Resource):
                if self.font_pal_banks else {}),
             "collision_layer": self.collision_layer,
             "collision_map": self.collision_map,
+            "physics_enabled": self.physics_enabled,
             **({"physics_gravity_override": True,
                 "physics_gravity_x": self.physics_gravity_x,
                 "physics_gravity_y": self.physics_gravity_y,
@@ -863,6 +868,7 @@ class Scene(Resource):
             font_pal_banks=_font_pal_banks_from_dict(d),
             collision_layer=d.get("collision_layer", 0),
             collision_map=d.get("collision_map", []),
+            physics_enabled=bool(d.get("physics_enabled", True)),
             # Avant l'héritage projet, la présence d'une valeur de gravité
             # signifiait nécessairement une règle propre à cette scène.
             physics_gravity_override=bool(

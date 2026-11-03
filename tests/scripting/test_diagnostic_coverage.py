@@ -1,8 +1,9 @@
-"""Le cliquet de couverture des diagnostics (chantier « La fiabilité du journal de build », tranche 4).
+"""La couverture des diagnostics (chantier « La fiabilité du journal de build », tranche 4).
 
 `tools/diagnostic_coverage.py` énumère les sites qui peuvent émettre un diagnostic et compare ce qu'un
-run déclenche à une référence. Ces tests protègent le mécanisme lui-même : une clé qui survit à un
-décalage de lignes, un site perdu ou nouveau qui avertit, et un avertissement qui n'échoue jamais.
+run déclenche à la liste d'exemptions. Ces tests protègent le mécanisme lui-même : une clé qui survit à
+un décalage de lignes, un site non testé et non exempté qui avertit, une exemption inutile ou orpheline
+qui avertit, et un avertissement qui n'échoue jamais.
 """
 from __future__ import annotations
 
@@ -57,50 +58,47 @@ def test_le_recorder_couvre_le_site_dont_il_a_vu_la_ligne(tmp_path):
     assert recorder.covered(sites) == {sites[0].key}
 
 
-def test_un_site_perdu_et_un_site_nouveau_avertissent(tmp_path):
+def test_un_site_non_teste_et_non_exempte_avertit(tmp_path):
     sites = dc.enumerate_sites(_tree(tmp_path))
     a, b, c = (s.key for s in sites)
-    baseline = {"sites": {a: True, b: True}}             # `c` n'existait pas à la référence
+    exemptions = {b: "nécessite devkitPro"}
 
-    report = dc.compare(sites, covered={a}, baseline=baseline)
+    report = dc.compare(sites, covered={a}, exemptions=exemptions)
 
-    assert report.lost == [b]                            # couvert avant, plus maintenant
-    assert report.new_unhit == [c]                       # nouveau, jamais déclenché
-    lines = dc.summary_lines(report, baseline)
-    assert lines[0].startswith("Diagnostic coverage: 1/3 sites exercised")
-    assert sum(line.startswith("WARNING") for line in lines) == 2
+    assert report.unexempted == [c]                      # ni testé ni exempté
+    assert report.obsolete == [] and report.stale == []
+    lines = dc.summary_lines(report, exemptions)
+    assert lines[0].startswith("Diagnostic coverage: 1/3 sites exercised") and "1 exempted" in lines[0]
+    assert sum(line.startswith("WARNING") for line in lines) == 1
 
 
-def test_rien_a_signaler_quand_la_couverture_se_maintient(tmp_path):
+def test_une_exemption_devenue_inutile_ou_orpheline_avertit(tmp_path):
     sites = dc.enumerate_sites(_tree(tmp_path))
-    keys = {s.key for s in sites}
-    report = dc.compare(sites, covered=keys, baseline={"sites": {k: True for k in keys}})
-    assert report.lost == [] and report.new_unhit == []
-    assert not any(line.startswith("WARNING") for line in dc.summary_lines(report, {"sites": {}}))
+    a, b, c = (s.key for s in sites)
+    exemptions = {a: "testé depuis", "core/validator.py::gone::deadbeef": "message réécrit"}
+
+    report = dc.compare(sites, covered={a, b, c}, exemptions=exemptions)
+
+    assert report.obsolete == [a]                        # exempté, mais un test le déclenche
+    assert report.stale == ["core/validator.py::gone::deadbeef"]
+    assert report.unexempted == []
+    assert sum(line.startswith("WARNING") for line in dc.summary_lines(report, exemptions)) == 2
 
 
-def test_la_reference_se_relit_telle_quelle(tmp_path):
+def test_rien_a_signaler_quand_tout_est_teste_ou_exempte(tmp_path):
     sites = dc.enumerate_sites(_tree(tmp_path))
-    path = tmp_path / "baseline.json"
-    dc.write_baseline(sites, {sites[0].key}, collected=42, path=path)
-    loaded = dc.load_baseline(path)
-    assert loaded["collected"] == 42
-    assert sum(loaded["sites"].values()) == 1
+    a, b, c = (s.key for s in sites)
+    report = dc.compare(sites, covered={a, b}, exemptions={c: "hors périmètre"})
+    assert not any(line.startswith("WARNING") for line in dc.summary_lines(report, {c: "hors périmètre"}))
 
 
-def test_sans_reference_il_n_y_a_rien_a_comparer(tmp_path):
-    assert dc.load_baseline(tmp_path / "absent.json") == {}
+def test_sans_fichier_d_exemptions_rien_n_est_exempte(tmp_path):
+    assert dc.load_exemptions(tmp_path / "absent.json") == {}
 
 
-def test_la_reference_du_depot_est_a_jour_avec_le_code():
-    """Pas de site « fantôme » : toute clé de la référence existe encore dans le code. Une clé qui
-    a disparu (message réécrit, fonction renommée) veut dire que la référence est à relever."""
-    baseline = dc.load_baseline()
-    if not baseline:
-        pytest.skip("pas de référence relevée")
+def test_les_exemptions_du_depot_nomment_des_sites_qui_existent_encore():
+    """Pas d'exemption orpheline : toute clé du fichier existe dans le code. Une clé qui a disparu (message réécrit,
+    fonction renommée) veut dire que l'exemption est à mettre à jour, sinon le site réécrit réapparaît non exempté."""
     current = {s.key for s in dc.enumerate_sites()}
-    stale = sorted(set(baseline["sites"]) - current)
-    # un message réécrit change sa clé : on le tolère en petit nombre, on ne laisse pas dériver
-    assert len(stale) <= max(5, len(current) // 20), (
-        f"{len(stale)} clé(s) de la référence n'existent plus ; relever avec "
-        "DIAGNOSTIC_COVERAGE_UPDATE=1 : " + ", ".join(stale[:5]))
+    stale = sorted(set(dc.load_exemptions()) - current)
+    assert stale == [], "exemptions orphelines : " + ", ".join(stale[:5])

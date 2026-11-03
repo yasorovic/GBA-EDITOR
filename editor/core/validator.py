@@ -16,6 +16,7 @@ Plugins : enregistrer un validateur avec @register_validator
                     ctx.error(actor, "MyComp.speed doit être > 0")
 """
 from __future__ import annotations
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, TYPE_CHECKING
@@ -426,6 +427,7 @@ def _check_each_scene(ctx: ValidationContext):
         _check_backgrounds(ctx)
         _check_collision_map(ctx)
         _check_frame_events(ctx)
+        _check_scene_without_physics(ctx, scene)
     ctx.focus(None)
 
 
@@ -546,6 +548,38 @@ def _check_collision_map(ctx):
         col, row, tile = bad[0]
         ctx.error(None, f"Collision map: {len(bad)} tile(s) have an unknown type (first: {tile!r} at column {col}, "
                         f"row {row}). Valid types are 0 to {TILE_COUNT - 1}: repaint or erase them.")
+
+
+_PHYSICS_LUA = re.compile(r"physics_body\s*\(|\bfunction\s+on_crushed\b|\bscene\.gravity\b")
+
+
+def _check_scene_without_physics(ctx, scene):
+    """Une scène sans physique ignore PhysicsBody, PhysicMaterial et les fonctions Lua physiques : le build le dit.
+    Les prefabs comptent par les acteurs posés qui les citent."""
+    if scene.physics_enabled:
+        return
+    from core.models.components import PhysicMaterialComponent, PhysicsBodyComponent
+    owners = list(scene.actors)
+    owners += [pf for pf in (ctx.project.get_prefab(a.prefab_name) for a in scene.actors if a.prefab_name) if pf]
+    seen = set()
+    for owner in owners:
+        if id(owner) in seen:
+            continue
+        seen.add(id(owner))
+        for comp in owner.components:
+            if isinstance(comp, (PhysicsBodyComponent, PhysicMaterialComponent)):
+                ctx.warn(owner, f"{type(comp).__name__.removesuffix('Component')} '{comp.id}' is ignored: physics is "
+                                "disabled in this scene.")
+    scripts = [scene.script] if getattr(scene, "script", "") else []
+    scripts += [c.script for o in owners for c in o.components if getattr(c, "script", None) and c.active]
+    for rel in dict.fromkeys(scripts):
+        path = ctx.project.asset_abs(rel)
+        if not path or not path.exists():
+            continue
+        match = _PHYSICS_LUA.search(path.read_text(encoding="utf-8", errors="replace"))
+        if match:
+            used = match.group(0).split()[-1].replace("physics_body(", "physics_body()")
+            ctx.warn(None, f"Script {rel} uses physics ({used}), which is ignored: physics is disabled in this scene.")
 
 
 def _check_physics_body(ctx, owner, comp):

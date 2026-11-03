@@ -803,6 +803,12 @@
     "actorinsp.comp_inactive": {
       "text": "(inactive)"
     },
+    "actorinsp.comp_ignored": {
+      "text": "(ignored: scene physics off)"
+    },
+    "actorinsp.comp_ignored_tip": {
+      "text": "Scene physics is disabled: this component is ignored by the build."
+    },
     "actorinsp.empty": {
       "text": "Select an actor\nfrom the left panel"
     },
@@ -918,6 +924,8 @@
     "sceneinsp.card.physics": {
       "text": "Physics"
     },
+    "sceneinsp.physics_enabled": { "text": "Scene physics" },
+    "sceneinsp.physics_enabled_tip": { "text": "Enables the physics simulation for this scene. Disabled, PhysicsBody and PhysicMaterial components are ignored, CollisionShape keeps only its response, and the Physics card is hidden. Movement against the collision map still works." },
     "sceneinsp.physics_reset_tip": { "text": "Restores the gravity and simulation values from Project Settings for this scene. Available once the scene has its own values." },
     "sceneinsp.physics_gravity": { "text": "Gravity:" },
     "sceneinsp.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors, in pixels per frame squared. Character and Kinematic actors ignore it." },

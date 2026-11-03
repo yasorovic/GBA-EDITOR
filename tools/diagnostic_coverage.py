@@ -8,13 +8,12 @@ Un message que personne n'a jamais vu sortir n'est pas vérifié : il peut citer
   fonction, empreinte du message — qui survit à un décalage de lignes.
 - **Dynamique** : `Recorder` note, pendant un run de tests, la ligne qui construit chaque
   `ValidationMessage` / `CheckError`.
-- **Cliquet** : la référence `tools/diagnostic_coverage_baseline.json` dit quels sites étaient
-  couverts au dernier relevé. À la fin d'un run COMPLET de `pytest`, `tests/conftest.py` AVERTIT — sans
-  jamais échouer — d'un diagnostic couvert qui ne l'est plus, ou d'un nouveau diagnostic jamais déclenché.
+- **Exemptions** : `tools/diagnostic_coverage_exemptions.json` nomme les sites que l'on assume ne pas tester
+  (clé -> raison). À la fin d'un run COMPLET de `pytest`, `tests/conftest.py` AVERTIT, sans jamais
+  échouer, d'un site non testé et non exempté (nouveau diagnostic, ou test retiré), d'une exemption devenue
+  inutile (le site est maintenant testé) ou d'une exemption dont la clé n'existe plus dans le code.
 
-Relever la référence (après avoir ajouté des tests, ou assumé qu'un site ne l'est plus) :
-
-    DIAGNOSTIC_COVERAGE_UPDATE=1 python -m pytest tests --ignore=tests/native
+La liste est courte et ne se périme pas seule : ajouter un diagnostic sans test le fait apparaître tout de suite.
 
 Voir les sites jamais atteints :
 
@@ -35,7 +34,7 @@ from pathlib import Path
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 EDITOR_DIR = REPO_DIR / "editor"
-BASELINE = REPO_DIR / "tools" / "diagnostic_coverage_baseline.json"
+EXEMPTIONS = REPO_DIR / "tools" / "diagnostic_coverage_exemptions.json"
 
 # Un appel à l'une de ces fonctions fabrique un diagnostic quand l'un de ses arguments est un message.
 EMITTERS = {"warn", "error", "_warn", "report", "build_error", "build_warning", "CheckError"}
@@ -144,47 +143,41 @@ class Recorder:
 class Report:
     total: int
     covered: set[str]
-    lost: list[str]        # couverts à la référence, non couverts maintenant
-    new_unhit: list[str]   # absents de la référence et non couverts
+    unexempted: list[str]   # non testés et non exemptés
+    obsolete: list[str]     # exemptés mais testés maintenant : l'exemption ne sert plus
+    stale: list[str]        # exemptés mais absents du code (message réécrit, fonction renommée)
 
     @property
     def ratio(self) -> float:
         return len(self.covered) / self.total if self.total else 1.0
 
 
-def load_baseline(path: Path = BASELINE) -> dict:
+def load_exemptions(path: Path = EXEMPTIONS) -> dict[str, str]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):  # tolerated: sans référence, il n'y a rien à comparer
+    except (OSError, ValueError):  # tolerated: sans fichier, aucun site n'est exempté
         return {}
 
 
-def compare(sites: list[Site], covered: set[str], baseline: dict) -> Report:
-    known = baseline.get("sites", {})
+def compare(sites: list[Site], covered: set[str], exemptions: dict[str, str]) -> Report:
     keys = {s.key for s in sites}
-    lost = sorted(k for k, was in known.items() if was and k in keys and k not in covered)
-    new_unhit = sorted(k for k in keys if k not in known and k not in covered)
-    return Report(len(keys), covered & keys, lost, new_unhit)
+    return Report(
+        len(keys), covered & keys,
+        unexempted=sorted(k for k in keys if k not in covered and k not in exemptions),
+        obsolete=sorted(k for k in exemptions if k in covered),
+        stale=sorted(k for k in exemptions if k not in keys))
 
 
-def write_baseline(sites: list[Site], covered: set[str], collected: int, path: Path = BASELINE) -> None:
-    payload = {
-        "collected": collected,
-        "sites": {s.key: (s.key in covered) for s in sorted(sites, key=lambda s: s.key)},
-    }
-    path.write_text(json.dumps(payload, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-
-
-def summary_lines(report: Report, baseline: dict) -> list[str]:
-    was = sum(1 for v in baseline.get("sites", {}).values() if v)
+def summary_lines(report: Report, exemptions: dict[str, str]) -> list[str]:
     lines = [f"Diagnostic coverage: {len(report.covered)}/{report.total} sites exercised "
-             f"({report.ratio:.0%}); reference: {was}/{len(baseline.get('sites', {}))}."]
-    if report.lost:
-        lines.append(f"WARNING: {len(report.lost)} diagnostic(s) exercised at the reference are no longer:")
-        lines += [f"    {k}" for k in report.lost[:15]]
-    if report.new_unhit:
-        lines.append(f"WARNING: {len(report.new_unhit)} new diagnostic(s) never exercised by any test:")
-        lines += [f"    {k}" for k in report.new_unhit[:15]]
+             f"({report.ratio:.0%}); {len(exemptions)} exempted."]
+    for count, what, keys in (
+            (len(report.unexempted), "diagnostic(s) never exercised by any test and not exempted", report.unexempted),
+            (len(report.obsolete), "exemption(s) now exercised by a test, remove them", report.obsolete),
+            (len(report.stale), "exemption(s) naming a diagnostic that no longer exists", report.stale)):
+        if count:
+            lines.append(f"WARNING: {count} {what}:")
+            lines += [f"    {k}" for k in keys[:15]]
     return lines
 
 

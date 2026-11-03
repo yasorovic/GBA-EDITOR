@@ -1,6 +1,8 @@
 """Requêtes sur les corps physiques, sans état runtime supplémentaire."""
 from __future__ import annotations
 
+import copy
+import dataclasses
 import re
 from pathlib import Path
 
@@ -11,8 +13,30 @@ from core.models.collision_tiles import (
 from core.models.components import (
     COLLISION_RESPONSE_BLOCK, ONE_WAY_GRAVITY, ONE_WAY_OFF,
     PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
-    CollisionShapeComponent, PhysicsBodyComponent, owner_effective_boxes,
+    CollisionShapeComponent, PhysicMaterialComponent, PhysicsBodyComponent, owner_effective_boxes,
 )
+
+
+def without_scene_physics(owner):
+    """L'acteur ou le prefab tel qu'une scène sans physique le construit : ni PhysicsBody ni PhysicMaterial, et des
+    formes sans sens unique ni matériau (elles gardent leur réponse). Le propriétaire lui-même s'il n'a rien de tel."""
+    def simplified(comps):
+        return [dataclasses.replace(c, one_way=ONE_WAY_OFF, material_id="") if isinstance(c, CollisionShapeComponent) else c
+                for c in comps if not isinstance(c, (PhysicsBodyComponent, PhysicMaterialComponent))]
+
+    def needs_change(o):
+        return any(isinstance(c, (PhysicsBodyComponent, PhysicMaterialComponent))
+                   or (isinstance(c, CollisionShapeComponent) and (c.one_way != ONE_WAY_OFF or c.material_id))
+                   for c in getattr(o, "components", []))
+
+    parts = getattr(owner, "children", None) or []
+    if not needs_change(owner) and not any(needs_change(part) for part in parts):
+        return owner
+    view = copy.copy(owner)
+    view.components = simplified(owner.components)
+    if parts:
+        view.children = [without_scene_physics(part) for part in parts]
+    return view
 
 
 def physics_body(owner) -> PhysicsBodyComponent | None:

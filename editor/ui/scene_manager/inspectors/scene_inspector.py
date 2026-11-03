@@ -370,10 +370,19 @@ class SceneInspector(QWidget):
         )
         mode_inner.addWidget(self._scene_script_slot)
 
+        W.separator(mode_inner)
+        self._chk_physics_enabled = QCheckBox(label("sceneinsp.physics_enabled"))
+        self._chk_physics_enabled.setFont(QFont(T.UI, T.SM))
+        self._chk_physics_enabled.setToolTip(tooltip(
+            title=label("sceneinsp.physics_enabled"), body=label("sceneinsp.physics_enabled_tip")))
+        self._chk_physics_enabled.toggled.connect(self._on_physics_enabled)
+        mode_inner.addWidget(self._chk_physics_enabled)
+
         cl.addWidget(mode_card)
 
         # ── Carte Physics ─────────────────────────────────────────
         physics_card = CollapsibleCard(label("sceneinsp.card.physics"))
+        self._physics_card = physics_card
         physics_inner = physics_card.body_layout
         # Mêmes modèles que les autres cartes : W.pair pour le vecteur (axes colorés),
         # W.row pour label + champ, tous sur la même largeur de label.
@@ -626,6 +635,10 @@ class SceneInspector(QWidget):
     def _refresh_physics(self):
         if not self._scene:
             return
+        self._chk_physics_enabled.blockSignals(True)
+        self._chk_physics_enabled.setChecked(self._scene.physics_enabled)
+        self._chk_physics_enabled.blockSignals(False)
+        self._physics_card.setVisible(self._scene.physics_enabled)
         inherited = not self._scene.physics_gravity_override
         settings = self._project.settings if self._project else None
         gravity_x, gravity_y = self._scene.effective_physics_gravity(settings)
@@ -659,6 +672,12 @@ class SceneInspector(QWidget):
     def _persist_and_refresh_physics(self):
         self._persist()
         self._refresh_physics()
+
+    def _on_physics_enabled(self, value: bool):
+        if self._blocking or not self._scene:
+            return
+        self._set_scene_field("physics_enabled", bool(value), extra_persist=self._refresh_physics)
+        self.changed.emit()
 
     def _on_physics_reset(self):
         self._push_physics_fields([("physics_gravity_override", False)])

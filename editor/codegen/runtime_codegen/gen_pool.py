@@ -9,6 +9,7 @@ from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.gen_appearance import appearance_layout
 from codegen.runtime_codegen.gen_scene_query import parent_depths
 from codegen.runtime_codegen.interact_gen import owner_boxes
+from codegen.runtime_codegen.physics.body import without_scene_physics
 from core.models.components import CollisionShapeComponent
 from core.models.field_value import (
     FieldValue as _FV, number_value as _number_value, var_names_from_project as _var_names,
@@ -34,7 +35,8 @@ def scene_pi(p: Project, scene: Scene) -> list[dict]:
     spool = ({"start": sh.start, "end": sh.end, "entry_start": sh.entry_start, "entries": sh.entries}
              if sh else None)
     return [
-        {"prefab": pl.prefab, "sym": pl.sym, "prefab_sym": pl.prefab_sym,
+        {"prefab": pl.prefab if scene.physics_enabled else without_scene_physics(pl.prefab),
+         "sym": pl.sym, "prefab_sym": pl.prefab_sym,
          # Un modèle que la scène fait naître : il vit dans `spool` et se reconnaît à `Actor.model`
          # (= `model_id`, ou `model_id + k` pour sa partie k).
          "shared": pl.shared, "model_id": pl.model_id, "spool": spool,

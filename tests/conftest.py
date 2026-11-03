@@ -60,8 +60,8 @@ def pytest_collection_modifyitems(items):
 # ── Couverture des diagnostics (cf. tools/diagnostic_coverage.py) ─────────────
 #
 # Chaque run note les lignes qui construisent un diagnostic. À la fin d'un run COMPLET, un
-# avertissement dit quel diagnostic couvert ne l'est plus, ou quel nouveau n'est jamais déclenché.
-# Il n'échoue jamais.
+# avertissement nomme chaque diagnostic jamais déclenché qui n'est pas dans la liste d'exemptions
+# (`tools/diagnostic_coverage_exemptions.json`). Il n'échoue jamais.
 
 TOOLS_DIR = REPO_DIR / "tools"
 
@@ -72,6 +72,17 @@ def pytest_configure(config):
     from diagnostic_coverage import Recorder
     config._diagnostic_recorder = Recorder()
     config._diagnostic_recorder.install()
+
+
+def _is_full_run(config) -> bool:
+    """Toute la suite : ni -k ni -m (hors le « not slow » par défaut de pyproject), le dossier `tests` entier, et rien
+    d'ignoré hors `tests/native` (qui ne produit aucun diagnostic)."""
+    if config.option.keyword or config.option.markexpr not in ("", "not slow"):
+        return False
+    here = config.invocation_params.dir
+    ignored = {(here / path).resolve() for path in config.option.ignore or []}
+    asked = {(here / arg).resolve() for arg in config.args}
+    return ignored <= {REPO_DIR / "tests" / "native"} and asked <= {REPO_DIR / "tests", REPO_DIR}
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
@@ -88,24 +99,10 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
             json.dump(sorted(recorder.hits), handle)
         return
 
-    baseline = dc.load_baseline()
-    collected = getattr(terminalreporter, "_numcollected", 0)
-    update = bool(os.environ.get("DIAGNOSTIC_COVERAGE_UPDATE"))
-    # « Complet » : ni -k ni -m (hors le « not slow » par défaut de pyproject), et presque autant de
-    # tests que lors du relevé de référence.
-    full = (bool(baseline) and not config.option.keyword
-            and config.option.markexpr in ("", "not slow")
-            and collected >= 0.9 * baseline.get("collected", 10 ** 9))
-    if not (full or update):
+    if not _is_full_run(config):
         return
+    exemptions = dc.load_exemptions()
     sites = dc.enumerate_sites()
-    covered = recorder.covered(sites)
-    if update:
-        dc.write_baseline(sites, covered, collected)
-        terminalreporter.write_line(
-            f"Diagnostic coverage reference updated: {len(covered & {s.key for s in sites})}"
-            f"/{len(sites)} sites.", yellow=True)
-        return
-    report = dc.compare(sites, covered, baseline)
-    for line in dc.summary_lines(report, baseline):
+    report = dc.compare(sites, recorder.covered(sites), exemptions)
+    for line in dc.summary_lines(report, exemptions):
         terminalreporter.write_line(line, yellow=line.startswith("WARNING"))
