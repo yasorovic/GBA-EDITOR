@@ -15,20 +15,36 @@ progression. Chaque page se lit seule, mais l'ordre ci-dessous va du plus simple
 Lire les touches, transformer une direction en mouvement, régler la vitesse dans l'inspecteur.
 :::
 
-:::{grid-item-card} Gravité et saut
-:link: gravite-saut
-:link-type: doc
-:class-card: backstage-card backstage-card-purple
-
-Le comportement d'un personnage de plateforme : tomber, marcher, sauter.
-:::
-
 :::{grid-item-card} Collisions
 :link: collisions
 :link-type: doc
 :class-card: backstage-card backstage-card-purple
 
 Peindre la carte de collision, donner une boîte à un acteur, ne plus traverser les murs.
+:::
+
+:::{grid-item-card} Types de tuile de collision
+:link: types-de-tuile-collision
+:link-type: doc
+:class-card: backstage-card backstage-card-purple
+
+Les 26 index de la carte de collision, les vues index et normales, les faces à sens unique.
+:::
+
+:::{grid-item-card} Corps physiques
+:link: corps-physiques
+:link-type: doc
+:class-card: backstage-card backstage-card-purple
+
+Les quatre modes de corps, la gravité de la scène, les plateformes mobiles, les caisses et les sols à sens unique.
+:::
+
+:::{grid-item-card} Gravité et saut
+:link: gravite-saut
+:link-type: doc
+:class-card: backstage-card backstage-card-purple
+
+Le comportement d'un personnage de plateforme : tomber, marcher, sauter.
 :::
 
 :::{grid-item-card} Caméra
@@ -45,7 +61,9 @@ Suivre un acteur dans une scène plus grande que l'écran.
 :maxdepth: 1
 
 Déplacer un acteur <deplacer-acteur>
-Gravité et saut <gravite-saut>
 Collisions <collisions>
+Types de tuile de collision <types-de-tuile-collision>
+Gravité et saut <gravite-saut>
+Corps physiques <corps-physiques>
 Caméra <camera>
 ```

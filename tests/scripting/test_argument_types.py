@@ -78,9 +78,9 @@ def test_un_local_peut_masquer_le_nom_du_constructeur():
     ('self:move(vec2(1, 0), vec2(1, 2))', 'argument "speed" expects a number', "a vec2"),
     ('self:move(vec2(1, 0), n > 2)',  'argument "speed" expects a number',    "a boolean"),
     ('self:move(5, 3)',               'argument "dir" expects a vec2',        "a number"),
-    ('local hb = self:collision_box("body")\n    hb:overlaps(5)',
-     'argument "other" expects an actor (or a collision box)',               "a number"),
-    ('local hb = self:collision_box("body")\n    hb:overlaps("paddle")',
+    ('local hb = self:collision_shape("body")\n    hb:overlaps(5)',
+     'argument "other" expects an actor (or a collision shape)',               "a number"),
+    ('local hb = self:collision_shape("body")\n    hb:overlaps("paddle")',
      'argument "other" expects an actor',                                    "a string"),
 ])
 def test_message_dit_ce_que_la_fonction_attend(call, expected, received):
@@ -112,9 +112,9 @@ def test_parametre_bool_refuse_un_nombre():
     'self:move(vec2(1, 0), n + 1)',              # un calcul
     'self:move(vec2(1, 0), math.abs(n))',        # un appel
     'self:move(self.position, 3)',               # une propriété vec2
-    'local hb = self:collision_box("body")\n    hb:overlaps(self)',
-    'local hb = self:collision_box("body")\n    hb:overlaps(paddle)',
-    'local hb = self:collision_box("body")\n    hb:overlaps(actor:get("paddle"))',
+    'local hb = self:collision_shape("body")\n    hb:overlaps(self)',
+    'local hb = self:collision_shape("body")\n    hb:overlaps(paddle)',
+    'local hb = self:collision_shape("body")\n    hb:overlaps(actor:get("paddle"))',
 ])
 def test_un_argument_bien_type_ou_inconnu_passe(call):
     assert _errors(call) == [], _errors(call)

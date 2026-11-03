@@ -19,7 +19,7 @@ Ce que cette fenêtre regroupe — tout ce que `ProjectSettings` porte :
     (placeholder, cf. `InputsCard` — rien ne les consomme encore).
   - **Languages** — déclaration des langues, reprend `LanguagesCard` telle
     quelle.
-  - **Collisions** — matrice triangulaire de tags qui s'ignorent, tags renommables/déclarables/retirables en place.
+  - **Physics & Collisions** : simulation par défaut, tags et matrice de filtrage.
 
 `ProjectInspector` (panneau latéral du Scene Manager, visible en permanence quand
 rien n'est sélectionné) garde l'identité sous les yeux, avec le nom éditable dans son
@@ -36,7 +36,7 @@ from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QListWidget, QListWidgetItem, QStackedWidget, QScrollArea,
-    QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton, QColorDialog,
+    QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox, QPushButton, QColorDialog,
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QFontMetrics
 from PyQt6.QtCore import Qt, QEvent, QPointF
@@ -45,7 +45,7 @@ from core.models.unique_name import unique_name
 from core.project import Project
 from core.models.settings import (Language, InputBinding, InputSequence, pair_key,
                                   RESERVED_COLLISION_TAGS)
-from core.models.components import CollisionBoxComponent
+from core.models.components import CollisionShapeComponent
 from core.history import (get_history, SetFieldCmd, AddListItemCmd,
                           RemoveListItemCmd, RenameCollisionTagCmd,
                           RemoveCollisionTagCmd)
@@ -1068,14 +1068,14 @@ class _TagHeaderLabel(QWidget):
         p.drawText(0, 0, self._text)
 
 
-class CollisionsPanel(QWidget):
-    """Matrice triangulaire entre tags de boxes — cf.
+class PhysicsCollisionsPanel(QWidget):
+    """Simulation par défaut du projet et matrice triangulaire entre tags de boxes — cf.
     ProjectSettings.collision_disabled_pairs. Cochée = les deux tags se
     rencontrent, ce qui est le défaut : la matrice ne stocke que les
     exceptions.
 
     Les tags qui peuplent lignes et colonnes viennent de DEUX sources
-    réunies (`_all_tags`) : ceux TROUVÉS sur un CollisionBoxComponent
+    réunies (`_all_tags`) : ceux TROUVÉS sur un CollisionShapeComponent
     (scènes et prefabs), et ceux DÉCLARÉS explicitement dans
     `ProjectSettings.collision_tags` — un tag qu'on veut réserver et régler
     avant même de l'assigner à un acteur. Renommer une ligne renomme le tag
@@ -1098,7 +1098,127 @@ class CollisionsPanel(QWidget):
 
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
-        lay.addWidget(_category_title(label('projset.collisions')))
+        lay.addWidget(_category_title(label('projset.physics_collisions')))
+
+        gravity_title = QLabel(label('projset.physics_gravity'))
+        gravity_title.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+        gravity_title.setStyleSheet(f"color:{C.TEXT_HI};")
+        lay.addWidget(gravity_title)
+
+        gravity_host = QWidget()
+        gravity_row = QHBoxLayout(gravity_host)
+        gravity_row.setContentsMargins(0, 0, 0, 0)
+        gravity_row.setSpacing(8)
+        self._spin_gravity_x = QDoubleSpinBox()
+        self._spin_gravity_y = QDoubleSpinBox()
+        for spin, axis, field in (
+            (self._spin_gravity_x, "X", "physics_gravity_x"),
+            (self._spin_gravity_y, "Y", "physics_gravity_y"),
+        ):
+            spin.setRange(-8.0, 8.0)
+            spin.setSingleStep(0.05)
+            spin.setDecimals(2)
+            spin.setPrefix(f"{axis} ")
+            spin.setSuffix(" px/f²")
+            spin.setFont(QFont(T.MONO, T.SM))
+            spin.setStyleSheet(QSS.spinbox)
+            spin.setToolTip(tooltip(title=label('projset.physics_gravity'),
+                                    body=label('projset.physics_gravity_tip')))
+            spin.valueChanged.connect(
+                lambda value, name=field: self._set_physics(name, float(value)))
+            gravity_row.addWidget(spin)
+        gravity_row.addStretch()
+        lay.addWidget(gravity_host)
+
+        gravity_hint = QLabel(label('projset.physics_gravity_hint'))
+        gravity_hint.setWordWrap(True)
+        gravity_hint.setFont(QFont(T.UI, T.SM))
+        gravity_hint.setStyleSheet(f"color:{C.TEXT_DIM};")
+        lay.addWidget(gravity_hint)
+
+        simulation_title = QLabel(label('projset.physics_simulation'))
+        simulation_title.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+        simulation_title.setStyleSheet(f"color:{C.TEXT_HI}; margin-top:6px;")
+        lay.addWidget(simulation_title)
+
+        def simulation_row(key: str, control: QWidget):
+            host = QWidget(); row = QHBoxLayout(host)
+            row.setContentsMargins(0, 0, 0, 0); row.setSpacing(8)
+            title = QLabel(label(key)); title.setFont(QFont(T.UI, T.SM))
+            title.setStyleSheet(f"color:{C.TEXT_DIM};"); title.setFixedWidth(150)
+            row.addWidget(title); row.addWidget(control); row.addStretch()
+            lay.addWidget(host)
+
+        self._spin_physics_iterations = QSpinBox()
+        self._spin_physics_iterations.setRange(1, 8)
+        self._spin_physics_iterations.setFont(QFont(T.MONO, T.SM))
+        self._spin_physics_iterations.setStyleSheet(QSS.spinbox)
+        self._spin_physics_iterations.setToolTip(tooltip(
+            title=label('projset.physics_solver_iterations'),
+            body=label('projset.physics_solver_iterations_tip')))
+        self._spin_physics_iterations.valueChanged.connect(
+            lambda value: self._set_physics("physics_solver_iterations", int(value)))
+        simulation_row('projset.physics_solver_iterations', self._spin_physics_iterations)
+
+        self._spin_physics_max_fall = QDoubleSpinBox()
+        self._spin_physics_max_fall.setRange(0.0, 64.0)
+        self._spin_physics_max_fall.setSingleStep(0.25); self._spin_physics_max_fall.setDecimals(2)
+        self._spin_physics_max_fall.setSuffix(" px/f")
+        self._spin_physics_max_fall.setFont(QFont(T.MONO, T.SM)); self._spin_physics_max_fall.setStyleSheet(QSS.spinbox)
+        self._spin_physics_max_fall.setToolTip(tooltip(
+            title=label('projset.physics_max_fall_speed'),
+            body=label('projset.physics_max_fall_speed_tip')))
+        self._spin_physics_max_fall.valueChanged.connect(
+            lambda value: self._set_physics("physics_max_fall_speed", float(value)))
+        simulation_row('projset.physics_max_fall_speed', self._spin_physics_max_fall)
+
+        self._spin_physics_damping = QDoubleSpinBox()
+        self._spin_physics_damping.setRange(0.0, 1.0)
+        self._spin_physics_damping.setSingleStep(0.01); self._spin_physics_damping.setDecimals(2)
+        self._spin_physics_damping.setFont(QFont(T.MONO, T.SM)); self._spin_physics_damping.setStyleSheet(QSS.spinbox)
+        self._spin_physics_damping.setToolTip(tooltip(
+            title=label('projset.physics_linear_damping'),
+            body=label('projset.physics_linear_damping_tip')))
+        self._spin_physics_damping.valueChanged.connect(
+            lambda value: self._set_physics("physics_linear_damping", float(value)))
+        simulation_row('projset.physics_linear_damping', self._spin_physics_damping)
+
+        self._chk_physics_sleep = QCheckBox(label('projset.physics_sleep'))
+        self._chk_physics_sleep.setFont(QFont(T.UI, T.SM))
+        self._chk_physics_sleep.setToolTip(tooltip(
+            title=label('projset.physics_sleep'), body=label('projset.physics_sleep_tip')))
+        self._chk_physics_sleep.toggled.connect(
+            lambda value: self._set_physics("physics_sleep_enabled", bool(value)))
+        lay.addWidget(self._chk_physics_sleep)
+
+        sleep_host = QWidget(); sleep_row = QHBoxLayout(sleep_host)
+        sleep_row.setContentsMargins(0, 0, 0, 0); sleep_row.setSpacing(8)
+        self._spin_physics_sleep_threshold = QDoubleSpinBox()
+        self._spin_physics_sleep_threshold.setRange(0.0, 4.0)
+        self._spin_physics_sleep_threshold.setSingleStep(0.01)
+        self._spin_physics_sleep_threshold.setDecimals(2)
+        self._spin_physics_sleep_threshold.setPrefix(label('projset.physics_sleep_threshold_prefix'))
+        self._spin_physics_sleep_threshold.setSuffix(" px/f")
+        self._spin_physics_sleep_frames = QSpinBox()
+        self._spin_physics_sleep_frames.setRange(1, 255)
+        self._spin_physics_sleep_frames.setPrefix(label('projset.physics_sleep_frames_prefix'))
+        self._spin_physics_sleep_frames.setSuffix(" f")
+        for spin in (self._spin_physics_sleep_threshold, self._spin_physics_sleep_frames):
+            spin.setFont(QFont(T.MONO, T.SM)); spin.setStyleSheet(QSS.spinbox)
+            spin.setToolTip(tooltip(
+                title=label('projset.physics_sleep'), body=label('projset.physics_sleep_tip')))
+            sleep_row.addWidget(spin)
+        self._spin_physics_sleep_threshold.valueChanged.connect(
+            lambda value: self._set_physics("physics_sleep_threshold", float(value)))
+        self._spin_physics_sleep_frames.valueChanged.connect(
+            lambda value: self._set_physics("physics_sleep_frames", int(value)))
+        sleep_row.addStretch(); lay.addWidget(sleep_host)
+
+        W.separator(lay)
+        collisions_title = QLabel(label('projset.collisions'))
+        collisions_title.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+        collisions_title.setStyleSheet(f"color:{C.TEXT_HI};")
+        lay.addWidget(collisions_title)
 
         # Ce qu'il faut FAIRE ici (niveau 1, il change avec l'état de la
         # matrice) et ce que la matrice VEUT DIRE (niveau 3 : une notion, la
@@ -1144,7 +1264,46 @@ class CollisionsPanel(QWidget):
         self._indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._indicator.hide()
 
+        self._refresh_physics()
         self._refresh_matrix()
+
+    def _refresh_physics(self):
+        settings = self._project.settings
+        for spin, value in (
+            (self._spin_gravity_x, settings.physics_gravity_x),
+            (self._spin_gravity_y, settings.physics_gravity_y),
+        ):
+            spin.blockSignals(True)
+            spin.setValue(float(value))
+            spin.blockSignals(False)
+
+        controls = (
+            (self._spin_physics_iterations, settings.physics_solver_iterations),
+            (self._spin_physics_max_fall, settings.physics_max_fall_speed),
+            (self._spin_physics_damping, settings.physics_linear_damping),
+            (self._chk_physics_sleep, settings.physics_sleep_enabled),
+            (self._spin_physics_sleep_threshold, settings.physics_sleep_threshold),
+            (self._spin_physics_sleep_frames, settings.physics_sleep_frames),
+        )
+        for control, value in controls:
+            control.blockSignals(True)
+            control.setChecked(value) if isinstance(control, QCheckBox) else control.setValue(value)
+            control.blockSignals(False)
+        self._spin_physics_sleep_threshold.setEnabled(settings.physics_sleep_enabled)
+        self._spin_physics_sleep_frames.setEnabled(settings.physics_sleep_enabled)
+
+    def _set_physics(self, field: str, value):
+        if self._blocking or getattr(self._project.settings, field) == value:
+            return
+
+        def persist():
+            _save_settings_soon(self._project)
+            self._refresh_physics()
+
+        get_history().push(SetFieldCmd(
+            self._project.settings, field, getattr(self._project.settings, field), value,
+            label=f"Projet.{field}", persist_fn=persist,
+        ))
 
     # ── Découverte des tags ──────────────────────────────────────
 
@@ -1157,14 +1316,14 @@ class CollisionsPanel(QWidget):
         return self._project.collision_tags()
 
     def _tag_usage(self, tag_name: str) -> int:
-        """Combien de CollisionBoxComponent portent ce tag, EXPLICITEMENT ou
+        """Combien de CollisionShapeComponent portent ce tag, EXPLICITEMENT ou
         par défaut vide — ce que `RemoveCollisionTagCmd` va faire retomber à
         « body ». Sert au bouton × pour prévenir plutôt que surprendre."""
         p = self._project
         owners = [a for sc in p.scenes for a in sc.actors] + list(p.prefabs)
         owners += [ch for pf in p.prefabs for ch in (getattr(pf, "children", []) or [])]
         return sum(1 for o in owners for c in getattr(o, "components", [])
-                  if isinstance(c, CollisionBoxComponent) and (c.tag or "body") == tag_name)
+                  if isinstance(c, CollisionShapeComponent) and (c.tag or "body") == tag_name)
 
     def _free_tag_name(self) -> str:
         taken = set(self._all_tags())
@@ -1475,9 +1634,9 @@ class ProjectSettingsDialog(QDialog):
     """Colonne de catégories à gauche, panneau à droite — même squelette que
     SettingsDialog (ui/common/settings_dialog.py)."""
 
-    _CATEGORY_KEYS = {'General': 'projset.general', 'Build': 'projset.build', 'Visual': 'projset.visual', 'Sound': 'projset.sound', 'Input': 'projset.input', 'Languages': 'projset.languages', 'Collisions': 'projset.collisions'}
+    _CATEGORY_KEYS = {'General': 'projset.general', 'Build': 'projset.build', 'Visual': 'projset.visual', 'Sound': 'projset.sound', 'Input': 'projset.input', 'Languages': 'projset.languages', 'Physics & Collisions': 'projset.physics_collisions'}
 
-    _CATEGORIES = ("General", "Build", "Visual", "Sound", "Input", "Languages", "Collisions")
+    _CATEGORIES = ("General", "Build", "Visual", "Sound", "Input", "Languages", "Physics & Collisions")
 
     def __init__(self, project: Project, initial_category: str = "General", parent=None):
         super().__init__(parent)
@@ -1500,7 +1659,7 @@ class ProjectSettingsDialog(QDialog):
         self._stack = QStackedWidget()
         panels = [
             GeneralPanel(project), BuildPanel(project), VisualPanel(project), SoundPanel(project),
-            InputsPanel(project), LanguagesPanel(project), CollisionsPanel(project),
+            InputsPanel(project), LanguagesPanel(project), PhysicsCollisionsPanel(project),
         ]
         for panel in panels:
             scroll = QScrollArea()

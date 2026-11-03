@@ -18,15 +18,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.models.components import CollisionBoxComponent, SpriteComponent
+from core.models.components import CollisionShapeComponent, SpriteComponent
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
 from codegen.runtime_codegen.headers import generate_actor_types
 from oam_fixtures import faire_naitre
 
 
-def _box(tag: str, active: bool = True) -> CollisionBoxComponent:
-    return CollisionBoxComponent(id=f"box_{tag}", active=active, tag=tag)
+def _box(tag: str, active: bool = True) -> CollisionShapeComponent:
+    return CollisionShapeComponent(id=f"box_{tag}", active=active, tag=tag)
 
 
 def _projet(tmp_path: Path) -> Project:
@@ -72,7 +72,7 @@ def test_le_tag_d_une_partie_de_prefab_aussi(tmp_path):
 
 def test_une_box_inactive_garde_son_tag(tmp_path):
     """« Active » de l'inspecteur n'est que l'état de DÉPART : un script peut
-    allumer la boîte (`hb:activate()`, après `self:collision_box("fantome")`),
+    allumer la boîte (`hb:activate()`, après `self:collision_shape("fantome")`),
     donc son tag doit avoir une constante."""
     p = _projet(tmp_path)
     p.prefabs.items[0].actor.components.append(_box("fantome", active=False))
@@ -109,4 +109,4 @@ def test_my_box_et_other_box_sont_des_references_de_boite():
         return [m for m in check(parse(src), ctx) if m.level == "error"]
 
     assert erreurs("Player") == []
-    assert any("no collision box with tag" in m.message for m in erreurs("Plyer"))
+    assert any("no collision shape with tag" in m.message for m in erreurs("Plyer"))

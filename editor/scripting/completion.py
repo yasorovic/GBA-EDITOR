@@ -32,7 +32,7 @@ from scripting.api import (
     RUNTIME_API, RUNTIME_PROPS, HARDWARE_ENUMS,
     KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND, EVENT_REGISTRY,
     STATELESS_MODULES, canonical_key, module_call_form, REF_TYPES, REF_ACTOR,
-    DOMAIN_ANIM, DOMAIN_SPRITE_ID, REF_COLLISION_BOX, BOX_PARAMS,
+    DOMAIN_ANIM, DOMAIN_SPRITE_ID, REF_COLLISION_SHAPE, BOX_PARAMS,
 )
 
 from scripting.expr_types import VEC_CONSTRUCTORS, VEC_FUNCTIONS
@@ -103,10 +103,12 @@ _MODULE_PROPS = _dotted_index(RUNTIME_PROPS)  # scene → [size, frame], camera 
 # distinction de Lua, celle que le checker fait déjà. Les méthodes viennent des
 # clés à deux-points de `RUNTIME_API` ; les propriétés des clés `self.` de
 # `RUNTIME_PROPS`, rangées ci-dessus.
-_SELF_METHODS = [_split(k)[2] for k in RUNTIME_API if k.startswith("actor:")]
+_SELF_METHODS = [_split(k)[2] for k, f in RUNTIME_API.items()
+                 if k.startswith("actor:") and not f.legacy]
 # Les champs d'un acteur sont sous `actor.` dans le catalogue : et NE sont pas ceux du module
 # `actor` (`actor:get`) : on les sort de `_MODULE_PROPS`.
-_SELF_PROPS   = _MODULE_PROPS.pop("actor", [])
+_SELF_PROPS   = [m for m in _MODULE_PROPS.pop("actor", [])
+                 if not RUNTIME_PROPS[f"actor.{m}"].legacy]
 
 # Les modules du catalogue, source unique aussi pour la coloration syntaxique
 # (`lua_editor.py` la lit d'ici, au lieu d'une liste tenue à la main qui citait
@@ -254,7 +256,7 @@ def _value_candidates(domain: str | None, project_names: dict | None) -> list[Ca
     ]
 
 
-# `local hb = self:collision_box("x")` : le type de référence que porte un local.
+# `local hb = self:collision_shape("x")` : le type de référence que porte un local.
 # Lecture textuelle, pour la même raison que `_script_locals` (pas d'AST à chaque frappe).
 _RE_REF_LOCAL = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*([A-Za-z_][\w.:]*)\s*\(")
 
@@ -266,7 +268,7 @@ _SELF_ONLY_DOMAINS = frozenset({DOMAIN_ANIM, DOMAIN_SPRITE_ID})
 def _receiver_prop(receiver_prop: str, source: str | None):
     """La propriété du catalogue que désigne `recepteur.champ` : `self.name` et
     `other.name` sont des champs d'acteur, `hb.tag` celui du TYPE que `hb` tient
-    (`hb = self:collision_box(…)` → `collision_box.tag`). Un récepteur dont on ne sait
+    (`hb = self:collision_shape(…)` → `collision_shape.tag`). Un récepteur dont on ne sait
     pas le type ne rend rien."""
     receiver, _, field = receiver_prop.partition(".")
     if not field:
@@ -274,7 +276,7 @@ def _receiver_prop(receiver_prop: str, source: str | None):
     if receiver == "self":
         return RUNTIME_PROPS.get(f"{REF_ACTOR}.{field}")
     # Les deux boîtes d'un événement de contact : `other_box.tag == "`.
-    ref_type = REF_COLLISION_BOX if receiver in dict(BOX_PARAMS) else None
+    ref_type = REF_COLLISION_SHAPE if receiver in dict(BOX_PARAMS) else None
     for m in _RE_REF_LOCAL.finditer(source or ""):
         if m.group(1) == receiver:
             api = RUNTIME_API.get(canonical_key(m.group(2)))

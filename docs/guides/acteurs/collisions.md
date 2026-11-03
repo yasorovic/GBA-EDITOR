@@ -45,14 +45,15 @@ un déplacement qui respecte les murs, passez par la vitesse :
 local vitesse = 2
 
 function on_update()
-    self.velocity = input:get_axis("horizontal", "vertical") * vitesse * 256
-    self:apply_velocity()
+    local body = self:physics_body()
+    body.velocity = input:get_axis("horizontal", "vertical") * vitesse * 256
+    body:apply_velocity()
 end
 ```
 
-`self.velocity` utilise une unité plus fine que le pixel : `256` vaut 1 pixel par frame. Le moteur
+`body.velocity` utilise une unité plus fine que le pixel : `256` vaut 1 pixel par frame. Le moteur
 conserve ainsi les fractions de déplacement et arrête l'acteur proprement contre une tuile.
-`self:apply_velocity()` fait la résolution : appelez-le à chaque frame, même sans touche appuyée.
+`body:apply_velocity()` fait la résolution : appelez-le à chaque frame, même sans touche appuyée.
 
 Lancez **Run** : l'acteur doit s'arrêter contre le sol et le mur peints.
 
@@ -62,8 +63,8 @@ Chaque boîte porte un **Tag** (`body`, `hitbox`...). Un script demande la boît
 tag, la garde dans une variable, puis lit ou change ses champs pendant le jeu :
 
 ```lua
-local corps = self:collision_box("body")       -- nil si l'acteur n'a pas de boîte de ce tag
-local frappe = self:collision_box("hitbox")
+local corps = self:collision_shape("body")       -- nil si l'acteur n'a pas de boîte de ce tag
+local frappe = self:collision_shape("hitbox")
 
 frappe.offset = vec2(8, -4)                    -- décalage par rapport au pivot du sprite
 frappe.size = vec2(20, 8)                      -- une zone d'attaque qui s'allonge
@@ -84,13 +85,16 @@ Deux actions complètent la boîte :
 
 ```lua
 if frappe:overlaps(ennemi) then ... end        -- touche-t-elle N'IMPORTE QUELLE boîte active de cet acteur ?
-if frappe:overlaps(ennemi:collision_box("body")) then ... end   -- ... ou celle-là seulement ?
+if frappe:overlaps(ennemi:collision_shape("body")) then ... end   -- ... ou celle-là seulement ?
 
 local sol = corps:get_collision_tile(corps.bounds.x, corps.bounds.y + corps.bounds.h)
 ```
 
 `boite:get_collision_tile(x, y)` interroge la carte à une position du monde, en pixels (absolue, elle
-ne dépend pas de la boîte) et rend le type de la tuile (0 = vide). Une boîte inactive ne touche
+ne dépend pas de la boîte) et rend l'index de type de la tuile (0 = vide, 1 = plein, 2 à 21 = pentes,
+22 à 25 = faces à sens unique ; le tableau complet est dans
+[Types de tuile de collision](types-de-tuile-collision.md)). Une face à sens unique se lit comme une
+tuile non nulle, au même titre qu'un bloc plein : comparez l'index pour les distinguer. Une boîte inactive ne touche
 personne. Un tag que le projet ne connaît pas est refusé au Build. Une boîte que l'acteur n'a pas
 donne `nil` : testez-la avec `if boite then`. `self.box_count` donne le nombre de boîtes de l'acteur.
 
@@ -98,7 +102,8 @@ donne `nil` : testez-la avec `if boite then`. `self.box_count` donne le nombre d
 
 - la carte de collision contient-elle des tuiles peintes à l'endroit du mur ou du sol ?
 - l'acteur possède-t-il un composant **Collision** en mode **Solid** ?
-- le script utilise-t-il `self.velocity` puis `self:apply_velocity()`, et non une affectation à
+- le script utilise-t-il `body.velocity` puis `body:apply_velocity()`, et non une affectation à
   `self.position` ?
 
-Pour ajouter gravité et saut, voir [Gravité et saut](gravite-saut.md).
+Pour ajouter gravité et saut, voir [Gravité et saut](gravite-saut.md). Pour les plateformes mobiles, les
+caisses qui tombent et les sols qu'on traverse par en dessous, voir [Corps physiques](corps-physiques.md).

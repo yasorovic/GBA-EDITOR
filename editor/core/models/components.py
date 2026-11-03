@@ -1,10 +1,11 @@
 """Components — briques attachables à un Actor (système type ECS).
 Un Actor a une liste de composants ; plusieurs instances du même
-type sont autorisées (ex: CollisionBox "ground_check" + "sword_hitbox").
+type sont autorisées (ex: CollisionShape "ground_check" + "sword_hitbox").
 Chaque composant a un `id` (label libre, unique au sein de l'actor)
 et un flag `active` pour le désactiver sans le retirer."""
 
 import dataclasses
+import math
 from dataclasses import dataclass, field, fields
 from typing import Optional
 
@@ -13,8 +14,40 @@ from core.models.settings import INTERACTIVE_COLLISION_TAG
 from core.models.unique_name import unique_name
 
 
+COLLISION_RESPONSE_BLOCK = "block"
+COLLISION_RESPONSE_SENSOR = "sensor"
+COLLISION_RESPONSES: tuple[str, ...] = (
+    COLLISION_RESPONSE_BLOCK,
+    COLLISION_RESPONSE_SENSOR,
+)
+# Sens unique d'une forme de réponse `block` : la face qu'elle offre n'arrête un corps que s'il vient du côté de
+# sa normale. `gravity` = l'opposé de la gravité de la scène (la plateforme classique, « le haut » sous gravité
+# vers le bas) ; les quatre autres fixent la normale, indépendamment de la gravité.
+ONE_WAY_OFF = "off"
+ONE_WAY_GRAVITY = "gravity"
+ONE_WAY_MODES: tuple[str, ...] = (ONE_WAY_OFF, ONE_WAY_GRAVITY, "up", "down", "left", "right")
+COLLISION_LAYER_BITS = 16
+COLLISION_ALL_LAYERS = (1 << COLLISION_LAYER_BITS) - 1
+PHYSICS_BODY_STATIC = "StaticBody"
+PHYSICS_BODY_CHARACTER = "CharacterBody"
+PHYSICS_BODY_KINEMATIC = "KinematicBody"
+PHYSICS_BODY_RIGID = "RigidBody"
+PHYSICS_BODY_MODES: tuple[str, ...] = (
+    PHYSICS_BODY_STATIC,
+    PHYSICS_BODY_CHARACTER,
+    PHYSICS_BODY_KINEMATIC,
+    PHYSICS_BODY_RIGID,
+)
+_LEGACY_PHYSICS_BODY_MODES: dict[str, str] = {
+    "static": PHYSICS_BODY_STATIC,
+    "character": PHYSICS_BODY_CHARACTER,
+    "kinematic": PHYSICS_BODY_KINEMATIC,
+    "rigid": PHYSICS_BODY_RIGID,
+}
+
+
 @dataclass
-class CollisionBoxComponent:
+class CollisionShapeComponent:
     """
     Boîte de collision AABB attachée à un Actor.
 
@@ -24,7 +57,7 @@ class CollisionBoxComponent:
         solid=True  → l'acteur est repoussé par les tuiles, se pose sur les
                       pentes, se cogne aux plafonds
         solid=False → la carte l'ignore : à un script de gérer les tuiles s'il
-                      le veut, via `collision_box.get_tile`
+                      le veut, via `collision_shape.get_tile`
 
     Les collisions acteur-contre-acteur ne le consultent PAS : les callbacks
     ci-dessous se déclenchent au recouvrement, quelle que soit la valeur. La
@@ -32,11 +65,10 @@ class CollisionBoxComponent:
     solides » — aucune ligne du runtime ne l'a jamais fait, et la v0.6.3 l'a
     découvert en cherchant qui avait droit à la résolution.
 
-    `blocks_actors` est le BLOCAGE entre acteurs, un réglage à part et jamais par défaut : un acteur
-    en mouvement qui a une box `solid` est repoussé hors de toute box `blocks_actors` d'un autre
-    acteur (axe de plus faible pénétration), puis la carte de collision passe en dernier. Un coffre,
-    un PNJ, une caisse le posent ; la matrice de collision décide qui est arrêté par qui. Il ne touche
-    ni la vitesse (le script la possède) ni `grounded`.
+    `response` est la réponse entre acteurs, indépendante de la carte : `"block"` repousse un
+    Character mobile hors de cette boîte, `"sensor"` ne fait que produire les événements de contact.
+    La matrice de collision décide dans les deux cas quels tags se rencontrent. L'ancien champ
+    `blocks_actors` n'existe plus : un projet qui le porte encore le perd à la lecture (rupture assumée).
 
     Handlers Lua appelés par le runtime C. Ils n'appartiennent PAS à ce
     composant : ce sont des fonctions globales du script de l'actor, et le
@@ -58,8 +90,12 @@ class CollisionBoxComponent:
     id: str = "collision"
     active: bool = True
     solid: bool = True      # arrêté par la carte de collision (cf. docstring)
-    blocks_actors: bool = False   # repousse les acteurs en mouvement qui ont une box solid (cf. docstring)
+    response: str = COLLISION_RESPONSE_SENSOR   # "block" ou "sensor" (cf. docstring)
     tag: str = "body"       # ex: "body", "ground_check", "hitbox", "hurtbox"
+    layer: int = 1            # bits de catégories émises au build
+    mask: int = COLLISION_ALL_LAYERS  # couches qu'elle accepte de rencontrer
+    material_id: str = ""   # id d'un PhysicMaterialComponent du même acteur ; vide = matériau par défaut
+    one_way: str = ONE_WAY_OFF   # face à sens unique (cf. ONE_WAY_MODES) ; sans effet si la réponse est `sensor`
     # Offset de la boîte depuis la POSITION DE L'ACTEUR, en pixels : le coin haut-gauche du sprite, ou le centre de son cadre
     # quand `affine_transform` est actif (l'acteur est alors centré sur le cadre). Ce n'est PAS le pivot du sprite : pour une boîte de
     # 8 px centrée sur un sprite de 16 px, x vaut 4 (et non -4).
@@ -67,6 +103,91 @@ class CollisionBoxComponent:
     y: int = 0
     w: int = 16
     h: int = 16
+
+    def __post_init__(self):
+        if self.response not in COLLISION_RESPONSES:
+            raise ValueError(f"unknown collision response {self.response!r}, expected one of {COLLISION_RESPONSES}")
+        if not isinstance(self.layer, int) or not 0 < self.layer <= COLLISION_ALL_LAYERS:
+            raise ValueError("collision layer must be a non-zero 16-bit mask")
+        if not isinstance(self.mask, int) or not 0 <= self.mask <= COLLISION_ALL_LAYERS:
+            raise ValueError("collision mask must be a 16-bit mask")
+        self.material_id = str(self.material_id or "")
+        if self.one_way not in ONE_WAY_MODES:
+            raise ValueError(f"unknown one_way mode {self.one_way!r}, expected one of {ONE_WAY_MODES}")
+
+
+@dataclass
+class PhysicMaterialComponent:
+    """Le matériau d'un contact : rebond et frottement, indépendants de la géométrie.
+
+    Une CollisionShapeComponent le désigne par son `id` (`material_id`) ; sans désignation,
+    ou si le composant est introuvable, la forme prend le matériau par défaut (0, 0).
+    Pour un contact, le rebond retenu est le plus élevé des deux formes et le frottement
+    leur moyenne géométrique."""
+    id: str = "physic_material"
+    active: bool = True
+    restitution: float = 0.0
+    friction: float = 0.0
+
+    def __post_init__(self):
+        if not math.isfinite(self.restitution) or not 0.0 <= self.restitution <= 1.0:
+            raise ValueError("physic material restitution must be between 0 and 1")
+        if not math.isfinite(self.friction) or not 0.0 <= self.friction <= 1.0:
+            raise ValueError("physic material friction must be between 0 and 1")
+
+
+def shape_material(owner, shape: CollisionShapeComponent) -> PhysicMaterialComponent:
+    """Le matériau d'une forme : celui qu'elle désigne s'il est présent et actif, sinon le défaut.
+    La source unique, appelée par le build."""
+    if shape.material_id:
+        for c in getattr(owner, "components", []):
+            if isinstance(c, PhysicMaterialComponent) and c.active and c.id == shape.material_id:
+                return c
+    return PhysicMaterialComponent()
+
+
+def collision_shapes_collide(a: CollisionShapeComponent, b: CollisionShapeComponent) -> bool:
+    """Les deux boîtes se voient-elles par leurs couches et masques ?"""
+    return bool((a.mask & b.layer) and (b.mask & a.layer))
+
+
+@dataclass
+class PhysicsBodyComponent:
+    """Le comportement physique de l'acteur, indépendant de ses colliders.
+
+    `CharacterBody` est conduit explicitement par son script, est arrêté sur la
+    normale des contacts Block et ne reçoit aucune impulsion. `KinematicBody`
+    applique sa vélocité à chaque frame, pousse les corps dynamiques et
+    transporte ceux qui reposent dessus. `RigidBody` applique sa vélocité après
+    la gravité de scène. Ces trois modes résolvent carte et `block`;
+    `StaticBody` n'intègre aucun mouvement et ne reçoit aucune impulsion. La
+    position de son Actor reste néanmoins écrivable : la modifier téléporte sa
+    géométrie, sans lui donner une vitesse. Les acteurs hérités sans composant
+    gardent le comportement CharacterBody quand ils possèdent une boîte
+    `solid`. Pour un `RigidBody`, `mass` répartit les impulsions entre deux
+    corps, `gravity_scale` module la gravité de scène et `can_sleep` autorise
+    la règle de sommeil de la scène. Ces valeurs sont intégrées au code généré
+    et n'ajoutent aucun champ à l'Actor runtime. `collider_id` relie le corps à
+    sa CollisionShape physique. Une valeur vide conserve provisoirement la
+    sélection historique des boîtes `solid`.
+    """
+    id: str = "physics_body"
+    active: bool = True
+    mode: str = PHYSICS_BODY_CHARACTER
+    collider_id: str = ""
+    mass: float = 1.0
+    gravity_scale: float = 1.0
+    can_sleep: bool = True
+
+    def __post_init__(self):
+        self.mode = _LEGACY_PHYSICS_BODY_MODES.get(self.mode, self.mode)
+        self.collider_id = str(self.collider_id or "")
+        if self.mode not in PHYSICS_BODY_MODES:
+            raise ValueError(f"unknown physics body mode {self.mode!r}, expected one of {PHYSICS_BODY_MODES}")
+        if not math.isfinite(self.mass) or not 0.1 <= self.mass <= 100.0:
+            raise ValueError("physics body mass must be between 0.1 and 100")
+        if not math.isfinite(self.gravity_scale) or not -8.0 <= self.gravity_scale <= 8.0:
+            raise ValueError("physics body gravity scale must be between -8 and 8")
 
 
 @dataclass
@@ -169,7 +290,7 @@ class InteractiveComponent:
     interaction : "hover" (l'interacteur recouvre la zone) ou "facing" (sa box, projetée dans son regard
                   sur la portée réglée dans les settings et arrêtée par les murs, touche la zone).
     box_tag     : "" = le composant crée sa propre boîte (tag `Interactive`, réservé), sans que l'auteur
-                  en dessine une ; sinon le tag d'une CollisionBoxComponent DÉJÀ présente sur l'acteur.
+                  en dessine une ; sinon le tag d'une CollisionShapeComponent DÉJÀ présente sur l'acteur.
     box_w/box_h : taille de la boîte implicite, en pixels ; 0 = automatique (le cadre du sprite, sinon
                   16×16). Ignorés quand `box_tag` désigne une boîte existante."""
     id: str = "interactive"
@@ -202,11 +323,11 @@ def interactive_box_size(comp, frame_w: int = 0, frame_h: int = 0) -> tuple[int,
     return int(w), int(h)
 
 
-MAX_COLLISION_BOXES = 4      # `MAX_BOXES`, actor_types_static.h
+MAX_COLLISION_SHAPES = 4      # `MAX_BOXES`, actor_types_static.h
 
 
-def effective_collision_boxes(owner, frame_w: int = 0, frame_h: int = 0, centered: bool = False) -> list:
-    """Les boîtes que le build pose sur un porteur : ses CollisionBoxComponent (au plus MAX_BOXES),
+def effective_collision_shapes(owner, frame_w: int = 0, frame_h: int = 0, centered: bool = False) -> list:
+    """Les boîtes que le build pose sur un porteur : ses CollisionShapeComponent (au plus MAX_BOXES),
     PUIS la boîte propre de son composant Interactive actif quand celui-ci n'en désigne pas une
     existante — tag réservé `Interactive`, taille de `interactive_box_size`, solide et bloquante pour
     les acteurs en mode `facing` (un obstacle), ni l'un ni l'autre en mode `hover`.
@@ -215,27 +336,28 @@ def effective_collision_boxes(owner, frame_w: int = 0, frame_h: int = 0, centere
     pour dessiner ce que le build émet. `centered` : le sprite est affine, l'acteur est centré sur
     son cadre (cf. `center_on_frame`) et la boîte propre l'est donc aussi."""
     boxes = [c for c in getattr(owner, "components", [])
-             if isinstance(c, CollisionBoxComponent)][:MAX_COLLISION_BOXES]
+             if isinstance(c, CollisionShapeComponent)][:MAX_COLLISION_SHAPES]
     comp = next((c for c in getattr(owner, "components", [])
                  if isinstance(c, InteractiveComponent) and c.active), None)
-    if comp is not None and not comp.box_tag and len(boxes) < MAX_COLLISION_BOXES:
+    if comp is not None and not comp.box_tag and len(boxes) < MAX_COLLISION_SHAPES:
         w, h = interactive_box_size(comp, frame_w, frame_h)
         # En mode `facing`, l'objet est un OBSTACLE contre lequel on s'arrête pour le viser (un coffre, un
         # panneau) : sa boîte propre bloque les acteurs. En mode `hover`, on doit pouvoir la recouvrir
         # (une plaque) : elle ne bloque pas.
         obstacle = comp.interaction == "facing"
-        boxes.append(CollisionBoxComponent(
-            id="interactive", solid=obstacle, blocks_actors=obstacle, tag=INTERACTIVE_COLLISION_TAG,
+        boxes.append(CollisionShapeComponent(
+            id="interactive", solid=obstacle,
+            response=COLLISION_RESPONSE_BLOCK if obstacle else COLLISION_RESPONSE_SENSOR, tag=INTERACTIVE_COLLISION_TAG,
             x=-(w // 2) if centered else 0, y=-(h // 2) if centered else 0, w=w, h=h))
     return boxes
 
 
 def owner_effective_boxes(owner, sprite) -> list:
-    """`effective_collision_boxes` d'un porteur dont le sprite affiché est `sprite` (ou None) : le
+    """`effective_collision_shapes` d'un porteur dont le sprite affiché est `sprite` (ou None) : le
     cadre du sprite donne la taille de la boîte propre, et un sprite affine la centre. L'appel unique
     du build ET du canvas."""
     comp = affine_sprite_component(owner)
-    return effective_collision_boxes(
+    return effective_collision_shapes(
         owner,
         sprite.frame_w if sprite else 0,
         sprite.frame_h if sprite else 0,
@@ -243,7 +365,7 @@ def owner_effective_boxes(owner, sprite) -> list:
 
 
 def interactive_box_index(boxes: list, comp) -> int:
-    """Le rang, dans `boxes` (cf. `effective_collision_boxes`), de la zone du composant : la boîte
+    """Le rang, dans `boxes` (cf. `effective_collision_shapes`), de la zone du composant : la boîte
     propre, ou la première boîte portant le tag désigné. -1 si elle n'y est pas."""
     tag = comp.box_tag or INTERACTIVE_COLLISION_TAG
     return next((i for i, b in enumerate(boxes) if (b.tag or "body") == tag), -1)
@@ -260,7 +382,9 @@ class ScriptComponent:
 # Registre type-name -> classe, utilisé pour la (dé)sérialisation
 # polymorphe et pour piloter le menu "+ Component" de l'UI.
 COMPONENT_REGISTRY: dict = {
-    "collision_box": CollisionBoxComponent,
+    "collision_shape": CollisionShapeComponent,
+    "physic_material": PhysicMaterialComponent,
+    "physics_body":  PhysicsBodyComponent,
     "sprite":        SpriteComponent,
     "sound_fx":      SoundFxComponent,
     "interactive":   InteractiveComponent,
@@ -295,12 +419,33 @@ _LEGACY_SFX_TRIGGERS: dict = {
 }
 
 
+# Migration à la lecture : `CollisionBoxComponent` (clé "collision_box") est devenu
+# CollisionShapeComponent, et son rebond/frottement un PhysicMaterialComponent à part.
+_LEGACY_COLLISION_SHAPE_TYPE = "collision_box"
+
+
+def _legacy_shape_material(cd: dict) -> Optional[PhysicMaterialComponent]:
+    """Le matériau d'une ancienne boîte qui portait un rebond ou un frottement non nul, sinon None.
+    Retire ces deux champs de `cd`."""
+    restitution, friction = cd.pop("restitution", 0.0), cd.pop("friction", 0.0)
+    if not (restitution or friction):
+        return None
+    return PhysicMaterialComponent(id=f"{cd.get('id', 'collision')}_material",
+                                   restitution=restitution, friction=friction)
+
+
 def components_from_list(data: list) -> list:
     """Inverse de components_to_list."""
     components = []
     for cd in data:
         cd = dict(cd)
         type_name = cd.pop("component_type", None)
+        if type_name == _LEGACY_COLLISION_SHAPE_TYPE:
+            type_name = "collision_shape"
+            material = _legacy_shape_material(cd)
+            if material is not None:
+                cd["material_id"] = material.id
+                components.append(material)
         klass = COMPONENT_REGISTRY.get(type_name)
         if not klass:
             continue
@@ -345,7 +490,7 @@ def center_on_frame(owner, sprite_comp, sprite) -> list:
         sprite_comp.offset_y = -(sprite.frame_h // 2)
         changed.append(sprite_comp)
     for comp in getattr(owner, "components", []):
-        if not isinstance(comp, CollisionBoxComponent):
+        if not isinstance(comp, CollisionShapeComponent):
             continue
         fx, fy = FieldValue.parse(comp.x), FieldValue.parse(comp.y)
         fw, fh = FieldValue.parse(comp.w), FieldValue.parse(comp.h)

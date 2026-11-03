@@ -15,7 +15,7 @@ couche reste à la base (cf. TodoTechnique, A3).
 """
 from __future__ import annotations
 
-from core.models.components import CollisionBoxComponent
+from core.models.components import CollisionShapeComponent, collision_shapes_collide
 from codegen.grit_conversion import (bg_layer_sym, bg_layer_sym_for,
                                      bg_map_geometry, bg_map_sbb_count,
                                      count_frames)
@@ -74,7 +74,33 @@ def actor_box_tags(owner) -> list[str]:
     l'allumer (`hb:activate()`). « body » par défaut, comme partout ailleurs
     dans le build."""
     return [c.tag or "body" for c in getattr(owner, "components", [])
-            if isinstance(c, CollisionBoxComponent)]
+            if isinstance(c, CollisionShapeComponent)]
+
+
+def actor_collision_shapes(owner) -> list[CollisionShapeComponent]:
+    return [c for c in getattr(owner, "components", [])
+            if isinstance(c, CollisionShapeComponent)][:4]
+
+
+def collision_pair_mask(a, b, settings) -> int:
+    """Bits de contacts autorisés pour une paire d'acteurs, cuits au build.
+
+    Les tags gardent leur matrice historique. Les couches et masques ajoutent
+    un filtre propre à chaque CollisionShape, sans agrandir `Actor`.
+    """
+    from core.models.settings import tags_collide
+    aa, bb = actor_collision_shapes(a), actor_collision_shapes(b)
+    mask = 0
+    for i, box_a in enumerate(aa):
+        tag_a = box_a.tag or "body"
+        ci = next(k for k, prior in enumerate(aa[:i + 1]) if (prior.tag or "body") == tag_a)
+        for j, box_b in enumerate(bb):
+            tag_b = box_b.tag or "body"
+            cj = next(k for k, prior in enumerate(bb[:j + 1]) if (prior.tag or "body") == tag_b)
+            if (tags_collide(settings, tag_a, tag_b)
+                    and collision_shapes_collide(box_a, box_b)):
+                mask |= 1 << (ci * 4 + cj)
+    return mask
 
 
 def actors_can_collide(p, a, b) -> bool:
@@ -86,20 +112,9 @@ def actors_can_collide(p, a, b) -> bool:
 
     Sans box d'un côté, il n'y a rien à filtrer : on laisse passer, et le reste
     du build décide comme avant. Ne rien dire vaut mieux que deviner."""
-    from core.models.settings import tags_collide
-    ta, tb = actor_box_tags(a), actor_box_tags(b)
-    if not ta or not tb:
+    if not actor_collision_shapes(a) or not actor_collision_shapes(b):
         return True
-    return any(tags_collide(p.settings, x, y) for x in ta for y in tb)
-
-
-def has_solid_box(owner) -> bool:
-    """Cet acteur (ou prefab) a-t-il une box PHYSIQUE ?
-
-    C'est ce qui lui donne droit à la résolution contre la carte de collision —
-    la définition que le modèle donne déjà de `solid` (cf. components.py)."""
-    return any(getattr(c, "solid", False) and hasattr(c, "w")
-               for c in getattr(owner, "components", []))
+    return bool(collision_pair_mask(a, b, p.settings))
 
 
 def scene_has_cmap(scene) -> bool:

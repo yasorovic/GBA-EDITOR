@@ -9,30 +9,75 @@ une boîte **Collision** en mode **Solid** et un script. Ces deux éléments se 
 
 ## 1. Ajouter la gravité
 
-La carte de collision arrête l'acteur contre un mur, un sol ou un plafond, mais elle n'ajoute pas
-de gravité : un acteur immobile dans les airs y reste. Pour la gravité, ajoutez une accélération
-vers le bas à chaque frame :
+La carte de collision arrête l'acteur contre un mur, un sol ou un plafond, mais un `CharacterBody` ne
+reçoit aucune gravité automatique : un acteur immobile dans les airs y reste. La gravité se règle une
+fois pour le projet (**Game > Project Settings > Physics & Collisions**, en pixels par frame au carré) et
+peut être remplacée par scène. Le script la lit dans `scene.gravity` et l'ajoute à chaque frame
+quand l'acteur est en l'air :
 
 ```lua
-local gravite = 24
-
 function on_update()
-    self.velocity = vec2(input:get_axis("horizontal") * 2 * 256, self.velocity.y + gravite)
-    self:apply_velocity()
+    local body = self:physics_body()
+    local g = scene.gravity                      -- la gravité de la scène, en Q8
+
+    local vitesse_y = body.velocity.y
+    if not body.grounded then vitesse_y = vitesse_y + g.y end
+
+    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, vitesse_y)
+    body:apply_velocity()
 end
 ```
 
-`gravite` s'exprime dans la même échelle que `self.velocity` (`256` vaut 1 pixel par frame). Ici,
-`24` ajoute une petite vitesse vers le bas à chaque frame. Quand la boîte touche le sol peint, le
-moteur annule la vitesse verticale et l'acteur reste posé.
+`scene.gravity` s'exprime dans la même échelle que `body.velocity` : `256` vaut 1 pixel par frame (une
+gravité de `0,25` px/frame² vaut donc `64`). Quand la boîte touche le sol peint, le moteur annule la
+vitesse verticale et l'acteur reste posé. Tous les acteurs d'une scène suivent ainsi la même gravité,
+et une scène peut en avoir une autre (une scène lunaire, par exemple) sans toucher aux scripts. Voir
+[Corps physiques](corps-physiques.md).
 
-Pour un jeu vu de dessus, vous n'avez pas besoin de gravité : un simple `self.velocity` suffit.
+Pour un jeu vu de dessus, vous n'avez pas besoin de gravité : une simple `body.velocity` suffit.
 
 ## 2. Savoir si l'acteur est au sol
 
-Après la résolution des collisions, le moteur met à jour `self.grounded` : `true` quand la boîte
-solide repose sur le sol, `false` dans les airs. Cette propriété empêche de sauter à chaque frame :
-le joueur ne saute que depuis le sol.
+Après la résolution des collisions, le moteur met à jour `body.grounded` : `true` quand la boîte
+solide repose sur la carte de collision, un StaticBody ou un KinematicBody posé, `false` dans les
+airs. Cette propriété empêche de sauter à chaque frame : le joueur ne saute que depuis le sol.
+
+`body.floor` donne l'Actor qui porte actuellement le personnage (StaticBody, KinematicBody, ou un autre corps
+sur lequel il repose).
+Il vaut `nil` quand le personnage repose sur la carte ou se trouve dans les airs. Vous pouvez ainsi
+identifier une plateforme particulière sans refaire un test de collision :
+
+```lua
+local floor = self:physics_body().floor
+if floor then
+    -- floor est une référence d'Actor
+end
+```
+
+## Matériaux physiques
+
+Un `PhysicMaterialComponent` porte une restitution et une friction, de `0` à `1`. Une `CollisionShape`
+le désigne par son id (champ « Matériau ») : sans désignation, elle n'a ni rebond ni frottement. La
+restitution décide du rebond et le contact conserve la valeur la plus élevée. La friction ralentit le
+glissement tangent et le contact emploie la moyenne géométrique des deux valeurs.
+
+Ces coefficients sont combinés au build puis écrits dans les paires physiques de la scène. Ils n'ajoutent
+donc aucun état à l'`Actor` au runtime. Plusieurs formes d'un même acteur peuvent partager un matériau.
+
+## Couches et masques de collision
+
+Une `CollisionShape` porte aussi des **couches** et un **masque de collision**, chacun sur 16 bits. Une
+boîte peut appartenir à plusieurs couches. Elle rencontre une autre boîte seulement si son masque accepte
+une couche de l'autre, et réciproquement. Les valeurs par défaut, couche `1` et masque `65535`, conservent
+le comportement historique : toutes les boîtes se rencontrent.
+
+Les couches et masques s'ajoutent à la matrice de tags de **Project Settings > Physics & Collisions** : les
+deux filtres doivent accepter le contact. Le build calcule les couples de boîtes autorisés et ne les émet
+pas dans les tables de contacts, de blocage, de contact au sol ou d'impulsions. Ils n'ajoutent donc aucun champ à
+l'`Actor` ni de lecture dynamique de couches ou de masques dans la ROM.
+
+Les méthodes Lua de requête géométrique, telles que `collision_shape:overlaps`, restent des tests de forme
+explicites. Elles ne sont pas des événements automatiques et ne consultent pas ces filtres.
 
 ## 3. Ajouter l'impulsion de saut
 
@@ -42,18 +87,19 @@ exports = {
     force_saut = { type = "int", default = 900, label = "Force du saut", min = 0, max = 2048 },
 }
 
-local gravite = 24
-
 function on_update()
+    local body = self:physics_body()
+    local g = scene.gravity
     local vitesse_x = input:get_axis("horizontal") * vitesse * 256
-    local vitesse_y = self.velocity.y + gravite
+    local vitesse_y = body.velocity.y
+    if not body.grounded then vitesse_y = vitesse_y + g.y end
 
-    if self.grounded and input:pressed("a") then
+    if body.grounded and input:pressed("a") then
         vitesse_y = -force_saut
     end
 
-    self.velocity = vec2(vitesse_x, vitesse_y)
-    self:apply_velocity()
+    body.velocity = vec2(vitesse_x, vitesse_y)
+    body:apply_velocity()
 end
 ```
 
@@ -63,9 +109,10 @@ l'augmente ensuite chaque frame jusqu'au prochain contact avec le sol.
 ## 4. Comprendre les valeurs
 
 `256` vaut 1 pixel par frame : une force de saut de `900` correspond à une impulsion d'environ
-3,5 pixels par frame vers le haut. **Vitesse** et **Force du saut** sont exposées dans l'inspecteur
-parce qu'elles changent souvent d'un personnage à l'autre. `gravite` reste une variable `local` :
-c'est une règle commune. Exposez-la si certains acteurs doivent tomber différemment.
+3,5 pixels par frame vers le haut. Le saut monte d'environ `force² / (2 × gravité)` : avec une gravité de
+`64` (0,25 px/frame²), une force de `1024` donne environ 32 pixels de hauteur, et la même force sous une
+gravité quatre fois plus faible monte quatre fois plus haut. **Vitesse** et **Force du saut** sont exposées
+dans l'inspecteur parce qu'elles changent souvent d'un personnage à l'autre ; la gravité vient de la scène.
 
 ## 5. Tester
 
@@ -77,5 +124,6 @@ Lancez **Run**, déplacez l'acteur avec gauche et droite, puis appuyez sur `A` :
 - les murs peints l'arrêtent.
 
 Si le saut ne fonctionne pas, vérifiez que la boîte est en mode **Solid** et que le sol est bien
-peint. `self.grounded` décrit la fin de la frame précédente : juste après avoir quitté une
+peint. Si l'acteur reste dans les airs au départ, vérifiez la gravité du projet et de la scène : à `0`, `scene.gravity`
+rend `0` et rien ne le fait tomber. `body.grounded` décrit la fin de la frame précédente : juste après avoir quitté une
 plateforme, il peut rester vrai une frame.

@@ -69,11 +69,11 @@ PARITY = [
     pytest.param('actor:get("Foe").velocity = vec2(1, 0)',
                  'local a = actor:get("Foe")\na.velocity = vec2(1, 0)',
                  _FOE, "a", id="ecriture-propriete-acteur"),
-    pytest.param('self:collision_box("hb").solid = false',
-                 'local b = self:collision_box("hb")\nb.solid = false',
+    pytest.param('self:collision_shape("hb").solid = false',
+                 'local b = self:collision_shape("hb")\nb.solid = false',
                  _BOX, "b", id="ecriture-propriete-boite"),
-    pytest.param('local s = self:collision_box("hb").solid',
-                 'local b = self:collision_box("hb")\nlocal s = b.solid',
+    pytest.param('local s = self:collision_shape("hb").solid',
+                 'local b = self:collision_shape("hb")\nlocal s = b.solid',
                  _BOX, "b", id="lecture-propriete-boite"),
     pytest.param('interface:get("Cursor"):show()',
                  'local m = interface:get("Cursor")\nm:show()',
@@ -129,7 +129,7 @@ def test_une_comparaison_de_domaine_sur_recepteur_chaine():
 # ── Ce que le checker refuse, au lieu de le laisser traverser ─────────────
 
 def test_ecrire_une_propriete_chainee_en_lecture_seule_est_refuse():
-    assert any("read-only" in m for m in _errors('self:collision_box("hb").tag = "x"'))
+    assert any("read-only" in m for m in _errors('self:collision_shape("hb").tag = "x"'))
 
 
 def test_une_propriete_chainee_recoit_le_type_de_sa_valeur():
@@ -138,8 +138,8 @@ def test_une_propriete_chainee_recoit_le_type_de_sa_valeur():
 
 
 def test_un_champ_inconnu_sur_une_reference_chainee_est_refuse():
-    (msg,) = _errors('local x = self:collision_box("hb").bogus')
-    assert "bogus" in msg and "collision_box" in msg
+    (msg,) = _errors('local x = self:collision_shape("hb").bogus')
+    assert "bogus" in msg and "collision_shape" in msg
 
 
 def test_un_recepteur_chaine_de_type_inconnu_est_refuse():

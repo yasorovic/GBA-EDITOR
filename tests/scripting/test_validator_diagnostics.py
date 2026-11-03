@@ -12,7 +12,7 @@ import pytest
 
 from core import validator
 from core.models.background import BackgroundLayer
-from core.models.components import CollisionBoxComponent, ScriptComponent, SpriteComponent
+from core.models.components import CollisionShapeComponent, ScriptComponent, SpriteComponent
 from core.models.scene import BLEND_ALPHA, BLEND_TOP, Actor, Scene
 from core.models.sprite import SpriteAsset
 from core.project import Project
@@ -144,14 +144,14 @@ def test_un_acteur_d_ecran_avec_collision_camera_ou_interface_avertit(project):
     from core.models.ui_region import ANCHOR_ACTOR, InterfaceNode, UILayout
     scene = project.active_scene
     hud = Actor(name="Hud", screen_space=True)
-    hud.components = [CollisionBoxComponent(tag="hit", w=8, h=8)]
+    hud.components = [CollisionShapeComponent(tag="hit", w=8, h=8)]
     scene.actors = [hud]
     scene.cameras = [Camera(name="Cam", mode="follow", follow_target="Hud")]
     scene.camera = "Cam"
     project.ui_layouts.append(UILayout(name="bubble", anchor=ANCHOR_ACTOR, anchor_actor="Hud"))
     scene.ui_layouts.append(InterfaceNode(layout_name="bubble", anchor=ANCHOR_ACTOR, anchor_actor="Hud"))
     found = run(project, validator._check_screen_space)
-    assert says(found, "warning", "carries a CollisionBox")
+    assert says(found, "warning", "carries a CollisionShape")
     assert says(found, "warning", "will stay still")
     assert says(found, "warning", "subtract the scroll a second time")
 

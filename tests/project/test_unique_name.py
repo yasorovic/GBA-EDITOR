@@ -1,6 +1,6 @@
 """Une seule règle de nom libre : `coin`, `coin_2`, `coin_3`."""
 from core.asset_folder_store import AssetFolderStore
-from core.models.components import CollisionBoxComponent
+from core.models.components import CollisionShapeComponent
 from core.models.scene import Actor
 from core.models.text import key_from_path
 from core.models.unique_name import unique_name
@@ -22,11 +22,11 @@ def test_text_keys_follow_the_same_rule():
 
 def test_component_ids_follow_the_same_rule():
     actor = Actor(name="Hero")
-    actor.add_component("collision_box")
-    second = actor.add_component("collision_box")
-    third = actor.add_component("collision_box")
+    actor.add_component("collision_shape")
+    second = actor.add_component("collision_shape")
+    third = actor.add_component("collision_shape")
     assert [c.id for c in actor.components][-3:] == ["collision", "collision_2", "collision_3"]
-    assert isinstance(second, CollisionBoxComponent) and third.id == "collision_3"
+    assert isinstance(second, CollisionShapeComponent) and third.id == "collision_3"
 
 
 def test_folder_groups_follow_the_same_rule(tmp_path):

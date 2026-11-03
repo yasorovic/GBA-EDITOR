@@ -976,6 +976,21 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             "last_scene":  self.settings.last_scene,
             "author":      self.settings.author,
             "version":     self.settings.version,
+            **({"physics_gravity_x": self.settings.physics_gravity_x,
+                 "physics_gravity_y": self.settings.physics_gravity_y}
+               if (self.settings.physics_gravity_x or self.settings.physics_gravity_y) else {}),
+            **({"physics_solver_iterations": self.settings.physics_solver_iterations,
+                "physics_max_fall_speed": self.settings.physics_max_fall_speed,
+                "physics_linear_damping": self.settings.physics_linear_damping,
+                "physics_sleep_enabled": self.settings.physics_sleep_enabled,
+                "physics_sleep_threshold": self.settings.physics_sleep_threshold,
+                "physics_sleep_frames": self.settings.physics_sleep_frames}
+               if (self.settings.physics_solver_iterations != 4
+                   or self.settings.physics_max_fall_speed != 8.0
+                   or self.settings.physics_linear_damping
+                   or not self.settings.physics_sleep_enabled
+                   or self.settings.physics_sleep_threshold != 0.05
+                   or self.settings.physics_sleep_frames != 30) else {}),
             "backdrop_color": self.settings.backdrop_color,
             "save_slots":  self.settings.save_slots,
             "transition_kind":   self.settings.transition_kind,
@@ -1053,6 +1068,17 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.settings.last_scene  = d.get("last_scene", self.settings.start_scene)
         self.settings.author      = d.get("author", "")
         self.settings.version     = d.get("version", "0.1")
+        # Absente sur les anciens projets : aucune accélération, donc aucun
+        # changement pour leurs RigidBody.
+        self.settings.physics_gravity_x = float(d.get("physics_gravity_x", 0.0))
+        self.settings.physics_gravity_y = float(d.get("physics_gravity_y", 0.0))
+        self.settings.physics_solver_iterations = max(1, min(8, int(d.get("physics_solver_iterations", 4))))
+        self.settings.physics_max_fall_speed = max(0.0, float(d.get("physics_max_fall_speed", 8.0)))
+        self.settings.physics_linear_damping = max(
+            0.0, min(1.0, float(d.get("physics_linear_damping", 0.0))))
+        self.settings.physics_sleep_enabled = bool(d.get("physics_sleep_enabled", True))
+        self.settings.physics_sleep_threshold = max(0.0, float(d.get("physics_sleep_threshold", 0.05)))
+        self.settings.physics_sleep_frames = max(1, min(255, int(d.get("physics_sleep_frames", 30))))
         # `palette_auto_import_enabled` des anciens project.json est ignoré :
         # le réservoir auto-import est abandonné, la clé
         # disparaît du fichier à la prochaine sauvegarde.
@@ -1151,8 +1177,8 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
     def collision_tags(self) -> list:
         """Tags de collision du projet, DÉCLARÉS d'abord (dans leur ordre —
-        celui que Project Settings > Collisions laisse glisser-déposer),
-        puis ceux seulement TROUVÉS sur un CollisionBoxComponent (actif ou non : un script peut l'allumer)
+        celui que Project Settings > Physics & Collisions laisse glisser-déposer),
+        puis ceux seulement TROUVÉS sur un CollisionShapeComponent (actif ou non : un script peut l'allumer)
         (scènes, prefabs, ET parties de prefabs), triés, à la suite.
 
         Source unique pour ses TROIS lecteurs : le sélecteur de tag du
@@ -1162,11 +1188,11 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         collecte, limitée aux acteurs de SCÈNE : un tag porté seulement par un
         prefab poolé n'avait pas de constante, et `spawn_<Prefab>()` — qui
         l'écrit dans `boxes[].tag` — ne compilait pas."""
-        from core.models.components import CollisionBoxComponent
+        from core.models.components import CollisionShapeComponent
         owners = [a for sc in self.scenes for a in sc.actors] + list(self.prefabs)
         owners += [ch for pf in self.prefabs for ch in (getattr(pf, "children", []) or [])]
         discovered = {c.tag or "body" for o in owners for c in getattr(o, "components", [])
-                     if isinstance(c, CollisionBoxComponent)}
+                     if isinstance(c, CollisionShapeComponent)}
         # Les tags réservés existent dans tout projet, même ancien (recréés ici plutôt que migrés), et
         # passent en tête dans leur ordre : la liste sauvée est triée par ordre alphabétique, ce qui
         # mettrait « Interactive » avant « Player ».

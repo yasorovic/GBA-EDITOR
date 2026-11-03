@@ -109,26 +109,26 @@ def test_les_verbes_d_un_acteur_se_traduisent_terme_a_terme():
 
 
 def test_les_verbes_d_une_boite_et_d_un_element_se_traduisent_sans_variable():
-    body = ('self:collision_box("hb"):deactivate()\n'
-            'local hb = self:collision_box("hb")\nhb:activate()\n'
+    body = ('self:collision_shape("hb"):deactivate()\n'
+            'local hb = self:collision_shape("hb")\nhb:activate()\n'
             'interface:get("Menu"):hide()\ninterface:get("Menu"):show()')
     assert _errors(body) == []
     assert _c_body(body) == [
-        "collision_box_set_active(actor_get_box(self, BOXTAG_HB), 0);",
+        "collision_shape_set_active(actor_get_box(self, BOXTAG_HB), 0);",
         "int hb = actor_get_box(self, BOXTAG_HB);",
-        "collision_box_set_active(hb, 1);",
+        "collision_shape_set_active(hb, 1);",
         "ui_element_show(UIELEM_MENU, 0);", "ui_element_show(UIELEM_MENU, 1);",
     ]
 
 
 def test_l_etat_se_lit_sur_chaque_type():
     body = ('if self.visible and self.active then self:hide() end\n'
-            'local hb = self:collision_box("hb")\nif hb.active then hb:deactivate() end\n'
+            'local hb = self:collision_shape("hb")\nif hb.active then hb:deactivate() end\n'
             'if interface:get("Menu").visible then self:hide() end')
     assert _errors(body) == []
     c = "\n".join(_c_body(body))
     assert "actor_get_visible(self)" in c and "actor_get_active(self)" in c
-    assert "collision_box_get_active(hb)" in c
+    assert "collision_shape_get_active(hb)" in c
     assert "ui_element_is_visible(UIELEM_MENU)" in c
 
 
@@ -137,7 +137,7 @@ def test_l_etat_se_lit_sur_chaque_type():
 def test_ecrire_l_etat_est_refuse_sur_chaque_type():
     for body, prop in (("self.visible = false", "self.visible"),
                        ("self.active = true", "self.active"),
-                       ('local hb = self:collision_box("hb")\nhb.active = false',
+                       ('local hb = self:collision_shape("hb")\nhb.active = false',
                         "hb.active"),
                        ('interface:get("Menu").visible = false', "visible")):
         (msg,) = _errors(body)
@@ -147,7 +147,7 @@ def test_ecrire_l_etat_est_refuse_sur_chaque_type():
 def test_un_type_refuse_un_verbe_qu_il_ne_declare_pas():
     # Une boîte s'active sans s'afficher ; un effet n'a aucun verbe ; un élément statique
     # ne se détruit pas.
-    for body, verbe in (('local hb = self:collision_box("hb")\nhb:show()', "show"),
+    for body, verbe in (('local hb = self:collision_shape("hb")\nhb:show()', "show"),
                         ('local p = sfx:play("Bip")\np:hide()', "hide"),
                         ('interface:get("Menu"):destroy()', "destroy")):
         errors = _errors(body)

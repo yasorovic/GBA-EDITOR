@@ -143,15 +143,15 @@ def test_le_pivot_est_seme_depuis_le_composant_sprite():
 
 
 def test_centrer_sur_le_cadre_a_la_case_affine():
-    from core.models.components import (CollisionBoxComponent, SpriteComponent,
+    from core.models.components import (CollisionShapeComponent, SpriteComponent,
                                         center_on_frame)
 
     class Frame:
         frame_w, frame_h = 32, 24
 
     sprite_comp = SpriteComponent()
-    deplacee = CollisionBoxComponent(id="a", x=0, y=0, w=16, h=8)
-    reglee = CollisionBoxComponent(id="b", x=3, y=0, w=16, h=8)
+    deplacee = CollisionShapeComponent(id="a", x=0, y=0, w=16, h=8)
+    reglee = CollisionShapeComponent(id="b", x=3, y=0, w=16, h=8)
     owner = _actor()
     owner.components = [sprite_comp, deplacee, reglee]
 

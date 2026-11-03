@@ -36,11 +36,11 @@ from core.models.collision_tiles import (
 )
 from core.models.tile_codec import flip_h, flip_v
 from core.project import Project
-from ui.common.theme import C
+from ui.common.theme import C, T
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import (
-    QBrush, QColor, QPainter, QPainterPath, QPen, QPixmap, QTransform,
+    QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QTransform,
 )
 from PyQt6.QtWidgets import (
     QGraphicsItem, QGraphicsLineItem, QGraphicsPixmapItem, QGraphicsRectItem,
@@ -891,7 +891,7 @@ class GridItem(QGraphicsItem):
 
 class ActorBoxOverlay(QGraphicsItem):
     """
-    Dessine les CollisionBoxComponent des acteurs passés via set_actors().
+    Dessine les CollisionShapeComponent des acteurs passés via set_actors().
     Solid → rouge,  trigger → vert.
     z=160 (au-dessus des sprites, sous la caméra).
     """
@@ -1009,6 +1009,9 @@ class SnapPreviewItem(QGraphicsRectItem):
 #  Overlay de collision (z=300)
 # ──────────────────────────────────────────────────────────────────
 _T = COLLISION_TILE_SIZE  # 8
+_C_NORMAL = QColor(90, 225, 255, 235)   # cyan : ni le plein (orange), ni le plafond (bleu), ni le sens unique (violet)
+_NORMAL_LENGTH = 4                      # pixels
+_TEXT_SCALE = 8            # facteur de composition du texte des index (cf. CollisionOverlay._draw_indices)
 
 _C_SOLID = QColor(255, 126, 88, 42)
 # Surbrillance de survol : neutre, pour ne pas se confondre avec un type de tuile.
@@ -1020,6 +1023,9 @@ _B_SOLID = QColor(255, 126, 88, 175)
 _B_STEEP = QColor(255, 183, 77, 185)
 _B_GENTLE = QColor(255, 211, 102, 185)
 # Plafond — teinte bleue/violette pour distinguer visuellement
+# Face à sens unique : violet, distinct du plein (orange) et du plafond (bleu).
+_C_ONEWAY = QColor(190, 130, 255, 90)
+_B_ONEWAY = QColor(190, 130, 255, 215)
 _C_STEEP_INV = QColor(110, 168, 255, 48)
 _C_GENTLE_INV = QColor(152, 194, 255, 48)
 _B_STEEP_INV = QColor(110, 168, 255, 185)
@@ -1084,6 +1090,10 @@ class CollisionOverlay(QGraphicsItem):
         # l'empreinte que le prochain geste de peinture va couvrir.
         self._hover: Optional[tuple[int, int, int, int]] = None
         self._cache: Optional[QPixmap] = None  # cache rendu hors-écran (map seule)
+        # Vue « index de tuile » : l'index du type de chaque tuile non vide, pour déboguer la carte lue par le runtime.
+        self._show_indices = False
+        # Vue « normales » : la normale de chaque surface, tracée depuis le centre de sa face comme les outils 3D.
+        self._show_normals = False
         self.setZValue(300)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
@@ -1102,6 +1112,14 @@ class CollisionOverlay(QGraphicsItem):
 
     def get_map(self) -> list[list[int]]:
         return self._map
+
+    def set_show_indices(self, visible: bool):
+        self._show_indices = visible
+        self.update()
+
+    def set_show_normals(self, visible: bool):
+        self._show_normals = visible
+        self.update()
 
     def set_tile(self, col: int, row: int, tile_type: int):
         if 0 <= row < self._rows and 0 <= col < self._cols:
@@ -1158,6 +1176,11 @@ class CollisionOverlay(QGraphicsItem):
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         painter.drawPixmap(0, 0, self._cache)
 
+        if self._show_normals:
+            self._draw_normals(painter, option.exposedRect)
+        if self._show_indices:
+            self._draw_indices(painter, option.exposedRect)
+
         # Preview slope au-dessus du cache (pas mis en cache — éphémère)
         if self._preview:
             painter.save()
@@ -1174,6 +1197,72 @@ class CollisionOverlay(QGraphicsItem):
             painter.setPen(QPen(_B_HOVER, 0))
             painter.drawRect(col * _T, row * _T, w * _T - 1, h * _T - 1)
             painter.restore()
+
+    def _tile_kind_at(self, col: int, row: int) -> int:
+        if 0 <= row < self._rows and 0 <= col < self._cols:
+            return CT.kind_of(self._map[row][col])
+        return CT.KIND_EMPTY
+
+    def _draw_normals(self, painter: QPainter, exposed: QRectF):
+        """La normale de chaque surface : une ligne partant du centre de la face, dans le sens où la matière s'ouvre.
+        Un bloc plein n'en porte que sur ses faces exposées (voisine qui n'est pas pleine) ; une pente, une face à
+        sens unique en ont une, issue de `collision_tiles.surface_normal` (la même géométrie que le runtime)."""
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(_C_NORMAL, 0))
+        c0, c1 = max(0, int(exposed.left() // _T)), min(self._cols - 1, int(exposed.right() // _T))
+        r0, r1 = max(0, int(exposed.top() // _T)), min(self._rows - 1, int(exposed.bottom() // _T))
+        half = _T / 2
+        for row in range(r0, r1 + 1):
+            for col in range(c0, c1 + 1):
+                t = self._map[row][col]
+                origin = (col * _T, row * _T)
+                if CT.kind_of(t) == CT.KIND_SOLID:
+                    for dc, dr in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                        if self._tile_kind_at(col + dc, row + dr) != CT.KIND_SOLID:
+                            self._draw_normal(painter, origin[0] + half + dc * half, origin[1] + half + dr * half, dc, dr)
+                    continue
+                n = CT.surface_normal(t)
+                if n is not None:
+                    self._draw_normal(painter, origin[0] + n[0], origin[1] + n[1], n[2], n[3])
+        painter.restore()
+
+    @staticmethod
+    def _draw_normal(painter: QPainter, x: float, y: float, nx: float, ny: float):
+        """Une flèche de `_NORMAL_LENGTH` pixels, à pointe de 1 pixel."""
+        tip_x, tip_y = x + nx * _NORMAL_LENGTH, y + ny * _NORMAL_LENGTH
+        painter.drawLine(QLineF(x, y, tip_x, tip_y))
+        for side in (-1, 1):
+            bx = tip_x - nx * 1.2 - side * ny * 0.9
+            by = tip_y - ny * 1.2 + side * nx * 0.9
+            painter.drawLine(QLineF(tip_x, tip_y, bx, by))
+
+    def _draw_indices(self, painter: QPainter, exposed: QRectF):
+        """L'index du type de chaque tuile non vide : celui que `g_tile_kind` et `g_tile_surface` lisent en ROM.
+        Hors cache (il suit le zoom) et limité à la zone exposée."""
+        painter.save()
+        # Le texte est composé dans une cellule de 8 fois la tuile puis réduit : Qt choisit la taille de glyphe selon la
+        # transformation complète, donc l'index reste net quel que soit le zoom du canvas.
+        font = QFont(T.UI)
+        font.setPixelSize(5 * _TEXT_SCALE)
+        painter.setFont(font)
+        c0, c1 = max(0, int(exposed.left() // _T)), min(self._cols - 1, int(exposed.right() // _T))
+        r0, r1 = max(0, int(exposed.top() // _T)), min(self._rows - 1, int(exposed.bottom() // _T))
+        for row in range(r0, r1 + 1):
+            for col in range(c0, c1 + 1):
+                t = self._map[row][col]
+                if t == TILE_EMPTY:
+                    continue
+                painter.save()
+                painter.translate(col * _T, row * _T)
+                painter.scale(1 / _TEXT_SCALE, 1 / _TEXT_SCALE)
+                cell = QRectF(0, 0, _T * _TEXT_SCALE, _T * _TEXT_SCALE)
+                painter.setPen(QColor(0, 0, 0, 200))
+                painter.drawText(cell.translated(3, 3), Qt.AlignmentFlag.AlignCenter, str(t))
+                painter.setPen(QColor(255, 255, 255, 235))
+                painter.drawText(cell, Qt.AlignmentFlag.AlignCenter, str(t))
+                painter.restore()
+        painter.restore()
 
     def _draw_tile(
         self, painter: QPainter, col: int, row: int, t: int, alpha_mul: float
@@ -1203,6 +1292,12 @@ class CollisionOverlay(QGraphicsItem):
             for offset in range(-_T, _T * 2, 4):
                 painter.drawLine(x + offset, y + _T, x + offset + _T, y)
             painter.restore()
+        elif CT.kind_of(t) == CT.KIND_ONEWAY:
+            fill, bord = _colored(_C_ONEWAY, _B_ONEWAY)
+            path = _slope_path(x, y, t)
+            painter.fillPath(path, fill)
+            painter.setPen(QPen(bord, 0))
+            painter.drawPath(path)
         elif t in _FLOOR_SLOPES:
             fill, bord = _colored(_C_STEEP, _B_STEEP)
             path = _slope_path(x, y, t)

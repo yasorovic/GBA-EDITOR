@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from codegen.runtime_codegen.gen_affine import scene_has_affine
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_destroy_table
+from codegen.runtime_codegen.physics.body import project_has_one_way
+from codegen.runtime_codegen.physics.floor import project_has_floors
 
 
 def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int, n_oam_entries: int,
@@ -17,6 +19,14 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
     # au code et aux petits états runtime.
     L += [
         f"Actor g_actors[{n_actors}] EWRAM_BSS;",
+        f"u16 g_actor_floor_store[{n_actors if project_has_floors(p) else 1}] EWRAM_BSS;",
+        f"u16 *g_actor_floor={'g_actor_floor_store' if project_has_floors(p) else '0'};",
+        # `physics_body:drop_through(n)` : frames restantes pendant lesquelles un corps ignore les faces à sens unique.
+        f"u8 g_drop_store[{n_actors if project_has_one_way(p) else 1}] EWRAM_BSS;",
+        f"u8 *g_drop_through={'g_drop_store' if project_has_one_way(p) else '0'};",
+        "u8 g_drop_live;   /* un compteur de g_drop_through est non nul : le décompte ne tourne que dans ce cas */",
+        # Position de chaque Rigid à la frame précédente (Q8), pour lire son repos sur le déplacement (physics/motion.py).
+        f"int g_rigid_rest[{n_actors}][2] EWRAM_BSS;",
         # Un bit par emplacement : les blocs de 32 sans vivant sont sautés par POOL_EACH (actor_types_static.h).
         f"u32 g_alive_bits[{max(1, (n_actors + 31) // 32)}];",
         # Époque des changements de vie et curseur de `actor:get(nom, i)` (actor_types_static.h).
@@ -90,6 +100,9 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
         # Défilement autorisé par la scène courante — lu par `scene.scroll_h/v`.
         "int   g_scene_scroll_h = 1, g_scene_scroll_v = 0;",
         "int   g_scene_collision_layer = 0;",
+        # Gravité de la scène courante (Q8) et côté d'appui qui en découle : cf. runtime_api_inline.h, `scene_set_gravity`.
+        "int   g_gravity_x = 0, g_gravity_y = 0;",
+        "u8    g_support_normal = 1;",
         "int   g_current_scene = -1;",
         "int   g_scene_placed = 0;   /* actors placed in the active scene "
         "(actor:get(i)) */",

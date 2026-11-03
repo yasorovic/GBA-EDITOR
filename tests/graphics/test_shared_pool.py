@@ -201,13 +201,13 @@ def test_l_animation_et_l_ecriture_oam_du_pool_tiennent_dans_une_seule_boucle(tm
 def _scene_blocage(tmp_path):
     """Un mur (boîte bloquante) et un héros (boîte solide, regard, joueur) tous deux spawnés dans le pool, plus
     un acteur posé qui bloque aussi."""
-    from core.models.components import CollisionBoxComponent
+    from core.models.components import CollisionShapeComponent
     wall, hero = Prefab(name="Wall"), Prefab(name="Hero")
-    wall.actor.components.append(CollisionBoxComponent(blocks_actors=True, solid=False, w=16, h=16))
-    hero.actor.components.append(CollisionBoxComponent(solid=True, w=16, h=16))
+    wall.actor.components.append(CollisionShapeComponent(response="block", solid=False, w=16, h=16))
+    hero.actor.components.append(CollisionShapeComponent(solid=True, w=16, h=16))
     hero.actor.is_player = True
     scene = Scene(name="S", script="assets/s.lua",
-                  actors=[Actor(name="Rock", components=[CollisionBoxComponent(blocks_actors=True, solid=False, w=16, h=16)])])
+                  actors=[Actor(name="Rock", components=[CollisionShapeComponent(response="block", solid=False, w=16, h=16)])])
     p = Project(tmp_path)
     p.scenes.items = [scene]
     p.prefabs.items = [wall, hero]
@@ -220,7 +220,7 @@ def _scene_blocage(tmp_path):
 
 
 def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path):
-    from codegen.runtime_codegen.block_gen import block_tick_lines
+    from codegen.runtime_codegen.physics.blocks import block_tick_lines
     from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     p, scene = _scene_blocage(tmp_path)
@@ -231,12 +231,12 @@ def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path
     assert f"case {ids['Hero']}: {{" in code and f"case {ids['Wall']}:" not in code     # le mur n'est pas un mobile
     assert f"static const u8 _bk_pm[]={{{ids['Wall']}}};" in code
     assert "static const u16 _bk_idx[]={0};" in code
-    assert "actors_resolve_blocks_pool(_a,_bk_pm,_bk_pb,1);" in code
+    assert "actors_resolve_blocks_pool(_a,1,_bk_pm,_bk_pb,1);" in code
     assert "POOL_EACH(_bm){" in code
 
 
 def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
-    from codegen.runtime_codegen.block_gen import block_tick_lines
+    from codegen.runtime_codegen.physics.blocks import block_tick_lines
     from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     p, scene = _scene_blocage(tmp_path)
@@ -245,7 +245,7 @@ def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
                                                encoding="utf-8")
     pi = scene_pi(p, scene)
     code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, shown))
-    assert "actors_resolve_blocks_pool" not in code and "actors_resolve_blocks(_a,_bk_idx" in code
+    assert "actors_resolve_blocks_pool" not in code and "actors_resolve_blocks(_a,1,_bk_idx" in code
 
 
 def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteurs_nes(tmp_path):
@@ -254,11 +254,11 @@ def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteu
     from codegen.runtime_codegen.interact_gen import interact_tick_lines
     from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
-    from core.models.components import CollisionBoxComponent, InteractiveComponent
+    from core.models.components import CollisionShapeComponent, InteractiveComponent
     hero, chest = Prefab(name="Hero"), Prefab(name="Chest")
-    hero.actor.components.append(CollisionBoxComponent(solid=True, w=16, h=16))
+    hero.actor.components.append(CollisionShapeComponent(solid=True, w=16, h=16))
     hero.actor.is_player = True
-    chest.actor.components += [CollisionBoxComponent(tag="zone", w=16, h=16),
+    chest.actor.components += [CollisionShapeComponent(tag="zone", w=16, h=16),
                                InteractiveComponent(interaction="facing", box_tag="zone")]
     scene = Scene(name="S", script="assets/s.lua", actors=[Actor(name="A")])
     p = Project(tmp_path)
@@ -287,10 +287,10 @@ def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteu
 
 def _scene_boss(tmp_path):
     """Un projectile plat et un boss à deux parties, tous deux spawnés ; le boss a un sprite, une partie un marqueur."""
-    from core.models.components import CollisionBoxComponent
+    from core.models.components import CollisionShapeComponent
     bullet, boss = Prefab(name="Bullet"), Prefab(name="Boss")
     arm = Actor(name="Arm")
-    arm.components.append(CollisionBoxComponent(w=8, h=8))
+    arm.components.append(CollisionShapeComponent(w=8, h=8))
     boss.children = [arm, Actor(name="Muzzle")]
     scene = Scene(name="S", script="assets/s.lua", actors=[Actor(name="A")])
     p = Project(tmp_path)
@@ -368,10 +368,10 @@ def test_chaque_type_d_emplacement_a_son_cas_d_affichage_et_ses_collisions(tmp_p
         pi, lambda owner, sym: [None], anim_tick_variants,
         lambda owner: [Appearance(SpriteAsset(name=owner.name, asset="a.png"), 0)], oam_write_lines))
     assert "case 1: {" in code and "case 2: {" in code and "case 3: {" in code and "case 4:" not in code   # le marqueur n'affiche rien
-    from codegen.runtime_codegen.interact_gen import box_contact_lines
-    from core.models.components import CollisionBoxComponent
+    from codegen.runtime_codegen.physics.contacts import box_contact_lines
+    from core.models.components import CollisionShapeComponent
     boxed = [(0, scene.actors[0])]
-    scene.actors[0].components.append(CollisionBoxComponent(w=8, h=8))
+    scene.actors[0].components.append(CollisionShapeComponent(w=8, h=8))
     col = "\n".join(shared_pool_gen.collision_lines(
         pi, 100, boxed, lambda pf, a: True, lambda sym, ev: sym.endswith("Boss") and ev == "on_collision_enter",
         lambda sym, ev: True, lambda scn, name: f"{scn}_{name}", {0}, "S", box_contact_lines))

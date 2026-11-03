@@ -606,6 +606,7 @@ def transpile_all(
         ctx_check = BuildContext(
             actor_name   = actor.name,
             owner_kind   = "actor",
+            has_physics_body = actor.get_component("physics_body") is not None,
             input_names  = input_names,
             input_sequence_names = input_layout.sequence_names,
             axis_names   = input_layout.axis_names,
@@ -845,6 +846,7 @@ def transpile_all(
         ctx_check = BuildContext(
             actor_name   = pf.name,
             owner_kind   = "prefab",
+            has_physics_body = pf.get_component("physics_body") is not None,
             input_names  = input_names,
             input_sequence_names = input_layout.sequence_names,
             axis_names   = input_layout.axis_names,

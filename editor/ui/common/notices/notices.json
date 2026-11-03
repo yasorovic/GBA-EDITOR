@@ -6,6 +6,18 @@
       "code": "self.active",
       "text": "If false, the actor is skipped: no update, no collision, OAM slot released."
     },
+    "physics.static_body": {
+      "tone": "info",
+      "text": "StaticBody has no automatic movement and ignores impulses. Changing the Actor position teleports its collision geometry; use KinematicBody for continuous movement."
+    },
+    "physics.character_body": {
+      "tone": "info",
+      "text": "CharacterBody is driven by its script: get self:physics_body(), set its velocity, then call body:apply_velocity(). It receives no automatic gravity or impulse; the collision map and Block colliders stop it."
+    },
+    "physics.kinematic_body": {
+      "tone": "info",
+      "text": "KinematicBody applies its velocity automatically without gravity or impulses. StaticBody actors and the collision map can stop it; its Block colliders push dynamic bodies and carry bodies resting on top."
+    },
     "actor.priority": {
       "tone": "accent",
       "code": "self.priority",

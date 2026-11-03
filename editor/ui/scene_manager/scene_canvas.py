@@ -265,6 +265,16 @@ class SceneEditor(QWidget):
                 title=label('scncanvas.collisions'), body=label('scncanvas.collisions_tip')
             ),
             self._on_collision_view_toggle)
+        self._chk_collision_index = self._bar.add_toggle(
+            "view_collision_index", tooltip(
+                title=label('scncanvas.collision_index'), body=label('scncanvas.collision_index_tip')
+            ),
+            self._on_collision_index_toggle)
+        self._chk_collision_normals = self._bar.add_toggle(
+            "view_collision_normals", tooltip(
+                title=label('scncanvas.collision_normals'), body=label('scncanvas.collision_normals_tip')
+            ),
+            self._on_collision_normals_toggle)
         self._bar.add_action(
             "clear", tooltip(title=label('scncanvas.clear_collision'), body=label('scncanvas.clear_collision_tip')),
             self._on_clear_collision)
@@ -689,6 +699,12 @@ class SceneEditor(QWidget):
 
     def _on_collision_view_toggle(self, checked: bool):
         self._gba_scene.set_collision_view(checked)
+
+    def _on_collision_index_toggle(self, checked: bool):
+        self._gba_scene.set_collision_index_view(checked)
+
+    def _on_collision_normals_toggle(self, checked: bool):
+        self._gba_scene.set_collision_normals_view(checked)
 
     def _on_ui_elements_toggle(self, checked: bool):
         self._gba_scene.set_ui_elements_view(checked)

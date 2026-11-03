@@ -46,7 +46,7 @@ def interact_helper_lines() -> list[str]:
         "/* ── Interactive : trouver ce que l'interacteur atteint ─────────────────────────────",
         "   Rectangles en PIXELS MONDE, bornes droite/basse exclues, comme `box_overlap`. */",
         "typedef struct { int l, t, r, b; } IaRect;",
-        "static void __attribute__((unused)) ia_box_rect(const Actor* a, const CollisionBox* b, IaRect* o){",
+        "static void __attribute__((unused)) ia_box_rect(const Actor* a, const CollisionShape* b, IaRect* o){",
         "    o->l=(a->x>>8)+b->x; o->t=(a->y>>8)+b->y; o->r=o->l+b->w; o->b=o->t+b->h;",
         "}",
         "/* La boîte de l'interacteur : la première boîte solide active, sinon la première active, sinon",
@@ -82,7 +82,7 @@ def interact_helper_lines() -> list[str]:
         "static int __attribute__((unused)) ia_reach(const IaRect* w,const IaRect* s,int fx,int fy,",
         "                                             const Actor* t,int box,int aim,int* dist){",
         "    if(box>=t->collision.box_count) return 0;",
-        "    const CollisionBox* zb=&t->collision.boxes[box];",
+        "    const CollisionShape* zb=&t->collision.boxes[box];",
         "    if(!zb->active) return 0;",
         "    IaRect z; ia_box_rect(t,zb,&z);",
         "    const IaRect* q=aim?s:w;",
@@ -271,48 +271,4 @@ def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
                   f"            if(!g_actors[_w].active||!{model_is(pool_players, 'g_actors[_w]')}) continue;",
                   *dispatch("&g_actors[_w]", "            ", n, bool(pool_items)), "        }"]
         L.append("    }")
-    return L
-
-
-def box_contact_lines(a_expr: str, b_expr: str, active: str, prev: str,
-                       events_a: list, events_b: list, indent: str) -> list[str]:
-    """Les contacts d'UNE paire d'acteurs, un par couple de TAGS de boxes.
-
-    `actors_overlap_mask` rend un bit par couple de tags en contact ; `prev` en
-    garde le souvenir d'une frame à l'autre. Un contact qui naît appelle
-    `on_collision_enter`, un contact qui dure `on_collide`, un contact qui se
-    défait `on_collision_exit` — chacun avec les tags de CE couple. Une paire
-    d'acteurs porte donc plusieurs contacts à la fois (pieds contre tête ET corps
-    contre corps) sans que le premier masque les suivants.
-
-    `events_a` / `events_b` : (événement, fonction C) que reçoit chaque côté ;
-    `my_box` d'un côté est la `other_box` de l'autre."""
-    def calls(event: str) -> list[str]:
-        out = []
-        for ev, fn in events_a:
-            if ev == event:
-                out.append(f"{fn}({a_expr},{b_expr},_ta,_tb);")
-        for ev, fn in events_b:
-            if ev == event:
-                out.append(f"{fn}({b_expr},{a_expr},_tb,_ta);")
-        return out
-
-    i = indent
-    L = [
-        f"{i}{{ u16 _cur=({active})?actors_overlap_mask({a_expr},{b_expr}):0; u16 _prv={prev};",
-        f"{i}  if(_cur|_prv)",
-        f"{i}  for(u8 _bi=0;_bi<MAX_BOXES;_bi++) for(u8 _bj=0;_bj<MAX_BOXES;_bj++){{",
-        f"{i}      u16 _m=(u16)(1u<<(_bi*MAX_BOXES+_bj));",
-        f"{i}      u8 _c=(_cur&_m)!=0, _p=(_prv&_m)!=0;",
-        f"{i}      if(!_c&&!_p) continue;",
-        f"{i}      u8 _ta=({a_expr})->collision.boxes[_bi].tag, _tb=({b_expr})->collision.boxes[_bj].tag;",
-        f"{i}      (void)_ta; (void)_tb;",
-    ]
-    for cond, event in (("_c&&!_p", "on_collision_enter"),
-                        ("_c&&_p", "on_collide"),
-                        ("!_c&&_p", "on_collision_exit")):
-        cs = calls(event)
-        if cs:
-            L.append(f"{i}      if({cond}){{ " + " ".join(cs) + " }")
-    L += [f"{i}  }}", f"{i}  {prev}=_cur; }}"]
     return L

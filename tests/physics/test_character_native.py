@@ -20,8 +20,11 @@ SONDE = r"""
 typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
+#include "gba_debug.h"
 %(helpers)s
 
+u8 *g_drop_through = 0;
+u8 g_support_normal = 1;
 /* 8 x 6 tuiles : un sol plein sur la dernière rangée (y = 40), un mur plein sur la colonne 6 (x = 48). */
 static u8 carte[8 * 6];
 
@@ -31,14 +34,14 @@ static Actor mk(int x, int y, int vx, int vy){
     a.x = x << 8; a.y = y << 8; a.vx = vx; a.vy = vy;
     a.collision.last_x = x;
     a.collision.box_count = 1;
-    a.collision.boxes[0] = (CollisionBox){-7, 11, 17, 4, 1, 1, 0, 0};
+    a.collision.boxes[0] = (CollisionShape){-7, 11, 17, 4, 1, 1, 0, 0};
     return a;
 }
 static void report(const char* nom, Actor* a){
     printf("%%s %%d %%d %%d %%d %%d\n", nom, a->x >> 8, a->y >> 8, a->vx, a->vy, a->collision.grounded);
 }
 /* Ce que fait `actor:apply_velocity()` puis le tick. */
-static void frame(Actor* a){ a->x += a->vx; a->y += a->vy; resolve_actor_tiles(a, 0); }
+static void frame(Actor* a){ a->x += a->vx; a->y += a->vy; resolve_actor_tiles(a, 1, 0); }
 
 int main(void){
     for(int tx = 0; tx < 8; tx++) carte[5 * 8 + tx] = 1;
@@ -66,9 +69,9 @@ def resultats(tmp_path_factory):
     compilateur = compilateur_hote()
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; la collision est vérifiée en CI")
-    from codegen.runtime_codegen.gen_tile_collision import gen_tile_helpers
+    from codegen.runtime_codegen.physics.character import character_solver_lines
     dossier = tmp_path_factory.mktemp("tuiles")
-    (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(gen_tile_helpers())}, encoding="utf-8")
+    (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(character_solver_lines())}, encoding="utf-8")
     binaire = dossier / "probe"
     construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),
                                 "-o", str(binaire), str(dossier / "probe.c")],

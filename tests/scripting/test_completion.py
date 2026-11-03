@@ -288,7 +288,7 @@ def test_tag_compare_propose_les_noms_du_projet():
     # `other.name == "` → identités d'acteurs ; `hb.tag == "` → tags de boîtes de
     # collision, d'après le type de référence que le local tient.
     names = {"actor_name": ["player"], "box_tag": ["hitbox", "body"], "anim": ["walk"]}
-    src = 'local hb = self:collision_box("body")\n'
+    src = 'local hb = self:collision_shape("body")\n'
 
     def at(prefix):
         return {c.insert for c in C.candidates_at(prefix, context="actor",

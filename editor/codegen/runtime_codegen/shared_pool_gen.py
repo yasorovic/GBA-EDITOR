@@ -52,19 +52,32 @@ def hook_lines(pi: list[dict], event: str, has_event) -> list[str]:
     return _loop(cases) if cases else []
 
 
-def tile_lines(pi: list[dict], has_event, has_solid_box) -> list[str]:
-    """La résolution contre la carte de collision, pour les modèles qui ont une boîte solide."""
+def tile_lines(pi: list[dict], has_event, map_collider_mask, carried=frozenset()) -> list[str]:
+    """La résolution contre la carte de collision, pour les seuls Character bodies.
+
+    `carried` : les modèles dont une instance peut être portée par une plateforme Kinematic. Comme pour un acteur posé
+    porté, le déplacement de la plateforme (`_kin_pd`, cf. `physics.kinematic`) s'ajoute à la vitesse le temps de la
+    résolution, puis la vitesse propre est restaurée."""
     cases = []
     for m in shared_models(pi):
-        if not has_solid_box(m["prefab"]):
+        mask = map_collider_mask(m["prefab"])
+        if not mask:
             continue
         cb = f"{m['sym']}_on_tile_collide" if has_event(m["sym"], "on_tile_collide") else "NULL"
-        cases.append(f"        case {m['model_id']}: resolve_actor_tiles(_a, {cb}); break;")
+        if m["model_id"] in carried:
+            cases.append(
+                f"        case {m['model_id']}: {{ int _kin_i=_pk-g_spool_start; int _kin_ovx=_a->vx,_kin_ovy=_a->vy;\n"
+                "            int _kin_ivx=_kin_ovx+_kin_pd[_kin_i][0],_kin_ivy=_kin_ovy+_kin_pd[_kin_i][1];\n"
+                "            _a->vx=_kin_ivx; _a->vy=_kin_ivy;\n"
+                f"            resolve_actor_tiles(_a, {mask}, {cb});\n"
+                "            _a->vx=(_kin_ivx&&!_a->vx)?0:_kin_ovx; _a->vy=(_kin_ivy&&!_a->vy)?0:_kin_ovy; } break;")
+            continue
+        cases.append(f"        case {m['model_id']}: resolve_actor_tiles(_a, {mask}, {cb}); break;")
     return _loop(cases) if cases else []
 
 
 def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has_event, has_col_event,
-                    dispatch_sym, lua_idx: set, scene_name: str, contact_lines) -> list[str]:
+                    dispatch_sym, lua_idx: set, scene_name: str, contact_lines, collision_mask=None) -> list[str]:
     """Les contacts des instances du pool partagé avec les acteurs posés qui ont une boîte.
 
     Une collision a DEUX côtés, et chacun apprend la nouvelle dans son propre script (comme la boucle
@@ -89,7 +102,8 @@ def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has
                 "_a", f"&g_actors[{sidx}]", f"g_actors[{sidx}].active", f"_pcol[_sl][{ci}]",
                 [(ev, f"{fn}_{ev}") for ev, fn in ev_pool],
                 [(ev, f"{fn}_{ev}") for ev, fn in ev_scene],
-                "                ")
+                "                ",
+                collision_mask(m["prefab"], sactor) if collision_mask else 0xFFFF)
             width = max(width, ci + 1)
         if body:
             labels = " ".join(f"case {m['model_id'] + k}:" for k in range(m["group"]))

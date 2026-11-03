@@ -33,16 +33,17 @@ function on_start()
 end
 
 function on_update()
+    local body = self:physics_body()
     if etat == 0 then
-        self.velocity = vec2(0, 0)
+        body.velocity = vec2(0, 0)
         minuteur = minuteur - 1
         if minuteur <= 0 then
             etat = 1
         end
     elseif etat == 1 then
-        self.velocity = vec2(sens * 256, 0)
+        body.velocity = vec2(sens * 256, 0)
     end
-    self:apply_velocity()
+    body:apply_velocity()
 end
 ```
 
@@ -65,7 +66,7 @@ end
 ```
 
 Un choc horizontal pendant la marche retourne le gardien et le renvoie à l'attente. Le mouvement
-passe par `self.velocity` puis `apply_velocity()` : c'est cette vitesse que la carte lit pour
+passe par `body.velocity` puis `body:apply_velocity()` : c'est cette vitesse que la carte lit pour
 détecter un mur. Écrire `self.position` téléporterait l'acteur, et la carte ne verrait aucun
 mouvement.
 

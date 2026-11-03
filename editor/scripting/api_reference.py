@@ -62,7 +62,7 @@ _FALLBACK_GROUP: dict[str, str] = {
 # labels.json, français dans labels_fr.json) : la sidebar traduit, cette couche
 # ne code pas de texte visible en dur.
 SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("scrsb.sec.actor",   ("Actor", "Instance", "Transform", "Movement", "Physics", "CollisionBox", "Collision", "Sprite", "Animation", "Juiciness", "Input")),
+    ("scrsb.sec.actor",   ("Actor", "Instance", "Transform", "Movement", "Physics", "CollisionShape", "Collision", "Sprite", "Animation", "Juiciness", "Input")),
     ("scrsb.sec.scene",   ("Scene", "Layer", "Tilemap", "Palette", "Window", "Blend")),
     ("scrsb.sec.camera",  ("Camera",)),
     ("scrsb.sec.sound",   ("Audio",)),
@@ -126,6 +126,9 @@ _PROP_HOME: dict[str, str] = {
     "actor.rotation":  "Transform",
     "actor.scale":     "Transform",
     "actor.velocity":  "Physics",
+    "physics_body.velocity": "Physics",
+    "physics_body.grounded": "Physics",
+    "physics_body.floor": "Physics",
     "actor.visible":   "Instance",
     "actor.active":    "Instance",
     "actor.name":      "Instance",
@@ -152,8 +155,8 @@ _PROP_HOME: dict[str, str] = {
     "actor.direction": "Movement",
     "actor.facing":      "Movement",
     "actor.facing_auto": "Movement",
-    "actor.grounded":  "CollisionBox",
-    "actor.box_count": "CollisionBox",
+    "actor.grounded":  "CollisionShape",
+    "actor.box_count": "CollisionShape",
     "ui_element.visible": "Interface",
     "background_layer.visible": "Layer", "background_layer.priority": "Layer",
     "background_layer.scroll": "Layer", "background_layer.map": "Layer",
@@ -161,13 +164,13 @@ _PROP_HOME: dict[str, str] = {
     "window_region.visible": "Window",
     "image.state": "Interface", "image.offset": "Interface",
     "textBox.reading": "Interface",
-    "collision_box.tag":    "CollisionBox",
-    "collision_box.active": "CollisionBox",
-    "collision_box.solid":  "CollisionBox",
-    "collision_box.is_grounded": "CollisionBox",
-    "collision_box.offset": "CollisionBox",
-    "collision_box.size":   "CollisionBox",
-    "collision_box.bounds": "CollisionBox",
+    "collision_shape.tag":    "CollisionShape",
+    "collision_shape.active": "CollisionShape",
+    "collision_shape.solid":  "CollisionShape",
+    "collision_shape.is_grounded": "CollisionShape",
+    "collision_shape.offset": "CollisionShape",
+    "collision_shape.size":   "CollisionShape",
+    "collision_shape.bounds": "CollisionShape",
     "actor.screen_space": "Transform",
     "actor.affine":    "Sprite",
     "camera.position": "Camera",
@@ -176,6 +179,7 @@ _PROP_HOME: dict[str, str] = {
     "camera.frame":    "Camera",
     "camera.name":     "Camera",
     "scene.size":      "Scene",
+    "scene.gravity":   "Physics",
     "scene.frame":     "Scene",
     "scene.scroll_h":  "Scene",
     "scene.scroll_v":  "Scene",
@@ -185,7 +189,7 @@ _PROP_HOME: dict[str, str] = {
 }
 
 # Même chose pour les FONCTIONS `self:*` et celles d'une RÉFÉRENCE
-# (`collision_box:*`) : leur module (`self`, ou aucun) ne dit pas la catégorie,
+# (`collision_shape:*`) : leur module (`self`, ou aucun) ne dit pas la catégorie,
 # donc `_reconcile` ne peut pas déduire où en ranger une nouvelle et la jetterait
 # dans « Actor » ou « Other ». Ne figurent ici que celles à ranger ailleurs ; le
 # reste est décrit par le JSON.
@@ -193,8 +197,12 @@ _FUNC_HOME: dict[str, str] = {
     # La vélocité est un état de Physics ; l'appliquer est le geste qui le
     # transforme en déplacement, pas une opération générique d'Actor.
     "actor:apply_velocity": "Physics",
-    "actor:collision_box":     "CollisionBox",
-    "collision_box:overlaps": "CollisionBox",
+    "actor:physics_body": "Physics",
+    "physics_body:add_velocity": "Physics",
+    "physics_body:apply_velocity": "Physics",
+    "physics_body:drop_through": "Physics",
+    "actor:collision_shape":     "CollisionShape",
+    "collision_shape:overlaps": "CollisionShape",
     "actor:activate_sprite": "Sprite",
     "layer.get": "Layer", "window.get": "Window",
     "background_layer:show": "Layer", "background_layer:hide": "Layer",
@@ -206,15 +214,15 @@ _FUNC_HOME: dict[str, str] = {
     "window_region:show": "Window", "window_region:hide": "Window", "window_region:set": "Window",
     "window_region:set_layer": "Window", "window_region:get_layer": "Window",
     "window_region:set_obj": "Window", "window_region:set_blend": "Window",
-    "collision_box:activate": "CollisionBox",
+    "collision_shape:activate": "CollisionShape",
 
-    "collision_box:deactivate": "CollisionBox",
+    "collision_shape:deactivate": "CollisionShape",
     "image:play": "Interface", "image:pause": "Interface",
     "textBox:draw": "Interface", "textBox:clear": "Interface",
     "textBox:skip": "Interface",
     # Lecture de la carte : l'ancienne méthode de boîte reste compatible mais
     # vit avec son équivalent direct `collision:tile_at`.
-    "collision_box:get_collision_tile": "Collision",
+    "collision_shape:get_collision_tile": "Collision",
     "collision.tile_at": "Collision",
 }
 
@@ -436,7 +444,7 @@ def _reconcile(cats: list[dict]) -> list[dict]:
 
     by_name = {c["name"]: c for c in out}
     for name in RUNTIME_API:
-        if name in described:
+        if name in described or RUNTIME_API[name].legacy:
             continue
         candidates = homes.get(_module_of(name), set())
         target = (_FUNC_HOME[name] if name in _FUNC_HOME
@@ -454,6 +462,8 @@ def _reconcile(cats: list[dict]) -> list[dict]:
     # voit pas, et la boucle ci-dessus ne les voit pas non plus : on les ajoute
     # à part, rangées par `_PROP_HOME`.
     for name in RUNTIME_PROPS:
+        if RUNTIME_PROPS[name].legacy:
+            continue
         target = _PROP_HOME.get(name, _MISC_FALLBACK)
         cat = by_name.get(target)
         if cat is None:

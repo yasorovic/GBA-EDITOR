@@ -100,8 +100,8 @@ def resolve_prop(expr, ref_types: Optional[dict[str, str]] = None,
     `other.velocity` est le même champ, avec un autre récepteur. Les propriétés
     de caméra/scène, elles, n'existent que sur `camera`/`scene`.
 
-    Un récepteur qui tient une RÉFÉRENCE (`hb = self:collision_box("hitbox")`,
-    d'où `hb.solid`) a les propriétés de son TYPE, clés `collision_box.solid` :
+    Un récepteur qui tient une RÉFÉRENCE (`hb = self:collision_shape("hitbox")`,
+    d'où `hb.solid`) a les propriétés de son TYPE, clés `collision_shape.solid` :
     `ref_types` (nom → type, tenu par le checker et le codegen) le dit. Et il n'a
     QUE celles-là : jamais le repli sur les champs d'actor, sans quoi `hb.tag`
     se lirait comme le tag de l'actor. Un type HÉRITE de son parent (`menu.visible`,
@@ -268,7 +268,7 @@ def held_actor_refs(script) -> dict:
 
 def chain_label(obj) -> str:
     """Comment un récepteur CHAÎNÉ s'annonce dans un message : `actor:get(…)`,
-    `collision_box(…)`. Ce que l'auteur a écrit ne tient pas dans une phrase, et
+    `collision_shape(…)`. Ce que l'auteur a écrit ne tient pas dans une phrase, et
     les arguments n'aident pas à comprendre la faute."""
     cell = _data_cell(obj)
     if cell:
@@ -284,7 +284,7 @@ def chain_label(obj) -> str:
 
 
 def _resolve_chained_prop(expr, ref_kinds=None, ref_types=None) -> Optional[tuple[str, ApiProp]]:
-    """`actor:get("Foe").velocity`, `self:collision_box("hb").solid` : la même
+    """`actor:get("Foe").velocity`, `self:collision_shape("hb").solid` : la même
     propriété que sur un nom, avec pour récepteur une EXPRESSION.
 
     Sans cette branche, `resolve_prop` rendait None faute d'un `ExprName`, le
@@ -434,6 +434,9 @@ def infer_ref_type(expr, ref_kinds: Optional[dict[str, str]] = None,
         cell = _data_cell(expr)
         if cell:
             return (ref_kinds or {}).get(data_column_key(*cell))
+        prop = resolve_prop(expr, ref_types, ref_kinds)
+        if prop is not None and prop[1].ref in REF_TYPES:
+            return prop[1].ref
         if expr.field in ACTOR_NAV_PROPS and _is_actor_receiver(expr.obj, ref_kinds, ref_types):
             return REF_ACTOR                                 # `other.parent`, `boss.Canon.root`
         child_of = getattr(ref_types, "child_of", None)
@@ -448,7 +451,7 @@ def infer_ref_type(expr, ref_kinds: Optional[dict[str, str]] = None,
         if receiver:
             found = ref_member(receiver, expr.method, ":")
             return found[1].ret if (found and found[1].ret in REF_TYPES) else None
-        # `self:collision_box("hitbox")` : un constructeur de référence qui
+        # `self:collision_shape("hitbox")` : un constructeur de référence qui
         # s'écrit comme une méthode d'actor, faute de module à qui le rattacher.
         api = RUNTIME_API.get(f"{REF_ACTOR}:{expr.method}")
         return api.ret if (api and api.ret in REF_TYPES) else None

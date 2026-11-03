@@ -634,6 +634,18 @@ class Scene(Resource):
     collision_layer: int = 0  # index BG (0-3) portant la carte de collisions
     # Grille de collision en tiles 8×8 — list[row][col] de TILE_* constants
     collision_map: list = field(default_factory=list)
+    # Surcharge locale des réglages physiques du projet. Le nom historique
+    # `physics_gravity_override` est conservé dans le format de scène.
+    # Le booléen distingue « hériter » de valeurs locales égales aux défauts.
+    physics_gravity_override: bool = False
+    physics_gravity_x: float = 0.0
+    physics_gravity_y: float = 0.0
+    physics_solver_iterations: int = 4
+    physics_max_fall_speed: float = 8.0   # px/frame, 0 = sans limite
+    physics_linear_damping: float = 0.0   # part de vitesse retirée par frame, 0..1
+    physics_sleep_enabled: bool = True
+    physics_sleep_threshold: float = 0.05  # px/frame
+    physics_sleep_frames: int = 30
     # Palettes actives de cette scène — noms référençant project.obj_palettes/
     # bg_palettes (catalogue illimité). Ordre = index de banque hardware
     # (slot 0 = 1er élément). Actor/Prefab.pal_bank indexe dans CETTE liste,
@@ -761,6 +773,16 @@ class Scene(Resource):
                if self.font_pal_banks else {}),
             "collision_layer": self.collision_layer,
             "collision_map": self.collision_map,
+            **({"physics_gravity_override": True,
+                "physics_gravity_x": self.physics_gravity_x,
+                "physics_gravity_y": self.physics_gravity_y,
+                "physics_solver_iterations": self.physics_solver_iterations,
+                "physics_max_fall_speed": self.physics_max_fall_speed,
+                "physics_linear_damping": self.physics_linear_damping,
+                "physics_sleep_enabled": self.physics_sleep_enabled,
+                "physics_sleep_threshold": self.physics_sleep_threshold,
+                "physics_sleep_frames": self.physics_sleep_frames}
+               if self.physics_gravity_override else {}),
             "active_obj_palettes": self.active_obj_palettes,
             "active_bg_palettes": self.active_bg_palettes,
             "backdrop_color": self.backdrop_color,
@@ -841,6 +863,22 @@ class Scene(Resource):
             font_pal_banks=_font_pal_banks_from_dict(d),
             collision_layer=d.get("collision_layer", 0),
             collision_map=d.get("collision_map", []),
+            # Avant l'héritage projet, la présence d'une valeur de gravité
+            # signifiait nécessairement une règle propre à cette scène.
+            physics_gravity_override=bool(
+                d.get("physics_gravity_override",
+                      any(key in d for key in (
+                          "physics_gravity_x", "physics_gravity_y", "physics_solver_iterations",
+                          "physics_max_fall_speed", "physics_linear_damping", "physics_sleep_enabled",
+                          "physics_sleep_threshold", "physics_sleep_frames")))),
+            physics_gravity_x=float(d.get("physics_gravity_x", 0.0)),
+            physics_gravity_y=float(d.get("physics_gravity_y", 0.0)),
+            physics_solver_iterations=max(1, min(8, int(d.get("physics_solver_iterations", 4)))),
+            physics_max_fall_speed=max(0.0, float(d.get("physics_max_fall_speed", 8.0))),
+            physics_linear_damping=max(0.0, min(1.0, float(d.get("physics_linear_damping", 0.0)))),
+            physics_sleep_enabled=bool(d.get("physics_sleep_enabled", True)),
+            physics_sleep_threshold=max(0.0, float(d.get("physics_sleep_threshold", 0.05))),
+            physics_sleep_frames=max(1, min(255, int(d.get("physics_sleep_frames", 30)))),
             active_obj_palettes=d.get("active_obj_palettes", []),
             active_bg_palettes=d.get("active_bg_palettes", []),
             backdrop_color=d.get("backdrop_color"),
@@ -860,3 +898,22 @@ class Scene(Resource):
         assign_member_ids(scene.members())
         scene.ensure_collision_map()
         return scene
+
+    def effective_physics_gravity(self, project_settings) -> tuple[float, float]:
+        """Gravité réellement compilée : surcharge locale, sinon projet."""
+        if self.physics_gravity_override:
+            return self.physics_gravity_x, self.physics_gravity_y
+        return (float(getattr(project_settings, "physics_gravity_x", 0.0)),
+                float(getattr(project_settings, "physics_gravity_y", 0.0)))
+
+    def effective_physics_simulation(self, project_settings) -> tuple[int, float, float, bool, float, int]:
+        """Réglages de simulation réellement compilés : surcharge locale, sinon projet."""
+        source = self if self.physics_gravity_override else project_settings
+        return (
+            max(1, min(8, int(getattr(source, "physics_solver_iterations", 4)))),
+            max(0.0, float(getattr(source, "physics_max_fall_speed", 8.0))),
+            max(0.0, min(1.0, float(getattr(source, "physics_linear_damping", 0.0)))),
+            bool(getattr(source, "physics_sleep_enabled", True)),
+            max(0.0, float(getattr(source, "physics_sleep_threshold", 0.05))),
+            max(1, min(255, int(getattr(source, "physics_sleep_frames", 30)))),
+        )

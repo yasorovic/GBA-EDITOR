@@ -187,6 +187,16 @@ class ProjectSettings:
     last_scene: str = ""
     author: str = ""
     version: str = "0.1"
+    # Gravité par défaut des scènes, en pixels par frame². Une scène peut la
+    # surcharger explicitement ; zéro garde le comportement historique.
+    physics_gravity_x: float = 0.0
+    physics_gravity_y: float = 0.0
+    physics_solver_iterations: int = 4
+    physics_max_fall_speed: float = 8.0
+    physics_linear_damping: float = 0.0
+    physics_sleep_enabled: bool = True
+    physics_sleep_threshold: float = 0.05
+    physics_sleep_frames: int = 30
     # Couleur de backdrop par défaut (BGR555) — PAL_BG_RAM[0], affichée quand
     # rien d'opaque n'est dessiné nulle part. Éditée dans le ProjectInspector ;
     # Scene.backdrop_color peut la surcharger par scène.
@@ -249,7 +259,7 @@ class ProjectSettings:
     # ce qui permet de réserver un nom et de régler ses paires avant de
     # l'assigner au premier acteur. Les tags simplement TROUVÉS sur des
     # composants n'ont pas besoin d'y figurer : la matrice les découvre déjà
-    # en parcourant les scènes (cf. CollisionsPanel._all_tags). Union des deux
+    # en parcourant les scènes (cf. Project.collision_tags). Union des deux
     # ensembles à l'affichage, jamais l'un à la place de l'autre.
     collision_tags: list = field(default_factory=list)
     # Cadence de répétition des listes de menu, en frames —

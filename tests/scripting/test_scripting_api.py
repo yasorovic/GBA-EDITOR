@@ -35,6 +35,16 @@ def _errors(src: str, **ctx_kw) -> list[str]:
     return [e.message for e in _lua(src, **ctx_kw)[0] if e.level == "error"]
 
 
+def test_on_crushed_recoit_un_obstacle_ou_nil():
+    errors, code = _lua("function on_crushed(obstacle)\n"
+                        "  if obstacle then obstacle:hide() end\n"
+                        "end\n")
+
+    assert not [error for error in errors if error.level == "error"]
+    assert "void Ball_on_crushed(Actor* self, Actor* obstacle)" in code
+    assert "actor_set_visible(obstacle, 0);" in code
+
+
 # ── T6 : actor.spawn rend un Actor* ──────────────────
 
 def test_spawn_local_est_un_actor_pointer():
@@ -675,7 +685,7 @@ def test_tag_d_un_acteur_guide_vers_name():
     assert any("other.name" in e for e in errs)
 
 
-def test_collision_box_n_est_pas_un_champ_d_acteur():
+def test_collision_shape_n_est_pas_un_champ_d_acteur():
     errs, _ = _tag_lua('function on_collide(self, other)\n'
-                       ' if other.collision_box.tag == "Player" then end\nend\n')
+                       ' if other.collision_shape.tag == "Player" then end\nend\n')
     assert any("other_box.tag" in e for e in errs)

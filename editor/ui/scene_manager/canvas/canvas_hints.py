@@ -12,6 +12,10 @@ _TITLES = {
     "collision_16": "cvtool.16_16_px_brush",
     "collision_slope": "cvtool.floor_slope",
     "collision_slope_inv": "cvtool.ceiling_slope",
+    "collision_oneway_up": "cvtool.oneway_up",
+    "collision_oneway_down": "cvtool.oneway_down",
+    "collision_oneway_left": "cvtool.oneway_left",
+    "collision_oneway_right": "cvtool.oneway_right",
     "inpaint_brush": "cvtool.scene_inpainting",
     "inpaint_rect": "cvtool.scene_inpainting",
     "ui_text": "cvtool.interface_widget",
@@ -23,6 +27,8 @@ _TITLES = {
 
 _PAINT = [(mouse("left_drag"), "hints.scene.paint_solid"),
           (mouse("right_drag"), "hints.scene.erase_tiles")]
+_ONEWAY = [(mouse("left_drag"), "hints.scene.paint_oneway"),
+           (mouse("right_drag"), "hints.scene.erase_tiles")]
 _SLOPE = [(mouse("left_drag"), "hints.scene.draw_slope"),
           (mouse("right_drag"), "hints.scene.erase_slope")]
 _INPAINT_BRUSH = [(mouse("left_drag"), "hints.scene.inpaint_paint"),
@@ -47,6 +53,8 @@ def _tool_rows(tool: str) -> list:
         return [(mouse("left_click"), "hints.scene.erase_actor")]
     if tool in ("collision_8", "collision_16"):
         return _PAINT
+    if tool.startswith("collision_oneway_"):
+        return _ONEWAY
     if tool in ("collision_slope", "collision_slope_inv"):
         return _SLOPE
     if tool == "inpaint_brush":

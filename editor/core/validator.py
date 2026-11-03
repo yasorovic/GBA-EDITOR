@@ -424,6 +424,7 @@ def _check_each_scene(ctx: ValidationContext):
             ctx.warn(None, "The scene has no actor, script or interface: it will do nothing.")
         _check_actors(ctx)
         _check_backgrounds(ctx)
+        _check_collision_map(ctx)
         _check_frame_events(ctx)
     ctx.focus(None)
 
@@ -487,8 +488,11 @@ def _check_components(ctx: ValidationContext, owner, components):
 
         if ctype == "sprite":
             _check_sprite(ctx, owner, comp)
-        elif ctype == "collision_box":
+        elif ctype == "collision_shape":
             _check_collision(ctx, owner, comp)
+            _check_collision_material(ctx, owner, comp)
+        elif ctype == "physics_body":
+            _check_physics_body(ctx, owner, comp)
         elif ctype == "script":
             _check_script(ctx, owner, comp)
 
@@ -522,8 +526,50 @@ def _check_sprite(ctx, actor, comp):
 def _check_collision(ctx, actor, comp):
     if getattr(comp, "w", 0) <= 0 or getattr(comp, "h", 0) <= 0:
         ctx.error(actor,
-                  f"CollisionBox '{comp.tag}': zero width or height ({comp.w}×{comp.h}) — invisible "
+                  f"CollisionShape '{comp.tag}': zero width or height ({comp.w}×{comp.h}) — invisible "
                   "hitbox.")
+    # Une face à sens unique est une face qui BLOQUE dans un sens : sur un capteur, il n'y a rien à franchir.
+    from core.models.components import COLLISION_RESPONSE_BLOCK, ONE_WAY_OFF
+    if getattr(comp, "one_way", ONE_WAY_OFF) != ONE_WAY_OFF and comp.response != COLLISION_RESPONSE_BLOCK:
+        ctx.warn(actor, f"CollisionShape '{comp.tag}': One-way is set but the response is not Block, so it has no "
+                        "effect. Set the response to Block, or turn One-way off.")
+
+
+def _check_collision_map(ctx):
+    """Un type de tuile inconnu dans la carte de la scène : le runtime lit des tables de `TILE_COUNT` entrées par
+    ce type, donc une valeur hors de 0 à `TILE_COUNT - 1` lirait au-delà (aucun message, un comportement au hasard)."""
+    from core.models.collision_tiles import TILE_COUNT
+    bad = [(col, row, tile) for row, line in enumerate(getattr(ctx.scene, "collision_map", None) or [])
+           for col, tile in enumerate(line)
+           if not isinstance(tile, int) or isinstance(tile, bool) or not 0 <= tile < TILE_COUNT]
+    if bad:
+        col, row, tile = bad[0]
+        ctx.error(None, f"Collision map: {len(bad)} tile(s) have an unknown type (first: {tile!r} at column {col}, "
+                        f"row {row}). Valid types are 0 to {TILE_COUNT - 1}: repaint or erase them.")
+
+
+def _check_physics_body(ctx, owner, comp):
+    """Une relation explicite doit désigner exactement une boîte du même Actor."""
+    if not comp.collider_id:
+        return
+    from core.models.components import CollisionShapeComponent
+    matches = [box for box in getattr(owner, "components", [])
+               if isinstance(box, CollisionShapeComponent) and box.id == comp.collider_id]
+    if len(matches) != 1:
+        ctx.error(owner, f"PhysicsBody uses CollisionShape id '{comp.collider_id}', but this actor "
+                  f"contains {len(matches)} matching boxes. Choose an existing unique CollisionShape.")
+
+
+def _check_collision_material(ctx, owner, comp):
+    """Un matériau désigné doit exister une seule fois sur le même Actor."""
+    if not comp.material_id:
+        return
+    from core.models.components import PhysicMaterialComponent
+    matches = [m for m in getattr(owner, "components", [])
+               if isinstance(m, PhysicMaterialComponent) and m.id == comp.material_id]
+    if len(matches) != 1:
+        ctx.error(owner, f"CollisionShape '{comp.tag}' uses PhysicMaterial id '{comp.material_id}', but this "
+                  f"actor contains {len(matches)} matching materials. Choose an existing unique PhysicMaterial.")
 
 
 def _check_script(ctx, actor, comp):
@@ -1825,7 +1871,7 @@ def _check_interactive(ctx: ValidationContext):
     - sans `box_tag`, le composant ajoute SA boîte : il lui faut un emplacement libre (`MAX_BOXES`) ;
     - un composant sans `on_interact` dans le script de l'acteur ne fait rien (et inversement :
       un `on_interact` sans composant n'est jamais appelé) — avertissement, le jeu tourne."""
-    from core.models.components import CollisionBoxComponent, InteractiveComponent, ScriptComponent
+    from core.models.components import CollisionShapeComponent, InteractiveComponent, ScriptComponent
     MAX_BOXES = 4      # actor_types_static.h
     scenes = list(ctx.project.scenes)
     owners = [(a, a.name) for sc in scenes for a in sc.actors]
@@ -1840,7 +1886,7 @@ def _check_interactive(ctx: ValidationContext):
                      "trigger them. Tick \"Player\" on the actor that interacts.")
     for owner, name in owners:
         comps = [c for c in getattr(owner, "components", []) if isinstance(c, InteractiveComponent)]
-        boxes = [c for c in getattr(owner, "components", []) if isinstance(c, CollisionBoxComponent)]
+        boxes = [c for c in getattr(owner, "components", []) if isinstance(c, CollisionShapeComponent)]
         tags = {c.tag or "body" for c in boxes}
         script = next((c for c in getattr(owner, "components", [])
                        if isinstance(c, ScriptComponent) and c.active and c.script), None)
@@ -1869,7 +1915,7 @@ def _check_interactive(ctx: ValidationContext):
             if not comp.box_tag and len(boxes) >= MAX_BOXES:
                 ctx.error(name,
                     f"Interactive needs a box of its own, but this actor already has {len(boxes)} "
-                    f"collision boxes (the maximum is {MAX_BOXES}). Remove one or pick an existing box.")
+                    f"collision shapes (the maximum is {MAX_BOXES}). Remove one or pick an existing box.")
         if len(comps) > 1:
             ctx.warn(name, "This actor has several Interactive components: only the first is used.")
 
@@ -2172,13 +2218,13 @@ def _check_screen_space(ctx: ValidationContext):
                 continue
             # ① Collision — la carte de collision est en pixels de monde. Une
             # hitbox posée à des coordonnées d'écran teste donc la mauvaise case.
-            if any(type(c).__name__ == "CollisionBoxComponent"
+            if any(type(c).__name__ == "CollisionShapeComponent"
                    for c in getattr(actor, "components", []) or []):
                 ctx.warn(actor,
                     f"Scene '{scene.name}': '{actor.name}' is anchored to the screen but carries a "
-                    "CollisionBox — the collision map is in WORLD pixels, so the "
+                    "CollisionShape — the collision map is in WORLD pixels, so the "
                     "hitbox will test a different tile than the one you see. Remove "
-                    "the CollisionBox, or the screen anchor.")
+                    "the CollisionShape, or the screen anchor.")
             # ② Caméra — suivre une position d'écran fige la caméra sur place.
             _cam = p.scene_camera(scene) if hasattr(p, "scene_camera") else None
             if (_cam is not None and _cam.mode == "follow"

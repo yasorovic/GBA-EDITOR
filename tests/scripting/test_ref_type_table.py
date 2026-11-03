@@ -120,7 +120,8 @@ def test_le_prefixe_des_snippets_vient_de_la_table(gizmo):
 def test_le_type_c_de_chaque_type_reel_vient_de_la_table():
     """Les trois types existants, avec leur représentation C d'avant la table."""
     assert {n: t.c_type for n, t in REF_TYPE_TABLE.items()} == {
-        "sfx": "mm_sfxhand", "collision_box": "int", "ui_element": "int",
+        "sfx": "mm_sfxhand", "collision_shape": "int", "ui_element": "int",
+        "physics_body": "Actor*",
         "image": "int", "textBox": "int",
         "background_layer": "int", "window_region": "int", "actor": "Actor*"}
 
@@ -142,7 +143,7 @@ def test_absent_se_dit_nil_pour_toute_reference_de_pool():
     n'a pas à déclarer, seulement à ne pas casser."""
     cas = {
         "sfx": ('local p = sfx:play("Bip")\nif p ~= nil then p:stop() end', "(p != 0)"),
-        "collision_box": ('local hb = self:collision_box("hb")\nif hb == nil then self:destroy() end',
+        "collision_shape": ('local hb = self:collision_shape("hb")\nif hb == nil then self:destroy() end',
                           "(hb == 0)"),
         "actor": ('local a = actor:get("Foe")\nif a ~= nil then a:destroy() end', "(a != 0)"),
     }
@@ -165,7 +166,7 @@ def test_les_types_de_reference_sont_une_vue_vivante_de_la_table():
 
 def test_tout_type_declare_a_une_fabrique():
     """Un type que rien ne rend est un type mort : ses méthodes seraient injoignables.
-    (`collision_box` est rendu par `self:collision_box`, une acquisition dérivée.)"""
+    (`collision_shape` est rendu par `self:collision_shape`, une acquisition dérivée.)"""
     rendus = {f.ret for f in RUNTIME_API.values()}
     # `interface.get` rend le type de la NATURE de l'élément (`ret_by_name`) : tout type
     # d'élément d'interface a donc pour fabrique cette seule fonction.
@@ -269,6 +270,56 @@ def test_un_acteur_tenu_par_une_variable_a_les_membres_du_type_actor():
     assert _actor_errors(body) == []
     (msg,) = _actor_errors('local boss = actor:get("Foe")\nlocal x = boss.nawak')
     assert "actor" in msg and "position" in msg
+
+
+def test_le_corps_physique_est_une_reference_typee_de_l_actor():
+    body = ("local body = self:physics_body()\n"
+            "body.velocity = vec2(128, 256)\n"
+            "body:add_velocity(vec2(0, 16))\n"
+            "body:apply_velocity()\n"
+            "local grounded = body.grounded\n"
+            "local floor = body.floor\n"
+            "if floor then floor:hide() end")
+    assert _actor_errors(body) == []
+    assert _c_body(body) == [
+        "Actor* body = actor_get_physics_body(self);",
+        "actor_set_velocity(body, (Vec2){128, 256});",
+        "actor_add_velocity(body, (Vec2){0, 16});",
+        "actor_apply_velocity(body);",
+        "int grounded = actor_on_ground(body);",
+        "Actor* floor = actor_get_floor(body);",
+        "if (floor) {",
+        "if (actor_active_warn(floor, \"hide()\")) actor_set_visible(floor, 0);",
+        "}",
+    ]
+
+
+def test_un_floor_utilise_directement_est_protege_contre_nil():
+    body = ("local body = self:physics_body()\n"
+            "if body.floor then body.floor:hide() end")
+    assert _actor_errors(body) == []
+    assert _c_body(body) == [
+        "Actor* body = actor_get_physics_body(self);",
+        "if (actor_get_floor(body)) {",
+        "if (actor_active_warn(actor_get_floor(body), \"hide()\")) "
+        "actor_set_visible(actor_get_floor(body), 0);",
+        "}",
+    ]
+
+
+def test_les_raccourcis_physiques_legacy_restent_valides_mais_ne_sont_plus_proposes():
+    assert _actor_errors("self.velocity = vec2(0, 0)\nself:apply_velocity()") == []
+
+    from scripting.api_reference import get_categories
+    physics = next(c for c in get_categories() if c["name"] == "Physics")
+    labels = [e["label"] for e in physics["entries"]]
+    assert "self:physics_body()" in labels
+    assert "self:apply_velocity()" not in labels
+    assert labels.count("velocity(Vec2)") == 1
+
+    from scripting.completion import candidates_at
+    assert "apply_velocity" not in {c.insert for c in candidates_at("self:")}
+    assert "velocity" not in {c.insert for c in candidates_at("self.")}
 
 
 def test_le_module_actor_n_a_pas_les_champs_du_type_actor():

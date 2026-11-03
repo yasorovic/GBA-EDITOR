@@ -12,7 +12,7 @@
 
 #define MAX_BOXES 4   /* boxes de collision max par acteur */
 
-typedef struct CollisionBox {
+typedef struct CollisionShape {
     s8  x, y;   /* offset relatif au pivot (pixels) */
     u8  w, h;   /* dimensions (pixels) */
     u8  solid;  /* 1=physique, 0=trigger */
@@ -20,7 +20,7 @@ typedef struct CollisionBox {
     u8  tag;    /* BOXTAG_* */
     u8  grounded; /* cette boîte reposait-elle sur le sol à la fin de la frame ? Écrit par
                      resolve_actor_tiles ; reste 0 pour une boîte non solide, que la carte ignore */
-} CollisionBox;
+} CollisionShape;
 
 /* Vec2/Vec3/Rect — les valeurs COMPOSÉES du sous-ensemble Lua (vec2(x,y),
    vec3(x,y,z), rect(x,y,w,h)). Des entiers, rien d'autre : pas de virgule
@@ -239,8 +239,9 @@ typedef struct Actor {
        tick quand `facing_auto` vaut 1, libres sinon. */
     s8 facing_x;           /* -1 | 0 | 1 */
     s8 facing_y;           /* -1 | 0 | 1 */
+    u8 physics_sleep;      /* frames sous le seuil de sommeil du RigidBody */
 
-    /* ── collision ↔ CollisionBoxComponent ────────────────────────────── */
+    /* ── collision ↔ CollisionShapeComponent ────────────────────────────── */
     struct {
         /* Résolution contre la carte de collision — écrits par
            resolve_actor_tiles, lus par elle à la frame suivante :
@@ -261,7 +262,7 @@ typedef struct Actor {
         s16 slope_acc;
         u8 grounded;
         u8 box_count;      /* nombre de boxes actives (0..MAX_BOXES) */
-        CollisionBox boxes[MAX_BOXES];
+        CollisionShape boxes[MAX_BOXES];
     } collision;
 } Actor;
 

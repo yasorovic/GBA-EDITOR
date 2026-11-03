@@ -2,7 +2,7 @@
   "Transform": "Position, rotation, échelle d'un acteur et espace de sa position (monde ou écran).",
   "Movement": "Déplacer un acteur, et lire sa direction et son regard.",
   "Physics": "La vitesse d'un acteur, et comment l'appliquer à sa position.",
-  "CollisionBox": "Les boîtes de collision d'un acteur : les retrouver, les tester, les activer.",
+  "CollisionShape": "Les boîtes de collision d'un acteur : les retrouver, les tester, les activer.",
   "Collision": "Lire la carte de collision du décor, tuile par tuile.",
   "Sprite": "L'apparence d'un acteur : sprite actif, rotation, échelle et décalage.",
   "Animation": "Lancer une animation et lire son état.",

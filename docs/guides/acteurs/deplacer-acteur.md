@@ -89,6 +89,7 @@ modifier depuis l'éditeur.
 ## À savoir
 
 - Écrire dans `self.position` **téléporte** l'acteur : pratique pour débuter, mais la carte de
-  collision n'est pas consultée. Pour un déplacement physique, utilisez `self.velocity` et
-  `self:apply_velocity()` ([Collisions](collisions.md)).
+  collision n'est pas consultée. Pour un déplacement physique, obtenez
+  `self:physics_body()`, puis utilisez `body.velocity` et `body:apply_velocity()`
+  ([Collisions](collisions.md)).
 - Les touches se nomment et se reconfigurent dans **Project Settings → Input**.

@@ -747,9 +747,32 @@
     },
     "uiinsp.img.play_tip": { "text": "A frozen image costs no per-frame work and never rewrites the tilemap. It is the right default for a static HUD icon." },
     "uiinsp.bank_inherited_tip": { "text": "This text sits in a filled container, so it reads its ink from the bank of the container." },
-    "actorinsp.comp.collision": {
-      "text": "Collision"
+    "actorinsp.comp.collision_shape": {
+      "text": "Collision shape"
     },
+    "actorinsp.comp.physics_body": { "text": "Physics body" },
+    "actorinsp.comp.physic_material": { "text": "Physic material" },
+    "comped.collision_material": { "text": "Material" },
+    "comped.collision_choose_material": { "text": "Choose a PhysicMaterial..." },
+    "comped.collision_material_tip": { "text": "PhysicMaterial giving this shape its restitution and friction. Empty: no bounce, no friction." },
+    "comped.collision_material_none": { "text": "Default (no bounce, no friction)" },
+    "comped.collision_material_missing": { "text": "Missing PhysicMaterial [{name}]" },
+    "comped.physics_mode": { "text": "Mode" },
+    "comped.physics_collider": { "text": "Physics collider" },
+    "comped.physics_choose_collider": { "text": "Choose a CollisionShape..." },
+    "comped.physics_collider_tip": { "text": "CollisionShape used as this body’s physical shape. Once selected, the other boxes remain available for contacts and sensors but are not used to resolve this body." },
+    "comped.physics_collider_legacy": { "text": "Automatic · existing map colliders" },
+    "comped.physics_collider_missing": { "text": "Missing CollisionShape [{name}]" },
+    "comped.physics_character": { "text": "CharacterBody" },
+    "comped.physics_static": { "text": "StaticBody" },
+    "comped.physics_kinematic": { "text": "KinematicBody" },
+    "comped.physics_rigid": { "text": "RigidBody" },
+    "comped.physics_mass": { "text": "Mass" },
+    "comped.physics_mass_tip": { "text": "Relative mass used to distribute motion between two colliding RigidBody actors. It has no effect against a StaticBody." },
+    "comped.physics_gravity_scale": { "text": "Gravity scale" },
+    "comped.physics_gravity_scale_tip": { "text": "Multiplier applied to the scene gravity. Zero disables gravity for this body; a negative value reverses it." },
+    "comped.physics_can_sleep": { "text": "Can sleep" },
+    "comped.physics_can_sleep_tip": { "text": "Allows the scene sleep rule to stop simulating this body while it remains at rest." },
     "actorinsp.comp.soundfx": {
       "text": "SoundFX"
     },
@@ -767,7 +790,7 @@
     "comped.interact_area_tip": { "text": "How the player reaches the zone. Hover: the player overlaps it. Facing: the player's box, projected in the direction it looks over the reach set in the project settings and stopped by walls, touches it." },
     "comped.interact_box": { "text": "Zone" },
     "comped.interact_own_box": { "text": "Own box ({tag})" },
-    "comped.interact_box_tip": { "text": "Where the zone comes from. The own box is created by the component, with the reserved collision tag; or an existing collision box of this actor, chosen by its tag." },
+    "comped.interact_box_tip": { "text": "Where the zone comes from. The own box is created by the component, with the reserved collision tag; or an existing collision shape of this actor, chosen by its tag." },
     "comped.interact_auto": { "text": "Auto ({n})" },
     "comped.interact_size_tip": { "text": "Size of the own box in pixels. Auto uses the sprite frame, or 16 x 16 without a sprite." },
     "projset.reserved_tag_title": { "text": "Reserved tag" },
@@ -890,6 +913,23 @@
     "sceneinsp.card.mode": {
       "text": "Scene mode"
     },
+    "sceneinsp.card.physics": {
+      "text": "Physics"
+    },
+    "sceneinsp.physics_use_project": { "text": "Use project physics settings" },
+    "sceneinsp.physics_use_project_tip": { "text": "Uses gravity and simulation defaults from Project Settings. Unchecking it creates values specific to this scene." },
+    "sceneinsp.physics_gravity": { "text": "Gravity:" },
+    "sceneinsp.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors, in pixels per frame squared. Character and Kinematic actors ignore it." },
+    "sceneinsp.physics_solver_iterations": { "text": "Solver passes:" },
+    "sceneinsp.physics_solver_iterations_tip": { "text": "Number of passes over Rigid contacts. More passes stabilize stacks but cost more CPU time." },
+    "sceneinsp.physics_max_fall_speed": { "text": "Max fall speed:" },
+    "sceneinsp.physics_max_fall_speed_tip": { "text": "Maximum downward RigidBody speed in pixels per frame. Zero leaves it unlimited." },
+    "sceneinsp.physics_linear_damping": { "text": "Linear damping:" },
+    "sceneinsp.physics_linear_damping_tip": { "text": "Share of RigidBody velocity removed every frame. Zero preserves velocity; one removes it entirely." },
+    "sceneinsp.physics_sleep": { "text": "Put resting RigidBody actors to sleep" },
+    "sceneinsp.physics_sleep_tip": { "text": "Stops simulating a RigidBody once it stays within threshold x frames pixels of the same spot for the chosen number of frames. A hit that moves it further, or a new velocity written by a script, wakes it." },
+    "sceneinsp.physics_sleep_threshold_prefix": { "text": "Threshold " },
+    "sceneinsp.physics_sleep_frames_prefix": { "text": "After " },
     "sceneinsp.card.bg": {
       "text": "Background layers"
     },
@@ -1637,6 +1677,10 @@
     "comped.tag": {
       "text": "Tag"
     },
+      "comped.collision_layer": { "text": "Layers" },
+      "comped.collision_layer_tip": { "text": "Collision categories as a 16-bit mask. Each enabled bit is a layer this CollisionShape belongs to." },
+      "comped.collision_mask": { "text": "Collision mask" },
+      "comped.collision_mask_tip": { "text": "Collision categories this CollisionShape can meet. A contact needs both masks to accept the other layer." },
     "comped.offset": {
       "text": "Offset"
     },
@@ -1645,12 +1689,24 @@
     "comped.pivot_y_title": { "text": "Pivot point Y" },
     "comped.pivot_x_tip": { "text": "Sets the horizontal position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
     "comped.pivot_y_tip": { "text": "Sets the vertical position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
-    "comped.collision_blocks_row": { "text": "Blocking" },
-    "comped.collision_blocks": { "text": "Blocks actors" },
-    "comped.collision_blocks_tip": { "text": "Moving actors that have a solid box are pushed out of this box instead of passing through it (a chest, an NPC, a crate). The collision map still has the last word, and the collision matrix decides which tags are stopped. Off by default." },
+    "comped.collision_blocks_row": { "text": "Response" },
+    "comped.collision_blocks": { "text": "Block" },
+    "comped.collision_one_way": { "text": "One-way" },
+    "comped.collision_one_way_tip": { "text": "Makes a Block box stop only a body that comes from the side its face looks to; the other sides can be crossed. Against gravity is the usual platform. Needs the Block response: a Sensor box has nothing to cross." },
+    "comped.one_way_off": { "text": "Off" },
+    "comped.one_way_gravity": { "text": "Against gravity" },
+    "comped.one_way_up": { "text": "Up" },
+    "comped.one_way_down": { "text": "Down" },
+    "comped.one_way_left": { "text": "Left" },
+    "comped.one_way_right": { "text": "Right" },
+    "comped.collision_blocks_tip": { "text": "Block pushes a moving Character out of this box (a chest, an NPC, a crate). Sensor only reports contact events. The collision matrix decides which tags meet." },
     "comped.collision_solid": {
-      "text": "Solid  (unchecked = Trigger)"
+      "text": "Collides with map"
     },
+    "comped.material_restitution": { "text": "Restitution" },
+    "comped.material_restitution_tip": { "text": "Bounciness of this material. The contact keeps the higher coefficient." },
+    "comped.material_friction": { "text": "Friction" },
+    "comped.material_friction_tip": { "text": "Tangential slowdown of this material. The contact uses the geometric mean of both coefficients." },
     "comped.trig_manual": {
       "text": "manual"
     },
@@ -1705,7 +1761,7 @@
     "comped.affine": {
       "text": "Affine transform"
     },
-    "comped.affine_tip": { "text": "Reserves one of the 32 affine slots for this sprite, even at identity. The sprite can then rotate and scale around the centre of its frame, and the three local settings below apply on top of the transform of the actor. Ticking the box centres the actor on the frame: the offset becomes minus half the frame size, and collision boxes still at 0, 0 follow." },
+    "comped.affine_tip": { "text": "Reserves one of the 32 affine slots for this sprite, even at identity. The sprite can then rotate and scale around the centre of its frame, and the three local settings below apply on top of the transform of the actor. Ticking the box centres the actor on the frame: the offset becomes minus half the frame size, and collision shapes still at 0, 0 follow." },
     "comped.scale_x_tip": { "text": "Sets the local X scale, multiplied by the scale of the actor. The sprite scales around the pivot point. A negative value mirrors it around that point." },
     "comped.scale_y_tip": { "text": "Sets the local Y scale, multiplied by the scale of the actor. The sprite scales around the pivot point. A negative value mirrors it around that point." },
     "comped.rotation_tip": { "text": "Sets the local rotation in degrees, added to the rotation of the actor." },
@@ -3529,12 +3585,16 @@
     },
     "scncanvas.snap_tip": { "text": "Aligns actors and interface elements to the active grid while moving them." },
     "scncanvas.actor_boxes": {
-      "text": "Actor collision boxes"
+      "text": "Actor collision shapes"
     },
-    "scncanvas.actor_boxes_tip": { "text": "Shows the collision boxes of every actor in the active scene." },
+    "scncanvas.actor_boxes_tip": { "text": "Shows the collision shapes of every actor in the active scene." },
     "scncanvas.collisions": {
       "text": "Scene collisions"
     },
+    "scncanvas.collision_index": { "text": "Collision tile index" },
+    "scncanvas.collision_index_tip": { "text": "Writes the type index of each collision tile on the canvas: the value the runtime reads from the collision map." },
+    "scncanvas.collision_normals": { "text": "Collision normals" },
+    "scncanvas.collision_normals_tip": { "text": "Draws the normal of each collision surface as a line from the centre of its face, pointing away from the material." },
     "scncanvas.clear_collision": { "text": "Clear collision" },
     "scncanvas.clear_collision_tip": { "text": "Empties the whole collision map of the active scene. **Ctrl+Z** *brings it back.*" },
     "scncanvas.collision_already_empty": { "text": "The collision map is already empty." },
@@ -3802,6 +3862,14 @@
       "text": "Ceiling slope"
     },
     "cvtool.ceiling_slope_tip": { "text": "Paints an inverted floor slope as a triangle." },
+    "cvtool.oneway_up": { "text": "One-way face: up" },
+    "cvtool.oneway_up_tip": { "text": "Paints a flat face that carries from above and can be crossed from below and from the sides." },
+    "cvtool.oneway_down": { "text": "One-way face: down" },
+    "cvtool.oneway_down_tip": { "text": "Paints a flat face that carries from below and can be crossed from above and from the sides." },
+    "cvtool.oneway_left": { "text": "One-way face: left" },
+    "cvtool.oneway_left_tip": { "text": "Paints a flat face that stops from the left and can be crossed from the right, above and below." },
+    "cvtool.oneway_right": { "text": "One-way face: right" },
+    "cvtool.oneway_right_tip": { "text": "Paints a flat face that stops from the right and can be crossed from the left, above and below." },
     "cvtool.brush": {
       "text": "Brush"
     },
@@ -4277,6 +4345,23 @@
     "projset.collisions": {
       "text": "Collisions"
     },
+    "projset.physics_collisions": {
+      "text": "Physics & Collisions"
+    },
+    "projset.physics_gravity": { "text": "Default gravity" },
+    "projset.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors in scenes that use the project gravity." },
+    "projset.physics_gravity_hint": { "text": "Scenes inherit this value until they define their own physics settings." },
+    "projset.physics_simulation": { "text": "Simulation defaults" },
+    "projset.physics_solver_iterations": { "text": "Solver passes" },
+    "projset.physics_solver_iterations_tip": { "text": "Default number of passes over Rigid contacts. More passes stabilize stacks but cost more CPU time." },
+    "projset.physics_max_fall_speed": { "text": "Max fall speed" },
+    "projset.physics_max_fall_speed_tip": { "text": "Default maximum downward RigidBody speed in pixels per frame. Zero leaves it unlimited." },
+    "projset.physics_linear_damping": { "text": "Linear damping" },
+    "projset.physics_linear_damping_tip": { "text": "Default share of RigidBody velocity removed every frame. Zero preserves velocity; one removes it entirely." },
+    "projset.physics_sleep": { "text": "Put resting RigidBody actors to sleep by default" },
+    "projset.physics_sleep_tip": { "text": "Default sleep rule for scenes. A scene can override the threshold and delay with its other physics settings." },
+    "projset.physics_sleep_threshold_prefix": { "text": "Threshold " },
+    "projset.physics_sleep_frames_prefix": { "text": "After " },
     "projinsp.count_scenes": {
       "singular": "{n} scene",
       "plural": "{n} scenes"
@@ -4892,6 +4977,7 @@
     "hints.scene.erase_actor": { "text": "Deletes the actor under the cursor" },
     "hints.scene.paint_solid": { "text": "Paints solid collision tiles" },
     "hints.scene.erase_tiles": { "text": "Erases collision tiles" },
+    "hints.scene.paint_oneway": { "text": "Paints one-way collision faces" },
     "hints.scene.draw_slope": { "text": "Draws a slope between two tiles" },
     "hints.scene.erase_slope": { "text": "Erases the tiles along the line" },
     "hints.scene.inpaint_paint": { "text": "Paints the active bank on tiles" },

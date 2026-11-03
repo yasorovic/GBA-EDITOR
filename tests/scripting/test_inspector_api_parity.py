@@ -47,7 +47,7 @@ def _lua(src: str, tags=TAGS):
 def test_une_boite_se_tient_dans_une_variable_et_ses_champs_sont_des_proprietes():
     errs, code = _lua(
         "function on_update(self)\n"
-        "  local hb = self:collision_box(\"hitbox\")\n"
+        "  local hb = self:collision_shape(\"hitbox\")\n"
         "  hb.offset = vec2(8, -4)\n"
         "  hb.size = vec2(12, 8)\n"
         "  hb.solid = false\n"
@@ -59,13 +59,13 @@ def test_une_boite_se_tient_dans_une_variable_et_ses_champs_sont_des_proprietes(
         "end\n")
     assert errs == []
     assert "int hb = actor_get_box(self, BOXTAG_HITBOX);" in code
-    assert "collision_box_set_offset(hb, (Vec2){8, (-4)})" in code
-    assert "collision_box_set_size(hb, (Vec2){12, 8})" in code
-    assert "collision_box_set_solid(hb, 0)" in code
-    assert "collision_box_set_active(hb, 1)" in code
-    assert "collision_box_get_solid(hb)" in code
-    assert "collision_box_get_bounds(hb).w" in code
-    assert "collision_box_get_tag(hb) == BOXTAG_HITBOX" in code
+    assert "collision_shape_set_offset(hb, (Vec2){8, (-4)})" in code
+    assert "collision_shape_set_size(hb, (Vec2){12, 8})" in code
+    assert "collision_shape_set_solid(hb, 0)" in code
+    assert "collision_shape_set_active(hb, 1)" in code
+    assert "collision_shape_get_solid(hb)" in code
+    assert "collision_shape_get_bounds(hb).w" in code
+    assert "collision_shape_get_tag(hb) == BOXTAG_HITBOX" in code
     assert "(!hb)" in code                      # nil = 0, testable
 
 
@@ -73,16 +73,16 @@ def test_hb_tag_n_est_pas_le_tag_de_l_acteur():
     """`self.name` existe (identité de l'acteur) : `hb.tag` ne doit jamais s'y
     résoudre, sans quoi la boîte répondrait par l'acteur."""
     _, code = _lua("function on_update(self)\n"
-                   "  local hb = self:collision_box(\"body\")\n"
+                   "  local hb = self:collision_shape(\"body\")\n"
                    "  if hb.tag == \"body\" then self:show() end\nend\n")
-    assert "collision_box_get_tag(hb)" in code
+    assert "collision_shape_get_tag(hb)" in code
     assert "actor_get_name(hb)" not in code
 
 
 def test_une_boite_d_un_autre_acteur_se_demande_aussi():
     errs, code = _lua("function on_update(self)\n"
                       " local o = actor:get(\"Ball\")\n"
-                      " local hb = o:collision_box(\"body\")\n"
+                      " local hb = o:collision_shape(\"body\")\n"
                       " hb.solid = false\nend\n")
     assert errs == []
     assert "actor_get_box(o, BOXTAG_BODY)" in code
@@ -91,30 +91,30 @@ def test_une_boite_d_un_autre_acteur_se_demande_aussi():
 def test_overlaps_prend_un_acteur_ou_une_autre_boite():
     errs, code = _lua(
         "function on_update(self)\n"
-        "  local hb = self:collision_box(\"hitbox\")\n"
+        "  local hb = self:collision_shape(\"hitbox\")\n"
         "  local o = actor:get(\"Ball\")\n"
-        "  local hurt = o:collision_box(\"body\")\n"
+        "  local hurt = o:collision_shape(\"body\")\n"
         "  if hb:overlaps(o) then self:show() end\n"
         "  if hb:overlaps(hurt) then self:show() end\n"
-        "  if hb:overlaps(o:collision_box(\"body\")) then self:show() end\n"
+        "  if hb:overlaps(o:collision_shape(\"body\")) then self:show() end\n"
         "end\n")
     assert errs == []
-    assert "collision_box_overlaps_actor(hb, o)" in code
-    assert "collision_box_overlaps_box(hb, hurt)" in code
-    assert "collision_box_overlaps_box(hb, actor_get_box(o, BOXTAG_BODY))" in code
+    assert "collision_shape_overlaps_actor(hb, o)" in code
+    assert "collision_shape_overlaps_box(hb, hurt)" in code
+    assert "collision_shape_overlaps_box(hb, actor_get_box(o, BOXTAG_BODY))" in code
 
 
 def test_get_collision_tile_est_une_methode_de_la_boite():
     errs, code = _lua("function on_update(self)\n"
-                      "  local hb = self:collision_box(\"body\")\n"
+                      "  local hb = self:collision_shape(\"body\")\n"
                       "  local t = hb:get_collision_tile(hb.bounds.x, hb.bounds.y + hb.bounds.h)\n"
                       "end\n")
     assert errs == []
-    assert "collision_box_get_collision_tile(hb, " in code
+    assert "collision_shape_get_collision_tile(hb, " in code
 
 
 def test_collision_tile_at_interroge_directement_le_monde():
-    """La nouvelle porte ne demande aucune CollisionBox : la carte appartient
+    """La nouvelle porte ne demande aucune CollisionShape : la carte appartient
     à la scène, pas à l'acteur qui pose la question."""
     errs, code = _lua("function on_update(self)\n"
                       "  local t = collision:tile_at(self.position.x, self.position.y)\n"
@@ -125,24 +125,24 @@ def test_collision_tile_at_interroge_directement_le_monde():
 
 def test_un_champ_d_une_valeur_composee_de_la_boite_s_ecrit():
     errs, code = _lua("function on_update(self)\n"
-                      "  local hb = self:collision_box(\"body\")\n  hb.size.x = 3\nend\n")
+                      "  local hb = self:collision_shape(\"body\")\n  hb.size.x = 3\nend\n")
     assert errs == []
     assert "_field.x = 3;" in code
 
 
 def test_un_champ_inconnu_sur_une_boite_est_refuse():
     errs, _ = _lua("function on_update(self)\n"
-                   "  local hb = self:collision_box(\"body\")\n  hb.width = 3\nend\n")
+                   "  local hb = self:collision_shape(\"body\")\n  hb.width = 3\nend\n")
     assert errs and "width" in errs[0] and "size" in errs[0]
     errs, _ = _lua("function on_update(self)\n"
-                   "  local hb = self:collision_box(\"body\")\n"
+                   "  local hb = self:collision_shape(\"body\")\n"
                    "  if hb.width > 1 then self:show() end\nend\n")
     assert errs and "width" in errs[0]
 
 
 def test_un_tag_de_boite_inconnu_est_refuse_a_la_compilation():
     errs, _ = _lua("function on_update(self)\n"
-                   "  local hb = self:collision_box(\"hitboks\")\nend\n")
+                   "  local hb = self:collision_shape(\"hitboks\")\nend\n")
     assert errs and "hitboks" in errs[0] and "hitbox" in errs[0]
 
 
@@ -173,11 +173,11 @@ def test_un_autre_acteur_se_lit_aussi():
 def test_toutes_les_portes_de_la_tranche_ont_leur_c():
     from scripting.api import RUNTIME_API, RUNTIME_PROPS
     facade = (MOTEUR_DIR / "runtime_api_inline.h").read_text(encoding="utf-8", errors="ignore")
-    fns = [RUNTIME_API[k].c_func for k in ("actor:collision_box", "collision_box:overlaps")]
-    fns += ["collision_box_overlaps_box", RUNTIME_API["collision_box:get_collision_tile"].c_func]
+    fns = [RUNTIME_API[k].c_func for k in ("actor:collision_shape", "collision_shape:overlaps")]
+    fns += ["collision_shape_overlaps_box", RUNTIME_API["collision_shape:get_collision_tile"].c_func]
     fns += [RUNTIME_PROPS[k].c_getter for k in ("actor.box_count", "actor.screen_space", "actor.affine")]
     for k, prop in RUNTIME_PROPS.items():
-        if k.startswith("collision_box."):
+        if k.startswith("collision_shape."):
             fns.append(prop.c_getter)
             if prop.c_setter:
                 fns.append(prop.c_setter)
@@ -204,20 +204,20 @@ def test_renommer_un_tag_de_boite_suit_dans_les_scripts():
     from scripting.api import DOMAIN_BOX_TAG
     from scripting.refactor import rename_in_text
     src = ("function on_update(self)\n"
-           "  local hb = self:collision_box(\"hitbox\")\n"
+           "  local hb = self:collision_shape(\"hitbox\")\n"
            "  local s = \"hitbox\"\nend\n")
     out, n = rename_in_text(src, DOMAIN_BOX_TAG, "hitbox", "strike")
     assert n == 1
-    assert "collision_box(\"strike\")" in out and "local s = \"hitbox\"" in out
+    assert "collision_shape(\"strike\")" in out and "local s = \"hitbox\"" in out
 
 
 def test_renommer_un_tag_de_boite_suit_aussi_la_comparaison_de_hb_tag():
-    """`hb.tag == "hitbox"` cite le tag comme `self:collision_box("hitbox")` :
+    """`hb.tag == "hitbox"` cite le tag comme `self:collision_shape("hitbox")` :
     le renommage doit le suivre, sinon la comparaison ne compile plus."""
     from scripting.api import DOMAIN_BOX_TAG
     from scripting.refactor import rename_in_text
     src = ("function on_update(self)\n"
-           "  local hb = self:collision_box(\"hitbox\")\n"
+           "  local hb = self:collision_shape(\"hitbox\")\n"
            "  if hb.tag == \"hitbox\" then self:show() end\nend\n")
     out, n = rename_in_text(src, DOMAIN_BOX_TAG, "hitbox", "strike")
     assert n == 2 and out.count("strike") == 2
@@ -249,6 +249,13 @@ def sortie_sonde(tmp_path_factory):
     run = subprocess.run([str(binaire)], capture_output=True, text=True, env=env)
     assert run.returncode == 0, run.stderr
     return {l.split()[0]: [int(v) for v in l.split()[1:]] for l in run.stdout.splitlines()}
+
+
+def test_c_la_destruction_remet_les_tables_par_emplacement_a_zero(sortie_sonde):
+    """floor, drop_through et ancre de repos Rigid vivent hors d'`Actor` : un emplacement repris repart à zéro."""
+    assert sortie_sonde["tables_detruit"] == [0, 0, 0, 0]
+    assert sortie_sonde["tables_voisins"] == [7, 9, 100, 202]        # les autres emplacements ne bougent pas
+    assert sortie_sonde["tables_sans_floor"] == [0]                  # sans floor ni sens unique, l'ancre est remise à zéro
 
 
 def test_c_la_bonne_boite_repond(sortie_sonde):
@@ -533,3 +540,22 @@ def test_c_un_groupe_garde_sa_partie_detruite_et_rend_tout_avec_sa_racine(sortie
     assert sortie_sonde["ref_zero"] == [1, 1]         # génération 0, emplacement 0 : ce n'est pas « aucun acteur »
     assert sortie_sonde["grp_bits_partie"] == [(1 << 2) | (1 << 4)]   # emplacements 2 et 4 vivants, 3 détruit
     assert sortie_sonde["grp_bits_racine"] == [0]
+
+
+def test_c_une_paire_appelle_enter_collide_exit_dans_l_ordre_avec_les_bons_tags(sortie_sonde):
+    """`contact_pair_run` remplace le bloc de C recopié par paire : même vie d'un contact, une seule copie du code."""
+    assert sortie_sonde["contact_1"] == [1, 0, 0, 1]          # enter des deux côtés qui y répondent
+    assert sortie_sonde["contact_2"] == [1, 1, 0, 1]          # collide : seul le côté A y répond
+    assert sortie_sonde["contact_tags"] == [1, 0]             # my_box (A) puis other_box (B)
+    assert sortie_sonde["contact_3"] == [1, 1, 1, 1]          # exit
+    assert sortie_sonde["contact_4"] == [1, 1, 1, 1]          # rien de plus une fois éloignés
+    assert sortie_sonde["contact_5"] == [1, 1, 1, 1]          # un côté inactif ne touche pas
+
+
+def test_c_scene_gravity_choisit_le_cote_d_appui_et_reveille_les_rigid(sortie_sonde):
+    """`scene.gravity` : l'axe dominant donne le côté d'appui (1 bas, 2 haut, 3 droite, 4 gauche), le bas sans gravité
+    ou à égalité ; un Rigid endormi est réveillé quand la gravité change, pas quand elle est réécrite à l'identique."""
+    assert sortie_sonde["gravite_reveil"] == [0, 0]
+    assert sortie_sonde["gravite_inchangee"] == [30]
+    assert sortie_sonde["gravite_normales"] == [2, 3, 4, 1, 1, 2, 1]
+    assert sortie_sonde["gravite_lue"] == [-12, 34]

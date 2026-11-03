@@ -5,8 +5,8 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QComboBox,
-    QScrollArea, QPushButton, QMenu, QToolButton, QSpinBox,
-    QLineEdit,
+    QScrollArea, QPushButton, QMenu, QToolButton, QSpinBox, QDoubleSpinBox,
+    QLineEdit, QCheckBox,
 )
 from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QColor
@@ -20,7 +20,7 @@ from ui.scene_manager.inspectors.bg_layer_row import BgLayerRow
 from ui.scene_manager.inspectors.project_inspector import TRANSITION_LABELS
 from core.history import (
     get_history, Command, SetFieldCmd, SwapFieldCmd, AddListItemCmd,
-    RemoveListItemCmd, SetSceneModeCmd,
+    RemoveListItemCmd, SetSceneModeCmd, MacroCmd,
 )
 from core.command_dispatcher import get_dispatcher
 from ui.common.deferred_writes import schedule_save
@@ -374,6 +374,118 @@ class SceneInspector(QWidget):
 
         cl.addWidget(mode_card)
 
+        # ── Carte Physics ─────────────────────────────────────────
+        physics_card = CollapsibleCard(label("sceneinsp.card.physics"))
+        physics_inner = physics_card.body_layout
+        self._chk_physics_project = QCheckBox(label("sceneinsp.physics_use_project"))
+        self._chk_physics_project.setFont(QFont(T.UI, T.SM))
+        self._chk_physics_project.setToolTip(tooltip(
+            title=label("sceneinsp.physics_use_project"),
+            body=label("sceneinsp.physics_use_project_tip")))
+        self._chk_physics_project.toggled.connect(self._on_physics_project_toggled)
+        physics_inner.addWidget(self._chk_physics_project)
+
+        gravity_row = QHBoxLayout(); gravity_row.setSpacing(6)
+        lbl_gravity = QLabel(label("sceneinsp.physics_gravity"))
+        lbl_gravity.setFont(QFont(T.UI, T.SM)); lbl_gravity.setStyleSheet(f"color:{C.TEXT_DIM};")
+        lbl_gravity.setFixedWidth(70)
+        gravity_row.addWidget(lbl_gravity)
+        self._spin_gravity_x = QDoubleSpinBox(); self._spin_gravity_y = QDoubleSpinBox()
+        for spin, axis, field in (
+            (self._spin_gravity_x, "X", "physics_gravity_x"),
+            (self._spin_gravity_y, "Y", "physics_gravity_y"),
+        ):
+            spin.setRange(-8.0, 8.0); spin.setSingleStep(0.05); spin.setDecimals(2)
+            spin.setPrefix(f"{axis} "); spin.setSuffix(" px/f²")
+            spin.setFont(QFont(T.MONO, T.SM)); spin.setStyleSheet(QSS.spinbox)
+            spin.setToolTip(tooltip(title=label("sceneinsp.physics_gravity"),
+                                    body=label("sceneinsp.physics_gravity_tip")))
+            spin.valueChanged.connect(
+                lambda value, name=field: self._on_physics_gravity(name, float(value)))
+            gravity_row.addWidget(spin)
+        gravity_row.addStretch()
+        physics_inner.addLayout(gravity_row)
+
+        solver_row = QHBoxLayout(); solver_row.setSpacing(6)
+        lbl_solver = QLabel(label("sceneinsp.physics_solver_iterations"))
+        lbl_solver.setFont(QFont(T.UI, T.SM)); lbl_solver.setStyleSheet(f"color:{C.TEXT_DIM};")
+        lbl_solver.setFixedWidth(110); solver_row.addWidget(lbl_solver)
+        self._spin_physics_iterations = QSpinBox()
+        self._spin_physics_iterations.setRange(1, 8)
+        self._spin_physics_iterations.setFont(QFont(T.MONO, T.SM))
+        self._spin_physics_iterations.setStyleSheet(QSS.spinbox)
+        self._spin_physics_iterations.setToolTip(tooltip(
+            title=label("sceneinsp.physics_solver_iterations"),
+            body=label("sceneinsp.physics_solver_iterations_tip")))
+        self._spin_physics_iterations.valueChanged.connect(
+            lambda value: self._on_physics_value("physics_solver_iterations", int(value)))
+        solver_row.addWidget(self._spin_physics_iterations); solver_row.addStretch()
+        physics_inner.addLayout(solver_row)
+
+        fall_row = QHBoxLayout(); fall_row.setSpacing(6)
+        lbl_fall = QLabel(label("sceneinsp.physics_max_fall_speed"))
+        lbl_fall.setFont(QFont(T.UI, T.SM)); lbl_fall.setStyleSheet(f"color:{C.TEXT_DIM};")
+        lbl_fall.setFixedWidth(110); fall_row.addWidget(lbl_fall)
+        self._spin_physics_max_fall = QDoubleSpinBox()
+        self._spin_physics_max_fall.setRange(0.0, 64.0)
+        self._spin_physics_max_fall.setSingleStep(0.25); self._spin_physics_max_fall.setDecimals(2)
+        self._spin_physics_max_fall.setSuffix(" px/f")
+        self._spin_physics_max_fall.setFont(QFont(T.MONO, T.SM)); self._spin_physics_max_fall.setStyleSheet(QSS.spinbox)
+        self._spin_physics_max_fall.setToolTip(tooltip(
+            title=label("sceneinsp.physics_max_fall_speed"),
+            body=label("sceneinsp.physics_max_fall_speed_tip")))
+        self._spin_physics_max_fall.valueChanged.connect(
+            lambda value: self._on_physics_value("physics_max_fall_speed", float(value)))
+        fall_row.addWidget(self._spin_physics_max_fall); fall_row.addStretch()
+        physics_inner.addLayout(fall_row)
+
+        damping_row = QHBoxLayout(); damping_row.setSpacing(6)
+        lbl_damping = QLabel(label("sceneinsp.physics_linear_damping"))
+        lbl_damping.setFont(QFont(T.UI, T.SM)); lbl_damping.setStyleSheet(f"color:{C.TEXT_DIM};")
+        lbl_damping.setFixedWidth(110); damping_row.addWidget(lbl_damping)
+        self._spin_physics_damping = QDoubleSpinBox()
+        self._spin_physics_damping.setRange(0.0, 1.0)
+        self._spin_physics_damping.setSingleStep(0.01); self._spin_physics_damping.setDecimals(2)
+        self._spin_physics_damping.setFont(QFont(T.MONO, T.SM)); self._spin_physics_damping.setStyleSheet(QSS.spinbox)
+        self._spin_physics_damping.setToolTip(tooltip(
+            title=label("sceneinsp.physics_linear_damping"),
+            body=label("sceneinsp.physics_linear_damping_tip")))
+        self._spin_physics_damping.valueChanged.connect(
+            lambda value: self._on_physics_value("physics_linear_damping", float(value)))
+        damping_row.addWidget(self._spin_physics_damping); damping_row.addStretch()
+        physics_inner.addLayout(damping_row)
+
+        self._chk_physics_sleep = QCheckBox(label("sceneinsp.physics_sleep"))
+        self._chk_physics_sleep.setFont(QFont(T.UI, T.SM))
+        self._chk_physics_sleep.setToolTip(tooltip(
+            title=label("sceneinsp.physics_sleep"), body=label("sceneinsp.physics_sleep_tip")))
+        self._chk_physics_sleep.toggled.connect(
+            lambda value: self._on_physics_value("physics_sleep_enabled", bool(value)))
+        physics_inner.addWidget(self._chk_physics_sleep)
+
+        sleep_row = QHBoxLayout(); sleep_row.setSpacing(6)
+        self._spin_physics_sleep_threshold = QDoubleSpinBox()
+        self._spin_physics_sleep_threshold.setRange(0.0, 4.0)
+        self._spin_physics_sleep_threshold.setSingleStep(0.01)
+        self._spin_physics_sleep_threshold.setDecimals(2)
+        self._spin_physics_sleep_threshold.setPrefix(label("sceneinsp.physics_sleep_threshold_prefix"))
+        self._spin_physics_sleep_threshold.setSuffix(" px/f")
+        self._spin_physics_sleep_frames = QSpinBox()
+        self._spin_physics_sleep_frames.setRange(1, 255)
+        self._spin_physics_sleep_frames.setPrefix(label("sceneinsp.physics_sleep_frames_prefix"))
+        self._spin_physics_sleep_frames.setSuffix(" f")
+        for spin in (self._spin_physics_sleep_threshold, self._spin_physics_sleep_frames):
+            spin.setFont(QFont(T.MONO, T.SM)); spin.setStyleSheet(QSS.spinbox)
+            spin.setToolTip(tooltip(title=label("sceneinsp.physics_sleep"),
+                                    body=label("sceneinsp.physics_sleep_tip")))
+            sleep_row.addWidget(spin)
+        self._spin_physics_sleep_threshold.valueChanged.connect(
+            lambda value: self._on_physics_value("physics_sleep_threshold", float(value)))
+        self._spin_physics_sleep_frames.valueChanged.connect(
+            lambda value: self._on_physics_value("physics_sleep_frames", int(value)))
+        sleep_row.addStretch(); physics_inner.addLayout(sleep_row)
+        cl.addWidget(physics_card)
+
         # ── Carte Background Asset ────────────────────────────────
         bg_card = CollapsibleCard(label("sceneinsp.card.bg"))
         self._bg_card = bg_card
@@ -527,6 +639,7 @@ class SceneInspector(QWidget):
         self._notes_edit.set_text_silent(getattr(scene, "notes", ""))
         self._chk_scroll_h.setChecked(scene.scroll_h)
         self._chk_scroll_v.setChecked(scene.scroll_v)
+        self._refresh_physics()
         self._refresh_scroll_speeds()
         self._refresh_scene_script_label()
         self._palette_view_pending = True
@@ -542,6 +655,89 @@ class SceneInspector(QWidget):
         self._refresh_transition()
         self._refresh_music()
         self._blocking = False
+
+    def _refresh_physics(self):
+        if not self._scene:
+            return
+        inherited = not self._scene.physics_gravity_override
+        settings = self._project.settings if self._project else None
+        gravity_x, gravity_y = self._scene.effective_physics_gravity(settings)
+        iterations, max_fall, damping, sleep_enabled, sleep_threshold, sleep_frames = (
+            self._scene.effective_physics_simulation(settings))
+        self._chk_physics_project.blockSignals(True)
+        self._chk_physics_project.setChecked(inherited)
+        self._chk_physics_project.blockSignals(False)
+        for spin, value in ((self._spin_gravity_x, gravity_x),
+                            (self._spin_gravity_y, gravity_y)):
+            spin.blockSignals(True)
+            spin.setValue(value)
+            spin.setEnabled(not inherited)
+            spin.blockSignals(False)
+        controls = (
+            (self._spin_physics_iterations, iterations),
+            (self._spin_physics_max_fall, max_fall),
+            (self._spin_physics_damping, damping),
+            (self._chk_physics_sleep, sleep_enabled),
+            (self._spin_physics_sleep_threshold, sleep_threshold),
+            (self._spin_physics_sleep_frames, sleep_frames),
+        )
+        for control, value in controls:
+            control.blockSignals(True)
+            control.setChecked(value) if isinstance(control, QCheckBox) else control.setValue(value)
+            control.setEnabled(not inherited)
+            control.blockSignals(False)
+        self._spin_physics_sleep_threshold.setEnabled(not inherited and sleep_enabled)
+        self._spin_physics_sleep_frames.setEnabled(not inherited and sleep_enabled)
+
+    def _persist_and_refresh_physics(self):
+        self._persist()
+        self._refresh_physics()
+
+    def _on_physics_project_toggled(self, use_project: bool):
+        if self._blocking or not self._scene:
+            return
+        if use_project:
+            fields = [("physics_gravity_override", False)]
+        else:
+            settings = self._project.settings if self._project else None
+            gravity_x, gravity_y = self._scene.effective_physics_gravity(settings)
+            iterations, max_fall, damping, sleep_enabled, sleep_threshold, sleep_frames = (
+                self._scene.effective_physics_simulation(settings))
+            fields = [
+                ("physics_gravity_x", gravity_x),
+                ("physics_gravity_y", gravity_y),
+                ("physics_solver_iterations", iterations),
+                ("physics_max_fall_speed", max_fall),
+                ("physics_linear_damping", damping),
+                ("physics_sleep_enabled", sleep_enabled),
+                ("physics_sleep_threshold", sleep_threshold),
+                ("physics_sleep_frames", sleep_frames),
+                ("physics_gravity_override", True),
+            ]
+        commands = [
+            SetFieldCmd(self._scene, field, getattr(self._scene, field), value,
+                        label=f"{self._scene.name}.{field}")
+            for field, value in fields if getattr(self._scene, field) != value
+        ]
+        if not commands:
+            self._refresh_physics()
+            return
+        commands[-1]._persist = self._persist_and_refresh_physics
+        get_history().push(commands[0] if len(commands) == 1
+                           else MacroCmd(commands, "Physique de la scène"))
+        self.changed.emit()
+
+    def _on_physics_gravity(self, field: str, value: float):
+        if self._blocking or not self._scene or not self._scene.physics_gravity_override:
+            return
+        self._set_scene_field(field, value, extra_persist=self._refresh_physics)
+        self.changed.emit()
+
+    def _on_physics_value(self, field: str, value):
+        if self._blocking or not self._scene or not self._scene.physics_gravity_override:
+            return
+        self._set_scene_field(field, value, extra_persist=self._refresh_physics)
+        self.changed.emit()
 
     def _on_palette_card_toggled(self, expanded: bool) -> None:
         """Construit la vue coûteuse seulement quand l'auteur la consulte."""

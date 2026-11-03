@@ -8,7 +8,7 @@ from PyQt6.QtCore import QRectF
 from PyQt6.QtGui import QColor, QImage, QPainter
 from PyQt6.QtWidgets import QGraphicsScene
 
-from core.models.components import CollisionBoxComponent, InteractiveComponent
+from core.models.components import CollisionShapeComponent, InteractiveComponent
 from core.models.scene import Actor
 from ui.scene_manager.canvas.canvas_items import ActorBoxOverlay
 
@@ -54,7 +54,7 @@ def test_la_boite_propre_prend_le_cadre_du_sprite(qapp):
 
 def test_une_boite_designee_n_en_ajoute_pas(qapp):
     acteur = Actor(name="Sign", x=10, y=10)
-    acteur.components = [CollisionBoxComponent(tag="reach", solid=False, w=8, h=8),
+    acteur.components = [CollisionShapeComponent(tag="reach", solid=False, w=8, h=8),
                          InteractiveComponent(box_tag="reach")]
     image = _rendu(acteur)
     assert not _ambre(image, 14, 14)           # la boîte « reach » garde sa teinte de capteur

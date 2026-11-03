@@ -732,9 +732,9 @@ class CollisionPaintCmd(Command):
 
 
 def _collision_tag_owners(project):
-    """Tous les acteurs/prefabs porteurs d'un CollisionBoxComponent — la même
+    """Tous les acteurs/prefabs porteurs d'un CollisionShapeComponent — la même
     liste que la matrice de collision parcourt pour découvrir ses tags
-    (cf. project_settings_dialog.CollisionsPanel)."""
+    (cf. project_settings_dialog.PhysicsCollisionsPanel)."""
     return [a for sc in project.scenes for a in sc.actors] + list(project.prefabs) + [
         ch for pf in project.prefabs for ch in (getattr(pf, "children", []) or [])]
 
@@ -765,13 +765,13 @@ class RenameActorCmd(Command):
 
 class RenameCollisionTagCmd(Command):
     """Renomme un tag de collision PARTOUT en une seule étape d'annulation :
-    chaque CollisionBoxComponent qui le portait (tag explicite OU vide,
+    chaque CollisionShapeComponent qui le portait (tag explicite OU vide,
     donc « body » par défaut), et la clé de chaque paire de la matrice qui
     le citait (cf. pair_key, models/settings.py). Un tag simplement déclaré
     (`ProjectSettings.collision_tags`, aucun composant) suit lui aussi."""
 
     def __init__(self, project, old_name: str, new_name: str, persist_fn=None, label: str = ""):
-        from core.models.components import CollisionBoxComponent
+        from core.models.components import CollisionShapeComponent
         from core.models.settings import RESERVED_COLLISION_TAGS
         if old_name in RESERVED_COLLISION_TAGS:
             raise ValueError(f"The collision tag \"{old_name}\" is reserved and cannot be renamed.")
@@ -782,12 +782,12 @@ class RenameCollisionTagCmd(Command):
         self._persist = persist_fn
         self._components = [
             c for o in _collision_tag_owners(project) for c in getattr(o, "components", [])
-            if isinstance(c, CollisionBoxComponent) and (c.tag or "body") == old_name]
+            if isinstance(c, CollisionShapeComponent) and (c.tag or "body") == old_name]
 
     def _apply(self, old: str, new: str):
         from core.models.settings import pair_key
         from scripting.api import DOMAIN_BOX_TAG
-        # Les scripts citent le tag en chaîne (`self:collision_box("hitbox")`, `hb.tag == "hitbox"`) : ils
+        # Les scripts citent le tag en chaîne (`self:collision_shape("hitbox")`, `hb.tag == "hitbox"`) : ils
         # suivent le renommage, dans un sens comme dans l'autre (annulation).
         self._project.rename_lua_refs(DOMAIN_BOX_TAG, old, new)
         for c in self._components:
@@ -821,7 +821,7 @@ class RemoveCollisionTagCmd(Command):
     Tout revient à l'identique par l'annulation."""
 
     def __init__(self, project, tag_name: str, persist_fn=None, label: str = ""):
-        from core.models.components import CollisionBoxComponent
+        from core.models.components import CollisionShapeComponent
         from core.models.settings import RESERVED_COLLISION_TAGS
         if tag_name in RESERVED_COLLISION_TAGS:
             raise ValueError(f"The collision tag \"{tag_name}\" is reserved and cannot be removed.")
@@ -831,7 +831,7 @@ class RemoveCollisionTagCmd(Command):
         self._persist = persist_fn
         self._components = [
             c for o in _collision_tag_owners(project) for c in getattr(o, "components", [])
-            if isinstance(c, CollisionBoxComponent) and c.tag == tag_name]
+            if isinstance(c, CollisionShapeComponent) and c.tag == tag_name]
         self._removed_pairs = {k for k in project.settings.collision_disabled_pairs
                                if tag_name in k.split("|", 1)}
         self._was_declared = tag_name in project.settings.collision_tags

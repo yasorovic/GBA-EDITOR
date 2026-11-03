@@ -65,7 +65,7 @@ def test_une_annotation_de_type_est_expliquee():
 def test_un_return_en_fin_de_bloc_et_un_appel_de_methode_restent_valides():
     from scripting.parser import parse
     parse(_in_handler("  local a = 1\n  return"))
-    parse(_in_handler("  if true then return end\n  local p = self:collision_box(\"b\")"))
+    parse(_in_handler("  if true then return end\n  local p = self:collision_shape(\"b\")"))
 
 
 # ── Récursion ────────────────────────────────────────────────────

@@ -40,6 +40,11 @@ int  global_read_at (int i, int k)        { (void)i; (void)k; return 0; }
 void global_write_at(int i, int k, int v) { (void)i; (void)k; (void)v; }
 
 Actor g_actors[64];
+u16 *g_actor_floor = 0;
+u8 *g_drop_through = 0;
+u8 g_support_normal = 1;
+int g_gravity_x = 0, g_gravity_y = 0;
+int g_rigid_rest[64][2];
 u32 g_obj_state[16];
 int g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1, g_spool_free = 0;
 u32 g_alive_bits[16];
@@ -82,16 +87,28 @@ static void vec(const char *nom, Vec2 v) {
     printf("%s %d %d\n", nom, v.x, v.y);
 }
 
+/* Les contacts d'une paire d'acteurs : enter, collide, exit, et un côté B qui ne répond qu'à enter. */
+static int s_ev_a[3], s_ev_b[3];
+static u8 s_tag_a, s_tag_b;
+static void a_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; s_ev_a[0]++; s_tag_a = m; s_tag_b = t; }
+static void a_collide(Actor *s, Actor *o, u8 m, u8 t) { (void)s; (void)o; (void)m; (void)t; s_ev_a[1]++; }
+static void a_exit(Actor *s, Actor *o, u8 m, u8 t)    { (void)s; (void)o; (void)m; (void)t; s_ev_a[2]++; }
+static void b_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; (void)m; (void)t; s_ev_b[0]++; }
+static void contact_frame(const char *nom, const ContactPair *paire, u16 *prev) {
+    contact_pair_run(paire, prev);
+    printf("%s %d %d %d %d\n", nom, s_ev_a[0], s_ev_a[1], s_ev_a[2], s_ev_b[0]);
+}
+
 int main(void) {
     Actor *a = &g_actors[0];
     Actor *b = &g_actors[1];
     a->oam_entry = 0;
     b->oam_entry = 1;
     a->collision.box_count = 2;
-    a->collision.boxes[0] = (CollisionBox){ 0,  0, 16, 16, 1, 1, TAG_BODY };
-    a->collision.boxes[1] = (CollisionBox){ 2, -3,  8,  8, 0, 1, TAG_HIT  };
+    a->collision.boxes[0] = (CollisionShape){ 0,  0, 16, 16, 1, 1, TAG_BODY };
+    a->collision.boxes[1] = (CollisionShape){ 2, -3,  8,  8, 0, 1, TAG_HIT  };
     b->collision.box_count = 1;
-    b->collision.boxes[0] = (CollisionBox){ 0,  0, 16, 16, 1, 1, TAG_BODY };
+    b->collision.boxes[0] = (CollisionShape){ 0,  0, 16, 16, 1, 1, TAG_BODY };
 
     /* Le tag choisit la bonne boîte : la référence est un rang, 0 = absente. */
     int body = actor_get_box(a, TAG_BODY);
@@ -99,72 +116,72 @@ int main(void) {
     int none = actor_get_box(a, TAG_NONE);
     int bbox = actor_get_box(b, TAG_BODY);
     printf("refs %d %d %d %d\n", body, hit, none, bbox);
-    printf("tags %d %d\n", collision_box_get_tag(body), collision_box_get_tag(hit));
+    printf("tags %d %d\n", collision_shape_get_tag(body), collision_shape_get_tag(hit));
 
     /* Décalage et taille, lus séparément. */
-    vec("offset_body", collision_box_get_offset(body));
-    vec("offset_hit",  collision_box_get_offset(hit));
-    vec("size_hit",    collision_box_get_size(hit));
+    vec("offset_body", collision_shape_get_offset(body));
+    vec("offset_hit",  collision_shape_get_offset(hit));
+    vec("size_hit",    collision_shape_get_size(hit));
 
     /* Une écriture hors bornes est SERRÉE, elle ne déborde pas. */
-    collision_box_set_offset(hit, (Vec2){ 500, -500 });
-    collision_box_set_size(hit,   (Vec2){ 300, -4 });
-    vec("offset_borne", collision_box_get_offset(hit));
-    vec("size_borne",   collision_box_get_size(hit));
-    vec("voisine_offset", collision_box_get_offset(body));
-    vec("voisine_size",   collision_box_get_size(body));
-    collision_box_set_offset(hit, (Vec2){ 4, 5 });
-    collision_box_set_size(hit,   (Vec2){ 6, 7 });
-    vec("offset_normal", collision_box_get_offset(hit));
-    vec("size_normal",   collision_box_get_size(hit));
+    collision_shape_set_offset(hit, (Vec2){ 500, -500 });
+    collision_shape_set_size(hit,   (Vec2){ 300, -4 });
+    vec("offset_borne", collision_shape_get_offset(hit));
+    vec("size_borne",   collision_shape_get_size(hit));
+    vec("voisine_offset", collision_shape_get_offset(body));
+    vec("voisine_size",   collision_shape_get_size(body));
+    collision_shape_set_offset(hit, (Vec2){ 4, 5 });
+    collision_shape_set_size(hit,   (Vec2){ 6, 7 });
+    vec("offset_normal", collision_shape_get_offset(hit));
+    vec("size_normal",   collision_shape_get_size(hit));
 
     /* solid et active : lecture, écriture, et l'autre boîte n'est pas touchée. */
-    printf("solid_avant %d %d\n", collision_box_get_solid(body), collision_box_get_solid(hit));
-    collision_box_set_solid(hit, 5);          /* toute valeur non nulle = vrai */
-    collision_box_set_solid(body, 0);
-    printf("solid_apres %d %d\n", collision_box_get_solid(body), collision_box_get_solid(hit));
-    printf("active_avant %d %d\n", collision_box_get_active(body), collision_box_get_active(hit));
-    collision_box_set_active(hit, 0);
-    printf("active_apres %d %d\n", collision_box_get_active(body), collision_box_get_active(hit));
-    collision_box_set_active(hit, 1);
+    printf("solid_avant %d %d\n", collision_shape_get_solid(body), collision_shape_get_solid(hit));
+    collision_shape_set_solid(hit, 5);          /* toute valeur non nulle = vrai */
+    collision_shape_set_solid(body, 0);
+    printf("solid_apres %d %d\n", collision_shape_get_solid(body), collision_shape_get_solid(hit));
+    printf("active_avant %d %d\n", collision_shape_get_active(body), collision_shape_get_active(hit));
+    collision_shape_set_active(hit, 0);
+    printf("active_apres %d %d\n", collision_shape_get_active(body), collision_shape_get_active(hit));
+    collision_shape_set_active(hit, 1);
 
     /* Une boîte absente : lecture vide, écriture sans effet. */
-    vec("absente_offset", collision_box_get_offset(none));
-    rect("absente_bounds", collision_box_get_bounds(none));
-    collision_box_set_offset(none, (Vec2){ 1, 1 });
-    collision_box_set_solid(none, 1);
-    collision_box_set_active(none, 1);
-    printf("absente_solid %d\n", collision_box_get_solid(none));
+    vec("absente_offset", collision_shape_get_offset(none));
+    rect("absente_bounds", collision_shape_get_bounds(none));
+    collision_shape_set_offset(none, (Vec2){ 1, 1 });
+    collision_shape_set_solid(none, 1);
+    collision_shape_set_active(none, 1);
+    printf("absente_solid %d\n", collision_shape_get_solid(none));
     printf("box_count %d\n", actor_get_box_count(a));
 
     /* Le rectangle MONDE : position en Q8 (>>8), plus décalage, plus taille. */
-    collision_box_set_offset(hit, (Vec2){ 2, -3 });
-    collision_box_set_size(hit,   (Vec2){ 8, 8 });
+    collision_shape_set_offset(hit, (Vec2){ 2, -3 });
+    collision_shape_set_size(hit,   (Vec2){ 8, 8 });
     a->x = 100 << 8;  a->y = 50 << 8;
-    rect("bounds_body", collision_box_get_bounds(body));
-    rect("bounds_hit",  collision_box_get_bounds(hit));
+    rect("bounds_body", collision_shape_get_bounds(body));
+    rect("bounds_hit",  collision_shape_get_bounds(hit));
 
     /* Chevauchement : des PIXELS, pas du Q8. Deux 16x16 distants de 5 px se
        touchent, de 20 px non — y compris avec un reste sous-pixel. */
     b->x = (105 << 8) + 77;  b->y = 50 << 8;
-    printf("overlap_5px  %d %d\n", collision_box_overlaps_box(body, bbox),
-                                    collision_box_overlaps_actor(body, b));
+    printf("overlap_5px  %d %d\n", collision_shape_overlaps_box(body, bbox),
+                                    collision_shape_overlaps_actor(body, b));
     b->x = 120 << 8;
-    printf("overlap_20px %d %d\n", collision_box_overlaps_box(body, bbox),
-                                    collision_box_overlaps_actor(body, b));
+    printf("overlap_20px %d %d\n", collision_shape_overlaps_box(body, bbox),
+                                    collision_shape_overlaps_actor(body, b));
     b->x = 105 << 8;
     printf("actors_overlap %d\n", actors_overlap(a, b));
 
     /* Une boîte inactive ne touche personne, des deux côtés. */
-    collision_box_set_active(bbox, 0);
-    printf("overlap_inactive_autre %d %d %d\n", collision_box_overlaps_box(body, bbox),
-                                                 collision_box_overlaps_actor(body, b),
+    collision_shape_set_active(bbox, 0);
+    printf("overlap_inactive_autre %d %d %d\n", collision_shape_overlaps_box(body, bbox),
+                                                 collision_shape_overlaps_actor(body, b),
                                                  actors_overlap(a, b));
-    collision_box_set_active(bbox, 1);
-    collision_box_set_active(body, 0);
-    printf("overlap_inactive_moi %d\n", collision_box_overlaps_box(body, bbox));
-    collision_box_set_active(body, 1);
-    printf("overlap_absente %d\n", collision_box_overlaps_box(none, bbox));
+    collision_shape_set_active(bbox, 1);
+    collision_shape_set_active(body, 0);
+    printf("overlap_inactive_moi %d\n", collision_shape_overlaps_box(body, bbox));
+    collision_shape_set_active(body, 1);
+    printf("overlap_absente %d\n", collision_shape_overlaps_box(none, bbox));
 
     /* Contacts par couple de TAGS : un bit par couple, pour que le premier contact
        ne masque pas les suivants. `joueur` = un corps (haut) + des pieds (bas) ;
@@ -172,37 +189,37 @@ int main(void) {
     Actor *joueur = &g_actors[2];
     Actor *piece  = &g_actors[3];
     joueur->collision.box_count = 2;
-    joueur->collision.boxes[0] = (CollisionBox){ 0,  0, 16, 16, 0, 1, TAG_BODY };
-    joueur->collision.boxes[1] = (CollisionBox){ 0, 16, 16,  4, 1, 1, TAG_HIT  };
+    joueur->collision.boxes[0] = (CollisionShape){ 0,  0, 16, 16, 0, 1, TAG_BODY };
+    joueur->collision.boxes[1] = (CollisionShape){ 0, 16, 16,  4, 1, 1, TAG_HIT  };
     piece->collision.box_count = 1;
-    piece->collision.boxes[0] = (CollisionBox){ 0, 0, 8, 8, 0, 1, TAG_BODY };
+    piece->collision.boxes[0] = (CollisionShape){ 0, 0, 8, 8, 0, 1, TAG_BODY };
     joueur->x = 0;  joueur->y = 0;
     piece->x = 4 << 8;
     piece->y = 18 << 8;                       /* ne touche que les pieds */
-    printf("mask_pieds %d\n", actors_overlap_mask(joueur, piece));
+    printf("mask_pieds %d\n", actors_overlap_mask(joueur, piece, 0xFFFF));
     piece->y = 10 << 8;                       /* touche le corps ET les pieds */
-    printf("mask_les_deux %d\n", actors_overlap_mask(joueur, piece));
+    printf("mask_les_deux %d\n", actors_overlap_mask(joueur, piece, 0xFFFF));
     piece->y = 40 << 8;
-    printf("mask_loin %d\n", actors_overlap_mask(joueur, piece));
+    printf("mask_loin %d\n", actors_overlap_mask(joueur, piece, 0xFFFF));
     /* Deux boîtes de même tag chez le même acteur : UN seul contact. */
     joueur->collision.boxes[1].tag = TAG_BODY;
     piece->y = 10 << 8;
-    printf("mask_meme_tag %d\n", actors_overlap_mask(joueur, piece));
+    printf("mask_meme_tag %d\n", actors_overlap_mask(joueur, piece, 0xFFFF));
     /* Une boîte inactive ne fait pas de contact. */
     joueur->collision.boxes[1].tag = TAG_HIT;
     joueur->collision.boxes[1].active = 0;
-    printf("mask_inactive %d\n", actors_overlap_mask(joueur, piece));
+    printf("mask_inactive %d\n", actors_overlap_mask(joueur, piece, 0xFFFF));
 
     /* Au sol : par boîte, et une boîte absente est fausse. */
     a->collision.boxes[0].grounded = 1;
     a->collision.boxes[1].grounded = 0;
-    printf("grounded %d %d %d\n", collision_box_get_grounded(body),
-                                  collision_box_get_grounded(hit),
-                                  collision_box_get_grounded(none));
+    printf("grounded %d %d %d\n", collision_shape_get_grounded(body),
+                                  collision_shape_get_grounded(hit),
+                                  collision_shape_get_grounded(none));
 
     /* La carte de collision, interrogée par la boîte. */
-    printf("collision_tile %d %d\n", collision_box_get_collision_tile(body, 3, 7),
-                                     collision_box_get_collision_tile(none, 3, 7));
+    printf("collision_tile %d %d\n", collision_shape_get_collision_tile(body, 3, 7),
+                                     collision_shape_get_collision_tile(none, 3, 7));
 
     /* Drapeaux fixés au build. */
     g_oam_entries[a->oam_entry].affine_slot = -1;
@@ -493,6 +510,64 @@ int main(void) {
         printf("pose_sommet_mort %d %d\n", actor_root(&g_actors[2]) == 0, actor_parent(&g_actors[2]) == 0);
         g_placed_parent = 0;                                   /* sans table : chaque posé est sa propre racine */
         printf("pose_sans_table %d %d\n", actor_parent(&g_actors[4]) == 0, actor_root(&g_actors[4]) == &g_actors[4]);
+        g_scene_placed = 0;
+    }
+
+    /* Les tables par emplacement hors d'Actor (floor, drop_through, ancre Rigid) : la destruction les rend à zéro, celles
+       des autres emplacements ne bougent pas. */
+    {
+        static u16 sol[64]; static u8 chute[64];
+        g_actor_floor = sol; g_drop_through = chute;
+        for (int i = 0; i < 3; i++) {
+            g_actors[i] = (Actor){0}; g_actors[i].inst = i; g_actors[i].alive = 1; g_actors[i].active = 1;
+            sol[i] = 7; chute[i] = 9; g_rigid_rest[i][0] = 100 + i; g_rigid_rest[i][1] = 200 + i;
+        }
+        actor_destroy_internal(&g_actors[1]);
+        printf("tables_detruit %d %d %d %d\n", sol[1], chute[1], g_rigid_rest[1][0], g_rigid_rest[1][1]);
+        printf("tables_voisins %d %d %d %d\n", sol[0], chute[2], g_rigid_rest[0][0], g_rigid_rest[2][1]);
+        g_actor_floor = 0; g_drop_through = 0;                   /* projet sans floor ni sens unique : pas d'écriture */
+        actor_destroy_internal(&g_actors[2]);
+        printf("tables_sans_floor %d\n", g_rigid_rest[2][0]);
+    }
+
+    /* Une paire en contact : enter à la naissance, collide tant qu'elle dure, exit quand elle se défait, rien quand elle est
+       éloignée ou qu'un côté est inactif. Les tags arrivent du bon côté (my_box d'abord). */
+    {
+        for (int i = 0; i < 2; i++) { g_actors[i] = (Actor){0}; g_actors[i].active = 1; g_actors[i].collision.box_count = 1; }
+        g_actors[0].collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_HIT };
+        g_actors[1].collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_BODY };
+        static const ContactPair paire = { 0, 1, 0xFFFF, { a_enter, a_collide, a_exit }, { b_enter, 0, 0 } };
+        u16 prev = 0;
+        contact_frame("contact_1", &paire, &prev);            /* superposés : enter */
+        contact_frame("contact_2", &paire, &prev);            /* ça dure : collide */
+        printf("contact_tags %d %d\n", s_tag_a, s_tag_b);
+        g_actors[1].x = 100 << 8;
+        contact_frame("contact_3", &paire, &prev);            /* éloignés : exit */
+        contact_frame("contact_4", &paire, &prev);            /* rien de plus */
+        g_actors[1].x = 0; g_actors[1].active = 0;
+        contact_frame("contact_5", &paire, &prev);            /* un côté inactif : pas de contact */
+    }
+    {   /* scene.gravity : le côté d'appui suit l'axe dominant (le bas sans gravité ou à égalité), et un Rigid endormi
+           reprend sa chute seulement si la gravité change. */
+        g_scene_placed = 2;
+        g_actors[0].physics_sleep = 30; g_actors[1].physics_sleep = 30;
+        scene_set_gravity((Vec2){ 0, 64 });
+        printf("gravite_reveil %d %d\n", g_actors[0].physics_sleep, g_actors[1].physics_sleep);
+        g_actors[0].physics_sleep = 30;
+        scene_set_gravity((Vec2){ 0, 64 });
+        printf("gravite_inchangee %d\n", g_actors[0].physics_sleep);
+        int n[7];
+        scene_set_gravity((Vec2){ 0, -64 });   n[0] = g_support_normal;
+        scene_set_gravity((Vec2){ 64, 0 });    n[1] = g_support_normal;
+        scene_set_gravity((Vec2){ -64, 0 });   n[2] = g_support_normal;
+        scene_set_gravity((Vec2){ 0, 64 });    n[3] = g_support_normal;
+        scene_set_gravity((Vec2){ 50, 50 });   n[4] = g_support_normal;
+        scene_set_gravity((Vec2){ -30, -50 }); n[5] = g_support_normal;
+        scene_set_gravity((Vec2){ 0, 0 });     n[6] = g_support_normal;
+        printf("gravite_normales %d %d %d %d %d %d %d\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6]);
+        scene_set_gravity((Vec2){ -12, 34 });
+        Vec2 lue = scene_get_gravity();
+        printf("gravite_lue %d %d\n", lue.x, lue.y);
         g_scene_placed = 0;
     }
     return 0;
