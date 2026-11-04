@@ -57,7 +57,7 @@ def test_l_editeur_affiche_et_ecrit_les_quatre_noms_canoniques(qapp):
 
     collider._click_clear()
     assert comp.collider_id == ""
-    assert "Automatic" in collider._lbl.text()
+    assert collider._lbl.text() == "Auto"
 
     combo.setCurrentIndex(combo.findData("StaticBody"))
     assert static_note.isVisibleTo(host)
