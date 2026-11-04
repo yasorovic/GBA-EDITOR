@@ -272,7 +272,6 @@
     },
     "settings.toolchains.mgba_keys_title": { "text": "mGBA keyboard" },
     "settings.toolchains.mgba_keys_hint": { "text": "Keys written to the mGBA configuration at each launch from the editor. A key given to a second button swaps the two." },
-    "settings.toolchains.mgba_key_waiting": { "text": "Press a key…" },
     "settings.toolchains.mgba_keys_reset": { "text": "Default keys" },
     "settings.theme.dark": {
       "text": "Dark"
@@ -930,7 +929,7 @@
     "sceneinsp.physics_enabled_tip": { "text": "Enables the physics simulation for this scene. Disabled, PhysicsBody and PhysicMaterial components are ignored, CollisionShape keeps only its response, and the Physics card is hidden. Movement against the collision map still works." },
     "sceneinsp.physics_reset_tip": { "text": "Restores the gravity and simulation values from Project Settings for this scene. Available once the scene has its own values." },
     "sceneinsp.physics_gravity": { "text": "Gravity:" },
-    "sceneinsp.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors, in pixels per frame squared. Character and Kinematic actors ignore it." },
+    "sceneinsp.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors, in pixels per frame squared. Character and Kinematic bodies follow it while their Use scene gravity box is checked." },
     "sceneinsp.physics_solver_iterations": { "text": "Solver passes:" },
     "sceneinsp.physics_solver_iterations_tip": { "text": "Number of passes over Rigid contacts. More passes stabilize stacks but cost more CPU time." },
     "sceneinsp.physics_max_fall_speed": { "text": "Max fall speed:" },
@@ -4349,7 +4348,7 @@
       "text": "Physics & Collisions"
     },
     "projset.physics_gravity": { "text": "Default gravity" },
-    "projset.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors in scenes that use the project gravity." },
+    "projset.physics_gravity_tip": { "text": "Acceleration applied, in scenes that use the project gravity, to RigidBody actors and to Character and Kinematic bodies whose Use scene gravity box is checked." },
     "projset.physics_gravity_hint": { "text": "Scenes inherit this value until they define their own physics settings." },
     "projset.physics_simulation": { "text": "Simulation defaults" },
     "projset.physics_solver_iterations": { "text": "Solver passes" },

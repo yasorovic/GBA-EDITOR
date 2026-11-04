@@ -172,10 +172,6 @@ def physics_body_mode(owner) -> str | None:
     return None
 
 
-def is_character_body(owner) -> bool:
-    return physics_body_mode(owner) == PHYSICS_BODY_CHARACTER
-
-
 def uses_body_collider(owner, sprite=None) -> bool:
     """Un corps mobile possédant au moins une forme de résolution."""
     return physics_body_mode(owner) in (
@@ -188,8 +184,3 @@ def uses_character_solver(owner, sprite=None) -> bool:
     return physics_body_mode(owner) in (
         PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
     ) and has_map_collider(owner, sprite)
-
-
-def physics_body_needs_motion(owner) -> bool:
-    """Kinematic et Rigid déplacent leur vélocité sans appel Lua explicite."""
-    return physics_body_mode(owner) in (PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID)

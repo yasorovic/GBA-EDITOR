@@ -68,15 +68,6 @@ def parent_depths(scene_actors: list) -> tuple[dict, list]:
     return depths, errors
 
 
-def actor_box_tags(owner) -> list[str]:
-    """Les tags des boxes d'un acteur (ou d'un prefab), inactives comprises :
-    « Active » de l'inspecteur n'est que l'état de DÉPART, un script peut
-    l'allumer (`hb:activate()`). « body » par défaut, comme partout ailleurs
-    dans le build."""
-    return [c.tag or "body" for c in getattr(owner, "components", [])
-            if isinstance(c, CollisionShapeComponent)]
-
-
 def actor_collision_shapes(owner) -> list[CollisionShapeComponent]:
     return [c for c in getattr(owner, "components", [])
             if isinstance(c, CollisionShapeComponent)][:4]

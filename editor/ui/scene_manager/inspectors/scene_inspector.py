@@ -388,7 +388,7 @@ class SceneInspector(QWidget):
         # W.row pour label + champ, tous sur la même largeur de label.
         label_w = 104
 
-        def physics_spin(kind, lo, hi, step, field, title, suffix=""):
+        def physics_spin(kind, lo, hi, step, field, title, tip, suffix=""):
             spin = UnitSpin() if kind == "int" else UnitDoubleSpin()
             spin.setRange(lo, hi)
             spin.setSingleStep(step)
@@ -402,34 +402,37 @@ class SceneInspector(QWidget):
             # champ se laisse écraser et W.pair ne repasse jamais à la ligne.
             widest = spin.field.fontMetrics().horizontalAdvance(f"-{abs(hi):.2f}")
             spin.field.setMinimumWidth(widest + 44)
-            spin.setToolTip(tooltip(title=label(title), body=label(title + "_tip")))
+            spin.setToolTip(tooltip(title=label(title), body=label(tip)))
             conv = int if kind == "int" else float
             spin.valueChanged.connect(
                 lambda value, name=field: self._on_physics_value(name, conv(value)))
             return spin
 
         self._spin_gravity_x = physics_spin("float", -8.0, 8.0, 0.05, "physics_gravity_x",
-                                            "sceneinsp.physics_gravity", " px/f²")
+                                            "sceneinsp.physics_gravity",
+                                            "sceneinsp.physics_gravity_tip", " px/f²")
         self._spin_gravity_y = physics_spin("float", -8.0, 8.0, 0.05, "physics_gravity_y",
-                                            "sceneinsp.physics_gravity", " px/f²")
+                                            "sceneinsp.physics_gravity",
+                                            "sceneinsp.physics_gravity_tip", " px/f²")
         W.pair(label("sceneinsp.physics_gravity"),
                "X", C.AXIS_X, self._spin_gravity_x, "Y", C.AXIS_Y, self._spin_gravity_y,
                physics_inner, label_w)
 
         self._spin_physics_iterations = physics_spin(
-            "int", 1, 8, 1, "physics_solver_iterations", "sceneinsp.physics_solver_iterations")
+            "int", 1, 8, 1, "physics_solver_iterations", "sceneinsp.physics_solver_iterations",
+            "sceneinsp.physics_solver_iterations_tip")
         W.row(label("sceneinsp.physics_solver_iterations"),
               self._spin_physics_iterations, physics_inner, label_w)
 
         self._spin_physics_max_fall = physics_spin(
             "float", 0.0, 64.0, 0.25, "physics_max_fall_speed",
-            "sceneinsp.physics_max_fall_speed", " px/f")
+            "sceneinsp.physics_max_fall_speed", "sceneinsp.physics_max_fall_speed_tip", " px/f")
         W.row(label("sceneinsp.physics_max_fall_speed"),
               self._spin_physics_max_fall, physics_inner, label_w)
 
         self._spin_physics_damping = physics_spin(
             "float", 0.0, 1.0, 0.01, "physics_linear_damping",
-            "sceneinsp.physics_linear_damping", " /f")
+            "sceneinsp.physics_linear_damping", "sceneinsp.physics_linear_damping_tip", " /f")
         W.row(label("sceneinsp.physics_linear_damping"),
               self._spin_physics_damping, physics_inner, label_w)
 

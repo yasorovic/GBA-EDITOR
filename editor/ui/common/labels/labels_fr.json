@@ -398,7 +398,6 @@
     },
     "settings.toolchains.mgba_keys_title": { "text": "Clavier mGBA" },
     "settings.toolchains.mgba_keys_hint": { "text": "Touches écrites dans la configuration de mGBA à chaque lancement depuis l’éditeur. Une touche donnée à un deuxième bouton échange les deux." },
-    "settings.toolchains.mgba_key_waiting": { "text": "Appuyer sur une touche…" },
     "settings.toolchains.mgba_keys_reset": { "text": "Touches par défaut" },
     "settings.theme.dark": {
       "text": "Sombre"
@@ -1892,7 +1891,7 @@
     "projset.remove_tag_unused": { "text": "Aucune boîte ne l’utilise." },
     "projset.physics_collisions": { "text": "Physique et collisions" },
     "projset.physics_gravity": { "text": "Gravité par défaut" },
-    "projset.physics_gravity_tip": { "text": "Accélération appliquée aux RigidBody dans les scènes qui utilisent la gravité du projet." },
+    "projset.physics_gravity_tip": { "text": "Accélération appliquée, dans les scènes qui utilisent la gravité du projet, aux RigidBody et aux corps Character et Kinematic dont la case Use scene gravity est cochée." },
     "projset.physics_gravity_hint": { "text": "Les scènes héritent de cette valeur tant qu’elles ne définissent pas leurs propres réglages physiques." },
     "projset.physics_simulation": { "text": "Simulation par défaut" },
     "projset.physics_solver_iterations": { "text": "Passes du solveur" },
@@ -2048,7 +2047,7 @@
     "sceneinsp.scroll_h_tip": { "text": "Défilement horizontal" },
     "sceneinsp.scroll_v_tip": { "text": "Défilement vertical" },
     "sceneinsp.physics_gravity": { "text": "Gravité :" },
-    "sceneinsp.physics_gravity_tip": { "text": "Accélération appliquée aux RigidBody, en pixels par frame². Character et Kinematic l’ignorent." },
+    "sceneinsp.physics_gravity_tip": { "text": "Accélération appliquée aux RigidBody, en pixels par frame². Les corps Character et Kinematic la suivent tant que leur case Use scene gravity est cochée." },
     "sceneinsp.physics_solver_iterations": { "text": "Passes du solveur :" },
     "sceneinsp.physics_solver_iterations_tip": { "text": "Nombre de passes sur les contacts Rigid. Davantage de passes stabilisent les piles mais coûtent plus de temps CPU." },
     "sceneinsp.physics_max_fall_speed": { "text": "Vitesse de chute max :" },

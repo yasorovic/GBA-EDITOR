@@ -14,15 +14,12 @@ def _actor(name: str, solid: bool = True, mode: str | None = None) -> Actor:
 
 
 def test_les_scenes_heritent_du_character_et_les_modes_explicites_l_emportent():
-    from codegen.runtime_codegen.physics.body import (
-        is_character_body, physics_body_needs_motion, uses_character_solver,
-    )
+    from codegen.runtime_codegen.physics.body import physics_body_mode, uses_character_solver
 
-    assert is_character_body(_actor("Legacy"))
-    assert is_character_body(_actor("Hero", mode="CharacterBody"))
-    assert not is_character_body(_actor("Wall", mode="StaticBody"))
-    assert not physics_body_needs_motion(_actor("Wall", mode="StaticBody"))
-    assert not is_character_body(_actor("Sensor", solid=False))
+    assert physics_body_mode(_actor("Legacy")) == "CharacterBody"
+    assert physics_body_mode(_actor("Hero", mode="CharacterBody")) == "CharacterBody"
+    assert physics_body_mode(_actor("Wall", mode="StaticBody")) == "StaticBody"
+    assert physics_body_mode(_actor("Sensor", solid=False)) is None
     assert uses_character_solver(_actor("Lift", mode="KinematicBody"))
     assert uses_character_solver(_actor("Crate", mode="RigidBody"))
 
