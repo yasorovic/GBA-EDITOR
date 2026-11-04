@@ -3,7 +3,7 @@
 Ce guide décrit les quatre modes de **Physics body**, ce que chacun fait, comment la gravité de la scène
 les atteint, et comment construire plateformes mobiles, caisses et sols à sens unique.
 
-**Ce qu'il vous faut :** un acteur avec une boîte **Collision** et un composant **Physics body**. La boîte est décrite dans [Collisions](collisions.md).
+**Ce qu'il vous faut :** un acteur avec une boîte **Collision** et un composant **Physics body**. La boîte est décrite dans [Collisions](collisions.md). Le guide [Gravité et saut](gravite-saut.md) précède celui-ci : il écrit la gravité à la main, ici le moteur la fournit.
 
 ## 1. Choisir un mode
 
@@ -45,10 +45,27 @@ function on_update()
 end
 ```
 
+Le saut du guide [Gravité et saut](gravite-saut.md) se simplifie de la même façon : la ligne qui ajoutait
+`scene.gravity` disparaît, le moteur la fournit, et il reste la vitesse horizontale et l'impulsion :
+
+```lua
+function on_update()
+    local body = self:physics_body()
+    local vitesse_y = body.velocity.y
+
+    if body.grounded and input:pressed("a") then
+        vitesse_y = -900
+    end
+
+    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, vitesse_y)
+    body:apply_velocity()
+end
+```
+
 Décochez **Use scene gravity** pour un corps qui ne doit pas tomber (une plateforme mobile, un personnage vu de
-dessus) ou dont le script gère lui-même la chute. Dans ce cas, `scene.gravity` reste lisible (Q8 : 256 vaut 1 pixel
-par frame au carré) et le script peut l'ajouter à sa vitesse. Ne l'ajoutez pas quand la case est cochée : la
-gravité serait comptée deux fois.
+dessus) ou dont le script gère lui-même la chute, comme dans [Gravité et saut](gravite-saut.md). Dans ce cas,
+`scene.gravity` reste lisible (Q8 : 256 vaut 1 pixel par frame au carré) et le script l'ajoute à sa vitesse. Ne
+l'ajoutez pas quand la case est cochée : la gravité serait comptée deux fois.
 
 Une gravité de `0,25` px/frame² vaut `64` en Q8. Un script peut aussi écrire `scene.gravity = vec2(0, 64)` :
 les Rigid suivent, et les notions de sol (`grounded`, `floor`, transport par une plateforme) suivent l'axe

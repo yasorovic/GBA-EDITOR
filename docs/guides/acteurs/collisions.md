@@ -55,7 +55,9 @@ end
 conserve ainsi les fractions de déplacement et arrête l'acteur proprement contre une tuile.
 `body:apply_velocity()` fait la résolution : appelez-le à chaque frame, même sans touche appuyée.
 
-Lancez **Run** : l'acteur doit s'arrêter contre le sol et le mur peints.
+Lancez **Run** : l'acteur doit s'arrêter contre le sol et le mur peints. Le composant **Physics body** est
+un `CharacterBody` ; pour un déplacement vu de dessus comme ici, décochez sa case **Use scene gravity**, sinon
+l'acteur tombe (la gravité est traitée dans [Gravité et saut](gravite-saut.md)).
 
 ## Lire et régler la boîte depuis un script
 

@@ -100,11 +100,18 @@ def _entry(entry: dict, level: int) -> list[str]:
 
 
 def _summary(entries: list[dict]) -> list[str]:
-    """Le tableau récapitulatif d'un groupe : une ligne par fonction, qui renvoie à sa fiche."""
-    lines = ["| Fonction | Rôle |", "| --- | --- |"]
-    for e in entries:
-        lines.append(f"| [`{e['label']}`](#{e['doc_anchor']}) | {_plain(_first_sentence(e['description']))} |")
-    return lines + [""]
+    """Les tableaux récapitulatifs d'un groupe : un pour les fonctions, un pour les propriétés (celles qui ont un
+    accès « Read Only » ou « Read and Write »), chaque ligne renvoyant à sa fiche."""
+    lines: list[str] = []
+    for title, rows in (("Fonction", [e for e in entries if not e.get("access")]),
+                        ("Propriété", [e for e in entries if e.get("access")])):
+        if not rows:
+            continue
+        lines += [f"| {title} | Rôle |", "| --- | --- |"]
+        for e in rows:
+            lines.append(f"| [`{e['label']}`](#{e['doc_anchor']}) | {_plain(_first_sentence(e['description']))} |")
+        lines.append("")
+    return lines
 
 
 def _groups(section: dict, descriptions: dict[str, str]) -> list[dict]:
