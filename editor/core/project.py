@@ -976,9 +976,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             "last_scene":  self.settings.last_scene,
             "author":      self.settings.author,
             "version":     self.settings.version,
-            **({"physics_gravity_x": self.settings.physics_gravity_x,
-                 "physics_gravity_y": self.settings.physics_gravity_y}
-               if (self.settings.physics_gravity_x or self.settings.physics_gravity_y) else {}),
+            # Toujours écrite : zéro est un choix explicite, la clé absente d'un ancien projet vaut zéro.
+            "physics_gravity_x": self.settings.physics_gravity_x,
+            "physics_gravity_y": self.settings.physics_gravity_y,
             **({"physics_solver_iterations": self.settings.physics_solver_iterations,
                 "physics_max_fall_speed": self.settings.physics_max_fall_speed,
                 "physics_linear_damping": self.settings.physics_linear_damping,

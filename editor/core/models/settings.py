@@ -188,9 +188,10 @@ class ProjectSettings:
     author: str = ""
     version: str = "0.1"
     # Gravité par défaut des scènes, en pixels par frame². Une scène peut la
-    # surcharger explicitement ; zéro garde le comportement historique.
+    # surcharger explicitement. Un nouveau projet démarre avec une gravité minimale ;
+    # un projet existant sans cette clé garde zéro (voir `Project.load_settings`).
     physics_gravity_x: float = 0.0
-    physics_gravity_y: float = 0.0
+    physics_gravity_y: float = 0.25
     physics_solver_iterations: int = 4
     physics_max_fall_speed: float = 8.0
     physics_linear_damping: float = 0.0
