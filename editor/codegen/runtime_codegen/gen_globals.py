@@ -4,9 +4,18 @@ from __future__ import annotations
 
 from codegen.runtime_codegen.gen_affine import scene_has_affine
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_destroy_table
+from codegen.runtime_codegen.gen_scene_query import collision_pairs, lua_actor_indices
 from codegen.runtime_codegen.physics.areas import area_globals_lines
 from codegen.runtime_codegen.physics.body import project_has_one_way
 from codegen.runtime_codegen.physics.floor import project_has_floors
+
+
+def _contact_memory_lines(p, all_scene_data: list[dict]) -> list[str]:
+    """`g_col_prev` : le recouvrement de la frame précédente de chaque paire d'acteurs posés qui prévient un script. Une seule
+    scène est vivante : la table est dimensionnée sur la plus fournie, et `scene_init` la remet à zéro."""
+    n = max((len(collision_pairs(p, d["scene_actors"], 0, lua_actor_indices(p, d["scene_actors"], 0)))
+             for d in all_scene_data), default=0)
+    return [f"u16 g_col_prev[{n}] EWRAM_BSS;   /* un souvenir par paire posée, remis à zéro à chaque entrée de scène */"] if n else []
 
 
 def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int, n_oam_entries: int,
@@ -21,6 +30,7 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
     L += [
         f"Actor g_actors[{n_actors}] EWRAM_BSS;",
         *area_globals_lines(p, all_scene_data),
+        *_contact_memory_lines(p, all_scene_data),
         f"u16 g_actor_floor_store[{n_actors if project_has_floors(p) else 1}] EWRAM_BSS;",
         f"u16 *g_actor_floor={'g_actor_floor_store' if project_has_floors(p) else '0'};",
         # `physics_body:drop_through(n)` : frames restantes pendant lesquelles un corps ignore les faces à sens unique.

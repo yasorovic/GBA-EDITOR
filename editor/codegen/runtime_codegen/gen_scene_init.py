@@ -18,7 +18,9 @@ from codegen.runtime_codegen.gen_pool import dispatch_sym, placed_parent_table
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
 from codegen.runtime_codegen.physics.areas import area_init_lines
 from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
-from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scene_has_cmap, scene_world_size
+from codegen.runtime_codegen.gen_scene_query import (
+    collision_pairs, lua_actor_indices, scene_anim_descriptors, scene_has_cmap, scene_world_size,
+)
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
 from codegen.runtime_codegen.gen_sprite import initial_state_rank, shown
 from codegen.runtime_codegen.gen_ui_scene import scene_ui_lines
@@ -152,6 +154,9 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.
     L.append(f"    g_scene_placed = {len(scene_actors)};")
     L += area_init_lines(p, scene)
+    # La mémoire des contacts des paires posées ne survit pas à la scène (cf. `gen_scene_tick`).
+    if collision_pairs(p, scene_actors, actor_offset, lua_actor_indices(p, scene_actors, actor_offset)):
+        L.append("    for(unsigned _i=0;_i<sizeof(g_col_prev)/sizeof(g_col_prev[0]);_i++) g_col_prev[_i]=0;")
     # La hiérarchie des acteurs posés, lue par `a.parent` / `a.root` (runtime_api_inline.h).
     _ppar = placed_parent_table(scene_actors, actor_offset)
     if _ppar:

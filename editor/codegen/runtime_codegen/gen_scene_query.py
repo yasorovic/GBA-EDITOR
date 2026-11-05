@@ -96,7 +96,7 @@ def actors_can_collide(p, a, b) -> bool:
     """Ces deux acteurs ont-ils UNE SEULE combinaison de tags qui se rencontre ?
 
     Si non, la paire n'est pas émise du tout : ni bloc de C, ni
-    entrée dans `_col_prev`, ni test par frame. Le gain est donc en ROM autant
+    entrée dans `g_col_prev`, ni test par frame. Le gain est donc en ROM autant
     qu'en cycles — c'est la raison de filtrer au BUILD plutôt qu'au runtime.
 
     Sans box d'un côté, il n'y a rien à filtrer : on laisse passer, et le reste

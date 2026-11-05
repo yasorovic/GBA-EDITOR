@@ -223,18 +223,18 @@ def gen_scene_tick(
             s = _dsym(scene.name, scene_actors[k - actor_offset][0].name)
             return "{" + ",".join(f"{s}_{ev}" if k in lua_idx and _def(s, ev) else "0" for ev in evs) + "}"
 
-        # Une paire dont aucun côté n'a de handler ne produit rien (et `_col_prev` n'est lu que par `contact_pair_run`) : elle
-        # n'entre pas dans la table.
+        # Une paire dont aucun côté n'a de handler ne produit rien (et `g_col_prev` n'est lu que par `contact_pair_run`) : elle
+        # n'entre pas dans la table. La mémoire des contacts est une globale que chaque `scene_init` remet à zéro : un `static`
+        # d'ici survivait à une sortie de scène, et le retour y voyait des `collide` ou des `exit` sans `enter`.
         rows = [(i, j, collision_pair_mask(scene_actors[i - actor_offset][0],
                                             scene_actors[j - actor_offset][0], p.settings),
                  handlers(i), handlers(j)) for i, j in col_pairs]
         rows = [r for r in rows if r[3] != "{0,0,0}" or r[4] != "{0,0,0}"]
         if rows:
-            L.append(f"    static u16 _col_prev[{len(rows)}]={{0}};")
             L.append(f"    static const ContactPair _col_pairs[{len(rows)}]={{")
             L += [f"        {{{i},{j},{allowed},{a},{b}}}," for i, j, allowed, a, b in rows]
             L += ["    };",
-                  f"    for(u16 _k=0;_k<{len(rows)};_k++) contact_pair_run(&_col_pairs[_k],&_col_prev[_k]);"]
+                  f"    for(u16 _k=0;_k<{len(rows)};_k++) contact_pair_run(&_col_pairs[_k],&g_col_prev[_k]);"]
 
     # Areas à déclencheur : les acteurs posés (table de couples) puis ceux du pool (boucle sur les emplacements), le même
     # `area_contact_step` des deux côtés.
