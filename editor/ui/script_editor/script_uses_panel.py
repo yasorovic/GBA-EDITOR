@@ -1,7 +1,7 @@
 """
 ui/script_editor/script_uses_panel.py — « Voir les utilisations » d'un script.
 
-Remplace la colonne droite du Script Editor (la bibliothèque de scripts) le temps de la
+Remplace la colonne gauche du Script Editor (la bibliothèque de scripts) le temps de la
 consultation : les scènes, prefabs et scripts de scène qui pointent le fichier. La vue ne
 navigue pas elle-même : elle dit QUELLE cible, la fenêtre bascule sur le Scene Manager.
 """
@@ -17,7 +17,7 @@ from ui.common.uses_list import UsesListBase
 
 class ScriptUsesPanel(UsesListBase):
     """
-    Vue 'SCRIPT USES', colonne droite du Script Editor : toutes les scènes et acteurs
+    Vue 'SCRIPT USES', colonne gauche du Script Editor : toutes les scènes et acteurs
     qui ont un ScriptComponent pointant vers ce fichier script. Un clic sur une ligne demande
     à la fenêtre d'aller l'y sélectionner (`target_requested`) ; « v » revient à la bibliothèque.
 

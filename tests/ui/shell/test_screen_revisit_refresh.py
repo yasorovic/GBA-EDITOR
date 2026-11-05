@@ -62,7 +62,7 @@ def _make_window(screen):
     )
     win._watcher = SimpleNamespace(rescan=lambda: win.rescans.append(1))
     win._ensure_screen = lambda index: screen
-    win._move_build_panel_to = lambda index: None   # le panneau de build n'est pas l'objet du test
+    win._move_shared_panels_to = lambda index: None   # le panneau de build n'est pas l'objet du test
     win._load_screen_for_project = MainWindow._load_screen_for_project.__get__(win)
     win._refresh_screen_for_project = MainWindow._refresh_screen_for_project.__get__(win)
     return win

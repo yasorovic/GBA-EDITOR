@@ -296,12 +296,15 @@ def sort_nodes(nodes, mode: str) -> list:
     return sorted(nodes, key=key)
 
 
-def show_sort_menu(parent: QWidget, button, current: str, on_pick: Callable[[str], None]) -> None:
+def show_sort_menu(parent: QWidget, button, current: str, on_pick: Callable[[str], None],
+                   options: tuple[tuple[str, str], ...] | None = None) -> None:
     """Le menu du bouton de tri, déroulé sous `button` : un critère par entrée, celui en vigueur coché."""
     menu = QMenu(parent)
     menu.setStyleSheet(QSS.menu)
-    for mode in SORT_MODES:
-        action = menu.addAction(label(f'disk.sort_{mode}'))
+    if options is None:
+        options = tuple((mode, label(f'disk.sort_{mode}')) for mode in SORT_MODES)
+    for mode, text in options:
+        action = menu.addAction(text)
         action.setCheckable(True)
         action.setChecked(mode == current)
         action.triggered.connect(lambda _=False, m=mode: on_pick(m))

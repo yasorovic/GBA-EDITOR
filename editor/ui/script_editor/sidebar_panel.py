@@ -1,4 +1,4 @@
-"""ui/script_editor/sidebar_panel.py — panneau gauche : sections EVENTS / API / RÉFÉRENCES."""
+"""ui/script_editor/sidebar_panel.py — panneau droit : sections EVENTS / API / RÉFÉRENCES."""
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QToolButton, QLineEdit
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal

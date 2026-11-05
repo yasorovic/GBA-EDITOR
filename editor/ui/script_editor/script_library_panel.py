@@ -1,4 +1,4 @@
-"""ui/script_editor/script_library_panel.py — colonne droite du Script Editor.
+"""ui/script_editor/script_library_panel.py — colonne gauche du Script Editor.
 
 Trois sections empilées : l'arbre des scripts du projet, puis les constantes et
 les globales. Seule la première liste des ASSETS — elle est donc rendue par le
@@ -60,20 +60,22 @@ class ScriptLibraryPanel(QWidget):
 
         # ── Constantes / globales — PAS des assets : des variables typées,
         #    avec leur valeur. Leur table reste. ────────────────────────
-        sec_const = LibrarySection(label("vartbl.constants"))
+        sec_const = LibrarySection(label("vartbl.constants"), sortable=True)
         sec_const.remember_fold("section/script_constants")
         self._constants_panel = VarTablePanel(kind="const")
         self._constants_panel.snippet_requested.connect(self.snippet_requested)
         sec_const.set_widget(self._constants_panel)
         sec_const.add_clicked.connect(self._constants_panel._add_var)
+        sec_const.sort_requested.connect(self._constants_panel.show_sort_menu)
         self._scripts.add_section(sec_const)
 
-        sec_globals = LibrarySection(label("vartbl.globals"))
+        sec_globals = LibrarySection(label("vartbl.globals"), sortable=True)
         sec_globals.remember_fold("section/script_globals")
         self._globals_panel = VarTablePanel(kind="global")
         self._globals_panel.snippet_requested.connect(self.snippet_requested)
         sec_globals.set_widget(self._globals_panel)
         sec_globals.add_clicked.connect(self._globals_panel._add_var)
+        sec_globals.sort_requested.connect(self._globals_panel.show_sort_menu)
         self._scripts.add_section(sec_globals)
 
     # ── API publique ──────────────────────────────────────────────────

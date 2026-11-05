@@ -56,3 +56,59 @@ def test_ferme_garde_sa_poignee_et_se_rouvre_a_la_souris(app):
     total = sum(body.center_split.sizes())
     body.center_split.setSizes([total - 200, 200])      # ce que fait un glissé de la poignée
     assert body.dock_is_open()
+
+
+def test_disk_reste_sous_la_bibliotheque_et_conserve_son_arbre(app):
+    from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem
+    first, _ = _body()
+    second, _ = _body()
+    disk = QTreeWidget()
+    folder = QTreeWidgetItem(disk, ["Sources"])
+    QTreeWidgetItem(folder, ["hero.png"])
+    folder.setExpanded(True)
+    disk.setCurrentItem(folder)
+    first.attach_disk(disk)
+    QApplication.processEvents()
+    first.left_split.setSizes([180, 410])
+    sizes = first.left_split.sizes()
+    second.attach_disk(disk)
+    assert second.left_split.widget(0) is not disk
+    assert second._disk_layout.itemAt(0).widget() is disk
+    assert disk.currentItem() is folder and folder.isExpanded()
+    first.attach_disk(disk)
+    QApplication.processEvents()
+    assert first._disk_layout.itemAt(0).widget() is disk
+    assert first.left_split.sizes() == sizes
+
+
+def test_tous_les_ecrans_natifs_affichent_le_meme_disk_sous_leur_library(qapp, tmp_path, monkeypatch):
+    from PyQt6.QtCore import QSettings
+    from PyQt6.QtWidgets import QTreeWidgetItem
+    import window
+    monkeypatch.setattr(window, "QSettings", lambda *args: QSettings(
+        str(tmp_path / "layout.ini"), QSettings.Format.IniFormat))
+    win = window.MainWindow()
+    win.show()
+    disk_tabs = win._left_tab_widget
+    disk = win.disk_tree_view
+    from ui.common.disk_tree_view import _PATH_ROLE
+    folder = QTreeWidgetItem(disk._tree, ["Sources"])
+    folder.setData(0, _PATH_ROLE, str(tmp_path))
+    QTreeWidgetItem(folder, ["hero.png"])
+    folder.setExpanded(True)
+    disk._tree.setCurrentItem(folder)
+    try:
+        for index, spec in enumerate(win._screens):
+            if spec.plugin:
+                continue
+            win._show_screen(index)
+            qapp.processEvents()
+            body = win._body_of(index)
+            assert body._disk_layout.itemAt(0).widget() is disk_tabs, spec.name
+            assert body.left_split.widget(1) is disk_tabs.parentWidget(), spec.name
+            assert disk.isVisible(), spec.name
+            assert disk._tree.currentItem() is folder and folder.isExpanded(), spec.name
+        assert disk_tabs.count() == 1 and disk_tabs.widget(0) is disk
+        assert win.scene_tree_panel._context_tabs.count() == 3
+    finally:
+        win.hide()

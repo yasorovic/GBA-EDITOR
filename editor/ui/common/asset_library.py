@@ -42,7 +42,7 @@ from typing import Any, Callable, Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTreeWidget, QTreeWidgetItem, QMenu,
-    QAbstractItemView, QSizePolicy, QScrollArea, QHeaderView,
+    QAbstractItemView, QSizePolicy, QScrollArea, QHeaderView, QStyle, QStyleOptionViewItem,
 )
 from ui.common.popup import MessageBox as QMessageBox
 from PyQt6 import sip
@@ -242,6 +242,8 @@ class AssetKind:
     # les noms des copies doivent être uniques entre eux. La library les pousse en une entrée d'historique. Une famille
     # sans `duplicate` n'offre ni l'entrée de menu ni Ctrl+D.
     duplicate: Optional[Callable[[Any, list], list]] = None
+    # L'icône ouvre l'asset ; active ou survolée seulement. Clic central : même action sur toute la ligne.
+    icon_activates: bool = False
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -357,18 +359,23 @@ _LOCATE_ICON = 14
 
 
 class _LocateDelegate(RowSelectionDelegate):
-    """La grammaire de sélection des libraries, plus l'icône Locate dans sa colonne.
+    """La grammaire de sélection, l'icône d'ouverture optionnelle et Locate dans sa colonne.
 
     L'icône n'est peinte que sur la ligne survolée ou sélectionnée : une liste de cinquante assets
     n'est pas une colonne de cinquante cibles. Elle s'allume (accent) quand c'est elle qu'on survole."""
 
     def paint(self, painter, option, index):
         super().paint(painter, option, index)
-        if index.column() != _LOCATE_COL:
-            return
         tree = self.parent()
         item = tree.itemFromIndex(index)
         if item is None or item.data(0, _ROLE_OBJ) is None:
+            return
+        if index.column() == 0 and tree._kind.icon_activates:
+            hovered = item is tree.hover_item()
+            if hovered or item is tree.active_item():
+                color = C.TEXT_HI if item is tree.active_item() else C.TEXT_DIM
+                _ico(tree._kind.icon, color).paint(painter, tree.activation_icon_rect(item))
+        if index.column() != _LOCATE_COL:
             return
         if not (item is tree.hover_item() or item.isSelected()):
             return
@@ -388,6 +395,7 @@ class _KindTree(QTreeWidget):
         self._kind = kind
         self._hover: tuple = (None, -1)         # (ligne survolée, colonne survolée), pour l'icône Locate
         self._project = None
+        self._activation_pressed = False
         self.setMouseTracking(True)
         # Asset ACTIF (chargé dans le canvas) — distinct de la sélection, peint
         # en barre gauche par la grammaire de sélection partagée
@@ -475,6 +483,11 @@ class _KindTree(QTreeWidget):
         if hover != self._hover:
             self._hover = hover
             self.viewport().update()
+        if self._kind.icon_activates:
+            item = hover[0]
+            on_icon = (item is not None and item.data(0, _ROLE_OBJ) is not None
+                       and self.activation_icon_rect(item).contains(pos))
+            self.viewport().setCursor(Qt.CursorShape.PointingHandCursor if on_icon else Qt.CursorShape.ArrowCursor)
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, event):
@@ -492,7 +505,36 @@ class _KindTree(QTreeWidget):
             return None
         return item.data(0, _ROLE_OBJ)
 
+    def activation_icon_rect(self, item: QTreeWidgetItem) -> QRect:
+        """La zone d'icône calculée par le style Qt, identique pour la peinture et le clic."""
+        option = QStyleOptionViewItem()
+        self.initViewItemOption(option)
+        option.rect = self.visualItemRect(item)
+        option.decorationSize = self.iconSize()
+        self.itemDelegate().initStyleOption(option, self.indexFromItem(item, 0))
+        return self.style().subElementRect(QStyle.SubElement.SE_ItemViewItemDecoration, option, self)
+
+    def _activation_hit(self, event):
+        if not self._kind.icon_activates:
+            return None
+        pos = event.position().toPoint()
+        item = self.itemAt(pos)
+        if item is None:
+            return None
+        obj = item.data(0, _ROLE_OBJ)
+        if obj is not None and (event.button() == Qt.MouseButton.MiddleButton
+                or (event.button() == Qt.MouseButton.LeftButton and self.activation_icon_rect(item).contains(pos))):
+            return obj
+        return None
+
     def mousePressEvent(self, event):
+        obj = self._activation_hit(event)
+        if obj is not None:
+            self._activation_pressed = True
+            # Le changement de scène peut repeupler l'arbre : laisser Qt terminer cet événement.
+            QTimer.singleShot(0, lambda asset=obj: self._panel.activated.emit(self._kind.label, asset))
+            event.accept()
+            return
         obj = self._locate_hit(event)
         if obj is not None:
             self._locate_asset(obj)
@@ -500,7 +542,18 @@ class _KindTree(QTreeWidget):
             return
         super().mousePressEvent(event)
 
+    def mouseReleaseEvent(self, event):
+        if self._activation_pressed:
+            self._activation_pressed = False
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
     def mouseDoubleClickEvent(self, event):
+        if self._activation_hit(event) is not None:
+            self._activation_pressed = True
+            event.accept()
+            return
         if self._locate_hit(event) is not None:
             event.accept()                      # le 2e clic d'un double-clic sur l'icône n'ouvre pas l'asset
             return
@@ -633,7 +686,9 @@ class _KindTree(QTreeWidget):
                 self._fill(item, node.children)
                 item.setExpanded(expanded)
             else:
-                item.setIcon(0, self._kind.icon_of(node.obj) if self._kind.icon_of
+                # L'icône transparente réserve sa place : son apparition ne décale pas le nom.
+                item.setIcon(0, _ico(self._kind.icon, "transparent") if self._kind.icon_activates
+                                else self._kind.icon_of(node.obj) if self._kind.icon_of
                                 else _ico(self._kind.icon, self._kind.color))
                 state = self._kind.state_of(self._project, node.obj) if self._kind.state_of else None
                 if state:
@@ -689,27 +744,12 @@ class _KindTree(QTreeWidget):
     # ── Sélection ─────────────────────────────────────────────────
 
     def _on_selection_set_changed(self):
-        """Sélection STABILISÉE de l'arbre. C'est le SEUL point où l'on décide
-        d'activer, et à dessein : Qt émet ce signal APRÈS avoir posé la plage d'un
-        Shift/Ctrl-clic, alors que `currentItemChanged` est émis AVANT — la
-        sélection y est encore celle d'avant le geste, si bien qu'on ne peut pas
-        y distinguer un clic simple d'un lot.
+        """Publie la sélection stabilisée, distincte de l'ouverture par icône ou clic central.
 
-        Un asset UNIQUE s'active — il devient ce que l'écran édite, et pour une
-        scène cela la CHARGE. Un LOT ne sert qu'aux opérations du menu contextuel
-        (suppression groupée) : on le publie pour la sélection croisée, mais on
-        ne l'active pas.
-
-        L'émission proprement dite est DIFFÉRÉE (`QTimer.singleShot(0, ...)`) :
-        activer une scène rafraîchit ce panneau (`window._on_scene_selected` ->
-        `scene_library_panel.refresh()` -> `populate()`), qui reconstruit CET
-        arbre — CELUI-LÀ MÊME qui est en train de traiter le clic qui a causé
-        cette activation. Le faire dans le même appel, c'est reconstruire
-        l'arbre PENDANT que Qt peint/termine l'évènement souris dessus : c'est ce
-        qui produisait les « QPainter: Unbalanced save/restore » observés en test
-        manuel. Un tour de boucle d'attente suffit à laisser le clic se terminer
-        avant que le rebuild n'ait lieu — même parade que `select_obj`/`edit_obj`
-        plus bas pour la même classe de réentrance."""
+        Qt pose toute la sélection avant itemSelectionChanged : un lot peut donc être
+        transmis sans inspecter chaque ligne de passage. Un seul asset émet selected,
+        un lot émet seulement la sélection croisée. L'émission reste différée d'un tour
+        de boucle : un destinataire peut repeupler l'arbre, une fois le clic terminé."""
         objs = self._selected_objs()
         QTimer.singleShot(0, lambda k=self._kind.label, os=objs: self._emit_selection(k, os))
 

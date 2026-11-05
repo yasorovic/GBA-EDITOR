@@ -1,4 +1,4 @@
-"""Panneau gauche (bas) du Scene Manager — la Scene library : les scènes et les prefabs du projet.
+"""Bibliothèque projet dans les onglets du panneau gauche du Scene Manager — la Scene library : les scènes et les prefabs du projet.
 
 Les scripts ont leur propre bibliothèque (`script_library_panel.py`), rendus par le composant partagé
 (`ui/common/asset_library.py`) comme dans tous les autres écrans. Ce module ne
@@ -7,7 +7,7 @@ garde que ce qui est propre à CET écran : traduire une sélection en geste
 un inspecteur en face (« Voir les instances », « Voir les utilisations »).
 
 Le contenu de la scène active — acteurs et mise en page UI — vit dans
-`scene_tree_panel.py`, au-dessus dans la même colonne.
+`scene_tree_panel.py`, dans les onglets voisins Content et Priority.
 """
 
 from pathlib import Path
@@ -99,8 +99,8 @@ class SceneLibraryPanel(QWidget):
 
         Le clic simple INSPECTE, il n'ouvre pas : une scène se pose sur le bus,
         où son inspecteur la prend (il édite n'importe quelle scène, pas
-        seulement l'active) — la BASCULE du canvas est réservée au double-clic
-        (`_on_activated`). Un prefab suit la même règle : sur le bus,
+        seulement l'active). L'icône ou le clic central ouvre la scène
+        dans le canvas (`_on_activated`). Un prefab suit la même règle : sur le bus,
         l'inspecteur le prend."""
         if kind_label == SCENES.label:
             get_bus().select(obj)     # -> SceneInspector, sans changer la scène active
@@ -108,8 +108,7 @@ class SceneLibraryPanel(QWidget):
             get_bus().select(obj)
 
     def _on_activated(self, kind_label: str, obj):
-        """Double-clic. Une scène s'OUVRE (le canvas bascule dessus, window.py la
-        désigne par son index) ; un prefab s'édite."""
+        """Icône, clic central ou double-clic : une scène s'ouvre par son index ; un prefab s'édite."""
         if kind_label == SCENES.label:
             if self._project is not None and obj in self._project.scenes:
                 self.scene_selected.emit(list(self._project.scenes).index(obj))
@@ -172,6 +171,7 @@ class SceneLibraryPanel(QWidget):
     def load_project(self, project: Project):
         self._project = project
         self._library.load_project(project)
+        self.highlight_active_scene(project.active_scene)
 
     def _on_selection_set(self, kind_label: str, objs) -> None:
         """Relaie la sélection de scènes vers le graphe (highlight croisé)."""
@@ -214,7 +214,7 @@ class SceneLibraryPanel(QWidget):
         scène sélectionnée ne sont plus la même chose (cf. règle de design
         active/sélectionnée). Ne repeuple pas : la liste des scènes ne change
         pas quand on bascule de scène active (`window._on_scene_selected`), on ne
-        fait que déplacer le liseré."""
+        fait que déplacer le liseré et l'icône active."""
         self._library.set_active(SCENES.label, scene)
 
     # ── Projets ───────────────────────────────────────────────────

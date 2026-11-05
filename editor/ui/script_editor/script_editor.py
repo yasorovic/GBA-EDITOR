@@ -1,25 +1,5 @@
-"""
-editor/ui/script_editor/script_editor.py — Écran d'édition de scripts Lua pour acteurs GBA.
-
-Layout :
-┌──────────────────────────────────────────────────────────────┐
-│  ← Retour   Hero.lua                             [Enregistrer]│
-├───────────────────┬──────────────────────────────────────────┤
-│  ▾ EVENTS         │                                          │
-│    ● on_start     │   function on_start()                    │
-│    ○ on_update    │       self:play_anim("idle")             │
-│                   │   end                                    │
-│  ▾ API            │                                          │
-│    Mouvement      │   function on_update()                   │
-│    self:move()    │       ...                                │
-│    ...            │   end                                    │
-│  ▾ RÉFÉRENCES     │                                          │
-│    Scènes         │                                          │
-│    Actors         │                                          │
-│    Scripts        │                                          │
-│    Prefabs        │                                          │
-└───────────────────┴──────────────────────────────────────────┘
-"""
+"""Écran d'édition Lua : bibliothèque et utilisations à gauche, éditeur au centre,
+API, événements et références à droite. Disk reste sous la bibliothèque."""
 
 from pathlib import Path
 from typing import Optional
@@ -143,7 +123,7 @@ class ScriptEditorScreen(QWidget):
 
         root.addWidget(bar)
 
-        # ── Corps : sidebar | (éditeur / log) | scripts ──────────────
+        # ── Corps : scripts | (éditeur / log) | sidebar ──────────────
         self._sidebar = SidebarPanel()
         self._sidebar.snippet_requested.connect(self._editor_insert_snippet)
         self._sidebar.stub_requested.connect(self._on_event_activated)
@@ -155,26 +135,26 @@ class ScriptEditorScreen(QWidget):
         ))
         self._editor.textChanged.connect(self._on_text_changed)
 
-        # ScriptLibraryPanel — colonne droite
+        # ScriptLibraryPanel : colonne gauche
         self._file_tree = ScriptLibraryPanel()
         self._file_tree.file_requested.connect(lambda p: self.open_script(Path(p)))
         self._file_tree.snippet_requested.connect(self._editor_insert_snippet)
         self._file_tree.uses_requested.connect(self._show_script_uses)
 
-        # La colonne droite alterne : la bibliothèque, ou les utilisations d'un script.
+        # La colonne gauche alterne : la bibliothèque, ou les utilisations d'un script.
         self._uses_panel = ScriptUsesPanel()
         self._uses_panel.edit_requested.connect(lambda p: self.open_script(Path(p)))
         self._uses_panel.target_requested.connect(self.script_user_requested)
         self._uses_panel.close_requested.connect(self._show_library)
-        self._right_column = QStackedWidget()
-        self._right_column.addWidget(self._file_tree)
-        self._right_column.addWidget(self._uses_panel)
+        self._library_column = QStackedWidget()
+        self._library_column.addWidget(self._file_tree)
+        self._library_column.addWidget(self._uses_panel)
 
         # Corps : trois colonnes redimensionnables à la souris, comme les autres
         # écrans. Le panneau de build s'accroche sous l'éditeur (cf. ThreeColumnBody).
         # childrenCollapsible=False : la poignée ne réduit pas une colonne à 0 par accident.
-        self.body = ThreeColumnBody(self._sidebar, self._editor, self._right_column,
-                                    sizes=(220, 900, 224))
+        self.body = ThreeColumnBody(self._library_column, self._editor, self._sidebar,
+                                    sizes=(224, 900, 220))
         self.body.setChildrenCollapsible(False)
         root.addWidget(self.body, 1)
 
@@ -184,10 +164,10 @@ class ScriptEditorScreen(QWidget):
         if self._project is None:
             return
         self._uses_panel.load(path, self._project)
-        self._right_column.setCurrentWidget(self._uses_panel)
+        self._library_column.setCurrentWidget(self._uses_panel)
 
     def _show_library(self):
-        self._right_column.setCurrentWidget(self._file_tree)
+        self._library_column.setCurrentWidget(self._file_tree)
 
     # ── API publique ──────────────────────────────────────────────────
 

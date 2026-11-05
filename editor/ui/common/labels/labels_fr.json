@@ -1,5 +1,6 @@
 {
   "labels": {
+    "scenelibrary.activate_scene_tip": { "text": "Un clic sur l'icône ou un clic central sur la ligne ouvre cette scène dans le canvas. Un clic sur le nom la sélectionne pour l'inspecteur." },
     "comped.trig_on_interact": { "text": "À l'interaction" },
     "txtentry.collapse": { "text": "Replier le champ de texte" },
     "common.copied": { "text": "Copié" },
@@ -2303,7 +2304,8 @@
     "scrsb.filter_tip": { "text": "Filtre les événements, entrées d’API et références du projet par nom." },
     "scrsb.event_tip_note": { "text": "La sélection insère ce gestionnaire, ou y mène s’il existe déjà." },
     "scrsb.behavior_stub_tip": { "text": "Insère une fonction exportée pour ce module de comportement." },
-    "vartbl.insert_title": { "text": "Insérer l’accès à la variable" },
+    "vartbl.name_tip": { "text": "Un clic gauche renomme la variable. Un clic central insère sa référence dans le script." },
+    "vartbl.sort_type": { "text": "Trier par type" },
     "scrsb.bg_ref": { "text": "Référence éditoriale. Un fond se place dans la scène, pas depuis un script." },
     "scrsb.require_desc": { "text": "Importe le module de comportement {name}." },
     "scrsb.interface_name": { "text": "Interface {name}" },

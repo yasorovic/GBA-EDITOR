@@ -123,6 +123,8 @@ SCENES = AssetKind(
     label         = "Scenes",
     label_key = 'akind.scenes',
     icon          = "scene",
+    icon_activates = True,
+    tooltip_of    = lambda scene: tooltip(title=scene.name, body=label("scenelibrary.activate_scene_tip")),
     nodes         = store_nodes("scenes"),
     rename        = _renamer("rename_scene"),
     delete        = _store_deleter("scenes"),

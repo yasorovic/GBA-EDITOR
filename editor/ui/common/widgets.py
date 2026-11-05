@@ -1028,6 +1028,7 @@ class LibrarySection(QFrame):
     """
 
     add_clicked = pyqtSignal()
+    sort_requested = pyqtSignal(object)     # bouton qui ancre le menu de tri
     toggled_by_user = pyqtSignal(bool)      # un clic sur l'en-tête, pas un set_expanded()
 
     # Air au-dessus du titre et sous le corps. Le bas ne compte que déplié :
@@ -1035,7 +1036,7 @@ class LibrarySection(QFrame):
     _PAD_TOP    = S.MD
     _PAD_BOTTOM = S.MD
 
-    def __init__(self, title: str, color: str = C.TEXT_NORM, parent=None):
+    def __init__(self, title: str, color: str = C.TEXT_NORM, parent=None, *, sortable: bool = False):
         # `color` par défaut neutre : les libraries n'utilisent plus de code
         # couleur par type d'asset (distinction par forme d'icône + libellé).
         # Le paramètre reste pour un usage ponctuel hors library si besoin.
@@ -1105,6 +1106,10 @@ class LibrarySection(QFrame):
 
         hl.addWidget(toggle_area, 1)
         hl.addWidget(self._btn_add)
+        if sortable:
+            sort_button = W.btn_sort()
+            sort_button.clicked.connect(lambda: self.sort_requested.emit(sort_button))
+            hl.addWidget(sort_button)
         hl.addWidget(self._btn_search)
         root.addWidget(hdr)
 
