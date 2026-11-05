@@ -5161,6 +5161,8 @@
     "cvtool.add_tip": { "text": "Places an actor or an area on the canvas with a click. The menu chooses which." },
     "cvtool.add_area": { "text": "Add area" },
     "cvtool.add_area_tip": { "text": "A click on the canvas places a new area: a game zone with a collision shape." },
-    "hints.scene.place_area": { "text": "Places an area on the grid" }
+    "hints.scene.place_area": { "text": "Places an area on the grid" },
+    "areainsp.trigger": { "text": "Trigger" },
+    "areainsp.trigger_tip": { "text": "Makes the area a trigger: the scripts of the actors that touch it receive on_area_enter, on_area_collide and on_area_exit. Without it, the area tests no contact." }
   }
 }

@@ -36,6 +36,7 @@ PARAM_RECT         = "rect"
 # Types de référence renvoyés par les appels et utilisés avec `:`.
 REF_SFX = "sfx"                   # un effet EN TRAIN de jouer : un mm_sfxhand
 REF_COLLISION_SHAPE = "collision_shape"  # une boîte de collision d'un acteur : un rang, 0 = absente
+REF_AREA = "area"                 # une Area de la scène : son rang dans `g_areas` plus un, 0 = absente
 REF_PHYSICS_BODY = "physics_body"    # l'état physique d'un acteur : le même Actor* sous une API dédiée
 REF_UI_ELEMENT = "ui_element"     # un élément d'interface : son index, connu au build
 # Les éléments d'interface héritent de `ui_element`.
@@ -85,6 +86,8 @@ class RefType:
 REF_TYPE_TABLE: dict[str, RefType] = {
     REF_SFX: RefType(c_type="mm_sfxhand", prefix="sfx"),
     REF_COLLISION_SHAPE: RefType(c_type="int", prefix="collision_shape"),
+    REF_AREA: RefType(c_type="int", prefix="area",
+                      hint="An Area is received by the `on_area_*` events: `function on_area_enter(area, my_box)`."),
     REF_PHYSICS_BODY: RefType(
         c_type="Actor*", prefix="body",
         hint="A PhysicsBody is acquired from its actor: `local body = self:physics_body()`."),
@@ -1920,6 +1923,20 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             " is the \"Active\" box of the inspector, which only sets the starting "
             "state.",
     ),
+    # ── Une Area (référence `area`) ───────────────────────────────────
+    # Reçue par les événements `on_area_*` : le récepteur est la VARIABLE `area` (cf. `collision_shape.*`).
+    "area.tag": ApiProp(
+        lua_name="area.tag", c_getter="area_get_tag",
+        ptype=PARAM_INT, self_first=True, read_only=True, domain=DOMAIN_BOX_TAG,
+        doc="The tag of the shape of this Area: the key the collision matrix reads. Read-only; used to "
+            "compare: area.tag == \"door\".",
+    ),
+    "area.active": ApiProp(
+        lua_name="area.active", c_getter="area_get_active",
+        ptype=PARAM_BOOL, self_first=True, read_only=True,
+        doc="Is the Area in play? An inactive Area touches nobody (an `on_area_exit` is sent to the actors it was "
+            "touching). It is the \"Active on start\" box of the inspector, which only sets the starting state.",
+    ),
     # ── Une IMAGE ────────────────────────────────────────────────
     # L'état se pose par son NOM dans le sprite de CETTE image (`IMGST_{image}_{état}`) :
     # deux images de sprites différents citent légitimement des états différents. Le
@@ -2289,6 +2306,42 @@ EVENT_REGISTRY: dict[str, dict] = {
         ],
         "c_sig": "void {prefix}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box)",
     },
+    # Les événements d'Area : reçus par l'acteur qui TOUCHE une Area à déclencheur (TriggerComponent), jamais par l'Area,
+    # qui n'a pas de script. `area` est une référence `area`, `my_box` la boîte de `self` en contact.
+    "on_area_enter": {
+        "icon": "→",
+        "icon_key": "ev_collision_enter",
+        "stub": "function on_area_enter(area, my_box)\n\nend\n",
+        "desc": "First frame of contact with a trigger Area.",
+        "params": [
+            {"name": "area",   "type": "area", "description": "The Area this actor enters"},
+            {"name": "my_box", "type": "int",  "description": "My collision shape involved"},
+        ],
+        "c_sig": "void {prefix}_on_area_enter(Actor* self, Area* area, u8 my_box)",
+    },
+    "on_area_collide": {
+        "icon": "⬡",
+        "icon_key": "ev_collide",
+        "stub": "function on_area_collide(area, my_box)\n\nend\n",
+        "desc": "Called every frame in which this actor touches a trigger Area.",
+        "params": [
+            {"name": "area",   "type": "area", "description": "The Area in contact"},
+            {"name": "my_box", "type": "int",  "description": "My collision shape involved"},
+        ],
+        "c_sig": "void {prefix}_on_area_collide(Actor* self, Area* area, u8 my_box)",
+    },
+    "on_area_exit": {
+        "icon": "←",
+        "icon_key": "ev_collision_exit",
+        "stub": "function on_area_exit(area, my_box)\n\nend\n",
+        "desc": "First frame without contact with a trigger Area. Sent when the Area is deactivated; a destroyed actor "
+                "cancels its contacts silently.",
+        "params": [
+            {"name": "area",   "type": "area", "description": "The Area this actor leaves"},
+            {"name": "my_box", "type": "int",  "description": "My collision shape involved"},
+        ],
+        "c_sig": "void {prefix}_on_area_exit(Actor* self, Area* area, u8 my_box)",
+    },
     "on_interact": {
         "icon": "☞",
         "icon_key": "ev_interact",
@@ -2319,8 +2372,12 @@ EVENT_C_SIGNATURES: dict[str, str] = {k: v["c_sig"] for k, v in EVENT_REGISTRY.i
 # `other`). Le C les passe en tag (`u8`) ; le script les tient comme des références
 # `collision_shape`, `other_box.tag == "Player"`, `my_box:overlaps(other_box)`,, le codegen
 # posant la référence en tête de fonction (`actor_get_box(<propriétaire>, tag)`).
-COLLISION_EVENTS = ("on_collide", "on_collision_enter", "on_collision_exit")
+AREA_EVENTS = ("on_area_enter", "on_area_collide", "on_area_exit")
+# Les événements d'Area reçoivent `my_box` seulement (une Area n'a pas de boîte-acteur) : le paramètre `other_box` n'y
+# figure pas, et `BOX_PARAMS` ne s'applique qu'aux paramètres que le handler déclare.
+COLLISION_EVENTS = ("on_collide", "on_collision_enter", "on_collision_exit", *AREA_EVENTS)
 BOX_PARAMS = (("my_box", "self"), ("other_box", "other"))   # (nom du paramètre, acteur qui la porte)
+AREA_PARAM = "area"   # le paramètre `area` des événements d'Area : une référence REF_AREA
 
 
 # ─── Les modules, dérivés du catalogue ────────────────────────────

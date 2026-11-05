@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from codegen.runtime_codegen.gen_affine import scene_has_affine
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_destroy_table
+from codegen.runtime_codegen.physics.areas import area_globals_lines
 from codegen.runtime_codegen.physics.body import project_has_one_way
 from codegen.runtime_codegen.physics.floor import project_has_floors
 
@@ -19,6 +20,7 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
     # au code et aux petits états runtime.
     L += [
         f"Actor g_actors[{n_actors}] EWRAM_BSS;",
+        *area_globals_lines(p, all_scene_data),
         f"u16 g_actor_floor_store[{n_actors if project_has_floors(p) else 1}] EWRAM_BSS;",
         f"u16 *g_actor_floor={'g_actor_floor_store' if project_has_floors(p) else '0'};",
         # `physics_body:drop_through(n)` : frames restantes pendant lesquelles un corps ignore les faces à sens unique.

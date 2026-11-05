@@ -2783,6 +2783,8 @@
     "cvtool.add_tip": { "text": "Un clic sur le canvas place un acteur ou une area. Le menu choisit lequel." },
     "cvtool.add_area": { "text": "Ajouter une area" },
     "cvtool.add_area_tip": { "text": "Un clic sur le canvas place une nouvelle area : une zone de jeu avec une forme de collision." },
-    "hints.scene.place_area": { "text": "Place une area sur la grille" }
+    "hints.scene.place_area": { "text": "Place une area sur la grille" },
+    "areainsp.trigger": { "text": "Déclencheur" },
+    "areainsp.trigger_tip": { "text": "Fait de l'area un déclencheur : les scripts des acteurs qui la touchent reçoivent on_area_enter, on_area_collide et on_area_exit. Sans lui, l'area ne teste aucun contact." }
   }
 }

@@ -1059,6 +1059,61 @@ static void __attribute__((unused)) contact_pair_run(const ContactPair* c, u16* 
     *prev = cur;
 }
 
+/* ── Areas ────────────────────────────────────────────────────────────────────
+   Une Area n'a qu'une boîte et pas de script : seul l'acteur qui la touche apprend le contact. Le test est celui des
+   acteurs (`box_overlap`), la mémoire d'une frame à l'autre aussi ; le masque compte un bit par RANG de boîte de
+   l'acteur (canonique, comme `actors_overlap_mask`), puisqu'il n'y a qu'une boîte de l'autre côté. `allowed` : les rangs
+   dont le tag rencontre celui de l'Area (la matrice des tags, cuite au build). */
+BS_ATTR_IWRAM
+static u16 area_overlap_mask(const Area* ar, const Actor* a, u16 allowed) {
+    u16 m = 0;
+    if (!ar->active || !ar->box.active) return 0;
+    for (int j=0; j<a->collision.box_count; j++) {
+        int cj=_box_canonical(a,j);
+        if ((allowed & (1u << cj)) && a->collision.boxes[j].active &&
+            box_overlap(ar->x>>8,ar->y>>8,&ar->box, a->x>>8,a->y>>8,&a->collision.boxes[j]))
+            m |= (u16)(1u << cj);
+    }
+    return m;
+}
+
+/* Un couple (Area, acteur de la scène) dont l'acteur réagit : enter, collide, exit, dans cet ordre ; NULL si le script n'y
+   répond pas. Le générateur écrit une table `const` de ces couples et une boucle qui appelle `area_contact_run`. */
+typedef void (*AreaFn)(Actor*, Area*, u8);
+typedef struct { Area* area; u8 actor; u16 allowed; AreaFn on[3]; } AreaContact;
+
+/* Les instances du pool et les acteurs posés passent par le MÊME code : `area_contact_step` est le pas d'un couple, que le
+   pool appelle avec sa mémoire par emplacement et la table posée avec la sienne. Un contact qui naît appelle enter, un qui
+   dure collide, un qui se défait exit — avec le tag de la boîte de l'acteur. Un acteur détruit n'apprend rien (terminal) ;
+   désactivé, il l'apprend à sa réactivation seulement : le seul `exit` utile est celui d'un acteur encore en jeu. */
+BS_ATTR_IWRAM
+static void __attribute__((unused)) area_contact_step(Area* ar, Actor* a, u16 allowed, const AreaFn* on, u16* prev) {
+    u16 cur = a->active ? area_overlap_mask(ar, a, allowed) : 0;
+    u16 prv = *prev;
+    if (cur | prv)
+        for (u8 b = 0; b < MAX_BOXES; b++) {
+            u16 m = (u16)(1u << b);
+            u8 now = (cur & m) != 0, was = (prv & m) != 0;
+            if (!now && !was) continue;
+            u8 event = now ? (was ? 1 : 0) : 2;           /* enter : naît ; collide : dure ; exit : se défait */
+            if (event == 2 && !(a->active && a->alive)) continue;
+            if (on[event]) on[event](a, ar, a->collision.boxes[b].tag);
+        }
+    *prev = cur;
+}
+
+static void __attribute__((unused)) area_contact_run(const AreaContact* c, u16* prev) {
+    area_contact_step(c->area, &g_actors[c->actor], c->allowed, c->on, prev);
+}
+
+/* La référence `area` d'un script : le rang de l'Area dans `g_areas`, plus un (0 = pas d'Area), comme la référence d'une
+   boîte. `g_areas` existe dans tout projet (une entrée au moins), l'extern est donc toujours satisfait. */
+extern Area g_areas[];
+static inline int area_ref(const Area* ar) { return (int)(ar - g_areas) + 1; }
+static inline Area* _area_of(int h) { return h ? &g_areas[h - 1] : 0; }
+static inline int area_get_tag(int h)    { const Area* a = _area_of(h); return a ? a->box.tag : 0; }
+static inline int area_get_active(int h) { const Area* a = _area_of(h); return a ? a->active : 0; }
+
 /* Rétrocompatibilité — teste sans récupérer les tags */
 static inline int actors_overlap(const Actor*a, const Actor*b) {
     u8 _a=0,_b=0; return actors_overlap_boxes(a,b,&_a,&_b);

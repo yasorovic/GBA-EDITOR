@@ -59,7 +59,7 @@ from .api import (
     DOMAIN_TEXT, DOMAIN_FONT, DOMAIN_IMAGE_STATE,
     DOMAIN_PALETTE, DOMAIN_UI_ELEMENT, ui_list_constant,
     ref_member, ref_upcast, ref_constant, REF_ACTOR, REF_UI_ELEMENT, REF_TEXT_BOX,
-    REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS,
+    REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS, REF_AREA, AREA_EVENTS, AREA_PARAM,
     DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL, DOMAIN_SEQUENCE,
     anim_constant, sprite_id_constant, sfx_constant, music_constant, key_constant, actor_name_constant, scene_constant,
     text_constant, font_constant, region_constant, anon_text_key, palette_constant,
@@ -1504,9 +1504,13 @@ class CodeGen:
             else:
                 sig = sig_tpl.format(prefix=self.ctx.actor_sym)
         box_params = self.ctx.has_self and fn.name in COLLISION_EVENTS
+        # `area` d'un événement d'Area : le C passe un `Area*`, le script tient une référence (le rang plus un).
+        area_param = self.ctx.has_self and fn.name in AREA_EVENTS and AREA_PARAM in fn.params
         if box_params:
             # Les appelants passent des tags (`u8`) ; le script reçoit des RÉFÉRENCES de boîte.
             sig = sig.replace("u8 my_box", "u8 my_box_tag").replace("u8 other_box", "u8 other_box_tag")
+        if area_param:
+            sig = sig.replace("Area* area", "Area* area_ptr")
         self._w(sig + " {")
         self._indent += 1
         if box_params:
@@ -1514,11 +1518,16 @@ class CodeGen:
                 if name in fn.params:
                     self._w(f"int {name} __attribute__((unused)) = actor_get_box({owner}, {name}_tag);")
                     self._ref_types[name] = REF_COLLISION_SHAPE
+        if area_param:
+            self._w(f"int {AREA_PARAM} __attribute__((unused)) = area_ref(area_ptr);")
+            self._ref_types[AREA_PARAM] = REF_AREA
         mark = self._open_state_scope()
         self._emit_block(fn.body)
         if fn.name == "on_update":
             self._emit_sequence_pump()
         self._close_state_scope(mark)
+        if area_param:
+            self._ref_types.pop(AREA_PARAM, None)    # un `local area` d'une autre fonction n'en hérite pas
         self._indent -= 1
         self._w("}")
         self._w("")

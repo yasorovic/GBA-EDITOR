@@ -289,6 +289,34 @@ def test_l_arbre_liste_les_areas_et_refuse_un_nom_pris(qapp, editor):
     panel.deleteLater()
 
 
+def test_la_case_declencheur_ajoute_desactive_et_reactive_le_composant(qapp, editor):
+    from core.models.components import TriggerComponent
+    from ui.scene_manager.inspectors.area_inspector import AreaInspector
+    project = editor._project
+    area = project.active_scene.areas[0]
+    insp = AreaInspector()
+    insp.load(area, project, project.active_scene)
+    assert insp._chk_trigger.isChecked() and area.is_trigger()
+    insp._chk_trigger.setChecked(False)                    # décoché : désactivé, jamais retiré
+    triggers = [c for c in area.components if isinstance(c, TriggerComponent)]
+    assert len(triggers) == 1 and not triggers[0].active and not area.is_trigger()
+    get_history().undo()                                   # annuler rend le déclencheur
+    assert area.is_trigger()
+    insp._chk_trigger.setChecked(False)
+    get_history().push_executed(type("Coupure", (), {"label": "coupure", "execute": lambda s: None,
+                                                     "undo": lambda s: None, "merge": lambda s, n: False})())
+    insp._chk_trigger.setChecked(True)                     # recoché : le MÊME composant revient
+    assert [c for c in area.components if isinstance(c, TriggerComponent)] == triggers and area.is_trigger()
+    area.components = [c for c in area.components if not isinstance(c, TriggerComponent)]
+    insp.load(area, project, project.active_scene)
+    assert not insp._chk_trigger.isChecked()
+    insp._chk_trigger.setChecked(True)                     # sans composant : il est ajouté
+    assert area.is_trigger() and len([c for c in area.components if isinstance(c, TriggerComponent)]) == 1
+    get_history().undo()
+    assert not area.is_trigger() and not any(isinstance(c, TriggerComponent) for c in area.components)
+    insp.deleteLater()
+
+
 def test_l_inspecteur_masque_ce_qui_n_a_pas_de_sens_pour_une_area_et_ses_edits_sont_annulables(qapp, editor):
     from ui.scene_manager.inspectors.area_inspector import AreaInspector
     project = editor._project

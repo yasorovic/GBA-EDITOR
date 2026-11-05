@@ -128,6 +128,50 @@ def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has
     ]
 
 
+def area_lines(pi: list[dict], size: int, areas: list, area_mask, has_event, area_events) -> list[str]:
+    """Les contacts des instances du pool partagé avec les Areas à déclencheur de la scène.
+
+    Même code que pour les acteurs posés (`area_contact_step`), avec la mémoire rangée par emplacement : elle appartient à
+    l'occupant et repart de zéro dès que l'emplacement change de main (`Actor.gen`). `areas` : (rang dans `g_areas`,
+    Area) ; `area_mask(prefab, area)` : les rangs de boîtes du modèle que la matrice des tags laisse toucher cette Area."""
+    cases = []
+    for m in shared_models(pi):
+        s = m["sym"]
+        handlers = [f"{s}_{ev}" if has_event(s, ev) else "0" for ev in area_events]
+        if all(h == "0" for h in handlers):
+            continue
+        body = []
+        for ci, (ai, area) in enumerate(areas):
+            allowed = area_mask(m["prefab"], area)
+            if allowed:
+                body.append(f"                debug_physics_area_test(); "
+                            f"area_contact_step(&g_areas[{ai}],_a,{allowed},_on,&_parea[_sl][{ci}]);")
+        if body:
+            labels = " ".join(f"case {m['model_id'] + k}:" for k in range(m["group"]))
+            cases += [f"            {labels} {{",
+                      f"                static const AreaFn _on[3]={{{','.join(handlers)}}};",
+                      *body, "            } break;"]
+    if not cases:
+        return []
+    return [
+        "    {",
+        f"        static u16 _parea[{size}][{len(areas)}] EWRAM_BSS;   /* recouvrement de la frame précédente */",
+        f"        static u16 _parea_gen[{size}] EWRAM_BSS;             /* à quel occupant il appartient */",
+        "        POOL_EACH(_pk){",
+        "            Actor* _a=&g_actors[_pk];",
+        "            if(!_a->active) continue;",
+        "            int _sl=_pk-g_spool_start;",
+        f"            if(_parea_gen[_sl]!=_a->gen){{ _parea_gen[_sl]=_a->gen; "
+        f"for(int _c=0;_c<{len(areas)};_c++) _parea[_sl][_c]=0; }}",
+        "            switch(_a->model){",
+        *cases,
+        "            default: break;",
+        "            }",
+        "        }",
+        "    }",
+    ]
+
+
 def sfx_lines(model: dict, sfx_sym, sfx_vol) -> list[str]:
     """Le Sfx d'un modèle du pool partagé, joué pour chacune de ses instances actives."""
     return [f"        POOL_EACH(_pi)",

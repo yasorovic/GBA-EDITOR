@@ -50,7 +50,8 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN
                   DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE, HARDWARE_ENUMS,
                   API_MODULES, module_members, REF_TYPES, REF_TYPE_TABLE,
                   ref_member, ref_lineage, REF_ACTOR, STATELESS_MODULES, module_call_form, LAYER_NUMBERS,
-                  modernize_message, REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY)
+                  modernize_message, REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY,
+                  REF_AREA, AREA_EVENTS, AREA_PARAM)
 
 from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
@@ -1438,6 +1439,10 @@ class Checker:
                       if fn.name in COLLISION_EVENTS else [])
         for name in box_params:
             self._ref_types[name] = REF_COLLISION_SHAPE
+        # Le paramètre `area` d'un événement d'Area est une référence d'Area.
+        if fn.name in AREA_EVENTS and AREA_PARAM in fn.params:
+            box_params.append(AREA_PARAM)
+            self._ref_types[AREA_PARAM] = REF_AREA
         self._check_block(fn.body, seq_top=seq is not None)
         for name in box_params:
             self._ref_types.pop(name, None)

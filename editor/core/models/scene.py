@@ -8,6 +8,7 @@ from core.models.palette import OWN_PAL_BANK
 from core.models.components import (
     ComponentOwnerMixin, components_to_list, components_from_list, ScriptComponent,
     SpriteComponent, affine_sprite_component, CollisionShapeComponent, COLLISION_RESPONSE_SENSOR,
+    TriggerComponent,
 )
 from core.models.background import BackgroundLayer, decode_tile_palette_overrides
 from core.models.camera import Camera
@@ -569,9 +570,11 @@ AREA_DEFAULT_SIZE = 32
 
 
 def default_area_components() -> list:
-    """Ce qu'une Area neuve porte : une forme de collision, capteur, de 32×32 pixels."""
+    """Ce qu'une Area neuve porte : une forme de collision capteur de 32×32 pixels, et le déclencheur qui prévient les
+    scripts des acteurs qui la touchent."""
     return [CollisionShapeComponent(id="collision", solid=False, response=COLLISION_RESPONSE_SENSOR,
-                                    tag=AREA_DEFAULT_TAG, w=AREA_DEFAULT_SIZE, h=AREA_DEFAULT_SIZE)]
+                                    tag=AREA_DEFAULT_TAG, w=AREA_DEFAULT_SIZE, h=AREA_DEFAULT_SIZE),
+            TriggerComponent()]
 
 
 @dataclass
@@ -594,6 +597,14 @@ class Area(SceneMember, ComponentOwnerMixin):
 
     def __post_init__(self):
         self.conform_shapes()
+
+    def shape(self) -> Optional[CollisionShapeComponent]:
+        """La forme de l'Area : sa première forme ACTIVE, ou None. L'unique lecture, celle du canvas et du build."""
+        return next((c for c in self.components if isinstance(c, CollisionShapeComponent) and c.active), None)
+
+    def is_trigger(self) -> bool:
+        """Cette Area prévient-elle les scripts des acteurs qui la touchent ? Oui avec un déclencheur actif."""
+        return any(isinstance(c, TriggerComponent) and c.active for c in self.components)
 
     def conform_shapes(self) -> None:
         """Les formes d'une Area sont des capteurs que la carte n'arrête pas : `solid`, `response` et `one_way`

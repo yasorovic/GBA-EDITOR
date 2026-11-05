@@ -20,7 +20,9 @@ from codegen.runtime_codegen.gen_sprite import (
     anim_tick_variants, anim_variants, appearances, oam_write_lines, shown,
 )
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
+from codegen.runtime_codegen.physics.areas import area_mask, area_pair_lines, trigger_areas
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
+from scripting.api import AREA_EVENTS
 from codegen.runtime_codegen.physics.body import (
     physics_body_mode, physics_collider_mask, project_has_one_way, project_sets_gravity, uses_character_solver,
 )
@@ -233,6 +235,16 @@ def gen_scene_tick(
             L += [f"        {{{i},{j},{allowed},{a},{b}}}," for i, j, allowed, a, b in rows]
             L += ["    };",
                   f"    for(u16 _k=0;_k<{len(rows)};_k++) contact_pair_run(&_col_pairs[_k],&_col_prev[_k]);"]
+
+    # Areas à déclencheur : les acteurs posés (table de couples) puis ceux du pool (boucle sur les emplacements), le même
+    # `area_contact_step` des deux côtés.
+    _areas = trigger_areas(scene)
+    if _areas:
+        L += area_pair_lines(p, scene, scene_actors, actor_offset, lua_idx, _def, _dsym, _areas)
+        if _sh:
+            L += shared_pool_gen.area_lines(
+                pi, _sh["spool"]["end"] - _sh["spool"]["start"], _areas,
+                lambda pf, area: area_mask(area, pf, p.settings), _def, AREA_EVENTS)
 
     # Déclencheurs SoundFx par nom d'input (2026-09-27) : les events de script
     # on_button_* ont disparu (un script écrit `if input:pressed(nom) then`

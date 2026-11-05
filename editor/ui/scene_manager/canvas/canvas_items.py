@@ -1038,10 +1038,8 @@ class AreaItem(QGraphicsItem):
             self._syncing = False
 
     def _shape(self):
-        """La forme que l'item dessine : la première forme active de l'Area, ou None."""
-        from core.models.components import CollisionShapeComponent
-        return next((c for c in self.area.components
-                     if isinstance(c, CollisionShapeComponent) and c.active), None)
+        """La forme que l'item dessine : celle que le build émet (`Area.shape`), ou None."""
+        return self.area.shape()
 
     def shape_rect(self) -> QRectF:
         """La boîte de la première forme active, en pixels (références de variables résolues à leur défaut)."""

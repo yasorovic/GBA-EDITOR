@@ -18,9 +18,11 @@ def _project(tmp_path, *areas):
     return p, scene
 
 
-def test_une_area_neuve_porte_une_forme_capteur_de_32_pixels():
+def test_une_area_neuve_porte_une_forme_capteur_de_32_pixels_et_un_declencheur():
+    from core.models.components import TriggerComponent
     area = Area(name="Door")
-    (shape,) = area.components
+    shape, trigger = area.components
+    assert isinstance(trigger, TriggerComponent) and trigger.active
     assert isinstance(shape, CollisionShapeComponent)
     assert (shape.w, shape.h, shape.tag) == (32, 32, AREA_DEFAULT_TAG)
     assert not shape.solid and shape.response == "sensor"
@@ -50,7 +52,7 @@ def test_une_scene_sans_area_n_ecrit_pas_la_cle(tmp_path):
 def test_lecture_tolerante_des_champs_absents():
     area = Area.from_dict({"name": "Bare"})
     assert (area.x, area.y, area.active) == (112, 72, True)
-    assert len(area.components) == 1 and area.components[0].w == 32
+    assert len(area.components) == 2 and area.components[0].w == 32 and area.is_trigger()
     # Une liste vide écrite par l'auteur est respectée (le validateur la signale).
     assert Area.from_dict({"name": "Empty", "components": []}).components == []
 

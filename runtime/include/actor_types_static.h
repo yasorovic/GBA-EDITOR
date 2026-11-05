@@ -22,6 +22,15 @@ typedef struct CollisionShape {
                      resolve_actor_tiles ; reste 0 pour une boîte non solide, que la carte ignore */
 } CollisionShape;
 
+/* Une Area : une zone de jeu posée dans la scène, sans sprite, sans OAM, sans script et hors du pool d'acteurs. Elle porte une
+   boîte (la forme de sa CollisionShapeComponent) ; `x`/`y` sont en Q8 comme ceux d'un acteur, pour que la même lecture
+   (`>>8`) serve les deux. `g_areas[]` est rempli à l'entrée de chaque scène par le build. */
+typedef struct Area {
+    int x, y;            /* position monde, Q8 */
+    CollisionShape box;  /* la forme : offset, taille, tag */
+    u8  active;          /* 0 = l'Area ne touche plus personne (un `exit` part au partenaire encore actif) */
+} Area;
+
 /* Vec2/Vec3/Rect — les valeurs COMPOSÉES du sous-ensemble Lua (vec2(x,y),
    vec3(x,y,z), rect(x,y,w,h)). Des entiers, rien d'autre : pas de virgule
    flottante sur GBA. + et - composante à composante et * par un entier ne

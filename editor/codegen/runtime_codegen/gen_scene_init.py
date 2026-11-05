@@ -16,6 +16,7 @@ from codegen.runtime_codegen.gen_camera import scene_camera_index
 from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
 from codegen.runtime_codegen.gen_pool import dispatch_sym, placed_parent_table
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
+from codegen.runtime_codegen.physics.areas import area_init_lines
 from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
 from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scene_has_cmap, scene_world_size
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
@@ -150,6 +151,7 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     # `actor:get(i)`/`actor:count()`. Les slots [0, placed) tiennent exactement ces
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.
     L.append(f"    g_scene_placed = {len(scene_actors)};")
+    L += area_init_lines(p, scene)
     # La hiérarchie des acteurs posés, lue par `a.parent` / `a.root` (runtime_api_inline.h).
     _ppar = placed_parent_table(scene_actors, actor_offset)
     if _ppar:

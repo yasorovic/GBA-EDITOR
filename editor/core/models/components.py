@@ -363,6 +363,20 @@ def interactive_box_index(boxes: list, comp) -> int:
 
 
 @dataclass
+class TriggerComponent:
+    """Fait d'une Area un DÉCLENCHEUR : ses contacts avec les acteurs préviennent leurs scripts, qui reçoivent
+    `on_area_enter(area, my_box)`, `on_area_collide(area, my_box)` et `on_area_exit(area, my_box)` (`self` est
+    l'acteur qui touche l'Area, `my_box` sa boîte en contact).
+
+    Une Area sans ce composant ne teste aucun contact : elle ne coûte rien par frame, ce qui laisse la place aux
+    effets qui n'ont pas besoin d'événements. Quels acteurs la touchent se décide par la matrice des tags du projet
+    (le tag de la forme de l'Area contre ceux de leurs boîtes), comme entre deux acteurs. `active` désactive le
+    déclencheur sans le retirer."""
+    id: str = "trigger"
+    active: bool = True
+
+
+@dataclass
 class ScriptComponent:
     id: str = "script"
     active: bool = True
@@ -379,13 +393,14 @@ COMPONENT_REGISTRY: dict = {
     "sprite":        SpriteComponent,
     "sound_fx":      SoundFxComponent,
     "interactive":   InteractiveComponent,
+    "trigger":       TriggerComponent,
     "script":        ScriptComponent,
 }
 
 
 # Un seul composant de ces types par acteur : le script et le moteur les adressent par leur
 # type (`self:physics_body()`), jamais par un id. L'inspecteur n'en montre donc pas.
-SINGLETON_COMPONENTS = frozenset({"physics_body", "interactive", "script"})
+SINGLETON_COMPONENTS = frozenset({"physics_body", "interactive", "trigger", "script"})
 
 
 def component_type_name(comp) -> str:

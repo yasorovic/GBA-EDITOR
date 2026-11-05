@@ -11,14 +11,15 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QCheckBox, QVBoxLayout, QWidget
 
 from core.command_dispatcher import get_dispatcher
-from core.history import SetFieldCmd, get_history
-from core.models.components import CollisionShapeComponent
+from core.history import AddListItemCmd, SetFieldCmd, get_history
+from core.models.components import CollisionShapeComponent, TriggerComponent
 from core.models.scene import Area, Scene
 from core.project import Project
 from ui.common.deferred_writes import schedule_save
 from ui.common.labels import label
 from ui.common.responsive import InspectorScrollArea
 from ui.common.theme import C, T
+from ui.common.tooltip import tooltip
 from ui.common.widgets import CollapsibleCard, NotesEdit, W
 from .component_editors.collision import CollisionEditor
 
@@ -64,6 +65,13 @@ class AreaInspector(QWidget):
         self._chk_active.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
         self._chk_active.toggled.connect(lambda v: self._set_area("active", bool(v)))
         area_card.body_layout.addWidget(self._chk_active)
+        # Le déclencheur : sans lui, l'Area ne prévient aucun script (cf. TriggerComponent).
+        self._chk_trigger = QCheckBox(label('areainsp.trigger'))
+        self._chk_trigger.setFont(QFont(T.UI, T.SM))
+        self._chk_trigger.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
+        self._chk_trigger.setToolTip(tooltip(title=label('areainsp.trigger'), body=label('areainsp.trigger_tip')))
+        self._chk_trigger.toggled.connect(self._set_trigger)
+        area_card.body_layout.addWidget(self._chk_trigger)
         self._spin_x = W.spinbox(0, -_COORD_RANGE, _COORD_RANGE)
         self._spin_y = W.spinbox(0, -_COORD_RANGE, _COORD_RANGE)
         self._spin_x.valueChanged.connect(lambda v: self._set_area("x", int(v)))
@@ -85,6 +93,7 @@ class AreaInspector(QWidget):
         self._blocking = True
         try:
             self._chk_active.setChecked(area.active)
+            self._chk_trigger.setChecked(area.is_trigger())
             self._spin_x.setValue(area.x)
             self._spin_y.setValue(area.y)
             self._notes_edit.set_text_silent(area.notes)
@@ -123,6 +132,7 @@ class AreaInspector(QWidget):
         self._blocking = True
         try:
             self._chk_active.setChecked(area.active)
+            self._chk_trigger.setChecked(area.is_trigger())
             self._spin_x.setValue(area.x)
             self._spin_y.setValue(area.y)
             shape = self._shape()
@@ -150,6 +160,20 @@ class AreaInspector(QWidget):
         get_history().push(SetFieldCmd(
             area, field_name, getattr(area, field_name), value,
             label=f"{area.name}.{field_name}", persist_fn=self._persist))
+
+    def _set_trigger(self, on: bool) -> None:
+        """Coche = l'Area a un déclencheur actif : le composant est ajouté, ou réactivé s'il existe déjà. Décoche = il est
+        désactivé, jamais retiré (un seul déclencheur par Area, et la réactivation garde son identifiant)."""
+        area = self._actor
+        if self._blocking or area is None or area.is_trigger() == on:
+            return
+        existing = next((c for c in area.components if isinstance(c, TriggerComponent)), None)
+        if existing is None:
+            get_history().push(AddListItemCmd(area.components, TriggerComponent(), persist_fn=self._persist,
+                                              label=f"{area.name}.trigger"))
+        else:
+            get_history().push(SetFieldCmd(existing, "active", not on, on, label=f"{area.name}.trigger.active",
+                                           persist_fn=self._persist))
 
     def _set_comp(self, comp, field_name: str, value) -> None:
         """Appelé par `CollisionEditor.set_field`. Les formes d'une Area restent des capteurs (`conform_shapes`)."""

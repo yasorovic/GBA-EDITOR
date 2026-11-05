@@ -425,6 +425,7 @@ def _check_each_scene(ctx: ValidationContext):
             ctx.warn(None, "The scene has no actor, script or interface: it will do nothing.")
         _check_actors(ctx)
         _check_areas(ctx, scene)
+        _check_area_handlers(ctx, scene)
         _check_backgrounds(ctx)
         _check_collision_map(ctx)
         _check_frame_events(ctx)
@@ -493,6 +494,22 @@ def _check_areas(ctx: ValidationContext, scene):
         if not any(c.active for c in area.components if isinstance(c, CollisionShapeComponent)):
             ctx.warn(area, "The Area has no active collision shape: it covers nothing.")
         _check_components(ctx, area, area.components)
+
+
+def _check_area_handlers(ctx: ValidationContext, scene):
+    """Un acteur posé dont le script répond à `on_area_*` n'a rien à entendre si la scène n'a aucune Area à déclencheur : le
+    handler ne sera jamais appelé. (Les scripts des modèles du pool ne sont pas lus ici : leur scène n'est pas connue.)"""
+    from scripting.api import AREA_EVENTS
+    if any(a.is_trigger() and a.shape() is not None for a in scene.areas):
+        return
+    for actor in scene.actors:
+        comp = actor.get_component("script")
+        path = ctx.project.asset_abs(comp.script) if comp and comp.active and comp.script else None
+        if path and path.suffix.lower() == ".lua":
+            handled = [ev for ev in AREA_EVENTS if ev in ctx.script_functions(path)]
+            if handled:
+                ctx.warn(actor, f"{', '.join(handled)} will never be called: the scene has no Area with an active "
+                                "Trigger. Add a Trigger to an Area, or remove the handler.")
 
 
 def _check_components(ctx: ValidationContext, owner, components):
