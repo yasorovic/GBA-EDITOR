@@ -786,6 +786,29 @@ class RenameActorCmd(Command):
             self._refresh()
 
 
+class RenameAreaCmd(Command):
+    """Renommage d'une Area, scripts compris (`Project.rename_area` réécrit les `area:get("…")`) : défaire renomme dans l'autre
+    sens, avec les mêmes réécritures. `refresh_fn()` remet l'écran à jour après chaque sens."""
+
+    def __init__(self, project, scene, area, new_name: str, refresh_fn=None):
+        self._project = project
+        self._scene = scene            # fixée maintenant : défaire depuis une autre scène doit sauvegarder CELLE-CI
+        self._area = area
+        self._old, self._new = area.name, new_name.strip()
+        self.label = f"Renommer {self._old} en {self._new}"
+        self._refresh = refresh_fn
+
+    def execute(self):
+        self._project.rename_area(self._scene, self._area, self._new)
+        if self._refresh:
+            self._refresh()
+
+    def undo(self):
+        self._project.rename_area(self._scene, self._area, self._old)
+        if self._refresh:
+            self._refresh()
+
+
 class RenameCollisionTagCmd(Command):
     """Renomme un tag de collision PARTOUT en une seule étape d'annulation :
     chaque CollisionShapeComponent qui le portait (tag explicite OU vide,

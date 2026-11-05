@@ -60,8 +60,8 @@ def test_un_parametre_que_le_moteur_ne_passe_pas_est_refuse():
 
 
 def test_les_proprietes_de_l_area_sont_en_lecture_seule_et_inconnues_refusees():
-    assert RUNTIME_PROPS["area.tag"].read_only and RUNTIME_PROPS["area.active"].read_only
-    errs, _code = _lua("function on_area_enter(area, my_box)\n  area.active = false\nend\n")
+    assert RUNTIME_PROPS["area.tag"].read_only and RUNTIME_PROPS["area.name"].read_only
+    errs, _code = _lua("function on_area_enter(area, my_box)\n  area.tag = \"door\"\nend\n")
     assert errs, "écrire une propriété en lecture seule doit être refusé"
     errs, _code = _lua("function on_area_enter(area, my_box)\n  local n = area.nope\nend\n")
     assert errs, "une propriété inconnue doit être refusée"

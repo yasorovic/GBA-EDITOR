@@ -21,7 +21,7 @@ from scripting.api import (
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
     DOMAIN_MUSIC_SECTION,
     DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS, DOMAIN_BOX_TAG, DOMAIN_ANIM,
-    DOMAIN_ACTOR_NAME,
+    DOMAIN_ACTOR_NAME, DOMAIN_AREA_NAME,
 )
 from core.models.settings import BUTTON_NAMES
 from core.script_owners import actors_and_prefabs_of_script
@@ -158,5 +158,9 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
         from codegen.oam_alloc import scene_has_model
         pooled = [pf.name for pf in project.prefabs if scene_has_model(project, sc, pf)]
     out[DOMAIN_ACTOR_NAME] = out.get(DOMAIN_ACTOR, []) + pooled
+
+    # Areas : celles de la scène active, comme les acteurs (leur nom est local à la scène).
+    if sc is not None:
+        out[DOMAIN_AREA_NAME] = _names(getattr(sc, "areas", []))
 
     return {dom: names for dom, names in out.items() if names}

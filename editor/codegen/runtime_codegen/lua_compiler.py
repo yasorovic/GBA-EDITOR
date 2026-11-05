@@ -484,6 +484,7 @@ def transpile_all(
         image_states[_im.name] = [st.name for st in (getattr(_spr, "states", []) or [])]
     all_syms    = [c_sym(a.name) for a, _ in scene_actors]
     _actor_names = [a.name for a, _ in scene_actors]
+    _area_names = [a.name for a in scene.areas]   # `area:get("…")` et `area.name` : les Areas de CETTE scène
     _scene_names = scene_names or []
     _camera_names = sorted(p.camera_names()) if hasattr(p, "camera_names") else []
     _box_tag_names = list(p.collision_tags()) if hasattr(p, "collision_tags") else []
@@ -626,6 +627,7 @@ def transpile_all(
             jingle_box_state_names  = _jgl_names,
             music_box_trigger_names = _snd_triggers,
             actor_names  = _actor_names,
+            area_names   = _area_names,
             prefab_names = _prefab_names,
             pooled_prefab_names = _pooled_prefab_names,
             global_names = list(global_names) if global_names else None,
@@ -701,6 +703,7 @@ def transpile_all(
                 jingle_box_state_names  = _jgl_names,
                 music_box_trigger_names = _snd_triggers,
                 actor_names  = _actor_names,
+                area_names   = _area_names,
             prefab_names = _prefab_names,
             pooled_prefab_names = _pooled_prefab_names,
                 global_names = list(global_names) if global_names else None,
@@ -865,6 +868,7 @@ def transpile_all(
             jingle_box_state_names  = _jgl_names,
             music_box_trigger_names = _snd_triggers,
             actor_names  = _actor_names,
+            area_names   = _area_names,
             prefab_names = _prefab_names,
             pooled_prefab_names = _pooled_prefab_names,
             global_names = list(global_names) if global_names else None,

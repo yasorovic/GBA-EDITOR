@@ -8,6 +8,10 @@
       "name": "boîte de collision",
       "in_rom": "Un entier (`int`) : le rang de la boîte, 0 si elle est absente."
     },
+    "area": {
+      "name": "zone de jeu",
+      "in_rom": "Un entier (`int`) : le rang de l'Area dans la scène plus un, 0 si elle est absente."
+    },
     "background_layer": {
       "name": "fond tuilé",
       "in_rom": "Un entier (`int`) : le numéro matériel du fond (son `bg_slot`)."
@@ -63,6 +67,9 @@
     },
     "CollisionShape": {
       "ref": "collision_shape"
+    },
+    "Area": {
+      "ref": "area"
     },
     "Layer": {
       "ref": "background_layer"

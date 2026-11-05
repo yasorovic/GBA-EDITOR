@@ -62,7 +62,7 @@ _FALLBACK_GROUP: dict[str, str] = {
 # labels.json, français dans labels_fr.json) : la sidebar traduit, cette couche
 # ne code pas de texte visible en dur.
 SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("scrsb.sec.actor",   ("Actor", "Instance", "Transform", "Movement", "Physics", "CollisionShape", "Collision", "Sprite", "Animation", "Juiciness", "Input")),
+    ("scrsb.sec.actor",   ("Actor", "Instance", "Transform", "Movement", "Physics", "CollisionShape", "Collision", "Area", "Sprite", "Animation", "Juiciness", "Input")),
     ("scrsb.sec.scene",   ("Scene", "Layer", "Tilemap", "Palette", "Window", "Blend")),
     ("scrsb.sec.camera",  ("Camera",)),
     ("scrsb.sec.sound",   ("Audio",)),
@@ -171,6 +171,7 @@ _PROP_HOME: dict[str, str] = {
     "collision_shape.offset": "CollisionShape",
     "collision_shape.size":   "CollisionShape",
     "collision_shape.bounds": "CollisionShape",
+    "area.tag": "Area", "area.active": "Area", "area.name": "Area", "area.position": "Area", "area.bounds": "Area",
     "actor.screen_space": "Transform",
     "actor.affine":    "Sprite",
     "camera.position": "Camera",
@@ -224,6 +225,7 @@ _FUNC_HOME: dict[str, str] = {
     # vit avec son équivalent direct `collision:tile_at`.
     "collision_shape:get_collision_tile": "Collision",
     "collision.tile_at": "Collision",
+    "area.get": "Area", "area:activate": "Area", "area:deactivate": "Area", "area:overlaps": "Area",
 }
 
 # Dans « Actor » et « Instance », l'ordre du dictionnaire technique ne raconte pas

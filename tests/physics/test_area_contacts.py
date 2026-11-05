@@ -81,6 +81,29 @@ def test_c_le_masque_compte_un_bit_par_rang_de_boite_filtre_par_les_tags_permis(
     assert sortie_sonde["area_masque_area_inactive"] == [0]
 
 
+def test_c_la_reference_nommee_est_la_constante_du_build(sortie_sonde):
+    assert sortie_sonde["area_acces"] == [1, 1, 1]          # `area:get` et `area.name` rendent la référence elle-même
+
+
+def test_c_position_et_bornes_suivent_la_forme(sortie_sonde):
+    assert sortie_sonde["area_position"] == [100, 50]
+    assert sortie_sonde["area_position_ecrite"] == [7, 9]
+    assert sortie_sonde["area_bounds"] == [9, 12, 16, 12]   # position (7, 9) + décalage (2, 3), taille 16×12
+
+
+def test_c_overlaps_est_geometrique_et_une_area_inactive_ne_touche_personne(sortie_sonde):
+    assert sortie_sonde["area_recouvre"] == [1]
+    assert sortie_sonde["area_recouvre_loin"] == [0]
+    assert sortie_sonde["area_inactive"] == [0, 0]
+    assert sortie_sonde["area_reactive"] == [1, 1]           # toute valeur non nulle réactive
+    assert sortie_sonde["area_acteur_sans_boite_active"] == [0]
+
+
+def test_c_une_reference_absente_se_lit_vide_et_s_ecrit_sans_effet(sortie_sonde):
+    assert sortie_sonde["area_absente"] == [0, 0, 0, 0, 0, 0, 0]
+    assert sortie_sonde["area_sans_forme"] == [0, 0]
+
+
 # ── Le C émis ────────────────────────────────────────────────────────────
 
 def _settings():

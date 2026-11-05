@@ -4,6 +4,7 @@
   "Physics": "La vitesse d'un acteur, et comment l'appliquer à sa position.",
   "CollisionShape": "Les boîtes de collision d'un acteur : les retrouver, les tester, les activer.",
   "Collision": "Lire la carte de collision du décor, tuile par tuile.",
+  "Area": "Les zones de jeu de la scène : les retrouver par leur nom, les activer, les déplacer, les tester.",
   "Sprite": "L'apparence d'un acteur : sprite actif, rotation, échelle et décalage.",
   "Animation": "Lancer une animation et lire son état.",
   "Juiciness": "Des effets de ressenti sur le sprite : écrasement, étirement, rebond, secousse.",

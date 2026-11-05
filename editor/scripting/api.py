@@ -181,6 +181,8 @@ DOMAIN_INPUT_SEQUENCE = "input_sequence"
 DOMAIN_ACTOR_NAME = "actor_name"
 # Étiquette libre d'une boîte de collision.
 DOMAIN_BOX_TAG = "box_tag"
+# Nom d'une Area de la scène : `area:get("Door")` et `area.name == "Door"` (AREA_<SCÈNE>_<NOM>, la référence elle-même).
+DOMAIN_AREA_NAME = "area_name"
 DOMAIN_SCENE  = "scene"   # SCENE_IDX_{name}
 DOMAIN_CAMERA = "camera"  # CAM_{name}   : caméra du projet
 # Chaque boîte sonore possède son propre espace de noms d'états.
@@ -654,6 +656,32 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc="The collision shape of this actor carrying this tag. Returns nil if the "
             "actor has none: `if hb then` tests it. Ex: local hb = "
             "self:collision_shape(\"hitbox\")",
+    ),
+    # ── Les Areas : un module `area` pour l'acquisition, une référence `area` pour ses états et ses actions. Une Area
+    # n'a ni sprite, ni vélocité, ni script, ni `destroy` : elle est posée dans la scène et n'en bouge que par sa position.
+    "area.get": ApiFunc(
+        lua_name="area.get", c_func="area_by_name",
+        params=[Param("name", PARAM_STR, DOMAIN_AREA_NAME, doc="Name of an Area of the scene")], ret=REF_AREA,
+        doc="An Area of the scene, by NAME (literal, resolved at compile time): local door = area:get(\"Door\"). "
+            "Areas are named in the scene, and the name is local to the scene. The reference is valid for the "
+            "whole time the scene is running.",
+    ),
+    f"{REF_AREA}:activate": ApiFunc(
+        lua_name="area:activate", c_func="area_set_active", params=[], self_first=True, fixed_args=(1,),
+        doc="Puts the Area in play: it touches the actors again (an `on_area_enter` is sent to those it overlaps). "
+            "Ex: door:activate()",
+    ),
+    f"{REF_AREA}:deactivate": ApiFunc(
+        lua_name="area:deactivate", c_func="area_set_active", params=[], self_first=True, fixed_args=(0,),
+        doc="Takes the Area out of play: it touches nobody, and the actors it was touching receive "
+            "`on_area_exit`. Ex: door:deactivate()",
+    ),
+    f"{REF_AREA}:overlaps": ApiFunc(
+        lua_name="area:overlaps", c_func="area_overlaps_actor",
+        params=[Param("other", PARAM_ACTOR, doc="An actor: any of its active collision shapes")], ret="bool",
+        self_first=True,
+        doc="Does this Area overlap `other`? An inactive Area, or one without a shape, overlaps nobody. It does not "
+            "look at the collision matrix: it is a geometric test. Ex: if door:overlaps(self) then ... end",
     ),
     f"{REF_COLLISION_SHAPE}:overlaps": ApiFunc(
         lua_name="collision_shape:overlaps", c_func="collision_shape_overlaps_actor",
@@ -1934,8 +1962,29 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "area.active": ApiProp(
         lua_name="area.active", c_getter="area_get_active",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Is the Area in play? An inactive Area touches nobody (an `on_area_exit` is sent to the actors it was "
-            "touching). It is the \"Active on start\" box of the inspector, which only sets the starting state.",
+        doc="Is the Area in play? An inactive Area touches nobody: an `on_area_exit` is sent to the actors it was "
+            "touching, and it never overlaps anything. Read-only: area:activate() / area:deactivate() write it. It is "
+            "the \"Active on start\" box of the inspector, which only sets the starting state.",
+    ),
+    # Se compare par le NOM, comme `actor.name` : la propriété rend la référence elle-même, que la constante
+    # `AREA_<SCÈNE>_<NOM>` désigne.
+    "area.name": ApiProp(
+        lua_name="area.name", c_getter="area_get_name", ptype=PARAM_INT,
+        self_first=True, read_only=True, domain=DOMAIN_AREA_NAME,
+        doc="Name of this Area (read-only), as set in the scene. It is what lets you recognise which Area you "
+            "touch. Ex: if area.name == \"Door\" then ... end",
+    ),
+    "area.position": ApiProp(
+        lua_name="area.position", c_getter="area_get_position", c_setter="area_set_position",
+        ptype=PARAM_VEC2, self_first=True,
+        doc="World position of this Area, in pixels (the origin its shape is measured from). Written as a whole: "
+            "area.position = vec2(x, y). Moving an Area is immediate: the next contact test uses the new place.",
+    ),
+    "area.bounds": ApiProp(
+        lua_name="area.bounds", c_getter="area_get_bounds", ptype=PARAM_RECT,
+        self_first=True, read_only=True,
+        doc="The world rectangle of the shape of this Area, in pixels (position plus the offset of the shape). "
+            "Read-only; empty when the Area has no shape.",
     ),
     # ── Une IMAGE ────────────────────────────────────────────────
     # L'état se pose par son NOM dans le sprite de CETTE image (`IMGST_{image}_{état}`) :
@@ -2521,6 +2570,14 @@ def actor_name_constant(actor_name: str, scene_sym: str = "") -> str:
     if scene_sym:
         return f"ACTOR_{(scene_sym + '_' + c_sym(actor_name)).upper()}"
     return f"ACTOR_{c_ident(actor_name)}"
+
+
+def area_name_constant(area_name: str, scene_sym: str = "") -> str:
+    """'Door' → 'AREA_<SCÈNE>_DOOR' : le `#define` que `headers.py` écrit par scène, égal à la référence de l'Area (son rang
+    dans `g_areas`, plus un). Sans scène (script partagé), le nom nu : aucun symbole C ne le porte."""
+    if scene_sym:
+        return f"AREA_{(scene_sym + '_' + c_sym(area_name)).upper()}"
+    return f"AREA_{c_ident(area_name)}"
 
 
 def box_tag_constant(tag: str) -> str:

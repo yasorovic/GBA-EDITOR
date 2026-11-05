@@ -356,17 +356,21 @@ class CommandDispatcher(EventEmitter):
         return area
 
     def rename_area(self, area: Area, new_name: str) -> bool:
-        """Renomme une Area (annulable). Rend False, sans rien changer, pour un nom vide, inchangé ou déjà pris dans
-        la scène : le nom sera la clé de `area:get("…")`, deux Areas du même nom le rendraient ambigu."""
-        from core.history import SetFieldCmd
+        """Renomme une Area (annulable), scripts compris : le nom est la clé de `area:get("…")`. Rend False, sans rien
+        changer, pour un nom vide, inchangé ou déjà pris dans la scène."""
+        from core.history import RenameAreaCmd
         scene = self._project.active_scene if self._project else None
         new_name = new_name.strip()
         if (scene is None or not new_name or new_name == area.name
                 or any(a is not area and a.name == new_name for a in scene.areas)):
             return False
-        get_history().push(SetFieldCmd(area, "name", area.name, new_name, label=f"Rename {area.name}",
-                                       persist_fn=self.persist_areas))
+        get_history().push(RenameAreaCmd(self._project, scene, area, new_name, refresh_fn=self._refresh_areas))
         return True
+
+    def _refresh_areas(self):
+        """Après un renommage (dans les deux sens) : `Project.rename_area` a déjà sauvé la scène."""
+        self._emit("actors_list_changed")
+        self._emit("scene_sprites_changed")
 
     def delete_areas(self, areas: list):
         """Supprime un LOT d'Areas de la scène active en UNE entrée d'historique."""

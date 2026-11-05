@@ -1,0 +1,117 @@
+# Zones de jeu (Area)
+
+Ce guide pose une **Area** : une zone de jeu sans sprite, qui prévient le script d'un acteur quand
+celui-ci y entre, y reste ou en sort. Elle sert à une porte, un piège, une sortie de niveau ou un
+déclencheur de cinématique.
+
+Une Area est un volume pur : pas de sprite, pas d'OAM, pas de script à elle, et aucune place dans le
+pool d'acteurs. Elle porte une **forme** de collision (un rectangle) et, si elle doit prévenir des
+scripts, un **déclencheur**. Ce sont les **acteurs** qui reçoivent les événements : l'Area, elle, ne
+réagit à rien.
+
+**Ce qu'il vous faut :** une scène avec un acteur qui se déplace et qui porte une boîte **Collision**
+et un script (voir [Déplacer un acteur](../acteurs/deplacer-acteur.md)).
+
+## 1. Poser une Area
+
+Dans le canvas, ouvrez le menu du bouton **+** de la barre d'outils flottante et choisissez
+**Add area**, puis cliquez dans la scène : une zone de 32×32 pixels, centrée sur le clic, est créée.
+Le bouton **+** de l'arbre de scène propose aussi **Area**.
+
+Sélectionnez l'Area pour régler dans l'inspecteur :
+
+- **Active on start** : l'Area touche-t-elle quelqu'un dès l'entrée dans la scène ?
+- **Trigger** : l'Area prévient-elle les scripts ? Une Area neuve est un déclencheur. Sans cette case,
+  elle ne teste aucun contact.
+- **Position**, puis la carte **Shape** : le **Tag** de la forme, son décalage (**Offset**) et sa
+  taille (**Size**). La taille se règle aussi à la souris, avec les poignées d'une Area sélectionnée.
+
+Le nom se change dans l'en-tête de l'inspecteur, comme pour un acteur. Il est **local à la scène** :
+deux scènes peuvent chacune avoir une Area `Porte`.
+
+Pour **réutiliser** une Area dans une autre scène, copiez-la (`Ctrl+C`) puis collez-la (`Ctrl+V`)
+dans l'autre scène : la copie garde sa position, sa forme et son tag, et reçoit un nom unique dans
+la scène d'arrivée.
+
+## 2. Choisir qui la touche
+
+Une Area ne touche que les acteurs dont une boîte porte un tag qui **rencontre** celui de sa forme.
+C'est la même matrice que celle des acteurs, dans **Project Settings → Collisions** : le tag d'une
+Area (`area` par défaut) y apparaît comme n'importe quel autre. Si le couple est coupé dans la
+matrice, l'Area n'appelle jamais ce tag.
+
+Les contacts sont calculés **au build** : un acteur dont aucun tag ne rencontre celui de l'Area, ou
+dont le script ne répond à aucun événement d'Area, n'est jamais testé.
+
+## 3. Réagir dans le script de l'acteur
+
+Le script de l'acteur qui entre dans la zone reçoit trois événements :
+
+```lua
+function on_area_enter(area, my_box)
+    if area.name == "Porte" and my_box.tag == "body" then
+        scene:switch("Interieur")
+    end
+end
+
+function on_area_collide(area, my_box)
+    -- appelé à chaque frame passée dans la zone
+end
+
+function on_area_exit(area, my_box)
+    -- première frame hors de la zone
+end
+```
+
+- `area` est une **référence** vers l'Area touchée ; `area.name` se compare à son nom
+  (`area.name == "Porte"`), `area.tag` au tag de sa forme.
+- `my_box` est la boîte de l'acteur qui est en contact, comme pour `on_collision_enter`.
+- Les événements ne sont envoyés qu'à l'acteur qui touche l'Area. Un acteur **détruit** dans la zone
+  n'apprend aucune sortie ; une Area **désactivée** envoie `on_area_exit` aux acteurs encore en jeu.
+
+Un acteur né pendant la partie (`actor:spawn`) reçoit les mêmes événements qu'un acteur posé dans
+l'éditeur : il n'y a qu'un seul chemin pour les deux.
+
+## 4. Retrouver une Area depuis n'importe où
+
+Un script (d'acteur ou de scène) obtient une Area par son nom, comme `actor:get` pour un acteur :
+
+```lua
+function on_update()
+    local porte = area:get("Porte")
+
+    if input:pressed("b") then
+        porte:deactivate()                    -- plus personne ne la touche
+    end
+
+    if porte:overlaps(self) then              -- test géométrique : ni matrice, ni déclencheur
+        self.position = self.position - vec2(1, 0)
+    end
+
+    porte.position = vec2(120, 80)            -- la déplacer : prise en compte au prochain test
+    local zone = porte.bounds                 -- le rectangle monde de sa forme (lecture seule)
+end
+```
+
+| Pour | Écrivez | Remarque |
+|---|---|---|
+| obtenir une Area | `area:get("Nom")` | le nom est vérifié au build, dans la scène du script |
+| connaître son nom | `area.name` | se compare à une chaîne : `area.name == "Porte"` |
+| la désactiver ou la réactiver | `area:deactivate()` / `area:activate()` | `area.active` se lit, il ne s'écrit pas |
+| lire ou changer sa place | `area.position` | `area.position = vec2(x, y)` |
+| son rectangle | `area.bounds` | lecture seule, vide sans forme |
+| savoir si un acteur la recouvre | `area:overlaps(acteur)` | une Area inactive ne recouvre personne |
+| son tag | `area.tag` | se compare à un tag du projet |
+
+Renommer une Area dans l'éditeur réécrit aussi les `area:get("…")` et les `area.name == "…"` des
+scripts, et l'annulation les remet.
+
+## Choisir entre une Area et un acteur sensor
+
+Un **acteur** dont la boîte est vide fait déjà office de déclencheur : il reste le bon choix s'il
+**bouge**, s'il a un sprite, ou s'il porte son propre script. Une **Area** est plus légère (aucune
+place dans le pool, aucun sprite, aucun script) : elle convient à tout ce qui est **fixe** et qui
+ne sert qu'à prévenir les acteurs qui la touchent.
+
+Une Area suit la scène : elle ne naît pas pendant la partie et ne se détruit pas. Elle ne bouge que
+si un script écrit `area.position`.

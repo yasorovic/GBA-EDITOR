@@ -31,7 +31,8 @@ import re
 from core.resources.resource_store import atomic_write
 
 from .api import (RUNTIME_API, RUNTIME_PROPS, REF_TYPES, REF_ACTOR, PARAM_STR, DOMAIN_UI_ELEMENT,
-                  DOMAIN_PREFAB, MODULE_CALLS)
+                  DOMAIN_PREFAB, MODULE_CALLS, COLLISION_EVENTS, BOX_PARAMS, AREA_EVENTS, AREA_PARAM,
+                  REF_AREA, REF_COLLISION_SHAPE)
 
 from .parser import DATA_NS, raw_tree
 
@@ -146,6 +147,14 @@ def _ref_locals(tree) -> dict[str, str]:
     de `hb` une `collision_shape`. Même relevé que le checker, sur l'AST brut."""
     out: dict[str, str] = {}
     for node in _lua_ast.walk(tree):
+        # Les paramètres d'un événement de contact sont des références : `other_box.tag == "hitbox"`, `area.name == "Door"`.
+        if isinstance(node, _nodes.Function) and getattr(node.name, "id", None) in COLLISION_EVENTS:
+            for arg in node.args or []:
+                if arg.id in dict(BOX_PARAMS):
+                    out[arg.id] = REF_COLLISION_SHAPE
+                elif arg.id == AREA_PARAM and node.name.id in AREA_EVENTS:
+                    out[arg.id] = REF_AREA
+            continue
         if not isinstance(node, (_nodes.LocalAssign, _nodes.Assign)):
             continue
         for target, value in zip(node.targets or [], node.values or []):

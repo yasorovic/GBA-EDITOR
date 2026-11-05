@@ -46,6 +46,14 @@ Points de vie, coups lisibles, barre de vie, frapper un point précis.
 
 Projectiles et effets : le pool et `actor:spawn`.
 :::
+
+:::{grid-item-card} Zones de jeu (Area)
+:link: zones-area
+:link-type: doc
+:class-card: backstage-card backstage-card-teal
+
+Portes, pièges et déclencheurs : une zone qui prévient les scripts.
+:::
 ::::
 
 ```{toctree}
@@ -57,4 +65,5 @@ Textes et dialogues <textes-dialogues>
 Machines d'état <etats>
 Santé et dégâts <sante-degats>
 Créer des acteurs pendant le jeu <acteurs-au-vol>
+Zones de jeu (Area) <zones-area>
 ```

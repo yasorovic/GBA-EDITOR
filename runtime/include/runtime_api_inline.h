@@ -1113,6 +1113,29 @@ static inline int area_ref(const Area* ar) { return (int)(ar - g_areas) + 1; }
 static inline Area* _area_of(int h) { return h ? &g_areas[h - 1] : 0; }
 static inline int area_get_tag(int h)    { const Area* a = _area_of(h); return a ? a->box.tag : 0; }
 static inline int area_get_active(int h) { const Area* a = _area_of(h); return a ? a->active : 0; }
+static inline void area_set_active(int h, int on) { Area* a = _area_of(h); if (a) a->active = on ? 1 : 0; }
+/* `area:get("Door")` : la constante AREA_<SCÈNE>_<NOM> du build EST la référence, et `area.name` la rend telle quelle : le
+   nom se compare donc à cette même constante. */
+static inline int area_by_name(int h) { return h; }
+static inline int area_get_name(int h) { return h; }
+static inline Vec2 area_get_position(int h) { const Area* a = _area_of(h); return a ? (Vec2){ a->x>>8, a->y>>8 } : (Vec2){ 0, 0 }; }
+static inline void area_set_position(int h, Vec2 p) { Area* a = _area_of(h); if (a) { a->x = p.x << 8; a->y = p.y << 8; } }
+/* Le rectangle MONDE de la forme : position (Q8 >> 8) plus décalage, plus taille ; vide sans Area ou sans forme. */
+static inline Rect area_get_bounds(int h) {
+    const Area* a = _area_of(h);
+    if (!a || !a->box.active) return (Rect){ 0, 0, 0, 0 };
+    return (Rect){ (a->x>>8) + a->box.x, (a->y>>8) + a->box.y, a->box.w, a->box.h };
+}
+/* Un test GÉOMÉTRIQUE : ni matrice de tags, ni déclencheur. Une Area ou une boîte inactive ne touche personne. */
+static inline int area_overlaps_actor(int h, const Actor* other) {
+    const Area* a = _area_of(h);
+    if (!a || !a->active || !a->box.active || !other) return 0;
+    for (int j = 0; j < other->collision.box_count; j++)
+        if (other->collision.boxes[j].active &&
+            box_overlap(a->x>>8, a->y>>8, &a->box, other->x>>8, other->y>>8, &other->collision.boxes[j]))
+            return 1;
+    return 0;
+}
 
 /* Rétrocompatibilité — teste sans récupérer les tags */
 static inline int actors_overlap(const Actor*a, const Actor*b) {

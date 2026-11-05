@@ -632,5 +632,37 @@ int main(void) {
         g_areas[0].box.active = 1; g_areas[0].active = 0;
         printf("area_masque_area_inactive %d\n", area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF));
     }
+    /* Areas : les accès d'un script. Une forme décalée de (2, 3) et grande de 16×12 ; la référence EST la constante du build. */
+    {
+        g_actors[4].alive = 1; g_actors[4].active = 1; g_actors[4].collision.box_count = 2;
+        g_actors[4].x = 100 << 8; g_actors[4].y = 34 << 8;
+        g_areas[0] = (Area){ 100 << 8, 50 << 8, (CollisionShape){ 2, 3, 16, 12, 0, 1, TAG_HIT }, 1 };
+        int h = area_by_name(1);
+        printf("area_acces %d %d %d\n", h, area_get_name(h), area_get_name(h) == 1);
+        Vec2 pos = area_get_position(h);
+        printf("area_position %d %d\n", pos.x, pos.y);
+        area_set_position(h, (Vec2){ 7, 9 });
+        printf("area_position_ecrite %d %d\n", g_areas[0].x >> 8, g_areas[0].y >> 8);
+        Rect r = area_get_bounds(h);
+        printf("area_bounds %d %d %d %d\n", r.x, r.y, r.w, r.h);       /* position, plus le décalage de la forme, plus sa taille */
+        area_set_position(h, (Vec2){ 100, 50 });
+        printf("area_recouvre %d\n", area_overlaps_actor(h, &g_actors[4]));          /* les pieds (y 50..54) touchent la forme (y 53..65) */
+        g_actors[4].x = 300 << 8;
+        printf("area_recouvre_loin %d\n", area_overlaps_actor(h, &g_actors[4]));
+        g_actors[4].x = 100 << 8;
+        area_set_active(h, 0);
+        printf("area_inactive %d %d\n", area_get_active(h), area_overlaps_actor(h, &g_actors[4]));
+        area_set_active(h, 7);                                                       /* toute valeur non nulle = vrai */
+        printf("area_reactive %d %d\n", area_get_active(h), area_overlaps_actor(h, &g_actors[4]));
+        g_actors[4].collision.boxes[0].active = 0; g_actors[4].collision.boxes[1].active = 0;
+        printf("area_acteur_sans_boite_active %d\n", area_overlaps_actor(h, &g_actors[4]));
+        /* Une référence absente (0) : lecture vide, écriture sans effet. */
+        area_set_position(0, (Vec2){ 5, 5 });  area_set_active(0, 1);
+        Vec2 vide = area_get_position(0);  Rect rv = area_get_bounds(0);
+        printf("area_absente %d %d %d %d %d %d %d\n", vide.x, vide.y, rv.x, rv.y, rv.w, rv.h, area_overlaps_actor(0, &g_actors[4]));
+        g_areas[0].box.active = 0;
+        Rect sans = area_get_bounds(h);
+        printf("area_sans_forme %d %d\n", sans.w, sans.h);
+    }
     return 0;
 }
