@@ -29,6 +29,26 @@ Sélectionnez l'Area pour régler dans l'inspecteur :
 Le nom se change dans l'en-tête de l'inspecteur, comme pour un acteur. Il est **local à la scène** :
 deux scènes peuvent chacune avoir une Area `Porte`.
 
+### Faire suivre un acteur à une Area
+
+Le sélecteur **Parent** de l'inspecteur (ou le glisser-déposer de l'Area **sur** un acteur dans
+l'arbre de scène) attache l'Area à un acteur **posé** de la scène : elle le suit, comme un acteur
+enfant. Quelques règles :
+
+- La position se pose en coordonnées **monde** dans l'éditeur : attacher une Area ne la déplace pas.
+  C'est le build qui en tire sa position par rapport au parent, et la recompose à chaque frame
+  (position, rotation et échelle du parent comprises). L'éditeur montre donc exactement ce
+  qu'affiche la première frame du jeu.
+- Déplacer le parent au canvas, à la souris ou aux flèches, **entraîne ses Areas** ; une Area n'a pas
+  d'enfant, et un acteur ne peut pas avoir une Area pour parent.
+- Tant que le parent est **désactivé ou détruit**, l'Area ne touche personne (les acteurs qui la
+  touchaient reçoivent `on_area_exit`). Quand il revient, elle reprend.
+- Un script ne peut pas déplacer une Area qui a un parent : `area.position = …` est sans effet, sa
+  place est recomposée depuis son parent à chaque frame. `area.parent` rend l'acteur suivi, ou `nil`.
+- Renommer le parent suit : les Areas qui le suivaient le suivent sous son nouveau nom. Le parent doit
+  être dans la même scène ; sinon le build le refuse.
+- Collée dans une scène qui n'a pas ce parent, une Area devient libre.
+
 Pour **réutiliser** une Area dans une autre scène, copiez-la (`Ctrl+C`) puis collez-la (`Ctrl+V`)
 dans l'autre scène : la copie garde sa position, sa forme et son tag, et reçoit un nom unique dans
 la scène d'arrivée.
@@ -89,6 +109,7 @@ function on_update()
     end
 
     porte.position = vec2(120, 80)            -- la déplacer : prise en compte au prochain test
+    porte.size = vec2(48, 32)                 -- l'agrandir : largeur et hauteur, de 0 à 255 pixels
     local zone = porte.bounds                 -- le rectangle monde de sa forme (lecture seule)
 end
 ```
@@ -98,7 +119,9 @@ end
 | obtenir une Area | `area:get("Nom")` | le nom est vérifié au build, dans la scène du script |
 | connaître son nom | `area.name` | se compare à une chaîne : `area.name == "Porte"` |
 | la désactiver ou la réactiver | `area:deactivate()` / `area:activate()` | `area.active` se lit, il ne s'écrit pas |
-| lire ou changer sa place | `area.position` | `area.position = vec2(x, y)` |
+| lire ou changer sa place | `area.position` | `area.position = vec2(x, y)` ; sans effet si l'Area a un parent |
+| l'acteur qu'elle suit | `area.parent` | lecture seule ; `nil` sans parent ou si le parent est détruit |
+| sa taille | `area.size` | `area.size = vec2(w, h)`, bornée de 0 à 255 ; sans forme, elle reste nulle |
 | son rectangle | `area.bounds` | lecture seule, vide sans forme |
 | savoir si un acteur la recouvre | `area:overlaps(acteur)` | une Area inactive ne recouvre personne |
 | son tag | `area.tag` | se compare à un tag du projet |
@@ -114,4 +137,4 @@ place dans le pool, aucun sprite, aucun script) : elle convient à tout ce qui e
 ne sert qu'à prévenir les acteurs qui la touchent.
 
 Une Area suit la scène : elle ne naît pas pendant la partie et ne se détruit pas. Elle ne bouge que
-si un script écrit `area.position`.
+si un script écrit `area.position` (sans parent), ou si son parent bouge.

@@ -21,6 +21,11 @@ HERO = """function on_area_enter(area, my_box)
     local door = area:get("Door")
     if area.name == "Door" and door:overlaps(self) then
       door.position = vec2(40, 56)
+      door.size = vec2(40, door.size.y)
+    end
+    local boss = area.parent
+    if boss then
+      boss:show()
     end
     self:hide()
   end
@@ -59,6 +64,7 @@ def _projet(tmp_path) -> Project:
                         ScriptComponent(script="assets/scripts/Hero.lua")]
     porte = Area(name="Door", x=40, y=56)
     porte.components[0].tag = "door"
+    porte.parent = "Hero"                      # la porte suit le héros (un acteur posé)
     muette = Area(name="Quiet", x=120, y=56)
     muette.components = [c for c in muette.components if isinstance(c, CollisionShapeComponent)]   # sans déclencheur
 
@@ -103,3 +109,8 @@ def test_un_projet_avec_areas_se_compile_et_emet_les_contacts_poses_et_pool(tmp_
     sources = "\n".join(c.read_text(encoding="utf-8") for c in (projet.root / "build").rglob("*.c"))
     assert "area_by_name(AREA_SCENE_01_DOOR)" in sources and "area_get_name(area) == AREA_SCENE_01_DOOR" in sources
     assert "area_overlaps_actor(door, self)" in sources and "area_set_active(quiet, 0)" in sources
+    # Une Area qui suit un acteur : le parent est posé à l'entrée de scène, la position recomposée après les acteurs.
+    assert "g_areas[0].parent=2;" in main_c and "g_areas[1].parent" not in main_c          # le héros est l'emplacement 1
+    assert "g_areas[0].held = !(g_actors[1].active && g_actors[1].alive);" in main_c
+    assert main_c.index("Areas that follow an actor") < main_c.index("static const AreaContact _area_pairs")   # avant les contacts
+    assert "area_get_parent(area)" in sources and "area_set_size(door," in sources

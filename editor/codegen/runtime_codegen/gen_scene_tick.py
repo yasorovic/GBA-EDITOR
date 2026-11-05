@@ -20,7 +20,7 @@ from codegen.runtime_codegen.gen_sprite import (
     anim_tick_variants, anim_variants, appearances, oam_write_lines, shown,
 )
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
-from codegen.runtime_codegen.physics.areas import area_mask, area_pair_lines, trigger_areas
+from codegen.runtime_codegen.physics.areas import area_mask, area_pair_lines, area_parent_lines, trigger_areas
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
 from scripting.api import AREA_EVENTS
 from codegen.runtime_codegen.physics.body import (
@@ -108,6 +108,7 @@ def gen_scene_tick(
     L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi, project_sets_gravity(p))
     L += parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
     L += pool_compose_lines(pi)
+    L += area_parent_lines(scene, scene_actors, actor_offset)
 
     # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).

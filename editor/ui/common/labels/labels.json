@@ -5163,6 +5163,7 @@
     "cvtool.add_area_tip": { "text": "A click on the canvas places a new area: a game zone with a collision shape." },
     "hints.scene.place_area": { "text": "Places an area on the grid" },
     "areainsp.trigger": { "text": "Trigger" },
-    "areainsp.trigger_tip": { "text": "Makes the area a trigger: the scripts of the actors that touch it receive on_area_enter, on_area_collide and on_area_exit. Without it, the area tests no contact." }
+    "areainsp.trigger_tip": { "text": "Makes the area a trigger: the scripts of the actors that touch it receive on_area_enter, on_area_collide and on_area_exit. Without it, the area tests no contact." },
+    "areainsp.parent_tip": { "text": "Expresses the position of this area in the frame of an actor of the scene: it follows the actor. While the actor is inactive or destroyed, the area touches nobody. A script cannot move an area that has a parent." }
   }
 }

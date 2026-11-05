@@ -1978,7 +1978,20 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="area.position", c_getter="area_get_position", c_setter="area_set_position",
         ptype=PARAM_VEC2, self_first=True,
         doc="World position of this Area, in pixels (the origin its shape is measured from). Written as a whole: "
-            "area.position = vec2(x, y). Moving an Area is immediate: the next contact test uses the new place.",
+            "area.position = vec2(x, y). Moving an Area is immediate: the next contact test uses the new place. An Area "
+            "with a parent (area.parent) cannot be moved by a script: it is placed from its parent every frame.",
+    ),
+    "area.parent": ApiProp(
+        lua_name="area.parent", c_getter="area_get_parent", ptype=PARAM_INT,
+        self_first=True, read_only=True, ref=REF_ACTOR,
+        doc="The actor this Area follows (read-only), set in the scene. nil without a parent, or when the parent was "
+            "destroyed. An Area with a parent is placed from it every frame: writing area.position has no effect, and "
+            "while the parent is inactive or destroyed the Area touches nobody. Ex: local boss = area.parent",
+    ),
+    "area.size": ApiProp(
+        lua_name="area.size", c_getter="area_get_size", c_setter="area_set_size", ptype=PARAM_VEC2, self_first=True,
+        doc="Width and height of the shape of this Area, in pixels (0 to 255, clamped). A zone that grows: "
+            "door.size = vec2(32 + t, 32). It reads zero for an Area without a shape, which a write does not give one.",
     ),
     "area.bounds": ApiProp(
         lua_name="area.bounds", c_getter="area_get_bounds", ptype=PARAM_RECT,

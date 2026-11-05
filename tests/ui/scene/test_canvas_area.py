@@ -166,6 +166,109 @@ def test_le_bouton_plus_offre_acteur_et_area_et_la_touche_a_reprend_le_dernier_c
     assert seen[-1] == "add"
 
 
+def _follow_first_actor(editor):
+    """Fait suivre le premier acteur de la scène à l'Area « Door » ; rend (item de l'acteur, Area)."""
+    item = editor._gba_scene._sprite_items[0]
+    door = next(a for a in editor._project.active_scene.areas if a.name == "Door")
+    door.parent = item.scene_sprite.name
+    return item, door
+
+
+def test_deplacer_un_parent_au_canvas_entraine_ses_areas_en_une_entree_annulable(editor):
+    item, door = _follow_first_actor(editor)
+    zone = next(a for a in editor._project.active_scene.areas if a.name == "Zone")      # sans parent : elle ne bouge pas
+    actor = item.scene_sprite
+    before = {"actor": (actor.x, actor.y), "door": (door.x, door.y), "zone": (zone.x, zone.y)}
+    view = editor._gba_view
+    start = _hit_point(view, item)
+    assert start is not None
+    QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+    for step in range(1, 6):
+        QTest.mouseMove(view.viewport(), start + QPoint(step * 8, step * 4))
+    QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=start + QPoint(40, 20))
+    dx, dy = actor.x - before["actor"][0], actor.y - before["actor"][1]
+    assert (dx, dy) != (0, 0)
+    assert (door.x - before["door"][0], door.y - before["door"][1]) == (dx, dy)          # l'Area suit du même écart
+    assert (zone.x, zone.y) == before["zone"]
+    area_item = _item(editor, "Door")
+    assert (area_item.pos().x(), area_item.pos().y()) == (door.x, door.y)                # son item aussi, en direct
+    assert len(get_history()._undo) == 1                                                  # un seul Ctrl+Z pour tout
+    get_history().undo()
+    assert (actor.x, actor.y) == before["actor"] and (door.x, door.y) == before["door"]
+
+
+def test_les_fleches_sur_un_parent_emportent_ses_areas(editor):
+    item, door = _follow_first_actor(editor)
+    item.setSelected(True)
+    before = (door.x, door.y)
+    editor._shortcut_nudge(3, 1)
+    assert (door.x, door.y) == (before[0] + 3, before[1] + 1)
+    assert (_item(editor, "Door").pos().x(), _item(editor, "Door").pos().y()) == (door.x, door.y)
+    assert len(get_history()._undo) == 1
+    get_history().undo()
+    assert (door.x, door.y) == before
+
+
+def test_choisir_un_parent_a_l_inspecteur_est_annulable_et_ne_deplace_pas_l_area(qapp, editor):
+    from ui.scene_manager.inspectors.area_inspector import AreaInspector
+    project = editor._project
+    scene = project.active_scene
+    area = next(a for a in scene.areas if a.name == "Door")
+    insp = AreaInspector()
+    insp.load(area, project, scene)
+    names = [insp._cmb_parent.itemData(i) for i in range(insp._cmb_parent.count())]
+    assert names[0] is None and names[1:] == [a.name for a in scene.actors]              # (none), puis les acteurs de la scène
+    position = (area.x, area.y)
+    insp._cmb_parent.setCurrentIndex(1)
+    assert area.parent == scene.actors[0].name and (area.x, area.y) == position
+    get_history().undo()
+    assert area.parent is None
+    insp.deleteLater()
+
+
+def test_l_arbre_accroche_une_area_sous_son_parent_et_le_depot_la_rattache(qapp, editor):
+    from PyQt6.QtWidgets import QTreeWidgetItemIterator
+    from ui.scene_manager.scene_tree_panel import T_ACTOR, T_AREA, SceneTreePanel, _ROLE_OBJ, _ROLE_TYPE
+    project = editor._project
+    scene = project.active_scene
+    door = next(a for a in scene.areas if a.name == "Door")
+    assert get_dispatcher().set_area_parent(door, "Ghost") is False                      # pas un acteur de la scène : refusé
+    assert get_dispatcher().set_area_parent(door, scene.actors[0].name) is True
+    panel = SceneTreePanel()
+    panel.load_project(project)
+    it = QTreeWidgetItemIterator(panel._tree)
+    found = None
+    while it.value():
+        if it.value().data(0, _ROLE_TYPE) == T_AREA and it.value().data(0, _ROLE_OBJ) is door:
+            found = it.value()
+        it += 1
+    assert found is not None and found.parent().data(0, _ROLE_TYPE) == T_ACTOR
+    assert found.parent().data(0, _ROLE_OBJ) is scene.actors[0]                         # sous son parent
+    assert get_dispatcher().set_area_parent(door, None) is True                          # libérée
+    assert door.parent is None and get_dispatcher().set_area_parent(door, None) is False  # déjà libre : rien à faire
+    get_history().undo()                       # les deux écritures du même champ ont fusionné : retour à l'état d'avant
+    assert door.parent is None
+    assert get_dispatcher().set_area_parent(door, scene.actors[0].name) is True
+    get_history().undo()
+    assert door.parent is None
+    panel.deleteLater()
+
+
+def test_coller_une_area_dans_une_scene_sans_son_parent_la_libere(editor):
+    from core.models.scene import Scene
+    project = editor._project
+    _item_, door = _follow_first_actor(editor)
+    other = Scene(name="Other")
+    project.scenes.append(other)
+    door_item = _item(editor, "Door")
+    door_item.setSelected(True)
+    editor._shortcut_copy()
+    project.set_active_scene(len(project.scenes) - 1)
+    editor._shortcut_paste()
+    assert other.areas[-1].parent is None                    # ce parent n'existe pas là : libre plutôt que pendante
+    assert door.parent is not None                           # l'original garde le sien
+
+
 def test_les_fleches_deplacent_les_areas_en_une_entree_fusionnee(editor):
     item = _item(editor, "Door")
     item.setSelected(True)

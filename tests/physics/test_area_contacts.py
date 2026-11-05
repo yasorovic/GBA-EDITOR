@@ -99,9 +99,24 @@ def test_c_overlaps_est_geometrique_et_une_area_inactive_ne_touche_personne(sort
     assert sortie_sonde["area_acteur_sans_boite_active"] == [0]
 
 
+def test_c_une_area_qui_suit_un_acteur_ne_se_deplace_pas_par_script(sortie_sonde):
+    assert sortie_sonde["area_parent_ecriture"] == [100, 50]      # recomposée chaque frame : l'écriture est sans effet
+    assert sortie_sonde["area_parent_taille"] == [20, 20]         # sa taille, elle, s'écrit
+    assert sortie_sonde["area_parent_lue"] == [1]
+    assert sortie_sonde["area_parent_touche"] == [1, 2]           # touchée : les pieds de l'acteur (rang 1) recouvrent la zone
+    assert sortie_sonde["area_parent_tenue"] == [0, 0]            # parent inactif : elle ne touche personne
+    assert sortie_sonde["area_parent_detruit"] == [1]             # parent détruit : area.parent vaut nil
+    assert sortie_sonde["area_libre"] == [5, 6, 1]                # sans parent, l'écriture passe
+
+
 def test_c_une_reference_absente_se_lit_vide_et_s_ecrit_sans_effet(sortie_sonde):
     assert sortie_sonde["area_absente"] == [0, 0, 0, 0, 0, 0, 0]
-    assert sortie_sonde["area_sans_forme"] == [0, 0]
+    assert sortie_sonde["area_sans_forme"] == [0, 0, 0, 16]      # lire ou écrire la taille ne rallume pas une forme éteinte
+
+
+def test_c_la_taille_se_lit_s_ecrit_et_reste_dans_un_u8(sortie_sonde):
+    # lue (16×12), puis écrite hors bornes (300, -4) → (255, 0), puis (20, 6) que les bornes monde reflètent aussitôt.
+    assert sortie_sonde["area_taille"] == [16, 12, 255, 0, 20, 20, 6]
 
 
 # ── Le C émis ────────────────────────────────────────────────────────────
@@ -179,13 +194,52 @@ def test_les_acteurs_du_pool_passent_par_le_meme_pas_avec_leur_memoire_par_empla
                                       lambda s, ev: False, AREA_EVENTS) == []
 
 
+def _scene_with_follower(**boss):
+    scene = Scene(name="S", actors=[Actor(name="Boss", x=100, y=50, **boss)], areas=[_area("Door", x=140, y=70)])
+    scene.areas[0].parent = "Boss"
+    return scene
+
+
+def test_une_area_qui_suit_un_acteur_est_recomposee_apres_lui_et_tenue_si_il_s_eteint():
+    from codegen.runtime_codegen.physics.areas import area_init_lines, area_parent_lines
+    scene = _scene_with_follower()
+    actors = [(scene.actors[0], None)]
+    text = "\n".join(area_parent_lines(scene, actors, 0))
+    assert "g_areas[0].x = g_actors[0].x +" in text and "g_areas[0].y = g_actors[0].y +" in text
+    assert "g_areas[0].held = !(g_actors[0].active && g_actors[0].alive);" in text
+    project = SimpleNamespace(settings=_settings(), globals=[], constants=[])
+    assert "g_areas[0].parent=1;" in "\n".join(area_init_lines(project, scene, actors, 0))
+    scene.areas[0].parent = None
+    assert area_parent_lines(scene, actors, 0) == []                  # sans parent : aucune ligne, aucun coût
+
+
+def _recompose(par, local, rotation, scale):
+    """Ce que le C émis calcule (Q8, `gba_sincos`) pour la position d'une Area enfant, rendue en pixels."""
+    import math
+    ox, oy = local
+    px = py = int(round(scale * 256))
+    co, si = round(math.cos(math.radians(rotation)) * 256), round(math.sin(math.radians(rotation)) * 256)
+    lx, ly = (ox * px) >> 8, (oy * py) >> 8
+    return ((par.x << 8) + ((lx * co - ly * si) >> 8)) >> 8, ((par.y << 8) + ((lx * si + ly * co) >> 8)) >> 8
+
+
+def test_la_frame_0_recompose_la_position_vue_dans_l_editeur():
+    """Le local est tiré de la pose authorée du parent : recomposé avec cette même pose, il redonne la position du canvas."""
+    from codegen.runtime_codegen.gen_pool import world_to_local_offset
+    for boss in ({}, {"rotation": 90, "scale_x": 2.0, "scale_y": 2.0}, {"rotation": 37, "scale_x": 0.5, "scale_y": 0.5}):
+        scene = _scene_with_follower(**boss)
+        par, area = scene.actors[0], scene.areas[0]
+        got = _recompose(par, world_to_local_offset(par, area.x, area.y), boss.get("rotation", 0), boss.get("scale_x", 1.0))
+        assert abs(got[0] - area.x) <= 1 and abs(got[1] - area.y) <= 1, (boss, got)
+
+
 def test_l_entree_de_scene_pose_les_areas_et_remet_les_contacts_a_zero():
     from codegen.runtime_codegen.physics.areas import area_init_lines
     scene = Scene(name="S", areas=[_area("Door", tag="door", x=40, y=56)])
     scene.areas[0].components[0].w = 48
     project = SimpleNamespace(settings=_settings(), globals=[], constants=[])
-    text = "\n".join(area_init_lines(project, scene))
+    text = "\n".join(area_init_lines(project, scene, [], 0))
     assert "g_areas[0].x=(40)<<8; g_areas[0].y=(56)<<8; g_areas[0].active=1;" in text
     assert "g_areas[0].box.w=(u8)48;" in text and "g_areas[0].box.tag=BOXTAG_DOOR;" in text
     assert "g_area_prev[_i]=0" in text                              # la mémoire des couples ne survit pas à la scène
-    assert area_init_lines(project, Scene(name="Empty")) == []     # une scène sans Area n'émet rien
+    assert area_init_lines(project, Scene(name="Empty"), [], 0) == []     # une scène sans Area n'émet rien

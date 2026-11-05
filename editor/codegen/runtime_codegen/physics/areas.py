@@ -10,6 +10,7 @@ rien par frame."""
 from __future__ import annotations
 
 from codegen.c_names import sym as c_sym
+from codegen.runtime_codegen.gen_pool import world_to_local_offset
 from codegen.runtime_codegen.gen_scene_query import actor_collision_shapes
 from core.models.field_value import FieldValue as _FV, var_names_from_project
 from core.models.settings import tags_collide
@@ -49,16 +50,25 @@ def area_globals_lines(p, all_scene_data: list[dict]) -> list[str]:
             f"u16 g_area_prev[{max(1, n_prev)}] EWRAM_BSS;   /* le recouvrement de la frame précédente, par couple posé */"]
 
 
-def area_init_lines(p, scene) -> list[str]:
+def _parent_slots(scene, scene_actors: list, actor_offset: int) -> dict:
+    """{rang de l'Area dans `g_areas`: emplacement de son parent dans `g_actors`} : les Areas dont le parent nomme un acteur posé
+    de la scène (un parent inconnu est refusé avant, par le validateur)."""
+    idx_of = {a.name: actor_offset + j for j, (a, _) in enumerate(scene_actors)}
+    return {i: idx_of[a.parent] for i, a in enumerate(scene.areas) if a.parent and a.parent in idx_of}
+
+
+def area_init_lines(p, scene, scene_actors: list, actor_offset: int) -> list[str]:
     """Pose les Areas de la scène dans `g_areas` à son entrée, et remet à zéro la mémoire des contacts."""
     if not scene.areas:
         return []
     names = var_names_from_project(p)
+    parents = _parent_slots(scene, scene_actors, actor_offset)
     L = ["    for(unsigned _i=0;_i<sizeof(g_areas)/sizeof(g_areas[0]);_i++) g_areas[_i]=(Area){0};",
          "    for(unsigned _i=0;_i<sizeof(g_area_prev)/sizeof(g_area_prev[0]);_i++) g_area_prev[_i]=0;"]
     for i, area in enumerate(scene.areas):
         a = f"g_areas[{i}]"
-        L.append(f"    {a}.x=({int(area.x)})<<8; {a}.y=({int(area.y)})<<8; {a}.active={1 if area.active else 0};")
+        L.append(f"    {a}.x=({int(area.x)})<<8; {a}.y=({int(area.y)})<<8; {a}.active={1 if area.active else 0};"
+                 + (f" {a}.parent={parents[i] + 1};" if i in parents else ""))
         shape = area.shape()
         if shape is None:
             continue         # `box.active` reste 0 : l'Area ne touche personne
@@ -67,6 +77,31 @@ def area_init_lines(p, scene) -> list[str]:
         w, h = _FV.parse(shape.w, names).c_expr(), _FV.parse(shape.h, names).c_expr()
         L += [f"    {a}.box.x=(s8){x}; {a}.box.y=(s8){y}; {a}.box.w=(u8){w}; {a}.box.h=(u8){h};",
               f"    {a}.box.solid=0; {a}.box.active=1; {a}.box.tag={tag};"]
+    return L
+
+
+def area_parent_lines(scene, scene_actors: list, actor_offset: int) -> list[str]:
+    """Recompose, chaque frame, la position des Areas qui suivent un acteur : la formule des acteurs enfants
+    (`parent_compose_lines` : position = parent + R(rotation)·S(échelle)·local), sans rotation ni échelle propres. Appelée APRÈS
+    la composition des acteurs, qui a mis à jour les parents (et les parents de parents). Une Area dont le parent est inactif ou
+    détruit est tenue (`held`) : elle ne touche personne. Le local est une constante du build, tirée de la pose authorée."""
+    parents = _parent_slots(scene, scene_actors, actor_offset)
+    if not parents:
+        return []
+    by_slot = {actor_offset + j: a for j, (a, _) in enumerate(scene_actors)}
+    L = ["    /* Areas that follow an actor — after the actors' own composition. */"]
+    for i, slot in sorted(parents.items()):
+        area, par = scene.areas[i], by_slot[slot]
+        ox, oy = world_to_local_offset(par, area.x, area.y)
+        L += [f"    {{   /* {area.name} in the frame of {par.name} */",
+              f"        int _pr = g_actors[{slot}].rotation;",
+              f"        int _px = g_actors[{slot}].scale_x, _py = g_actors[{slot}].scale_y;",
+              f"        int _co, _si; gba_sincos(_pr, &_si, &_co);",
+              f"        int _lx = ({ox} * _px) >> 8, _ly = ({oy} * _py) >> 8;",
+              f"        g_areas[{i}].x = g_actors[{slot}].x + ((_lx * _co - _ly * _si) >> 8);",
+              f"        g_areas[{i}].y = g_actors[{slot}].y + ((_lx * _si + _ly * _co) >> 8);",
+              f"        g_areas[{i}].held = !(g_actors[{slot}].active && g_actors[{slot}].alive);",
+              "    }"]
     return L
 
 

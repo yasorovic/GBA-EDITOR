@@ -56,11 +56,13 @@ def test_position_bounds_et_overlaps_se_compilent_vers_les_accesseurs():
         "function on_update()\n"
         "  local door = area:get(\"Door\")\n"
         "  door.position = vec2(8, 16)\n"
+        "  door.size = vec2(40, door.size.y)\n"
         "  local b = door.bounds\n"
         "  if door:overlaps(self) and b.w > 0 then door:activate() end\n"
         "end\n")
     assert errs == []
     assert "area_set_position(door," in code and "area_get_bounds(door)" in code
+    assert "area_set_size(door," in code and "area_get_size(door)" in code
     assert "area_overlaps_actor(door, self)" in code and "area_set_active(door, 1)" in code
 
 

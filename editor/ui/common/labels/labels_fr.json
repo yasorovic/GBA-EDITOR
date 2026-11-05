@@ -2785,6 +2785,7 @@
     "cvtool.add_area_tip": { "text": "Un clic sur le canvas place une nouvelle area : une zone de jeu avec une forme de collision." },
     "hints.scene.place_area": { "text": "Place une area sur la grille" },
     "areainsp.trigger": { "text": "Déclencheur" },
-    "areainsp.trigger_tip": { "text": "Fait de l'area un déclencheur : les scripts des acteurs qui la touchent reçoivent on_area_enter, on_area_collide et on_area_exit. Sans lui, l'area ne teste aucun contact." }
+    "areainsp.trigger_tip": { "text": "Fait de l'area un déclencheur : les scripts des acteurs qui la touchent reçoivent on_area_enter, on_area_collide et on_area_exit. Sans lui, l'area ne teste aucun contact." },
+    "areainsp.parent_tip": { "text": "Exprime la position de cette area dans le repère d'un acteur de la scène : elle le suit. Tant que l'acteur est inactif ou détruit, l'area ne touche personne. Un script ne peut pas déplacer une area qui a un parent." }
   }
 }

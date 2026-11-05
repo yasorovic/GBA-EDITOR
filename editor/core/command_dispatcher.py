@@ -372,6 +372,18 @@ class CommandDispatcher(EventEmitter):
         self._emit("actors_list_changed")
         self._emit("scene_sprites_changed")
 
+    def set_area_parent(self, area: Area, parent: Optional[str]) -> bool:
+        """Fait suivre `parent` (un acteur posé de la scène) à l'Area, ou la libère (`None`). Annulable. La position MONDE ne
+        change pas : seul le repère dans lequel le build l'exprime change. Rend False si rien ne change ou si `parent` n'est pas un
+        acteur de la scène."""
+        from core.history import SetFieldCmd
+        scene = self._project.active_scene if self._project else None
+        if scene is None or area.parent == parent or (parent and parent not in {a.name for a in scene.actors}):
+            return False
+        get_history().push(SetFieldCmd(area, "parent", area.parent, parent, label=f"{area.name}.parent",
+                                       persist_fn=self.persist_areas))
+        return True
+
     def delete_areas(self, areas: list):
         """Supprime un LOT d'Areas de la scène active en UNE entrée d'historique."""
         from core.history import RemoveListItemsCmd
@@ -412,10 +424,13 @@ class CommandDispatcher(EventEmitter):
             return []
         scene = self._project.active_scene
         taken = {a.name for a in scene.areas}
+        actors = {a.name for a in scene.actors}
         copies: list[Area] = []
         for src in sources:
             new = copy.deepcopy(src)
             new.id = ""                          # l'id appartient à la scène : `assign_member_ids` en donne un neuf
+            if new.parent not in actors:
+                new.parent = None                # collée dans une scène sans ce parent : libre, plutôt que pendante
             new.name = unique_name(src.name, taken)
             taken.add(new.name)
             new.x, new.y = src.x + dx, src.y + dy

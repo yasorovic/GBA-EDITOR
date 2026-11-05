@@ -505,6 +505,12 @@ def actor_descendant_names(actors: list, name: str) -> set:
     return out
 
 
+def area_descendants(areas: list, actor_names: set) -> list:
+    """Les Areas dont le parent est l'un de ces acteurs. Source unique pour le canvas (déplacer un parent entraîne ses Areas) :
+    `actor_names` est le parent déplacé ET ses descendants (cf. `actor_descendant_names`)."""
+    return [a for a in areas if a.parent and a.parent in actor_names]
+
+
 def actor_prefab_linked(actor: "Actor", prefab: "Prefab") -> bool:
     """« Linké » (True) si `actor` reste sur le MÊME chemin de compilation que
     son prefab, « unlinké » (False) s'il en a dérivé — la distinction que le
@@ -586,13 +592,17 @@ class Area(SceneMember, ComponentOwnerMixin):
     l'Area dans le monde, comme ceux d'un acteur. Elle est toujours un capteur et n'est jamais arrêtée par la
     carte : `conform_shapes` le force sur ses formes, quelle que soit la façon dont elles sont arrivées.
 
-    Posée dans la scène, jamais un asset : elle se réutilise d'une scène à l'autre par le copier/coller du canvas.
-    (`parent` et les composants d'effet viennent avec les tranches suivantes.)"""
+    Posée dans la scène, jamais un asset : elle se réutilise d'une scène à l'autre par le copier/coller du canvas. Elle peut
+    SUIVRE un acteur posé (`parent`) ; elle n'a jamais d'enfant. (Les composants d'effet viennent avec les tranches suivantes.)"""
     name: str = "Area"
     active: bool = True
     components: list = field(default_factory=default_area_components)
     x: int = 112
     y: int = 72
+    # Nom de l'acteur POSÉ de la même scène dans le repère duquel la position est exprimée : même règle que `Actor.parent` (posée
+    # en monde dans l'éditeur, local constant au build, recomposée à chaque frame). Vide = aucun parent. Une Area ne peut pas
+    # être parent, et un acteur ne peut pas avoir une Area pour parent : la profondeur est toujours de un.
+    parent: Optional[str] = None
     notes: str = ""   # note libre utilisateur (éditeur uniquement, jamais compilée)
 
     def __post_init__(self):
@@ -622,6 +632,8 @@ class Area(SceneMember, ComponentOwnerMixin):
             "components": components_to_list(self.components),
             "x":          self.x,
             "y":          self.y,
+            # Écrit seulement s'il y a un parent : une Area ordinaire ne gagne pas de clé.
+            **({"parent": self.parent} if self.parent else {}),
             "notes":      self.notes,
         }
 
@@ -634,6 +646,7 @@ class Area(SceneMember, ComponentOwnerMixin):
             components = components_from_list(d["components"]) if "components" in d else default_area_components(),
             x          = d.get("x", 112),
             y          = d.get("y", 72),
+            parent     = (d.get("parent") or None),
             notes      = d.get("notes", ""),
         )
         area.read_member_header(d)

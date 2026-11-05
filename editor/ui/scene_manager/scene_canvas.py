@@ -698,13 +698,17 @@ class SceneEditor(QWidget):
         for it in items:
             ox, oy = it.pos_px()   # résout px/tile/réf avant d'ajouter le delta
             moves.append((it.scene_sprite, ox, oy, ox + dx, oy + dy))
-        # Les Areas sélectionnées bougent dans la même entrée : mêmes données (x, y entiers), même commande.
-        moves += [(it.area, it.area.x, it.area.y, it.area.x + dx, it.area.y + dy) for it in area_items]
+        # Les Areas sélectionnées bougent dans la même entrée (mêmes données, x et y entiers, même commande), avec celles qui
+        # suivent un acteur déplacé : un parent entraîne ses Areas comme ses enfants. Chacune une fois.
+        followers = {id(a): a for it in selected for a in (f.area for f in self._gba_scene.descendant_area_items(it))}
+        followers.update({id(it.area): it.area for it in area_items})
+        moves += [(a, a.x, a.y, a.x + dx, a.y + dy) for a in followers.values()]
+        moved_areas = [it for it in self._gba_scene._area_items if id(it.area) in followers]
 
         def persist():
             # Le garde-fou itemChange (_drag_origin is None) empêche le
             # re-snap et la réécriture du modèle sur ce setPos programmatique.
-            for it in (*items, *area_items):
+            for it in (*items, *moved_areas):
                 it.sync_pos()
             self._update_actor_box_overlay()
 

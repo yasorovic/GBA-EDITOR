@@ -342,6 +342,28 @@ def _visible_line(indent: str, entry, parent_entry, own_visible) -> list[str]:
     return [f"{indent}g_oam_entries[{entry}].visible = g_oam_entries[{parent_entry}].visible && {own};"]
 
 
+def authored_frame(par) -> tuple[float, float, float]:
+    """(rotation en degrés, échelle x, échelle y) de la pose AUTHORÉE d'un parent : le repère dans lequel un enfant, acteur ou
+    Area, est converti du monde vers son local."""
+    p_rot = float(_number_value(getattr(par, "rotation", 0)) or 0)
+    p_sx = float(_number_value(getattr(par, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
+    p_sy = float(_number_value(getattr(par, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
+    return p_rot, p_sx, p_sy
+
+
+def world_to_local_offset(par, x, y) -> tuple[int, int]:
+    """Le point MONDE authoré `(x, y)` exprimé dans le repère du parent authoré `par`, en Q8 : on défait sa rotation puis son
+    échelle. Recomposé au runtime avec la même pose, le local redonne le point que l'auteur a vu au canvas. UNE conversion pour
+    les acteurs (`parent_compose_lines`) et les Areas (`physics/areas.py`)."""
+    p_rot, p_sx, p_sy = authored_frame(par)
+    dx = float(int(x) - int(par.x))
+    dy = float(int(y) - int(par.y))
+    th = math.radians(-p_rot)
+    ux = dx * math.cos(th) - dy * math.sin(th)
+    uy = dx * math.sin(th) + dy * math.cos(th)
+    return int(round((ux / p_sx) * 256)), int(round((uy / p_sy) * 256))
+
+
 def parent_compose_lines(scene_actors: list, actor_offset: int,
                           placed_entry: list[int]) -> list[str]:
     """Recompose, chaque frame, le transform monde des acteurs qui ont un parent.
@@ -400,16 +422,8 @@ def parent_compose_lines(scene_actors: list, actor_offset: int,
         # à la POSE AUTHORÉE du parent : on défait sa rotation puis son
         # échelle. Le résultat, recomposé au runtime avec cette même pose,
         # redonne la position que l'auteur a vue au canvas.
-        p_rot = float(_number_value(getattr(par, "rotation", 0)) or 0)
-        p_sx = float(_number_value(getattr(par, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
-        p_sy = float(_number_value(getattr(par, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
-        dx = float(int(a.x) - int(par.x))
-        dy = float(int(a.y) - int(par.y))
-        th = math.radians(-p_rot)
-        ux = dx * math.cos(th) - dy * math.sin(th)
-        uy = dx * math.sin(th) + dy * math.cos(th)
-        ox = int(round((ux / p_sx) * 256))
-        oy = int(round((uy / p_sy) * 256))
+        p_rot, p_sx, p_sy = authored_frame(par)
+        ox, oy = world_to_local_offset(par, a.x, a.y)
         rot = int(_number_value(getattr(a, "rotation", 0)) or 0) - int(round(p_rot))
         sx = int(round(float(_number_value(getattr(a, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
         sy = int(round(float(_number_value(getattr(a, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))

@@ -1067,7 +1067,7 @@ static void __attribute__((unused)) contact_pair_run(const ContactPair* c, u16* 
 BS_ATTR_IWRAM
 static u16 area_overlap_mask(const Area* ar, const Actor* a, u16 allowed) {
     u16 m = 0;
-    if (!ar->active || !ar->box.active) return 0;
+    if (!ar->active || ar->held || !ar->box.active) return 0;
     for (int j=0; j<a->collision.box_count; j++) {
         int cj=_box_canonical(a,j);
         if ((allowed & (1u << cj)) && a->collision.boxes[j].active &&
@@ -1119,7 +1119,26 @@ static inline void area_set_active(int h, int on) { Area* a = _area_of(h); if (a
 static inline int area_by_name(int h) { return h; }
 static inline int area_get_name(int h) { return h; }
 static inline Vec2 area_get_position(int h) { const Area* a = _area_of(h); return a ? (Vec2){ a->x>>8, a->y>>8 } : (Vec2){ 0, 0 }; }
-static inline void area_set_position(int h, Vec2 p) { Area* a = _area_of(h); if (a) { a->x = p.x << 8; a->y = p.y << 8; } }
+/* Une Area qui suit un acteur ne se déplace pas par script : sa position est recomposée à chaque frame depuis celle de son
+   parent, une écriture serait écrasée aussitôt. Elle est donc sans effet (comme sur une référence absente). */
+static inline void area_set_position(int h, Vec2 p) { Area* a = _area_of(h); if (a && !a->parent) { a->x = p.x << 8; a->y = p.y << 8; } }
+/* L'acteur posé qu'elle suit, ou nil : sans parent, ou si le parent est détruit. */
+static inline Actor* area_get_parent(int h) {
+    const Area* a = _area_of(h);
+    return (a && a->parent && g_actors[a->parent - 1].alive) ? &g_actors[a->parent - 1] : (Actor*)0;
+}
+/* La taille de la forme : w/h tiennent dans un u8 (cf. CollisionShape), bornés ici comme `collision_shape_set_size`. Une Area
+   sans forme (`box.active` à 0) garde sa taille nulle : lire ou écrire la taille ne la rallume pas. */
+static inline Vec2 area_get_size(int h) {
+    const Area* a = _area_of(h);
+    return (a && a->box.active) ? (Vec2){ a->box.w, a->box.h } : (Vec2){ 0, 0 };
+}
+static inline void area_set_size(int h, Vec2 v) {
+    Area* a = _area_of(h);
+    if (!a || !a->box.active) return;
+    a->box.w = (u8)(v.x < 0 ? 0 : v.x > 255 ? 255 : v.x);
+    a->box.h = (u8)(v.y < 0 ? 0 : v.y > 255 ? 255 : v.y);
+}
 /* Le rectangle MONDE de la forme : position (Q8 >> 8) plus décalage, plus taille ; vide sans Area ou sans forme. */
 static inline Rect area_get_bounds(int h) {
     const Area* a = _area_of(h);
@@ -1129,7 +1148,7 @@ static inline Rect area_get_bounds(int h) {
 /* Un test GÉOMÉTRIQUE : ni matrice de tags, ni déclencheur. Une Area ou une boîte inactive ne touche personne. */
 static inline int area_overlaps_actor(int h, const Actor* other) {
     const Area* a = _area_of(h);
-    if (!a || !a->active || !a->box.active || !other) return 0;
+    if (!a || !a->active || a->held || !a->box.active || !other) return 0;
     for (int j = 0; j < other->collision.box_count; j++)
         if (other->collision.boxes[j].active &&
             box_overlap(a->x>>8, a->y>>8, &a->box, other->x>>8, other->y>>8, &other->collision.boxes[j]))

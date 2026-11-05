@@ -82,6 +82,15 @@ class GBAScene(QGraphicsScene):
         return [it for it in self._sprite_items
                 if it is not item and it.scene_sprite.name in names]
 
+    def descendant_area_items(self, item: "SpriteItem") -> list:
+        """AreaItem des Areas qui suivent `item.scene_sprite` ou l'un de ses descendants : déplacer un parent entraîne ses Areas
+        comme ses enfants (`area_descendants`, la même lecture que le build)."""
+        from core.models.scene import actor_descendant_names, area_descendants
+        names = {item.scene_sprite.name} | actor_descendant_names(
+            [it.scene_sprite for it in self._sprite_items], item.scene_sprite.name)
+        followers = set(map(id, area_descendants([it.area for it in self._area_items], names)))
+        return [it for it in self._area_items if id(it.area) in followers]
+
     # ── Sélection multiple : membres + item ACTIF ─────────────────
     # Un item sélectionné est « membre » ; parmi eux, un seul est ACTIF —
     # c'est lui que l'inspecteur détaille et lui que les gestes visant « un »

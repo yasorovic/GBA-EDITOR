@@ -29,6 +29,9 @@ typedef struct Area {
     int x, y;            /* position monde, Q8 */
     CollisionShape box;  /* la forme : offset, taille, tag */
     u8  active;          /* 0 = l'Area ne touche plus personne (un `exit` part au partenaire encore actif) */
+    u8  held;            /* 1 = son parent est inactif ou détruit : elle ne touche personne, sans avoir été éteinte (recalculé à chaque frame) */
+    u16 parent;          /* emplacement de l'acteur posé qu'elle suit, plus un ; 0 = aucun. Sa position est alors recomposée à chaque
+                            frame (cf. `parent_compose_lines`) : une écriture de script est sans effet. */
 } Area;
 
 /* Vec2/Vec3/Rect — les valeurs COMPOSÉES du sous-ensemble Lua (vec2(x,y),

@@ -223,6 +223,10 @@ class ProjectRenameMixin:
             refs = self.rename_lua_refs(DOMAIN_ACTOR, old_name, new_name)
             for path, n in self._rename_actor_ref_exports(old_name, new_name).items():
                 refs[path] = refs.get(path, 0) + n
+            # Les Areas de la scène qui suivent cet acteur le suivent aussi sous son nouveau nom (le défaire les remet).
+            for area in (owner.areas if owner is not None else []):
+                if area.parent == old_name:
+                    area.parent = new_name
             actor.name = new_name
             if scene is not None:
                 self.save_scene(scene)

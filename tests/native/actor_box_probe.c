@@ -645,6 +645,13 @@ int main(void) {
         printf("area_position_ecrite %d %d\n", g_areas[0].x >> 8, g_areas[0].y >> 8);
         Rect r = area_get_bounds(h);
         printf("area_bounds %d %d %d %d\n", r.x, r.y, r.w, r.h);       /* position, plus le décalage de la forme, plus sa taille */
+        Vec2 taille = area_get_size(h);
+        area_set_size(h, (Vec2){ 300, -4 });                                         /* hors bornes : serré, jamais de débordement */
+        Vec2 serree = area_get_size(h);
+        area_set_size(h, (Vec2){ 20, 6 });
+        Rect apres = area_get_bounds(h);
+        printf("area_taille %d %d %d %d %d %d %d\n", taille.x, taille.y, serree.x, serree.y, area_get_size(h).x, apres.w, apres.h);
+        area_set_size(h, (Vec2){ 16, 12 });
         area_set_position(h, (Vec2){ 100, 50 });
         printf("area_recouvre %d\n", area_overlaps_actor(h, &g_actors[4]));          /* les pieds (y 50..54) touchent la forme (y 53..65) */
         g_actors[4].x = 300 << 8;
@@ -662,7 +669,32 @@ int main(void) {
         printf("area_absente %d %d %d %d %d %d %d\n", vide.x, vide.y, rv.x, rv.y, rv.w, rv.h, area_overlaps_actor(0, &g_actors[4]));
         g_areas[0].box.active = 0;
         Rect sans = area_get_bounds(h);
-        printf("area_sans_forme %d %d\n", sans.w, sans.h);
+        area_set_size(h, (Vec2){ 50, 50 });                                         /* sans forme : l'écriture ne la rallume pas */
+        printf("area_sans_forme %d %d %d %d\n", sans.w, sans.h, area_get_size(h).x, g_areas[0].box.w);
+    }
+    /* Areas : une Area qui suit un acteur posé (l'emplacement 6, d'où `parent` = 7). Sa position est recomposée chaque frame par le
+       build : un script ne la déplace pas. Tant que le parent est inactif ou détruit (`held`), elle ne touche personne. */
+    {
+        g_actors[6] = (Actor){0};
+        g_actors[6].alive = 1; g_actors[6].active = 1;
+        g_actors[4].alive = 1; g_actors[4].active = 1; g_actors[4].x = 100 << 8; g_actors[4].y = 34 << 8;
+        g_actors[4].collision.boxes[0].active = 1; g_actors[4].collision.boxes[1].active = 1;
+        g_areas[0] = (Area){ 100 << 8, 50 << 8, (CollisionShape){ 0, 0, 16, 16, 0, 1, TAG_HIT }, 1, 0, 7 };
+        int h = 1;
+        area_set_position(h, (Vec2){ 5, 5 });
+        printf("area_parent_ecriture %d %d\n", g_areas[0].x >> 8, g_areas[0].y >> 8);          /* sans effet : elle ne bouge pas */
+        area_set_size(h, (Vec2){ 20, 20 });
+        printf("area_parent_taille %d %d\n", g_areas[0].box.w, g_areas[0].box.h);              /* la taille, elle, s'écrit */
+        printf("area_parent_lue %d\n", area_get_parent(h) == &g_actors[6]);
+        printf("area_parent_touche %d %d\n", area_overlaps_actor(h, &g_actors[4]), area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF));
+        g_areas[0].held = 1;                                                                    /* le parent s'est éteint */
+        printf("area_parent_tenue %d %d\n", area_overlaps_actor(h, &g_actors[4]), area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF));
+        g_areas[0].held = 0;
+        g_actors[6].alive = 0;                                                                  /* le parent est détruit */
+        printf("area_parent_detruit %d\n", area_get_parent(h) == 0);
+        g_areas[0].parent = 0;                                                                  /* sans parent : l'écriture passe */
+        area_set_position(h, (Vec2){ 5, 6 });
+        printf("area_libre %d %d %d\n", g_areas[0].x >> 8, g_areas[0].y >> 8, area_get_parent(h) == 0);
     }
     return 0;
 }

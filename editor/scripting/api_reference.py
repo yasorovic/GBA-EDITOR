@@ -171,7 +171,7 @@ _PROP_HOME: dict[str, str] = {
     "collision_shape.offset": "CollisionShape",
     "collision_shape.size":   "CollisionShape",
     "collision_shape.bounds": "CollisionShape",
-    "area.tag": "Area", "area.active": "Area", "area.name": "Area", "area.position": "Area", "area.bounds": "Area",
+    "area.tag": "Area", "area.active": "Area", "area.name": "Area", "area.position": "Area", "area.size": "Area", "area.bounds": "Area", "area.parent": "Area",
     "actor.screen_space": "Transform",
     "actor.affine":    "Sprite",
     "camera.position": "Camera",

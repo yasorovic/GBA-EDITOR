@@ -491,6 +491,10 @@ def _check_areas(ctx: ValidationContext, scene):
             ctx.warn(area, f"Areas \"{seen[s]}\" and \"{area.name}\" share the C symbol `{s}` in scene "
                            f"'{scene.name}'. Rename one of them.")
         seen.setdefault(s, area.name)
+        # Le parent est un acteur POSÉ de la scène (une Area n'en a pas d'autre sorte) : sans lui, il n'y a pas de repère.
+        if area.parent and area.parent not in {a.name for a in scene.actors}:
+            ctx.error(area, f"Area \"{area.name}\" has parent \"{area.parent}\", which is not an actor of this scene. "
+                            "A parent is chosen within the same scene.")
         if not any(c.active for c in area.components if isinstance(c, CollisionShapeComponent)):
             ctx.warn(area, "The Area has no active collision shape: it covers nothing.")
         _check_components(ctx, area, area.components)

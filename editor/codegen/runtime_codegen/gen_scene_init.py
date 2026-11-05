@@ -153,7 +153,7 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     # `actor:get(i)`/`actor:count()`. Les slots [0, placed) tiennent exactement ces
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.
     L.append(f"    g_scene_placed = {len(scene_actors)};")
-    L += area_init_lines(p, scene)
+    L += area_init_lines(p, scene, scene_actors, actor_offset)
     # La mémoire des contacts des paires posées ne survit pas à la scène (cf. `gen_scene_tick`).
     if collision_pairs(p, scene_actors, actor_offset, lua_actor_indices(p, scene_actors, actor_offset)):
         L.append("    for(unsigned _i=0;_i<sizeof(g_col_prev)/sizeof(g_col_prev[0]);_i++) g_col_prev[_i]=0;")

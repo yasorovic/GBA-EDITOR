@@ -369,7 +369,13 @@ class _ActiveSceneTree(_Tree):
                 area_item.setData(0, _ROLE_TYPE, T_AREA)
                 area_item.setData(0, _ROLE_OBJ, area)
                 self._update_area_item(area_item, area)
-                self._add_content_root(T_AREA, area, area_item)
+                # Une Area qui suit un acteur s'accroche sous lui, comme un acteur enfant ; sans parent, ou avec un parent
+                # introuvable (le build le refuse), elle reste à la racine plutôt que de disparaître.
+                host = items.get(area.parent) if area.parent else None
+                if host is not None:
+                    host.addChild(area_item)
+                else:
+                    self._add_content_root(T_AREA, area, area_item)
             self._populate_ui_branch(scene, project)
             self._install_visibility_controls()
         self.blockSignals(False)
@@ -711,6 +717,19 @@ class _ActiveSceneTree(_Tree):
             indicator = self.dropIndicatorPosition()
             self._accept_drop_handled(event)
             self._handle_ui_drop(dragged, target, indicator)
+            return
+
+        if dtype == T_AREA:
+            # Lâchée SUR un acteur : l'Area le suit. Lâchée hors de tout item : elle devient libre. Ailleurs (sur une autre
+            # Area, entre deux lignes), rien : la position dans la liste ne dit rien d'une Area.
+            on_actor = (target is not None and target.data(0, _ROLE_TYPE) == T_ACTOR
+                        and self.dropIndicatorPosition() == QAbstractItemView.DropIndicatorPosition.OnItem)
+            if on_actor or target is None:
+                self._accept_drop_handled(event)
+                get_dispatcher().set_area_parent(
+                    dragged.data(0, _ROLE_OBJ), target.data(0, _ROLE_OBJ).name if on_actor else None)
+                return
+            event.ignore()
             return
 
         if dtype == T_ACTOR:

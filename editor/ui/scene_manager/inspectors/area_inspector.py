@@ -78,6 +78,11 @@ class AreaInspector(QWidget):
         self._spin_y.valueChanged.connect(lambda v: self._set_area("y", int(v)))
         W.pair(label('common.position'), "X", C.AXIS_X, self._spin_x, "Y", C.AXIS_Y, self._spin_y,
                area_card.body_layout)
+        # Le parent : un acteur posé de la scène que l'Area suit (cf. Area.parent).
+        self._cmb_parent = W.combobox([])
+        self._cmb_parent.setToolTip(tooltip(title=label('actorinsp.tr.parent'), body=label('areainsp.parent_tip')))
+        self._cmb_parent.currentIndexChanged.connect(self._on_parent_changed)
+        W.row(label('actorinsp.tr.parent'), self._cmb_parent, area_card.body_layout)
         self._layout.addWidget(area_card)
 
         # La forme : reconstruite à chaque chargement (le composant change avec l'Area).
@@ -96,10 +101,30 @@ class AreaInspector(QWidget):
             self._chk_trigger.setChecked(area.is_trigger())
             self._spin_x.setValue(area.x)
             self._spin_y.setValue(area.y)
+            self._refresh_parent_choices()
             self._notes_edit.set_text_silent(area.notes)
         finally:
             self._blocking = False
         self._build_shape(area)
+
+    def _refresh_parent_choices(self) -> None:
+        """Les acteurs posés de la scène, et « (none) ». Un parent disparu reste visible plutôt que réécrit en silence : le build
+        le refuse déjà, l'inspecteur dit la même chose que lui."""
+        area = self._actor
+        self._cmb_parent.blockSignals(True)
+        self._cmb_parent.clear()
+        self._cmb_parent.addItem(label('common.none_dash'), None)
+        for actor in (self._scene.actors if self._scene else []):
+            self._cmb_parent.addItem(actor.name, actor.name)
+        index = self._cmb_parent.findData(area.parent) if area is not None else 0
+        if area is not None and area.parent and index < 0:
+            self._cmb_parent.addItem(label('actorinsp.parent_missing', name=area.parent), area.parent)
+            index = self._cmb_parent.findData(area.parent)
+        self._cmb_parent.setCurrentIndex(max(0, index))
+        self._cmb_parent.blockSignals(False)
+
+    def _on_parent_changed(self, _index: int) -> None:
+        self._set_area("parent", self._cmb_parent.currentData())
 
     def _build_shape(self, area: Area) -> None:
         if self._shape_container is not None:
@@ -135,6 +160,7 @@ class AreaInspector(QWidget):
             self._chk_trigger.setChecked(area.is_trigger())
             self._spin_x.setValue(area.x)
             self._spin_y.setValue(area.y)
+            self._refresh_parent_choices()
             shape = self._shape()
             if shape is not None:
                 for field_name, sync in self._field_syncers.items():
@@ -151,6 +177,7 @@ class AreaInspector(QWidget):
         if scene is not None:
             schedule_save(self._project.scenes, scene)
         get_dispatcher()._emit("scene_sprites_changed")   # le canvas redessine l'Area
+        get_dispatcher()._emit("actors_list_changed")     # l'arbre range l'Area sous son parent
         self.changed.emit()
 
     def _set_area(self, field_name: str, value) -> None:

@@ -171,6 +171,8 @@ class SpriteItem(QGraphicsPixmapItem):
         # faire suivre en translation groupée pendant le drag — cf. itemChange.
         self._drag_descendants: list = []
         self._drag_desc_origin: list = []
+        # Les Areas qui suivent cet acteur ou ses descendants : elles bougent avec lui (cf. `Area.parent`).
+        self._drag_area_origin: list = []
         self._drag_peers: list = []     # les autres acteurs sélectionnés, déplacés avec celui-ci
         self._mask_rects: list = []   # découpe par les windows (cf. set_mask_rects)
         self._canvas_w = canvas_w
@@ -253,12 +255,15 @@ class SpriteItem(QGraphicsPixmapItem):
         sc = self.scene()
         self._drag_descendants = sc.descendant_sprite_items(self) if sc is not None else []
         self._drag_desc_origin = [(it, *it.pos_px()) for it in self._drag_descendants]
+        self._drag_area_origin = ([(it, it.area.x, it.area.y) for it in sc.descendant_area_items(self)]
+                                  if sc is not None else [])
 
     def _end_drag(self) -> None:
         self._drag_origin = None
         self._drag_confirmed = False
         self._drag_descendants = []
         self._drag_desc_origin = []
+        self._drag_area_origin = []
 
     def mousePressEvent(self, e):
         self._begin_drag()
@@ -289,6 +294,11 @@ class SpriteItem(QGraphicsPixmapItem):
                 if (ox, oy) != (nx, ny) and id(it.scene_sprite) not in seen:
                     seen.add(id(it.scene_sprite))
                     moves.append((it.scene_sprite, ox, oy, nx, ny))
+            # Les Areas suivies : même entrée d'historique (`.x`/`.y` entiers, comme un acteur), chacune une fois.
+            for it, ox, oy in node._drag_area_origin:
+                if (ox, oy) != (it.area.x, it.area.y) and id(it.area) not in seen:
+                    seen.add(id(it.area))
+                    moves.append((it.area, ox, oy, it.area.x, it.area.y))
         return moves
 
     def mouseReleaseEvent(self, e):
@@ -317,12 +327,16 @@ class SpriteItem(QGraphicsPixmapItem):
         nodes = (self, *self._drag_peers)
         poses = [(it, ox, oy) for node in nodes if node._drag_origin is not None
                  for it, ox, oy in [(node, *node._drag_origin)] + list(node._drag_desc_origin)]
+        area_poses = [pose for node in nodes for pose in node._drag_area_origin]
         for node in nodes:
             node._end_drag()                      # d'abord : itemChange ne doit plus réécrire le modèle
         self._drag_peers = []
         for it, ox, oy in poses:
             it.scene_sprite.x, it.scene_sprite.y = ox, oy
             it.setPos(ox, oy)
+        for it, ox, oy in area_poses:
+            it.area.x, it.area.y = ox, oy
+            it.sync_pos()
         if self.scene() is not None:
             self.scene().sprite_moved.emit()
 
@@ -363,6 +377,11 @@ class SpriteItem(QGraphicsPixmapItem):
                     it.scene_sprite.x = ox + dx
                     it.scene_sprite.y = oy + dy
                     it.setPos(*it.pos_px())
+            if self._drag_area_origin:
+                ox0, oy0 = self._drag_origin
+                for it, ox, oy in self._drag_area_origin:
+                    it.area.x, it.area.y = ox + int(x) - ox0, oy + int(y) - oy0
+                    it.sync_pos()
             if self.scene() is not None:
                 self.scene().sprite_moved.emit()
             return QPointF(x, y)

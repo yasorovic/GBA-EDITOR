@@ -64,6 +64,42 @@ def test_les_formes_sont_toujours_des_capteurs_non_solides():
     assert (shape.solid, shape.response, shape.one_way) == (False, "sensor", "off")
 
 
+def test_le_parent_s_ecrit_seulement_s_il_existe_et_se_relit(tmp_path):
+    from core.models.scene import Actor
+    follower, free = Area(name="Follower", parent="Boss"), Area(name="Free")
+    p, scene = _project(tmp_path, follower, free)
+    scene.actors.append(Actor(name="Boss"))
+    saved = _scene_json(p, scene)["areas"]
+    assert saved[0]["parent"] == "Boss" and "parent" not in saved[1]
+    p.scenes.load()
+    back = p.scenes.get("Arena").areas
+    assert [a.parent for a in back] == ["Boss", None]
+
+
+def test_renommer_un_acteur_fait_suivre_ses_areas(tmp_path):
+    from core.models.scene import Actor
+    p, scene = _project(tmp_path, Area(name="Follower", parent="Boss"), Area(name="Other", parent="Rock"))
+    boss = Actor(name="Boss")
+    scene.actors += [boss, Actor(name="Rock")]
+    assert p.rename_actor(boss, "Chief", scene=scene) is True
+    assert [a.parent for a in scene.areas] == ["Chief", "Rock"]       # seules celles de cet acteur
+    assert p.rename_actor(boss, "Boss", scene=scene) is True          # le défaire (RenameActorCmd) les remet
+    assert scene.areas[0].parent == "Boss"
+
+
+def test_le_validateur_refuse_un_parent_qui_n_est_pas_un_acteur_de_la_scene(tmp_path):
+    from core import validator
+    from core.models.scene import Actor
+    p, scene = _project(tmp_path, Area(name="Follower", parent="Ghost"))
+    ctx = validator.ValidationContext(p)
+    validator._check_areas(ctx, scene)
+    assert any(m.level == "error" and "\"Ghost\"" in m.message for m in ctx._msgs)
+    scene.actors.append(Actor(name="Ghost"))
+    ctx = validator.ValidationContext(p)
+    validator._check_areas(ctx, scene)
+    assert not [m for m in ctx._msgs if m.level == "error"]
+
+
 def test_les_ids_de_membres_sont_uniques_avec_les_acteurs(tmp_path):
     p, scene = _project(tmp_path, Area(name="A"), Area(name="B"))
     ids = [a["id"] for a in _scene_json(p, scene)["areas"]]
