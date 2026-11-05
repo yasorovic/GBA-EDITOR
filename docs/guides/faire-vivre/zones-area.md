@@ -45,6 +45,9 @@ enfant. Quelques règles :
   touchaient reçoivent `on_area_exit`). Quand il revient, elle reprend.
 - Un script ne peut pas déplacer une Area qui a un parent : `area.position = …` est sans effet, sa
   place est recomposée depuis son parent à chaque frame. `area.parent` rend l'acteur suivi, ou `nil`.
+- **Supprimer le parent** dans l'éditeur supprime aussi ses Areas, et ses acteurs enfants avec
+  les Areas qui les suivent : un seul `Ctrl+Z` rend tout le sous-arbre. Supprimer l'Area seule ne
+  touche pas le parent.
 - Renommer le parent suit : les Areas qui le suivaient le suivent sous son nouveau nom. Le parent doit
   être dans la même scène ; sinon le build le refuse.
 - Collée dans une scène qui n'a pas ce parent, une Area devient libre.

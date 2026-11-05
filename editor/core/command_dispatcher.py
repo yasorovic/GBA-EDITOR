@@ -221,14 +221,23 @@ class CommandDispatcher(EventEmitter):
     def delete_actors(self, actors: list):
         """Supprime un LOT d'actors de la scène active en UNE entrée
         d'historique — supprimer une sélection est un seul geste, l'annuler
-        doit l'être aussi (même règle que `duplicate_actors`)."""
-        from core.history import RemoveListItemsCmd
+        doit l'être aussi (même règle que `duplicate_actors`).
+
+        Supprimer un parent supprime tout son SOUS-ARBRE : ses acteurs enfants (`Actor.parent`, à tout niveau) et les Areas qui
+        suivent l'un d'eux. Sans cela ils gardaient un parent introuvable, que le build refuse."""
+        from core.history import MacroCmd, RefreshAfterCmd, RemoveListItemsCmd
+        from core.models.scene import actor_descendant_names, area_descendants
         if not self._project or not self._project.active_scene:
             return
         scene = self._project.active_scene
-        victims = [a for a in actors if any(x is a for x in scene.actors)]
-        if not victims:
+        picked = [a for a in actors if any(x is a for x in scene.actors)]
+        if not picked:
             return
+        names = {a.name for a in picked}
+        for a in picked:
+            names |= actor_descendant_names(scene.actors, a.name)
+        victims = [a for a in scene.actors if a.name in names]
+        followers = area_descendants(scene.areas, names)
 
         def persist():
             get_bus().clear()
@@ -236,13 +245,13 @@ class CommandDispatcher(EventEmitter):
             self._emit("actors_list_changed")
             self._emit("scene_sprites_changed")
 
-        n = len(victims)
-        get_history().push(RemoveListItemsCmd(
-            scene.actors, victims, persist_fn=persist,
-            label=f"Deleted {n} actor{'s' if n > 1 else ''}"))
-        self._emit("status_message",
-                   f"Deleted actor: {victims[0].name}" if n == 1
-                   else f"Deleted {n} actors")
+        n, m = len(victims), len(followers)
+        label = f"Deleted {n} actor{'s' if n > 1 else ''}" + (f" and {m} area{'s' if m > 1 else ''}" if m else "")
+        cmds = [RemoveListItemsCmd(scene.actors, victims, label=label)]
+        if followers:
+            cmds.append(RemoveListItemsCmd(scene.areas, followers, label=label))
+        get_history().push(RefreshAfterCmd(MacroCmd(cmds, label), persist))
+        self._emit("status_message", f"Deleted actor: {victims[0].name}" if n == 1 and not m else label)
 
     def duplicate_actor(self, actor: Actor, dx: int = 8, dy: int = 8) -> Optional[Actor]:
         """Duplique un actor (copie profonde des composants) dans la scène active,

@@ -254,6 +254,36 @@ def test_l_arbre_accroche_une_area_sous_son_parent_et_le_depot_la_rattache(qapp,
     panel.deleteLater()
 
 
+def test_supprimer_un_parent_supprime_son_sous_arbre_en_une_entree_annulable(editor):
+    scene = editor._project.active_scene
+    parent, child, other = scene.actors[0], scene.actors[1], scene.actors[2]
+    child.parent = parent.name                                   # un acteur enfant
+    door = next(a for a in scene.areas if a.name == "Door")
+    zone = next(a for a in scene.areas if a.name == "Zone")
+    door.parent = parent.name                                    # une Area qui suit le parent
+    zone.parent = child.name                                     # une Area qui suit l'enfant : elle part aussi
+    free = Area(name="Free", x=1, y=2)                           # sans parent : elle reste
+    scene.areas.append(free)
+    before_actors, before_areas = list(scene.actors), list(scene.areas)
+    get_dispatcher().delete_actors([parent])
+    assert parent not in scene.actors and child not in scene.actors and other in scene.actors
+    assert scene.areas == [free]                                 # Door et Zone suivaient le sous-arbre supprimé
+    assert len(get_history()._undo) == 1                         # un seul Ctrl+Z pour tout le sous-arbre
+    get_history().undo()
+    assert scene.actors == before_actors and scene.areas == before_areas                     # même contenu, même ordre
+    assert door.parent == parent.name and zone.parent == child.name and child.parent == parent.name
+
+
+def test_supprimer_un_enfant_laisse_son_parent_et_les_areas_du_parent(editor):
+    scene = editor._project.active_scene
+    parent, child = scene.actors[0], scene.actors[1]
+    child.parent = parent.name
+    door = next(a for a in scene.areas if a.name == "Door")
+    door.parent = parent.name
+    get_dispatcher().delete_actors([child])
+    assert parent in scene.actors and child not in scene.actors and door in scene.areas
+
+
 def test_coller_une_area_dans_une_scene_sans_son_parent_la_libere(editor):
     from core.models.scene import Scene
     project = editor._project
