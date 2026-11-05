@@ -42,14 +42,14 @@ def test_la_carte_scene_affiche_l_heritage_et_cree_une_surcharge(qapp, tmp_path)
 
     assert not scene.physics_gravity_override
     assert inspector._spin_gravity_x.isEnabled()
-    assert not inspector._btn_physics_reset.isEnabled()
+    assert inspector._btn_physics_reset.isHidden()
     assert (inspector._spin_gravity_x.value(),
             inspector._spin_gravity_y.value()) == (0.25, 0.5)
 
     inspector._spin_gravity_y.setValue(0.75)
     assert scene.physics_gravity_override
     assert (scene.physics_gravity_x, scene.physics_gravity_y) == (0.25, 0.75)
-    assert inspector._btn_physics_reset.isEnabled()
+    assert not inspector._btn_physics_reset.isHidden()
 
     inspector._btn_physics_reset.click()
     assert not scene.physics_gravity_override
