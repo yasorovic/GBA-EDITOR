@@ -121,6 +121,51 @@ def test_copier_une_area_la_colle_dans_une_autre_scene(editor):
     assert len(other.areas) == 1                                      # un seul Ctrl+Z défait le collage
 
 
+def test_l_outil_d_ajout_pose_une_area_centree_et_aimantee_en_une_entree_annulable(editor):
+    from ui.scene_manager.canvas_tools import AddAreaTool
+    scene = editor._project.active_scene
+    tool = AddAreaTool(editor._gba_view)
+    tool.activate()
+    try:
+        assert tool._centre(QPointF(101, 83)) == (104, 80)             # aimanté à 8 px
+        assert tool.on_press(QPointF(101, 83), None) is True
+    finally:
+        tool.deactivate()
+    from PyQt6.QtWidgets import QApplication
+    QApplication.processEvents()      # le retour à l'outil Sélection est différé (QTimer 0) : avant la fermeture de l'éditeur
+    assert editor._canvas_container._toolbar.current_tool == "select"
+    created = scene.areas[-1]
+    assert len(scene.areas) == 3 and created.name not in ("Door", "Zone")
+    assert (created.x, created.y) == (104 - 16, 80 - 16)               # le clic est le CENTRE de l'Area
+    get_history().undo()
+    assert len(scene.areas) == 2
+
+
+def test_la_gomme_supprime_une_area_sous_le_curseur(editor):
+    from ui.scene_manager.canvas_tools import EraseTool
+    scene = editor._project.active_scene
+    item = _item(editor, "Zone")
+    point = item.mapToScene(item.shape_rect().center())
+    EraseTool(editor._gba_view).on_press(point, None)
+    assert [a.name for a in scene.areas] == ["Door"]
+    get_history().undo()
+    assert [a.name for a in scene.areas] == ["Door", "Zone"]
+
+
+def test_le_bouton_plus_offre_acteur_et_area_et_la_touche_a_reprend_le_dernier_choix(editor):
+    toolbar = editor._canvas_container._toolbar
+    seen = []
+    toolbar.tool_changed.connect(seen.append)
+    toolbar._select_add_mode("add_area")
+    assert toolbar.current_tool == "add_area" and toolbar._btns["add"].isChecked()    # le (+) reste coché
+    toolbar.activate_shortcut("select")
+    toolbar.activate_shortcut("add")                                                   # la touche A : dernier choix
+    assert seen[-1] == "add_area" and toolbar.current_tool == "add_area"
+    toolbar._select_add_mode("add")
+    toolbar.activate_shortcut("add")
+    assert seen[-1] == "add"
+
+
 def test_les_fleches_deplacent_les_areas_en_une_entree_fusionnee(editor):
     item = _item(editor, "Door")
     item.setSelected(True)

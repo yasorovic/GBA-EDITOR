@@ -4973,7 +4973,7 @@
     "hints.scene.actor_menu": { "text": "Opens the actor menu" },
     "hints.scene.nudge": { "text": "Nudges by 1 px (Shift: 8 px)" },
     "hints.scene.place_actor": { "text": "Places an actor on the grid" },
-    "hints.scene.erase_actor": { "text": "Deletes the actor under the cursor" },
+    "hints.scene.erase_actor": { "text": "Deletes the actor or area under the cursor" },
     "hints.scene.paint_solid": { "text": "Paints solid collision tiles" },
     "hints.scene.erase_tiles": { "text": "Erases collision tiles" },
     "hints.scene.paint_oneway": { "text": "Paints one-way collision faces" },
@@ -5156,6 +5156,11 @@
     "common.area": { "text": "Area" },
     "scttree.filter_areas": { "text": "Areas" },
     "areainsp.shape": { "text": "Shape" },
-    "scncanvas.rename_area": { "text": "Rename area" }
+    "scncanvas.rename_area": { "text": "Rename area" },
+    "cvtool.add": { "text": "Add" },
+    "cvtool.add_tip": { "text": "Places an actor or an area on the canvas with a click. The menu chooses which." },
+    "cvtool.add_area": { "text": "Add area" },
+    "cvtool.add_area_tip": { "text": "A click on the canvas places a new area: a game zone with a collision shape." },
+    "hints.scene.place_area": { "text": "Places an area on the grid" }
   }
 }

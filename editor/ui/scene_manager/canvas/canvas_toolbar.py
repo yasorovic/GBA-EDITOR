@@ -25,7 +25,7 @@ class FloatingToolbar(QFrame):
 
     Outils :
         select    — Sélection / déplacement d'actors   (S)
-        add       — Ajouter un actor au clic           (A)
+        add       — Ajouter un actor ou une Area au clic (A, dropdown)
         erase     — Supprimer un actor au clic         (E)
         collision — Édition de collisions (dropdown)   (C)
         palette   — Éditeur de palette couleurs        (P)
@@ -41,8 +41,15 @@ class FloatingToolbar(QFrame):
     # Outils principaux — (id, icon_key, titre, description) — le raccourci est `canvas.<icon_key>`
     _MAIN_TOOLS = [
         ("select", "tool_select", 'cvtool.select', 'cvtool.select_tip'),
-        ("add", "tool_add", 'cvtool.add_actor', 'cvtool.add_actor_tip'),
+        ("add", "tool_add", 'cvtool.add', 'cvtool.add_tip'),
         ("erase", "tool_erase", 'cvtool.eraser', 'cvtool.eraser_tip'),
+    ]
+
+    # Sous-outils d'ajout — (id, icon_key, label, tooltip). Le bouton (+) garde son icône ; ce qu'un clic pose se
+    # choisit au dropdown, comme collision et interface, et A reprend le dernier choix.
+    _ADD_MODES = [
+        ("add", "tool_add", 'cvtool.add_actor', 'cvtool.add_actor_tip'),
+        ("add_area", "area", 'cvtool.add_area', 'cvtool.add_area_tip'),
     ]
 
     # Sous-outils collision — (id, icon_key, label, tooltip)
@@ -137,6 +144,7 @@ class FloatingToolbar(QFrame):
         self._dragging = False
         self._drag_offset = QPoint()
         self._current_tool = "select"
+        self._current_add = "add"
         self._current_collision = "collision_8"
         self._current_inpaint = "inpaint_brush"
         self._current_ui = "ui_text"
@@ -189,7 +197,10 @@ class FloatingToolbar(QFrame):
             btn.setCheckable(True)
             btn.setChecked(tool_id == "select")
             btn.setFixedSize(36, 36)
-            btn.clicked.connect(lambda _, t=tool_id: self._set_tool(t))  # re-coché par _sync_buttons
+            if tool_id == "add":
+                btn.clicked.connect(self._on_add_click)    # un dropdown : acteur ou Area
+            else:
+                btn.clicked.connect(lambda _, t=tool_id: self._set_tool(t))  # re-coché par _sync_buttons
             layout.addWidget(btn, 0, Qt.AlignmentFlag.AlignHCenter)
             self._btns[tool_id] = btn
 
@@ -256,6 +267,41 @@ class FloatingToolbar(QFrame):
 
         layout.addStretch()
         self.adjustSize()
+
+    # ── Ajout dropdown ────────────────────────────────────────────
+
+    def _on_add_click(self):
+        from PyQt6.QtGui import QAction
+        from PyQt6.QtWidgets import QMenu
+
+        menu = QMenu(self)
+        menu.setFont(QFont(T.UI, T.MD))
+        menu.setStyleSheet(f"""
+            QMenu {{ background:{C.BG_RAISED}; color:{C.TEXT_NORM}; border:1px solid {C.SPLITTER};
+                    border-radius:4px; padding:4px; }}
+            QMenu::item {{ padding:5px 14px 5px 8px; border-radius:3px; icon-size:20px; }}
+            QMenu::item:selected {{ background:{C.BG_SEL}; color:{C.ACCENT}; }}
+            QMenu::item:checked  {{ color:{C.ACCENT}; }}
+        """)
+        from ui.common.icons import COLOR_DEFAULT
+        from ui.common.icons import get as _ico
+
+        for mode_id, icon_key, lbl_key, tip in self._ADD_MODES:
+            act = QAction(label(lbl_key), self)
+            act.setIcon(_ico(icon_key, COLOR_DEFAULT))
+            act.setToolTip(tooltip(title=label(lbl_key), body=label(tip)))
+            act.setCheckable(True)
+            act.setChecked(self._current_add == mode_id)
+            act.triggered.connect(lambda _, m=mode_id: self._select_add_mode(m))
+            menu.addAction(act)
+
+        btn = self._btns["add"]
+        self._exec_menu(menu, btn.mapToGlobal(QPoint(btn.width() + 4, 0)), btn)
+
+    def _select_add_mode(self, mode: str):
+        # Le bouton garde son (+) ; le mode choisi est indiqué par la coche du menu.
+        self._current_add = mode
+        self._set_tool(mode)
 
     # ── Collision dropdown ────────────────────────────────────────
 
@@ -415,6 +461,7 @@ class FloatingToolbar(QFrame):
         for tid, btn in self._btns.items():
             btn.setChecked(
                 tid == tool
+                or (tid == "add" and tool == "add_area")
                 or (tid == "collision" and tool.startswith("collision"))
                 or (tid == "inpaint_btn" and tool.startswith("inpaint"))
                 or (tid == "ui_btn" and tool.startswith("ui_"))
@@ -437,7 +484,9 @@ class FloatingToolbar(QFrame):
         """Active un outil depuis un raccourci clavier. Pour 'collision' /
         'inpaint', reprend le dernier sous-mode utilisé (comme un clic ré-active
         le mode courant). Passe par _set_tool → boutons + signal synchronisés."""
-        if group == "collision":
+        if group == "add":
+            self._set_tool(self._current_add)
+        elif group == "collision":
             self._set_tool(self._current_collision)
         elif group == "inpaint":
             self._set_tool(self._current_inpaint)

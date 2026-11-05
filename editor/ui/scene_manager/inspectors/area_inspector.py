@@ -50,6 +50,13 @@ class AreaInspector(QWidget):
         self._layout.setSpacing(10)
         scroll.setWidget(inner)
 
+        # La note, en tête comme dans l'inspecteur d'un acteur.
+        notes_card = CollapsibleCard(label('common.note'))
+        self._notes_edit = NotesEdit()
+        self._notes_edit.committed.connect(lambda text: self._set_area("notes", text))
+        notes_card.body_layout.addWidget(self._notes_edit)
+        self._layout.addWidget(notes_card)
+
         # Position et état de départ.
         area_card = CollapsibleCard(label('common.area'))
         self._chk_active = QCheckBox(label('actorinsp.active'))
@@ -69,12 +76,6 @@ class AreaInspector(QWidget):
         self._shape_card = CollapsibleCard(label('areainsp.shape'))
         self._layout.addWidget(self._shape_card)
         self._shape_container: Optional[QWidget] = None
-
-        notes_card = CollapsibleCard(label('common.note'))
-        self._notes_edit = NotesEdit()
-        self._notes_edit.committed.connect(lambda text: self._set_area("notes", text))
-        notes_card.body_layout.addWidget(self._notes_edit)
-        self._layout.addWidget(notes_card)
         self._layout.addStretch()
 
     # ── Chargement ────────────────────────────────────────────────

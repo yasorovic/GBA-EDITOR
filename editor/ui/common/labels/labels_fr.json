@@ -2569,7 +2569,7 @@
     "hints.scene.actor_menu": { "text": "Ouvre le menu de l’acteur" },
     "hints.scene.nudge": { "text": "Décale de 1 px (Maj : 8 px)" },
     "hints.scene.place_actor": { "text": "Place un acteur sur la grille" },
-    "hints.scene.erase_actor": { "text": "Supprime l’acteur sous le curseur" },
+    "hints.scene.erase_actor": { "text": "Supprime l’acteur ou l’area sous le curseur" },
     "hints.scene.paint_solid": { "text": "Peint des tuiles de collision pleines" },
     "hints.scene.erase_tiles": { "text": "Efface des tuiles de collision" },
     "hints.scene.paint_oneway": { "text": "Peint des faces de collision à sens unique" },
@@ -2778,6 +2778,11 @@
     "common.area": { "text": "Area" },
     "scttree.filter_areas": { "text": "Areas" },
     "areainsp.shape": { "text": "Forme" },
-    "scncanvas.rename_area": { "text": "Renommer l'area" }
+    "scncanvas.rename_area": { "text": "Renommer l'area" },
+    "cvtool.add": { "text": "Ajouter" },
+    "cvtool.add_tip": { "text": "Un clic sur le canvas place un acteur ou une area. Le menu choisit lequel." },
+    "cvtool.add_area": { "text": "Ajouter une area" },
+    "cvtool.add_area_tip": { "text": "Un clic sur le canvas place une nouvelle area : une zone de jeu avec une forme de collision." },
+    "hints.scene.place_area": { "text": "Place une area sur la grille" }
   }
 }

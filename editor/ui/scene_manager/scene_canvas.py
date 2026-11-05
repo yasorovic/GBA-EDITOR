@@ -798,7 +798,8 @@ class SceneEditor(QWidget):
     # ── Outil actif ───────────────────────────────────────────────
 
     def _on_tool_changed(self, tool_id: str):
-        from ui.scene_manager.canvas_tools import AddActorTool, CollisionTool, EraseTool, SelectTool
+        from ui.scene_manager.canvas_tools import (
+            AddActorTool, AddAreaTool, CollisionTool, EraseTool, SelectTool)
 
         match tool_id:
             case t if t.startswith("collision"):
@@ -809,6 +810,8 @@ class SceneEditor(QWidget):
                 self._gba_view.set_tool(SceneInpaintingTool(self._gba_view, t))
             case "add":
                 self._gba_view.set_tool(AddActorTool(self._gba_view))
+            case "add_area":
+                self._gba_view.set_tool(AddAreaTool(self._gba_view))
             case "erase":
                 self._gba_view.set_tool(EraseTool(self._gba_view))
             case t if t.startswith("ui_"):
