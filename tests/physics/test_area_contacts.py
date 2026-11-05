@@ -233,6 +233,24 @@ def test_la_frame_0_recompose_la_position_vue_dans_l_editeur():
         assert abs(got[0] - area.x) <= 1 and abs(got[1] - area.y) <= 1, (boss, got)
 
 
+def test_une_seule_conversion_monde_vers_local_pour_acteurs_parties_et_areas():
+    """Les parties d'un prefab passent par la conversion des acteurs, avec la racine du prefab (sans pose) pour origine."""
+    from codegen.runtime_codegen import gen_pool
+    from core.models.scene import Prefab
+    arm = Actor(name="Arm", x=0, y=0, rotation=90, scale_x=2.0, scale_y=2.0)
+    # (30, 10) vu depuis un parent tourné de 90° et doublé : on défait la rotation, puis l'échelle (Q8).
+    assert gen_pool.world_to_local_offset(arm, 30, 10) == (1280, -3840)
+    assert gen_pool.world_to_local_offset(arm, 30, 10, origin=(30, 10)) == (0, 0)           # une origine explicite remplace la pose
+    assert gen_pool.world_to_local_offset(Actor(name="P", x=10, y=0), 30, 10) == (20 * 256, 10 * 256)
+    # La racine d'un prefab n'a pas de pose : ses parties s'expriment depuis l'origine, sans rotation ni échelle.
+    pf = Prefab(name="Boss", actor=Actor(name="Boss"),
+                children=[arm, Actor(name="Hand", x=30, y=10, parent="Arm"), Actor(name="Leg", x=7, y=-3)])
+    model = {"prefab": pf, "shared": True, "model_id": 3, "group": 4, "member_entries": [0, 1, 2, 3], "spool": {"entries": True}}
+    text = "\n".join(gen_pool.pool_compose_lines([model]))
+    assert "int _lx = (1280 * _px) >> 8, _ly = (-3840 * _py) >> 8;" in text                   # Hand, dans le repère d'Arm
+    assert "int _lx = (1792 * _px) >> 8, _ly = (-768 * _py) >> 8;" in text                    # Leg, depuis la racine (7, -3) × 256
+
+
 def test_l_entree_de_scene_pose_les_areas_et_remet_les_contacts_a_zero():
     from codegen.runtime_codegen.physics.areas import area_init_lines
     scene = Scene(name="S", areas=[_area("Door", tag="door", x=40, y=56)])

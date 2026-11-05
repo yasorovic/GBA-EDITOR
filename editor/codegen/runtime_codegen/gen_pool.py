@@ -351,13 +351,17 @@ def authored_frame(par) -> tuple[float, float, float]:
     return p_rot, p_sx, p_sy
 
 
-def world_to_local_offset(par, x, y) -> tuple[int, int]:
+def world_to_local_offset(par, x, y, origin: tuple[int, int] | None = None) -> tuple[int, int]:
     """Le point MONDE authoré `(x, y)` exprimé dans le repère du parent authoré `par`, en Q8 : on défait sa rotation puis son
     échelle. Recomposé au runtime avec la même pose, le local redonne le point que l'auteur a vu au canvas. UNE conversion pour
-    les acteurs (`parent_compose_lines`) et les Areas (`physics/areas.py`)."""
+    les acteurs (`parent_compose_lines`), les parties de prefab (`pool_compose_lines`) et les Areas (`physics/areas.py`).
+
+    `origin` est le point monde du parent, par défaut sa position authorée. La racine d'un prefab n'en a pas (le template est
+    posé à l'origine, `spawn(x, y)` décide où) : ses parties passent `(0, 0)`, avec la rotation et l'échelle de la racine."""
     p_rot, p_sx, p_sy = authored_frame(par)
-    dx = float(int(x) - int(par.x))
-    dy = float(int(y) - int(par.y))
+    ox0, oy0 = origin if origin is not None else (int(par.x), int(par.y))
+    dx = float(int(x) - ox0)
+    dy = float(int(y) - oy0)
     th = math.radians(-p_rot)
     ux = dx * math.cos(th) - dy * math.sin(th)
     uy = dx * math.sin(th) + dy * math.cos(th)
@@ -516,19 +520,12 @@ def pool_compose_lines(pi: list[dict]) -> list[str]:
             # Parent = une autre partie, sinon la racine du groupe (décalage 0).
             p_off = rank.get(par.name, 0) if par is not None else 0
             ref = par if par is not None else pf
-            p_rot = float(_number_value(getattr(ref, "rotation", 0)) or 0)
-            p_sx = float(_number_value(getattr(ref, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
-            p_sy = float(_number_value(getattr(ref, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
+            p_rot, p_sx, p_sy = authored_frame(ref)
             # La racine d'un prefab n'a pas de pose authorée — le template est
             # posé à l'origine, et c'est `spawn(x, y)` qui décide où. Le monde
             # d'un enfant se lit donc directement comme un offset au template.
-            rx = int(getattr(ref, "x", 0) or 0) if par is not None else 0
-            ry = int(getattr(ref, "y", 0) or 0) if par is not None else 0
-            dx, dy = float(int(pt.x) - rx), float(int(pt.y) - ry)
-            th = math.radians(-p_rot)
-            ux = dx * math.cos(th) - dy * math.sin(th)
-            uy = dx * math.sin(th) + dy * math.cos(th)
-            ox, oy = int(round(ux / p_sx * 256)), int(round(uy / p_sy * 256))
+            origin = (int(getattr(ref, "x", 0) or 0), int(getattr(ref, "y", 0) or 0)) if par is not None else (0, 0)
+            ox, oy = world_to_local_offset(ref, pt.x, pt.y, origin=origin)
             rot = int(_number_value(getattr(pt, "rotation", 0)) or 0) - int(round(p_rot))
             sx = int(round(float(_number_value(getattr(pt, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
             sy = int(round(float(_number_value(getattr(pt, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
