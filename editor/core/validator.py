@@ -1903,9 +1903,9 @@ def _check_interactive(ctx: ValidationContext):
 
     - `box_tag` nomme une boîte DÉJÀ posée : sans elle, la zone n'existe pas ;
     - sans `box_tag`, le composant ajoute SA boîte : il lui faut un emplacement libre (`MAX_BOXES`) ;
-    - un composant sans `on_interact` dans le script de l'acteur ne fait rien (et inversement :
+    - un composant sans `on_interact` ni SoundFx d'interaction ne fait rien (et inversement :
       un `on_interact` sans composant n'est jamais appelé) — avertissement, le jeu tourne."""
-    from core.models.components import CollisionShapeComponent, InteractiveComponent, ScriptComponent
+    from core.models.components import CollisionShapeComponent, InteractiveComponent, ScriptComponent, SoundFxComponent
     MAX_BOXES = 4      # actor_types_static.h
     scenes = list(ctx.project.scenes)
     owners = [(a, a.name) for sc in scenes for a in sc.actors]
@@ -1932,8 +1932,15 @@ def _check_interactive(ctx: ValidationContext):
             if path and path.suffix.lower() == ".lua":
                 handlers = ctx.script_functions(path)
         active = [c for c in comps if c.active]
+        sound = next((c for c in getattr(owner, "components", [])
+                      if isinstance(c, SoundFxComponent)), None)
+        sound_interact = bool(sound and sound.active and sound.trigger == "on_interact" and sound.sfx_name
+                              and any(s.name == sound.sfx_name for s in getattr(ctx.project, "sfx", [])))
+        if sound and sound.active and sound.trigger == "on_interact" and not active:
+            ctx.warn(name, "SoundFx uses on_interact but this actor has no active Interactive component: "
+                           "the sound is never triggered. Add the component.")
         if handlers is not None:
-            if active and "on_interact" not in handlers:
+            if active and "on_interact" not in handlers and not sound_interact:
                 ctx.warn(name, "Interactive is set but the script has no on_interact(who): the "
                                "interaction does nothing. Add the handler to the script.")
             if not active and "on_interact" in handlers:

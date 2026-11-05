@@ -20,6 +20,7 @@ from codegen.runtime_codegen.gen_sprite import (
     anim_tick_variants, anim_variants, appearances, oam_write_lines, shown,
 )
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
+from core.models.components import SFX_AUTO_TRIGGERS
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
 from codegen.runtime_codegen.physics.body import (
     physics_body_mode, physics_collider_mask, project_has_one_way, project_sets_gravity, uses_character_solver,
@@ -246,11 +247,11 @@ def gen_scene_tick(
     sfx_by_trigger: dict = {}
     for j, (actor, _spr) in enumerate(scene_actors, start=actor_offset):
         sfx_sym, sfx_vol, sfx_trig = sfx_trigger_info(p, actor)
-        if sfx_sym and sfx_trig not in ("manual", "on_spawn", "on_destroy"):
+        if sfx_sym and sfx_trig != "manual" and sfx_trig not in SFX_AUTO_TRIGGERS:
             sfx_by_trigger.setdefault(sfx_trig, []).append(("actor", j, sfx_sym, sfx_vol))
     for p2 in pi:
         sfx_sym, sfx_vol, sfx_trig = sfx_trigger_info(p, p2["prefab"])
-        if sfx_sym and sfx_trig not in ("manual", "on_spawn", "on_destroy"):
+        if sfx_sym and sfx_trig != "manual" and sfx_trig not in SFX_AUTO_TRIGGERS:
             if p2["shared"]:
                 sfx_by_trigger.setdefault(sfx_trig, []).append(("prefab", p2, sfx_sym, sfx_vol))
 

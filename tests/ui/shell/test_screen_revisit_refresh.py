@@ -85,6 +85,23 @@ def test_refresh_appele_en_revisite_pas_a_la_premiere_visite():
     assert len(win.rescans) == 3                # chaque changement d'écran rattrape d'abord le disque
 
 
+def test_premiere_visite_palettes_recoit_le_store_partage():
+    from window import MainWindow
+
+    screen = _FakeScreen()
+    received = []
+    screen.set_folder_store = received.append
+    win = _make_window(screen)
+    win._screens[0].name = "Palettes"
+    store = object()
+    win.scene_library_panel = SimpleNamespace(folder_store=store)
+
+    MainWindow._load_screen_for_project(win, 0)
+
+    assert screen.loaded == 1
+    assert received == [store]
+
+
 def test_pas_de_refresh_sans_projet():
     from window import MainWindow
 

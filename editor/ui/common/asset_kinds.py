@@ -475,6 +475,7 @@ PALETTES = AssetKind(
     add_tooltip_key = 'akind.add_palette',
     add_tip_key = 'akind.add_palette_tip',
     file_of     = store_file("palettes"),
+    folder_family = "palettes",
     duplicate   = _store_duplicator("palettes"),
 )
 

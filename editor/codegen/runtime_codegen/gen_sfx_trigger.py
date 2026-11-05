@@ -11,7 +11,7 @@ def sfx_trigger_info(p: Project, owner) -> tuple[Optional[str], int, str]:
     d'un actor/prefab, si présent et résolu vers un Sfx du projet.
 
     Rend (None, 0, "manual") si rien n'est configuré — l'appelant n'a alors
-    rien à émettre. Les triggers AUTOMATIQUES ("on_spawn"/"on_destroy"/un nom
+    rien à émettre. Les triggers AUTOMATIQUES ("on_spawn"/"on_destroy"/"on_interact"/un nom
     de bouton ou d'action) sont injectés au site d'appel connu au build par CE
     module, indépendamment de tout script sur l'actor : c'est ce qui fait
     marcher un déclencheur sur un actor SANS ScriptComponent (menu, decor

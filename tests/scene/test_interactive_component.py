@@ -101,6 +101,7 @@ def _messages(components, lua: str | None = None, tmp_path=None):
     actor = SimpleNamespace(name="Chest", components=components)
     hero = SimpleNamespace(name="Hero", components=[], is_player=True)
     project = SimpleNamespace(scenes=[SimpleNamespace(name="S", actors=[actor, hero])], prefabs=[],
+                              sfx=[SimpleNamespace(name="Open")],
                               asset_abs=lambda rel: root / rel)
     ctx = ValidationContext.__new__(ValidationContext)
     ctx.project, ctx._msgs, ctx._focus, ctx._scripts = project, [], "", {}
@@ -148,6 +149,21 @@ def test_un_handler_sans_composant_averti(tmp_path):
     assert [m[0] for m in orphelin] == ["warning"] and "never called" in orphelin[0][1]
     inactif = _messages([InteractiveComponent(active=False)], LUA_AVEC_HANDLER, tmp_path)
     assert [m[0] for m in inactif] == ["warning"]
+
+
+def test_un_son_interaction_suffit_sans_handler_et_exige_interactive(tmp_path):
+    from core.models.components import SoundFxComponent, components_from_list, components_to_list
+    sound = SoundFxComponent(sfx_name="Open", trigger="on_interact")
+    assert components_from_list(components_to_list([sound])) == [sound]
+    assert _messages([InteractiveComponent(), sound], tmp_path=tmp_path) == []
+    for comp in (None, InteractiveComponent(active=False)):
+        messages = _messages([sound] + ([comp] if comp else []), tmp_path=tmp_path)
+        assert any("sound is never triggered" in m for _, m in messages)
+    for sound in (SoundFxComponent(sfx_name="Open", trigger="on_interact", active=False),
+                  SoundFxComponent(sfx_name="Missing", trigger="on_interact"),
+                  SoundFxComponent(sfx_name="Open", trigger="a")):
+        assert any("on_interact(who)" in m for _, m in
+                   _messages([InteractiveComponent(), sound], tmp_path=tmp_path))
 
 
 def test_une_scene_interactive_sans_joueur_averti(tmp_path):

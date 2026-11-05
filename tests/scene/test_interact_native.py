@@ -24,6 +24,8 @@ u32 g_alive_epoch;
 PoolCursor g_nth;
 static int g_wall_x0 = 0, g_wall_x1 = -1;       /* un mur vertical : x dans [x0, x1], tout y */
 static int tile_wall_at(int px, int py){ (void)py; return px >= g_wall_x0 && px <= g_wall_x1; }
+static int sfx_calls, last_sfx, last_volume;
+static void sfx_play(int id,int volume,int unused){ sfx_calls++; last_sfx=id; last_volume=volume; }
 %(helpers)s
 
 /* Un acteur actif en (x, y), une seule boîte (bx, by, w, h) active. */
@@ -187,3 +189,75 @@ def test_une_instance_du_pool_est_un_consommateur_par_son_modele(resultats):
 def test_le_plus_proche_l_emporte_entre_pose_et_ne(resultats):
     assert resultats["pool_contre_pose"] == 0        # le posé (à 18 px) est plus proche que l'instance née (19 px)
     assert resultats["pool_plus_proche"] == -2 - 4   # l'instance née (17 px) l'emporte
+
+
+@pytest.mark.parametrize("handler", [False, True])
+def test_son_interaction_parite_pose_spawne(tmp_path, handler):
+    """Le tick généré joue le son du seul objet retenu, avec ou sans script, posé ou né au tick 0."""
+    from types import SimpleNamespace
+    from codegen.c_names import scene_actor_sym
+    from codegen.runtime_codegen.interact_gen import interact_helper_lines, interact_tick_lines
+    from core.models.audio import Sfx, volume_to_effect
+    from core.models.components import CollisionShapeComponent, InteractiveComponent, SoundFxComponent
+    from core.models.scene import Actor, Prefab, Scene
+    from core.project import Project
+
+    cc = compilateur_hote()
+    if cc is None:
+        pytest.skip("aucun compilateur C hôte")
+    project = Project(tmp_path)
+    sound = Sfx(name="Open", volume=70)
+    project.sfx.append(sound)
+    hero = Actor(name="Hero", is_player=True)
+    chest = Actor(name="Chest", components=[CollisionShapeComponent(tag="zone", w=16, h=16),
+        InteractiveComponent(box_tag="zone"), SoundFxComponent(sfx_name="Open", trigger="on_interact")])
+    ticks = []
+    for pooled in (False, True):
+        scene = Scene(name="S", actors=[hero] if pooled else [hero, chest])
+        pi = ([dict(shared=True, prefab=Prefab(name="Chest", actor=chest), model_id=1,
+                    sym="S_Chest", member_entries=[-1])] if pooled else [])
+        lines = interact_tick_lines(project, scene, [(a, None) for a in scene.actors], 0, pi,
+            {1} if handler else set(), lambda sym, event: handler, scene_actor_sym,
+            SimpleNamespace(masks={"interact": "1"}), lambda p, owner: (None, None), lambda j: 0)
+        assert lines
+        ticks.append("static void tick_%s(void){\n%s\n}" % ("pool" if pooled else "placed", "\n".join(lines)))
+    source = SONDE.split("int main(void){")[0] % {"helpers": "\n".join(interact_helper_lines())}
+    source += """
+#define SFX_OPEN 7
+static int pressed, callbacks;
+static int input_pressed(int mask){ return pressed; }
+static void S_Chest_on_interact(Actor* target,Actor* who){ callbacks++; target->active=0; }
+""" + "\n".join(ticks) + r"""
+int main(void){
+    for(int pooled=0;pooled<2;pooled++){
+        int target=pooled?3:1;
+        for(int frame=0;frame<6;frame++){
+            mk(0,0,0,0,0,16,16,1);
+            mk(target,frame==2?100:10,0,0,0,16,16,0);
+            g_actors[target].model=1;
+            g_spool_start=3; g_spool_hw=pooled?4:3;
+            if(pooled) pool_bit_set(target);
+            if(frame==3) g_actors[target].active=0;
+            if(frame==4) g_actors[target].collision.boxes[0].active=0;
+            pressed=(frame!=0);
+            sfx_calls=callbacks=0; last_sfx=last_volume=-1;
+            if(pooled) tick_pool(); else tick_placed();
+            printf("%d %d %d %d\n",sfx_calls,last_sfx,last_volume,callbacks);
+        }
+    }
+    return 0;
+}
+"""
+    path = tmp_path / "sfx_interact.c"
+    path.write_text(source, encoding="utf-8")
+    binary = tmp_path / "sfx_interact.exe"
+    result = subprocess.run([cc, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),
+                             "-o", str(binary), str(path)], capture_output=True, text=True, env=environnement(cc))
+    assert result.returncode == 0, result.stderr
+    result = subprocess.run([str(binary)], capture_output=True, text=True, env=environnement(cc))
+    assert result.returncode == 0, result.stderr
+    rows = [tuple(map(int, line.split())) for line in result.stdout.splitlines()]
+    silence = (0, -1, -1, 0)
+    played = (1, 7, volume_to_effect(sound.volume), int(handler))
+    expected = [silence, played, silence, silence, silence, played]
+    assert rows[:6] == rows[6:] == expected

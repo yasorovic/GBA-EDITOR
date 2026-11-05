@@ -276,11 +276,11 @@ def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteu
         SimpleNamespace(masks={"interact": "KEY_A"}), shown, lambda j: 0))
     top = max(ids.values()) + 1
     assert f"static const u8 _ia_pbox[{top}]=" in code and f"static const u8 _ia_paim[{top}]=" in code
-    assert f"static void (*const _ia_pfn[{top}])(Actor*,Actor*)=" in code and "S_Chest_on_interact" in code
+    assert f"static const IaAction _ia_paction[{top}]=" in code and "S_Chest_on_interact" in code
     assert f"g_actors[_w].model=={ids['Hero']}" in code                      # l'interacteur né est reconnu au modèle
     assert "int _k=interact_pick(&g_actors[_w],_ia_idx,_ia_box,_ia_aim,0,_ia_pbox,_ia_paim," in code
-    assert "if(_k<-1){ Actor* _t=&g_actors[-2-_k]; _ia_pfn[_t->model](_t,&g_actors[_w]); }" in code
-    assert "_ia_fn[" not in code                                            # aucun consommateur d'emplacement connu
+    assert "if(_k<-1){ Actor* _t=&g_actors[-2-_k]; interact_run(_t,&g_actors[_w],&_ia_paction[_t->model]); }" in code
+    assert "_ia_action[" not in code                                        # aucun consommateur d'emplacement connu
 
 
 # ── Les modèles à parties dans le pool ─────────────────────────────────

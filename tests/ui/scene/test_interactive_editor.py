@@ -32,6 +32,22 @@ def _combos(host):
     return host.findChildren(QComboBox)
 
 
+def test_soundfx_propose_et_conserve_le_declencheur_interaction(qapp):
+    from core.models.components import SoundFxComponent
+    from ui.scene_manager.inspectors.component_editors.sfx import SfxEditor
+    comp = SoundFxComponent(trigger="on_interact")
+    written = []
+    insp = SimpleNamespace(_project=None, _set_comp=lambda c, field, value: written.append((field, value)))
+    host = QWidget()
+    layout = QVBoxLayout(host)
+    SfxEditor(insp).build(comp, lambda lab, widget: W.row(lab, widget, layout), layout)
+    trigger = _combos(host)[1]
+    assert trigger.currentData() == "on_interact"
+    trigger.setCurrentIndex(trigger.findData("manual"))
+    trigger.setCurrentIndex(trigger.findData("on_interact"))
+    assert written[-1] == ("trigger", "on_interact")
+
+
 def test_l_editeur_propose_les_deux_selecteurs_et_la_zone(qapp):
     host, _ = _build(InteractiveComponent(), boxes=[CollisionShapeComponent(tag="reach")])
     saisie, interaction, zone = _combos(host)

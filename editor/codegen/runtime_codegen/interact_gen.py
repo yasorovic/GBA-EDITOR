@@ -6,7 +6,7 @@ zone, mode de visée, fonction `on_interact`), un test du geste (`input_pressed`
 `input_released`) évalué UNE fois pour tous les consommateurs, et seulement sur la frame où le geste a
 lieu, une recherche du consommateur atteint le plus proche pour chaque interacteur.
 
-Un acteur sans `on_interact` dans son script n'entre dans aucune table : il ne coûte rien.
+Un acteur entre dans les tables s'il a un handler `on_interact` ou un SoundFx déclenché à l'interaction.
 
 L'interacteur est un acteur de scène portant le tag d'acteur `Player` (`Actor.is_player`).
 
@@ -17,6 +17,7 @@ modèle (rang de la zone, visée), que `interact_pick` parcourt après les conso
 from __future__ import annotations
 
 from codegen.runtime_codegen.gen_sprite import follow_facing_lines
+from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
 from codegen.runtime_codegen.shared_pool_gen import shared_models
 from core.models.components import (
     InteractiveComponent, interactive_box_index, owner_effective_boxes,
@@ -43,6 +44,11 @@ def project_has_interactive(p) -> bool:
 def interact_helper_lines() -> list[str]:
     """Les aides C, émises après les aides de tuiles dont elles dépendent (`tile_wall_at`)."""
     return [
+        "typedef struct { void (*handler)(Actor*,Actor*); s16 sfx; u8 volume; } IaAction;",
+        "static void __attribute__((unused)) interact_run(Actor* target,Actor* who,const IaAction* action){",
+        "    if(action->sfx>=0) sfx_play(action->sfx,action->volume,0);",
+        "    if(action->handler) action->handler(target,who);",
+        "}",
         "/* ── Interactive : trouver ce que l'interacteur atteint ─────────────────────────────",
         "   Rectangles en PIXELS MONDE, bornes droite/basse exclues, comme `box_overlap`. */",
         "typedef struct { int l, t, r, b; } IaRect;",
@@ -140,32 +146,30 @@ def _gesture_test(mode: str, frames: int, mask: str) -> str:
 
 
 def _consumers(p, scene, scene_actors, actor_offset, pi, lua_idx, _def, scene_actor_sym, shown):
-    """Les consommateurs de la scène : (composant, indice d'acteur, rang de zone, symbole C).
+    """Les consommateurs : (composant, indice, rang de zone, symbole C, action C).
 
-    Un acteur n'en est un que si son script définit `on_interact`. Pour un modèle du pool PARTAGÉ, l'indice
+    Une action a un handler, un son, ou les deux. Pour un modèle du pool PARTAGÉ, l'indice
     est l'identité du modèle (`model_id`) : ses instances ne sont connues qu'à l'exécution."""
-    out = []
-    for j, (actor, sprite) in enumerate(scene_actors):
-        comp = next((c for c in actor.components
-                     if isinstance(c, InteractiveComponent) and c.active), None)
-        sym = scene_actor_sym(scene.name, actor.name)
-        if comp is None or (actor_offset + j) not in lua_idx or not _def(sym, "on_interact"):
-            continue
-        box = interactive_box_index(owner_boxes(actor, sprite), comp)
-        if box >= 0:
-            out.append((comp, actor_offset + j, box, sym))
+    candidates = [(a, sprite, actor_offset + j, scene_actor_sym(scene.name, a.name),
+                   actor_offset + j in lua_idx) for j, (a, sprite) in enumerate(scene_actors)]
     for p2 in pi:
         if not p2.get("shared"):
             continue            # ses instances posées sont des acteurs de la scène, vus plus haut
         pf = p2["prefab"]
-        comp = next((c for c in getattr(pf, "components", [])
+        candidates.append((pf, shown(p, pf)[1], p2["model_id"], p2["sym"], True))
+    out = []
+    for owner, sprite, idx, sym, scripted in candidates:
+        comp = next((c for c in getattr(owner, "components", [])
                      if isinstance(c, InteractiveComponent) and c.active), None)
-        if comp is None or not _def(p2["sym"], "on_interact"):
+        handler = f"{sym}_on_interact" if scripted and _def(sym, "on_interact") else "0"
+        sfx, volume, trigger = sfx_trigger_info(p, owner)
+        if trigger != "on_interact":
+            sfx = None
+        if comp is None or (handler == "0" and sfx is None):
             continue
-        sprite = shown(p, pf)[1]
-        box = interactive_box_index(owner_boxes(pf, sprite), comp)
+        box = interactive_box_index(owner_boxes(owner, sprite), comp)
         if box >= 0:
-            out.append((comp, p2["model_id"], box, p2["sym"]))      # un MODÈLE : ses instances se trouvent à l'exécution
+            out.append((comp, idx, box, sym, f"{{{handler},{sfx or '-1'},{volume if sfx else 0}}}"))
     return out
 
 
@@ -204,9 +208,9 @@ def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
     mask = input_layout.masks["interact"]
     reach = int(getattr(p.settings, "interact_reach", 4))
     gestures: dict = {}
-    for comp, idx, box, sym in consumers:
+    for comp, idx, box, sym, action in consumers:
         key = (comp.input_mode, comp.hold_frames if comp.input_mode == "hold" else 0)
-        gestures.setdefault(key, []).append((comp, idx, box, sym))
+        gestures.setdefault(key, []).append((comp, idx, box, sym, action))
 
     def is_pool(item) -> bool:
         return item[3] in {m["sym"] for m in shared}
@@ -219,9 +223,9 @@ def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
         pa = "_ia_pbox,_ia_paim" if has_pool else "0,0"
         out = [f"{pad}int _k=interact_pick({who},_ia_idx,_ia_box,_ia_aim,{n},{pa},{reach});"]
         if n:
-            out.append(f"{pad}if(_k>=0) _ia_fn[_k](&g_actors[_ia_idx[_k]],{who});")
+            out.append(f"{pad}if(_k>=0) interact_run(&g_actors[_ia_idx[_k]],{who},&_ia_action[_k]);")
         if has_pool:
-            out += [f"{pad}if(_k<-1){{ Actor* _t=&g_actors[-2-_k]; _ia_pfn[_t->model](_t,{who}); }}"]
+            out += [f"{pad}if(_k<-1){{ Actor* _t=&g_actors[-2-_k]; interact_run(_t,{who},&_ia_paction[_t->model]); }}"]
         return out
 
     L = []
@@ -248,15 +252,14 @@ def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
             f"        static const u8 _ia_aim[]={{{','.join('1' if i[0].interaction == 'facing' else '0' for i in static_items) or '0'}}};",
         ]
         if n:
-            L.append(f"        static void (*const _ia_fn[])(Actor*,Actor*)="
-                     f"{{{','.join(i[3] + '_on_interact' for i in static_items)}}};")
+            L.append(f"        static const IaAction _ia_action[]={{{','.join(i[4] for i in static_items)}}};")
         if pool_items:
             by_model = {i[1]: i for i in pool_items}
             L += [
                 f"        static const u8 _ia_pbox[{top}]={{{','.join(str(by_model[m][2]) if m in by_model else '255' for m in range(top))}}};",
                 f"        static const u8 _ia_paim[{top}]={{{','.join('1' if m in by_model and by_model[m][0].interaction == 'facing' else '0' for m in range(top))}}};",
-                f"        static void (*const _ia_pfn[{top}])(Actor*,Actor*)="
-                f"{{{','.join(by_model[m][3] + '_on_interact' if m in by_model else '0' for m in range(top))}}};",
+                f"        static const IaAction _ia_paction[{top}]="
+                f"{{{','.join(by_model[m][4] if m in by_model else '{0,-1,0}' for m in range(top))}}};",
             ]
         for first, stop, step in interactors:
             if stop - first == 1:

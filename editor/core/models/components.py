@@ -232,11 +232,11 @@ class SpriteComponent:
 # le dispatch est piloté par la DONNÉE du component, pas par la présence d'une
 # fonction Lua compilée. "on_destroy" passe par une table indexée par tag
 # (cf. `actor_destroy_with_sfx`, runtime), "on_spawn" est injecté au spawn de
-# l'actor ; tout AUTRE trigger est un NOM de bouton ou d'action déclarée (la
+# l'actor ; "on_interact" suit la cible retenue par Interactive ; tout AUTRE trigger est un NOM de bouton ou d'action déclarée (la
 # même liste que `input:pressed(nom)`, jamais une séquence ; décision du
 # 2026-09-27, qui a remplacé les dix
 # valeurs fixes `on_button_*` par ce nom libre).
-SFX_AUTO_TRIGGERS: tuple[str, ...] = ("on_spawn", "on_destroy")
+SFX_AUTO_TRIGGERS: tuple[str, ...] = ("on_spawn", "on_destroy", "on_interact")
 
 
 @dataclass
@@ -245,6 +245,7 @@ class SoundFxComponent:
     Associe un Sfx à un actor.
     trigger="manual"     : ne joue rien automatiquement — appeler self:play_sfx() depuis un script.
     trigger="on_spawn"   : joue automatiquement au démarrage de l'actor, sans script.
+    trigger="on_interact": joue quand cet acteur est atteint par une interaction (Interactive requis).
     trigger="on_destroy" : joue juste avant que l'actor soit désactivé (self:destroy() ou
                             other:destroy() depuis N'IMPORTE QUEL script), sans script sur CET actor.
     trigger=<nom>         : un bouton ou une action déclarée (Project Settings → Input → Inputs,

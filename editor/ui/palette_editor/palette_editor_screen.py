@@ -125,6 +125,12 @@ class PaletteEditorScreen(QWidget):
 
     # ── Chargement ────────────────────────────────────────────────
 
+    def set_folder_store(self, store) -> None:
+        """Range les palettes dans le store partagé de la session, comme les sons."""
+        if self._project is not None:
+            store.prune("palettes", {bank.id for bank in self._project.palettes})
+        self._library.set_folder_store(store)
+
     def load_project(self, project: Project):
         self._project = project
         self._library.load_project(project)

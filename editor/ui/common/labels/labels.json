@@ -1719,6 +1719,7 @@
     "comped.trig_on_destroy": {
       "text": "on_destroy"
     },
+    "comped.trig_on_interact": { "text": "On interaction" },
     "comped.sfx": {
       "text": "Sfx"
     },
@@ -1728,7 +1729,7 @@
     "comped.trigger": {
       "text": "Trigger"
     },
-    "comped.trigger_tip": { "text": "manual: plays nothing; call self:play_sfx() from a script.\non_spawn: plays when the actor starts.\non_destroy: plays just before the actor is destroyed.\nA button or an input: plays while the actor is active and that button is held." },
+    "comped.trigger_tip": { "text": "manual: plays nothing; self:play_sfx() plays it from a script.\non_spawn: plays when the actor starts.\non_destroy: plays just before the actor is destroyed.\nOn interaction: plays when this actor is selected by an interaction; requires an active Interactive component.\nA button or an input: plays when it is pressed, while the actor is active." },
     "comped.script_add": {
       "text": "Add a script"
     },

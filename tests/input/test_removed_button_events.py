@@ -41,7 +41,7 @@ def test_soundfx_component_conserve_manual_et_on_spawn():
 
 def test_sfx_auto_triggers_ne_contient_plus_les_boutons():
     from core.models.components import SFX_AUTO_TRIGGERS
-    assert SFX_AUTO_TRIGGERS == ("on_spawn", "on_destroy")
+    assert SFX_AUTO_TRIGGERS == ("on_spawn", "on_destroy", "on_interact")
 
 
 def test_removed_events_couvre_les_dix_noms():

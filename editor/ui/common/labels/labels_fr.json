@@ -1,5 +1,6 @@
 {
   "labels": {
+    "comped.trig_on_interact": { "text": "À l'interaction" },
     "txtentry.collapse": { "text": "Replier le champ de texte" },
     "common.copied": { "text": "Copié" },
     "txtentry.expand": { "text": "Déplier le champ de texte" },
@@ -1970,7 +1971,7 @@
     "comped.physics_can_sleep": { "text": "Peut dormir" },
     "comped.physics_can_sleep_tip": { "text": "Autorise la règle de sommeil de la scène à arrêter la simulation de ce corps tant qu’il reste au repos." },
     "comped.trigger": { "text": "Déclencheur" },
-    "comped.trigger_tip": { "text": "manual : ne joue rien ; appelez self:play_sfx() depuis un script.\non_spawn : joue au démarrage de l’acteur.\non_destroy : joue juste avant la destruction de l’acteur.\nUn bouton ou une entrée : joue tant que l’acteur est actif et que ce bouton est maintenu." },
+    "comped.trigger_tip": { "text": "manual : ne joue rien ; self:play_sfx() le joue depuis un script.\non_spawn : joue au démarrage de l’acteur.\non_destroy : joue juste avant la destruction de l’acteur.\nÀ l'interaction : joue quand cet acteur est retenu par une interaction ; nécessite un composant Interactive actif.\nUn bouton ou une entrée : joue à l'appui, tant que l’acteur est actif." },
     "comped.trigger_note": { "text": "Tous les déclencheurs sauf manual fonctionnent sans script." },
     "comped.palette": { "text": "Palette" },
     "comped.palette_tip": { "text": "« Sans palette » utilise les couleurs d’origine du PNG, par défaut. Sinon, choisissez l’une des palettes actives de la scène." },

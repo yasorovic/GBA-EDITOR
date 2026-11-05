@@ -1311,7 +1311,7 @@ class MainWindow(QMainWindow):
                 self._status.showMessage(
                     label("win.screen_error", name=spec.name, error=exc), 8000)
                 return
-        if spec.name == "Sounds":
+        if spec.name in ("Sounds", "Palettes"):
             store = self.scene_library_panel.folder_store
             if store is not None:
                 widget.set_folder_store(store)

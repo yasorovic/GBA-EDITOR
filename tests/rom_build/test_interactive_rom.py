@@ -106,6 +106,42 @@ def test_un_prefab_joueur_poole_interagit_par_une_boucle(tmp_path):
     assert "(*_a).facing_x=(*_a).dir_x" in main_c
 
 
+def test_soundfx_interaction_sans_script_pose_et_spawne_se_compile(tmp_path):
+    import wave
+    from asset_fixtures import create
+    from core.models.components import SoundFxComponent
+    from core.models.scene import Prefab
+    project = _projet(tmp_path)
+    path = project.user_library_dir / "Open.wav"
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(1)
+        out.setframerate(8000)
+        out.writeframes(bytes([128]) * 800)
+    sound = create(project, "sfx", path)
+    chest = next(a for a in project.scenes[0].actors if a.name == "Chest")
+    chest.components = [InteractiveComponent(), SoundFxComponent(sfx_name=sound.name, trigger="on_interact")]
+    prefab = Prefab(name="Bell", actor=Actor(name="Bell", components=[
+        InteractiveComponent(), SoundFxComponent(sfx_name=sound.name, trigger="on_interact")]))
+    project.prefabs.append(prefab)
+    project.prefabs.save(prefab)
+    (project.user_library_dir / "scripts" / "Spawn.lua").write_text(
+        'function on_start()\n actor:spawn("Bell", vec2(50,40))\nend\n', encoding="utf-8")
+    project.scenes[0].script = "assets/scripts/Spawn.lua"
+    project.save()
+    worker = BuildWorker(Project.open(project.root), Toolchain())
+    worker._step_launch_mgba = lambda p: True
+    diagnostics, verdict = [], []
+    worker.on("diagnostic", diagnostics.append)
+    worker.on("finished", verdict.append)
+    worker.run()
+    assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
+    code = next((project.root / "build").rglob("main.c")).read_text(encoding="utf-8")
+    assert "_ia_action[]" in code and "_ia_paction[" in code
+    assert "{0,SFX_OPEN," in code
+    assert "KEY_ON_INTERACT" not in code and "BTN_ON_INTERACT" not in code
+
+
 def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
     """Une boîte « Bloque les acteurs » sur le coffre : le C émis repousse le joueur (boîte solide) avant la carte."""
     projet = _projet(tmp_path)
