@@ -1189,7 +1189,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         prefab poolé n'avait pas de constante, et `spawn_<Prefab>()` — qui
         l'écrit dans `boxes[].tag` — ne compilait pas."""
         from core.models.components import CollisionShapeComponent
-        owners = [a for sc in self.scenes for a in sc.actors] + list(self.prefabs)
+        owners = [a for sc in self.scenes for a in (*sc.actors, *sc.areas)] + list(self.prefabs)
         owners += [ch for pf in self.prefabs for ch in (getattr(pf, "children", []) or [])]
         discovered = {c.tag or "body" for o in owners for c in getattr(o, "components", [])
                      if isinstance(c, CollisionShapeComponent)}

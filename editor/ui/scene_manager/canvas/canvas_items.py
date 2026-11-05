@@ -18,7 +18,7 @@ from ui.common.labels import label
 from ui.common.notes_tooltip import notes_tooltip
 from typing import Optional
 
-from core.history import MoveActorCmd, MoveActorGroupCmd, get_history
+from core.history import MoveActorCmd, MoveActorGroupCmd, ResizeCollisionShapeCmd, get_history
 from core.models.scene import Actor
 from core.models.field_value import number_value
 from core.models import collision_tiles as CT
@@ -37,8 +37,10 @@ from core.models.collision_tiles import (
 from core.models.tile_codec import flip_h, flip_v
 from core.project import Project
 from ui.common.theme import C, T
-from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
-from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
+from ui.scene_manager.canvas.canvas_const import (
+    GBA_W, GBA_H, HANDLE_EDGES, HANDLE_GRAB_PX, HANDLE_RADIUS_PX,
+)
+from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer
 from PyQt6.QtGui import (
     QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QTransform,
 )
@@ -978,6 +980,259 @@ class ActorBoxOverlay(QGraphicsItem):
                     painter.setPen(pen_t)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawRect(x, y, w, h)
+
+
+# ──────────────────────────────────────────────────────────────────
+#  Area posée dans la scène
+# ──────────────────────────────────────────────────────────────────
+
+# Curseur de chaque poignée de redimensionnement (les bords qu'elles déplacent : cf. canvas_const.HANDLE_EDGES).
+HANDLE_CURSORS = {
+    "nw": Qt.CursorShape.SizeFDiagCursor, "se": Qt.CursorShape.SizeFDiagCursor,
+    "ne": Qt.CursorShape.SizeBDiagCursor, "sw": Qt.CursorShape.SizeBDiagCursor,
+    "n":  Qt.CursorShape.SizeVerCursor,   "s":  Qt.CursorShape.SizeVerCursor,
+    "e":  Qt.CursorShape.SizeHorCursor,   "w":  Qt.CursorShape.SizeHorCursor,
+}
+
+
+class AreaItem(QGraphicsItem):
+    """Une Area : le rectangle de sa forme de collision, déplaçable, redimensionnable et sélectionnable.
+
+    Même géométrie que `ActorBoxOverlay` (position de l'Area + décalage de la forme, taille de la forme) : le canvas
+    montre la boîte que le build émettra. Un membre de la sélection se peint à l'accent, l'item actif en blanc (même
+    grammaire que les acteurs). Les poignées réécrivent le décalage et la taille de la forme ; elles n'existent pas
+    quand l'un de ces champs est une référence de variable (le geste écraserait la référence)."""
+
+    _FILL = QColor(110, 150, 255, 70)
+    _EDGE = QColor(140, 175, 255, 240)
+    _NO_SHAPE = 8          # côté du repère d'une Area sans forme active : elle reste attrapable
+    _CLICK_THRESHOLD = 2   # en deçà (px), un déplacement est le jitter d'un clic, pas un glisser
+
+    def __init__(self, area, resolver=None, snap: bool = False, save_fn=None):
+        super().__init__()
+        self.area = area
+        self._resolver = resolver
+        self.snap = snap
+        self._save_fn = save_fn
+        self._syncing = False      # setPos issu du modèle : itemChange ne le réécrit pas
+        self._drag_origin: tuple[int, int] | None = None
+        self._drag_confirmed = False
+        self._drag_peers: list = []
+        self._resize_handle: str | None = None
+        self._resize_start: tuple[int, int, int, int] | None = None    # (x, y, w, h) de la forme au press
+        self.setFlags(
+            QGraphicsItem.GraphicsItemFlag.ItemIsMovable
+            | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
+            | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges
+        )
+        self.setAcceptHoverEvents(True)
+        self.setZValue(158)        # au-dessus des sprites, sous les boîtes d'acteurs (160)
+        self.sync_pos()
+        self.setToolTip(notes_tooltip(area.notes))
+
+    def sync_pos(self) -> None:
+        self._syncing = True
+        try:
+            self.setPos(self.area.x, self.area.y)
+        finally:
+            self._syncing = False
+
+    def _shape(self):
+        """La forme que l'item dessine : la première forme active de l'Area, ou None."""
+        from core.models.components import CollisionShapeComponent
+        return next((c for c in self.area.components
+                     if isinstance(c, CollisionShapeComponent) and c.active), None)
+
+    def shape_rect(self) -> QRectF:
+        """La boîte de la première forme active, en pixels (références de variables résolues à leur défaut)."""
+        from core.models.field_value import FieldValue
+        comp = self._shape()
+        if comp is None:
+            return QRectF(0, 0, self._NO_SHAPE, self._NO_SHAPE)
+        px = lambda raw: FieldValue.parse(raw).px(self._resolver)
+        return QRectF(px(comp.x), px(comp.y), max(1, px(comp.w)), max(1, px(comp.h)))
+
+    def boundingRect(self) -> QRectF:
+        # Marge de repeinture des poignées : hors du boundingRect Qt ne les efface pas et laisse une traînée.
+        return self.shape_rect().adjusted(-6, -6, 6, 6)
+
+    def _view_scale(self) -> float:
+        """Facteur de zoom de la vue (m11), 1.0 s'il n'y a pas encore de vue."""
+        sc = self.scene()
+        views = sc.views() if sc else []
+        return views[0].transform().m11() if views else 1.0
+
+    def _resizable(self) -> bool:
+        from core.models.field_value import FieldValue
+        comp = self._shape()
+        return comp is not None and not any(FieldValue.parse(v).is_ref for v in (comp.x, comp.y, comp.w, comp.h))
+
+    def _handle_points(self) -> dict:
+        """Centre de chaque poignée en coordonnées locales, ou rien si la forme ne se redimensionne pas au canvas."""
+        if not self._resizable():
+            return {}
+        r = self.shape_rect()
+        l, t, rt, b = r.left(), r.top(), r.right(), r.bottom()
+        mx, my = (l + rt) / 2, (t + b) / 2
+        return {"nw": (l, t), "n": (mx, t), "ne": (rt, t), "e": (rt, my),
+                "se": (rt, b), "s": (mx, b), "sw": (l, b), "w": (l, my)}
+
+    def _handle_at(self, local_pos) -> str | None:
+        """Nom de la poignée sous `local_pos`, ou None. Tolérance en pixels écran : attrapable même dézoomée."""
+        tol = HANDLE_GRAB_PX / self._view_scale()
+        for name, (hx, hy) in self._handle_points().items():
+            dx, dy = local_pos.x() - hx, local_pos.y() - hy
+            if dx * dx + dy * dy <= tol * tol:
+                return name
+        return None
+
+    def paint(self, painter: QPainter, option, widget=None):
+        rect = self.shape_rect()
+        scene = self.scene()
+        active = scene is not None and getattr(scene, "active_item", None) is self
+        edge = QColor("#ffffff") if active else (QColor(C.ACCENT) if self.isSelected() else self._EDGE)
+        painter.fillRect(rect, self._FILL)
+        painter.setPen(QPen(edge, 0))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(rect)
+        if self.isSelected():
+            radius = HANDLE_RADIUS_PX / self._view_scale()
+            painter.setBrush(QBrush(self._EDGE))
+            for hx, hy in self._handle_points().values():
+                painter.drawEllipse(QPointF(hx, hy), radius, radius)
+        # Le nom, dans le coin : plusieurs Areas se côtoient, et la couleur seule ne dit pas laquelle est laquelle.
+        font = QFont(T.UI)
+        font.setPixelSize(6)
+        painter.setFont(font)
+        painter.drawText(rect.adjusted(2, 1, -2, -1), int(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft),
+                         self.area.name)
+
+    def _begin_drag(self) -> None:
+        self._drag_origin = (self.area.x, self.area.y)
+        self._drag_confirmed = False
+
+    def hoverMoveEvent(self, e):
+        handle = self._handle_at(e.pos()) if self.isSelected() else None
+        if handle:
+            self.setCursor(HANDLE_CURSORS[handle])
+        else:
+            self.unsetCursor()
+        super().hoverMoveEvent(e)
+
+    def hoverLeaveEvent(self, e):
+        self.unsetCursor()
+        super().hoverLeaveEvent(e)
+
+    def mousePressEvent(self, e):
+        # Une poignée n'est dessinée que sur une Area sélectionnée : le premier clic sélectionne, et seul le geste
+        # SUIVANT sur une poignée redimensionne. Figé avant `super()`, qui sélectionne.
+        was_selected = self.isSelected()
+        if was_selected and e.button() == Qt.MouseButton.LeftButton:
+            handle = self._handle_at(e.pos())
+            if handle:
+                comp = self._shape()
+                self._resize_handle = handle
+                self._resize_start = (int(comp.x), int(comp.y), int(comp.w), int(comp.h))
+                e.accept()           # pas de `super()` : l'item ne doit pas se déplacer
+                return
+        self._begin_drag()
+        super().mousePressEvent(e)
+        # Qt déplace TOUTE la sélection avec l'item saisi : les autres Areas sélectionnées écrivent elles aussi leur
+        # position au modèle (itemChange) et entrent dans la même entrée d'historique.
+        sc = self.scene()
+        self._drag_peers = [] if sc is None else [
+            it for it in sc.selectedItems() if isinstance(it, AreaItem) and it is not self]
+        for peer in self._drag_peers:
+            peer._begin_drag()
+
+    def mouseMoveEvent(self, e):
+        if self._resize_handle:
+            self._drag_resize(e.pos())
+            e.accept()
+            return
+        super().mouseMoveEvent(e)
+
+    def _drag_resize(self, local) -> None:
+        """Déplace les bords que la poignée tient jusqu'à `local`, en direct dans le modèle (l'historique n'est écrit
+        qu'au relâchement). Un bord ne dépasse jamais le bord opposé : 1 px au moins."""
+        comp = self._shape()
+        x0, y0, w0, h0 = self._resize_start
+        moves_left, moves_top, moves_right, moves_bottom = HANDLE_EDGES[self._resize_handle]
+        lx, ly = local.x(), local.y()
+        if self.snap:    # la grille de 8 px est celle du MONDE, pas celle de l'Area
+            lx = round((self.area.x + lx) / 8) * 8 - self.area.x
+            ly = round((self.area.y + ly) / 8) * 8 - self.area.y
+        lx, ly = round(lx), round(ly)
+        left, top, right, bottom = x0, y0, x0 + w0, y0 + h0
+        if moves_left:
+            left = min(lx, right - 1)
+        if moves_right:
+            right = max(lx, left + 1)
+        if moves_top:
+            top = min(ly, bottom - 1)
+        if moves_bottom:
+            bottom = max(ly, top + 1)
+        self.prepareGeometryChange()
+        comp.x, comp.y, comp.w, comp.h = left, top, right - left, bottom - top
+        self.update()
+
+    def _commit_resize(self) -> None:
+        comp = self._shape()
+        old, self._resize_handle, self._resize_start = self._resize_start, None, None
+        new = (comp.x, comp.y, comp.w, comp.h)
+        if new == old:
+            return
+        from core.command_dispatcher import get_dispatcher
+        persist = get_dispatcher().persist_areas
+        # Le redimensionnement a déjà écrit le modèle : pousser la commande SANS la rejouer. L'écriture et le
+        # redessin attendent la fin de l'évènement (ils recréent les items, dont celui-ci).
+        get_history().push_executed(ResizeCollisionShapeCmd(comp, old, new, persist_fn=persist))
+        QTimer.singleShot(0, persist)
+
+    def mouseReleaseEvent(self, e):
+        if self._resize_handle:
+            self._commit_resize()
+            e.accept()
+            return
+        super().mouseReleaseEvent(e)
+        if self._drag_origin is None:
+            return
+        moves = []
+        for it in (self, *self._drag_peers):
+            if it._drag_origin is None:
+                continue
+            ox, oy = it._drag_origin
+            if (ox, oy) != (it.area.x, it.area.y):
+                moves.append((it.area, ox, oy, it.area.x, it.area.y))
+            it._drag_origin = None
+            it._drag_confirmed = False
+        self._drag_peers = []
+        if not moves:
+            return
+        from core.command_dispatcher import get_dispatcher
+        persist = get_dispatcher().persist_areas   # annuler / rétablir : sauve et redessine
+        cmd = (MoveActorGroupCmd(moves, persist_fn=persist) if len(moves) > 1
+               else MoveActorCmd(*moves[0], persist_fn=persist))
+        # Le glisser a déjà écrit le modèle : pousser la commande SANS la rejouer.
+        get_history().push_executed(cmd)
+        if self._save_fn:
+            self._save_fn()
+        # L'inspecteur relit la position (après la fin de l'évènement : il peut recréer des vues).
+        QTimer.singleShot(0, lambda: get_dispatcher()._emit("actors_list_changed"))
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and not self._syncing:
+            x, y = value.x(), value.y()
+            if self._drag_origin is not None and not self._drag_confirmed:
+                ox, oy = self._drag_origin
+                if abs(x - ox) < self._CLICK_THRESHOLD and abs(y - oy) < self._CLICK_THRESHOLD:
+                    return QPointF(ox, oy)       # jitter de clic : ignorer
+                self._drag_confirmed = True
+            if self.snap:
+                x, y = round(x / 8) * 8, round(y / 8) * 8
+            self.area.x, self.area.y = int(x), int(y)
+            return QPointF(int(x), int(y))
+        return super().itemChange(change, value)
 
 
 # ──────────────────────────────────────────────────────────────────

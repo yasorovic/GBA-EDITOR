@@ -5152,6 +5152,10 @@
     "langcard.run_language": { "text": "Run language" },
     "langcard.run_language_tip": { "text": "The Run button and F5 use this language in monolingual mode." },
     "langcard.multilingual_tip": { "text": "Build includes all translations and their replacement fonts." },
-    "langcard.monolingual_tip": { "text": "Build includes only the chosen language. Game offers Build_<language> for each language." }
+    "langcard.monolingual_tip": { "text": "Build includes only the chosen language. Game offers Build_<language> for each language." },
+    "common.area": { "text": "Area" },
+    "scttree.filter_areas": { "text": "Areas" },
+    "areainsp.shape": { "text": "Shape" },
+    "scncanvas.rename_area": { "text": "Rename area" }
   }
 }

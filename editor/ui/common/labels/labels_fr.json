@@ -2774,6 +2774,10 @@
     "scriptlibrary.script_library": { "text": "Bibliothèque de scripts" },
     "palscr.palette_library": { "text": "Bibliothèque de palettes" },
     "sndpanel.sound_library": { "text": "Bibliothèque de sons" },
-    "txtscr.font_library": { "text": "Bibliothèque de polices" }
+    "txtscr.font_library": { "text": "Bibliothèque de polices" },
+    "common.area": { "text": "Area" },
+    "scttree.filter_areas": { "text": "Areas" },
+    "areainsp.shape": { "text": "Forme" },
+    "scncanvas.rename_area": { "text": "Renommer l'area" }
   }
 }

@@ -424,6 +424,7 @@ def _check_each_scene(ctx: ValidationContext):
         if not (scene.actors or getattr(scene, "script", "") or getattr(scene, "ui_layouts", None)):
             ctx.warn(None, "The scene has no actor, script or interface: it will do nothing.")
         _check_actors(ctx)
+        _check_areas(ctx, scene)
         _check_backgrounds(ctx)
         _check_collision_map(ctx)
         _check_frame_events(ctx)
@@ -475,6 +476,23 @@ def _check_prefabs(ctx: ValidationContext):
 def _check_actors(ctx: ValidationContext):
     for actor in ctx.actors:
         _check_components(ctx, actor, actor.components)
+
+
+def _check_areas(ctx: ValidationContext, scene):
+    """Une Area a une forme, et un nom unique dans sa scène (comme un acteur : son nom est la clé de
+    `area:get("…")`). Ses formes passent les mêmes contrôles que celles des acteurs."""
+    from codegen.c_names import sym as c_sym
+    from core.models.components import CollisionShapeComponent
+    seen: dict[str, str] = {}   # symbole C → premier nom vu DANS cette scène
+    for area in scene.areas:
+        s = c_sym(area.name)
+        if s in seen:
+            ctx.warn(area, f"Areas \"{seen[s]}\" and \"{area.name}\" share the C symbol `{s}` in scene "
+                           f"'{scene.name}'. Rename one of them.")
+        seen.setdefault(s, area.name)
+        if not any(c.active for c in area.components if isinstance(c, CollisionShapeComponent)):
+            ctx.warn(area, "The Area has no active collision shape: it covers nothing.")
+        _check_components(ctx, area, area.components)
 
 
 def _check_components(ctx: ValidationContext, owner, components):

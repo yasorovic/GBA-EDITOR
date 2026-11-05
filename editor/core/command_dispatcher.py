@@ -44,7 +44,7 @@ import copy
 
 from core.resources import asset_reconciliation
 from core.events import EventEmitter
-from core.models.scene import Actor, Prefab
+from core.models.scene import Actor, Area, Prefab
 from core.models.unique_name import unique_name
 from core.history import get_history, AddActorCmd
 from core.text_table_link import TableSync
@@ -335,6 +335,98 @@ class CommandDispatcher(EventEmitter):
         self._emit("scene_sprites_changed")
         get_bus().select(actor)
         return actor
+
+    # ── Area ──────────────────────────────────────────────────────
+    # Mêmes événements que les acteurs : l'arbre de scène se rafraîchit sur `actors_list_changed`, le canvas se
+    # recrée sur `scene_sprites_changed`. Une Area n'a pas d'événement à elle tant qu'elle n'a pas d'autre lecteur.
+
+    def add_area(self, x: int = 0, y: int = 0) -> Optional[Area]:
+        """Ajoute une Area neuve (forme capteur 32×32) à la scène active, centrée sur (x, y) (avec historique)."""
+        from core.history import AddListItemsCmd
+        from core.models.scene import AREA_DEFAULT_SIZE
+        if not self._project or not self._project.active_scene:
+            return None
+        scene = self._project.active_scene
+        area = Area(name=unique_name("Area", {a.name for a in scene.areas}),
+                    x=x - AREA_DEFAULT_SIZE // 2, y=y - AREA_DEFAULT_SIZE // 2)
+        get_history().push(AddListItemsCmd(scene.areas, [area], persist_fn=self.persist_areas,
+                                           label=f"Created area {area.name}"))
+        get_bus().select(area)
+        self._emit("status_message", f"Area created: {area.name}")
+        return area
+
+    def rename_area(self, area: Area, new_name: str) -> bool:
+        """Renomme une Area (annulable). Rend False, sans rien changer, pour un nom vide, inchangé ou déjà pris dans
+        la scène : le nom sera la clé de `area:get("…")`, deux Areas du même nom le rendraient ambigu."""
+        from core.history import SetFieldCmd
+        scene = self._project.active_scene if self._project else None
+        new_name = new_name.strip()
+        if (scene is None or not new_name or new_name == area.name
+                or any(a is not area and a.name == new_name for a in scene.areas)):
+            return False
+        get_history().push(SetFieldCmd(area, "name", area.name, new_name, label=f"Rename {area.name}",
+                                       persist_fn=self.persist_areas))
+        return True
+
+    def delete_areas(self, areas: list):
+        """Supprime un LOT d'Areas de la scène active en UNE entrée d'historique."""
+        from core.history import RemoveListItemsCmd
+        if not self._project or not self._project.active_scene:
+            return
+        scene = self._project.active_scene
+        victims = [a for a in areas if any(x is a for x in scene.areas)]
+        if not victims:
+            return
+
+        def persist():
+            get_bus().clear()
+            self.persist_areas()
+
+        n = len(victims)
+        get_history().push(RemoveListItemsCmd(
+            scene.areas, victims, persist_fn=persist,
+            label=f"Deleted {n} area{'s' if n > 1 else ''}"))
+        self._emit("status_message",
+                   f"Deleted area: {victims[0].name}" if n == 1 else f"Deleted {n} areas")
+
+    def duplicate_areas(self, areas: list, dx: int = 8, dy: int = 8) -> list:
+        """Duplique un LOT d'Areas de la scène active. Les sources doivent appartenir à la scène (ce qui
+        distingue le dupliquer du coller, dont les sources viennent du presse-papier, d'une autre scène peut-être)."""
+        if not self._project or not self._project.active_scene:
+            return []
+        scene = self._project.active_scene
+        return self._add_area_copies([a for a in areas if any(x is a for x in scene.areas)], dx, dy, "Duplicated")
+
+    def paste_areas(self, areas: list, dx: int = 0, dy: int = 0) -> list:
+        """Colle des Areas venues du presse-papier du canvas dans la scène active (copiées ailleurs, peut-être
+        dans une autre scène, peut-être supprimées depuis). C'est ce qui réutilise une Area d'une scène à l'autre."""
+        return self._add_area_copies(list(areas), dx, dy, "Pasted")
+
+    def _add_area_copies(self, sources: list, dx: int, dy: int, verb: str) -> list:
+        from core.history import AddListItemsCmd
+        if not self._project or not self._project.active_scene or not sources:
+            return []
+        scene = self._project.active_scene
+        taken = {a.name for a in scene.areas}
+        copies: list[Area] = []
+        for src in sources:
+            new = copy.deepcopy(src)
+            new.id = ""                          # l'id appartient à la scène : `assign_member_ids` en donne un neuf
+            new.name = unique_name(src.name, taken)
+            taken.add(new.name)
+            new.x, new.y = src.x + dx, src.y + dy
+            copies.append(new)
+        n = len(copies)
+        get_history().push(AddListItemsCmd(scene.areas, copies, persist_fn=self.persist_areas,
+                                           label=f"{verb} {n} area{'s' if n > 1 else ''}"))
+        get_bus().select(copies[0])
+        self._emit("status_message", f"{verb} area: {copies[0].name}" if n == 1 else f"{verb} {n} areas")
+        return copies
+
+    def persist_areas(self):
+        self._save_scene()
+        self._emit("actors_list_changed")
+        self._emit("scene_sprites_changed")
 
     # ── Scene ─────────────────────────────────────────────────────
 

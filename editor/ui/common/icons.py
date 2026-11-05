@@ -188,6 +188,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "data_table_linked":     ("mdi.link-variant",             "▦"),
     "asset_missing":         ("mdi.circle-outline",          "○"),
     "camera":                ("mdi.video",                   "▰"),
+    "area":                  ("mdi.vector-square",           "▭"),
     # Sprite Editor — directions
     "dir_n":                 ("mdi.arrow-up",                "↑"),
     "dir_ne":                ("mdi.arrow-top-right",         "↗"),

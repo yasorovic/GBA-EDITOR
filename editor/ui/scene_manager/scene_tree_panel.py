@@ -26,7 +26,7 @@ from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_UI
 from ui.common.tree_selection import highlight_matching
 from ui.common.selection_grammar import RowSelectionDelegate
 
-from core.models.scene import Actor, Scene
+from core.models.scene import Actor, Area, Scene
 from core.project import Project
 from core.models.field_value import number_value
 from core.selection_bus import (
@@ -52,6 +52,7 @@ _ROLE_PATH = Qt.ItemDataRole.UserRole + 2
 T_SCENE  = "scene"
 T_ACTOR  = "actor"
 T_CAMERA = "camera"          # une caméra POSSÉDÉE par la scène active
+T_AREA   = "area"            # une zone de jeu posée dans la scène active
 T_PREFAB = "prefab"
 T_SCRIPT = "script"
 T_FOLDER = "folder"
@@ -65,6 +66,8 @@ def _content_member(node_type: str, obj) -> str | None:
         return f"actor:{obj.name}"
     if node_type == T_CAMERA:
         return f"camera:{obj.name}"
+    if node_type == T_AREA:
+        return f"area:{obj.name}"
     if node_type == T_UI_LAYOUT:
         return f"ui:{obj.name}"
     return None
@@ -361,6 +364,12 @@ class _ActiveSceneTree(_Tree):
                 c_item.setData(0, _ROLE_OBJ, camera)
                 self._update_camera_item(c_item, camera)
                 self._add_content_root(T_CAMERA, camera, c_item)
+            for area in scene.areas:
+                area_item = QTreeWidgetItem()
+                area_item.setData(0, _ROLE_TYPE, T_AREA)
+                area_item.setData(0, _ROLE_OBJ, area)
+                self._update_area_item(area_item, area)
+                self._add_content_root(T_AREA, area, area_item)
             self._populate_ui_branch(scene, project)
             self._install_visibility_controls()
         self.blockSignals(False)
@@ -386,6 +395,7 @@ class _ActiveSceneTree(_Tree):
         state = self._panel._content_state
         valid = {f"actor:{a.name}" for a in scene.actors}
         valid |= {f"camera:{c.name}" for c in scene.cameras}
+        valid |= {f"area:{a.name}" for a in scene.areas}
         valid |= {f"ui:{getattr(n, 'layout_name', n)}" for n in scene.ui_layouts}
         layouts = (project.scene_ui_layouts(scene)
                    if project is not None and hasattr(project, "scene_ui_layouts") else [])
@@ -579,6 +589,16 @@ class _ActiveSceneTree(_Tree):
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDragEnabled)
         item.setForeground(0, QColor(_TEXT))
 
+    def _update_area_item(self, item: QTreeWidgetItem, area: Area):
+        item.setIcon(0, _ico("area", COLOR_DEFAULT))
+        item.setToolTip(0, tooltip(title=area.name))
+        item.setText(0, area.name)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDragEnabled)
+        item.setForeground(0, QColor(_TEXT))
+
+    def highlight_area(self, area: Area):
+        self._highlight(T_AREA, area)
+
     def highlight_actor(self, actor: Actor):
         self._highlight(T_ACTOR, actor)
 
@@ -639,6 +659,8 @@ class _ActiveSceneTree(_Tree):
             get_bus().select(self._scene)
         elif typ == T_CAMERA:
             get_bus().select(CameraSelection(self._scene, item.data(0, _ROLE_OBJ)))
+        elif typ == T_AREA:
+            get_bus().select(item.data(0, _ROLE_OBJ))
         elif typ == T_UI_ELEM:
             get_bus().select(UIElementSelection(item.data(0, _ROLE_PATH),
                                                 item.data(0, _ROLE_OBJ)))
@@ -669,7 +691,7 @@ class _ActiveSceneTree(_Tree):
         dtype = dragged.data(0, _ROLE_TYPE)
 
         if target is not None and target.data(0, _ROLE_TYPE) in (T_FOLDER, T_SCENE) and \
-                dtype in (T_ACTOR, T_CAMERA, T_UI_LAYOUT):
+                dtype in (T_ACTOR, T_CAMERA, T_AREA, T_UI_LAYOUT):
             obj = dragged.data(0, _ROLE_OBJ)
             if dtype == T_ACTOR and getattr(obj, "parent", None):
                 actors = {a.name: a for a in self._scene.actors}
@@ -908,6 +930,14 @@ class _ActiveSceneTree(_Tree):
             menu.addAction(label("scttree.delete_camera")).triggered.connect(
                 lambda: get_dispatcher().delete_camera(camera))
 
+        elif typ == T_AREA:
+            area = item.data(0, _ROLE_OBJ)
+            self._add_folder_actions(menu, T_AREA, area)
+            menu.addSeparator()
+            self.add_rename_action(menu, item, label("scttree.rename"))
+            menu.addAction(label("common.delete")).triggered.connect(
+                lambda: get_dispatcher().delete_areas([area]))
+
         elif typ == T_UI_LAYOUT:
             layout = item.data(0, _ROLE_OBJ)
             add = menu.addMenu(label("scttree.add_widget"))
@@ -1101,6 +1131,8 @@ class _ActiveSceneTree(_Tree):
             self._commit_rename_actor(item)
         elif typ == T_CAMERA:
             self._commit_rename_camera(item)
+        elif typ == T_AREA:
+            self._commit_rename_area(item)
         elif typ == T_UI_ELEM:
             self._commit_rename_ui_elem(item)
         elif typ == T_FOLDER:
@@ -1108,6 +1140,23 @@ class _ActiveSceneTree(_Tree):
             if folder_id and self._panel._content_state and self._scene:
                 self._panel._content_state.rename_folder(self._scene.name, folder_id, item.text(0))
                 self._panel.refresh()
+
+    def _commit_rename_area(self, item: QTreeWidgetItem):
+        """Renomme une Area (annulable). Un nom vide, inchangé ou déjà pris dans la scène est refusé : la ligne
+        retrouve son ancien nom."""
+        area = item.data(0, _ROLE_OBJ)
+        new_name = item.text(0).strip()
+        old_name = area.name
+        # Si le renommage aboutit, l'arbre est reconstruit : `item` est détruit après cet appel.
+        if not get_dispatcher().rename_area(area, new_name):
+            self.blockSignals(True)
+            self._update_area_item(item, area)
+            self.blockSignals(False)
+            return
+        state = self._panel._content_state
+        if state:
+            state.rename_member(self._scene.name, f"area:{old_name}", f"area:{area.name}")
+            self._panel.refresh()          # l'Area retrouve son dossier sous son nouveau nom
 
     def _commit_rename_camera(self, item: QTreeWidgetItem):
         camera = item.data(0, _ROLE_OBJ)
@@ -1523,6 +1572,7 @@ class SceneTreePanel(QWidget):
         add_menu.setFont(QFont(T.UI, T.MD))
         add_menu.addAction(_ico("actor", COLOR_DEFAULT), label("common.actor")).triggered.connect(self._add_actor)
         add_menu.addAction(_ico("camera", COLOR_DEFAULT), label("common.camera")).triggered.connect(self._add_camera)
+        add_menu.addAction(_ico("area", COLOR_DEFAULT), label("common.area")).triggered.connect(self._add_area)
         add_menu.addAction(_ico("ui_layout", COLOR_UI), label("common.interface")).triggered.connect(self._add_interface)
         add_menu.addSeparator()
         add_menu.addAction(_ico("folder", COLOR_DEFAULT), label("scttree.add_folder")).triggered.connect(self._add_folder)
@@ -1555,6 +1605,7 @@ class SceneTreePanel(QWidget):
             (T_ACTOR, "actor", "scttree.filter_actors"),
             (T_UI_LAYOUT, "ui_layout", "scttree.filter_interface"),
             (T_CAMERA, "camera", "scttree.filter_cameras"),
+            (T_AREA, "area", "scttree.filter_areas"),
             ("unfiled", "folder", "scttree.filter_unfiled"),
         ):
             button = QToolButton(self._filters_bar)
@@ -1688,7 +1739,7 @@ class SceneTreePanel(QWidget):
                 while top.parent() is not None and top.parent() is not self._tree._content_root:
                     top = top.parent()
                 category_match |= top.parent() is self._tree._content_root and \
-                    node_type in (T_ACTOR, T_CAMERA, T_UI_LAYOUT, T_UI_ELEM)
+                    node_type in (T_ACTOR, T_CAMERA, T_AREA, T_UI_LAYOUT, T_UI_ELEM)
             child_match = False
             for index in range(item.childCount()):
                 child_match |= matches(item.child(index))
@@ -1729,6 +1780,8 @@ class SceneTreePanel(QWidget):
         if isinstance(obj, Actor):
             self._tree.highlight_actor(obj)
             self._priority_tree.highlight_actor(obj)
+        elif isinstance(obj, Area):
+            self._tree.highlight_area(obj)
         elif isinstance(obj, CameraSelection):
             if obj.camera is not None:
                 self._tree.highlight_camera(obj.camera)
@@ -1811,6 +1864,16 @@ class SceneTreePanel(QWidget):
             return
         self.refresh()
         self._begin_rename(T_CAMERA, cam.name)
+
+    def _add_area(self):
+        """Ajoute une Area au centre de l'écran GBA (240×160), puis la nomme en place."""
+        if not self._project or not self._scene:
+            return
+        area = get_dispatcher().add_area(120, 80)
+        if area is None:
+            return
+        self.refresh()
+        self._begin_rename(T_AREA, area.name)
 
     def _begin_rename(self, node_type: str, name: str):
         if QTreeWidgetItemIterator is None:

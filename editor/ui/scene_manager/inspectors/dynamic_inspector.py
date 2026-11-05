@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.common.theme import C, T
 from .actor_inspector import ActorInspector
+from .area_inspector import AreaInspector
 from .scene_inspector import SceneInspector
 from .camera_inspector import CameraInspector
 from .project_inspector import ProjectInspector
@@ -61,6 +62,7 @@ class DynamicInspector(QWidget):
     _MODE_EDGE        = 9
     _MODE_GROUP       = 10
     _MODE_GRAPH_NOTE  = 11
+    _MODE_AREA        = 12
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -118,6 +120,7 @@ class DynamicInspector(QWidget):
             self._MODE_EDGE:        self._make_edge,
             self._MODE_GROUP:       self._make_group,
             self._MODE_GRAPH_NOTE:  self._make_graph_note,
+            self._MODE_AREA:        self._make_area,
         }
         self._placeholders: dict[int, QWidget] = {}
         for _mode in self._factories:            # 1..11, dans l'ordre → index == mode
@@ -137,6 +140,7 @@ class DynamicInspector(QWidget):
         self._edge_insp = None
         self._group_insp = None
         self._graph_note_insp = None
+        self._area_insp = None
 
         # Injecté par window.py AVANT toute construction d'inspecteur : mémorisé
         # ici, appliqué par les fabriques concernées à la naissance de leur
@@ -266,6 +270,12 @@ class DynamicInspector(QWidget):
         self._graph_note_insp = insp
         return insp
 
+    def _make_area(self) -> QWidget:
+        insp = AreaInspector()
+        insp.changed.connect(self.changed)
+        self._area_insp = insp
+        return insp
+
     def _on_actor_insp_changed(self):
         """Relaye changed ET émet actor_changed(actor) avec le payload explicite."""
         self.changed.emit()
@@ -276,7 +286,7 @@ class DynamicInspector(QWidget):
     # Kinds dont le NOM se change dans l'en-tête. Les éléments d'interface en
     # font partie depuis que leur inspecteur n'a plus de champ « Name » : le nom
     # se change là où il s'affiche, comme pour une scène ou un acteur.
-    _RENAMABLE = ("project", "scene", "actor", "prefab", "camera", "script_asset",
+    _RENAMABLE = ("project", "scene", "actor", "area", "prefab", "camera", "script_asset",
                   "ui_text", "ui_textbox", "ui_container", "ui_list", "ui_image", "ui_element",
                   "ui_layout")
 
@@ -314,6 +324,12 @@ class DynamicInspector(QWidget):
                     from core.command_dispatcher import get_dispatcher
                     get_dispatcher()._emit("actors_list_changed")
                 self._header.set_name(actor.name)
+        elif self._header_mode == "area":
+            area = self._area_insp._actor
+            if area:
+                from core.command_dispatcher import get_dispatcher
+                get_dispatcher().rename_area(area, new_name)   # refusé : l'en-tête ré-affiche l'ancien nom
+            self._header.set_name(area.name if area else "")
         elif self._header_mode == "camera":
             cam = self._camera_insp._camera
             scene = self._camera_insp._scene
@@ -377,7 +393,7 @@ class DynamicInspector(QWidget):
     def on_selection(self, obj):
         """Reçu du bus — afficher le bon panneau selon le type de l'objet."""
         from pathlib import Path as _P
-        from core.models.scene import Actor, Prefab, Scene
+        from core.models.scene import Actor, Area, Prefab, Scene
         from core.selection_bus import (
             BackgroundLayerSelection, CameraSelection, UIRegionSelection, UILayoutSelection,
             ActorSelection)
@@ -404,6 +420,9 @@ class DynamicInspector(QWidget):
         elif isinstance(obj, Actor):
             scene = self._project.active_scene if self._project else None
             self.show_actor(obj, self._project, scene)
+        elif isinstance(obj, Area):
+            scene = self._project.active_scene if self._project else None
+            self.show_area(obj, self._project, scene)
         elif isinstance(obj, Scene):
             # Sélection générique de la scène (clic vide dans la zone active du
             # canvas) → son propre inspecteur, comme Actor/Prefab.
@@ -462,6 +481,10 @@ class DynamicInspector(QWidget):
             self._project_insp.load(self._project)
             if self._project:
                 self._header.set_name(self._project.settings.name)   # renommé depuis Project Settings
+        elif self._stack.currentIndex() == self._MODE_AREA and self._area_insp is not None:
+            self._area_insp.refresh()     # sans reconstruire : l'utilisateur peut être en train de saisir
+            if self._area_insp._actor is not None:
+                self._header.set_name(self._area_insp._actor.name)   # renommé depuis l'arbre, ou annulé
         elif self._stack.currentIndex() == self._MODE_UI and self._ui_insp is not None:
             insp = self._ui_insp
             if insp._layout_asset is not None and insp._element is not None:
@@ -491,6 +514,12 @@ class DynamicInspector(QWidget):
         self._actor_insp.load(actor, project, scene)
         self._set_header("actor", label('common.actor'), actor.name if actor else "")
         self._stack.setCurrentIndex(self._MODE_ACTOR)
+
+    def show_area(self, area, project, scene=None):
+        self._ensure(self._MODE_AREA)
+        self._area_insp.load(area, project, scene)
+        self._set_header("area", label('common.area'), area.name)
+        self._stack.setCurrentIndex(self._MODE_AREA)
 
     def show_prefab(self, prefab, project):
         scene = project.active_scene if project else None
