@@ -2804,6 +2804,16 @@
     "areainsp.fx.drag": { "text": "Traînée" },
     "areainsp.fx.drag_tip": { "text": "Part de la vitesse perdue à chaque frame dans la zone (viscosité). 0 est l'air libre." },
     "areainsp.fx.characters": { "text": "Agit sur les personnages" },
-    "areainsp.fx.characters_tip": { "text": "Pousse aussi les acteurs CharacterBody. Désactivé par défaut : un personnage est conduit par son script." }
+    "areainsp.fx.characters_tip": { "text": "Pousse aussi les acteurs CharacterBody. Désactivé par défaut : un personnage est conduit par son script." },
+    "areainsp.fx.emitter": { "text": "Émetteur sonore" },
+    "areainsp.fx.emitter_tip": { "text": "Joue un effet sonore en boucle tant que le centre de la caméra est dans la zone ou à moins de la distance d'atténuation autour. Dehors, le son s'arrête et libère son canal." },
+    "areainsp.fx.sfx": { "text": "Effet sonore" },
+    "areainsp.fx.sfx_tip": { "text": "L'effet à jouer. Il repart dès qu'il se termine, tant que l'écouteur reste à portée." },
+    "areainsp.fx.volume": { "text": "Volume" },
+    "areainsp.fx.volume_tip": { "text": "Pourcentage du volume de l'effet lui-même." },
+    "areainsp.fx.falloff": { "text": "Atténuation" },
+    "areainsp.fx.falloff_tip": { "text": "Distance en pixels autour de la zone sur laquelle le volume descend à zéro. 0 coupe le son dès que le centre de la caméra quitte la zone." },
+    "areainsp.fx.panning": { "text": "Panoramique selon la position" },
+    "areainsp.fx.panning_tip": { "text": "Place le son à gauche ou à droite selon la position de la zone par rapport au centre de la caméra." }
   }
 }

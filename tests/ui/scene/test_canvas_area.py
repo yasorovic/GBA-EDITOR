@@ -473,6 +473,30 @@ def test_les_effets_physiques_s_ajoutent_se_reglent_et_s_annulent(qapp, editor):
     insp.deleteLater()
 
 
+def test_l_emetteur_sonore_s_ajoute_choisit_son_effet_et_s_annule(qapp, editor):
+    from core.models.audio import Sfx
+    from core.models.components import AudioEmitterComponent
+    from ui.scene_manager.inspectors.area_inspector import AreaInspector
+    project = editor._project
+    project.load_audio()
+    project.sfx.items.append(Sfx(name="Wind"))
+    area = project.active_scene.areas[0]
+    insp = AreaInspector()
+    insp.load(area, project, project.active_scene)
+    combo = insp._fx_inputs[(AudioEmitterComponent, "sfx_name")]
+    assert not insp._fx_checks[AudioEmitterComponent].isChecked() and not combo.isEnabled()
+    assert combo.findData("Wind") >= 0                                                    # les effets du projet
+    insp._fx_checks[AudioEmitterComponent].setChecked(True)
+    comp = area.effect(AudioEmitterComponent)
+    assert comp is not None and comp.sfx_name is None
+    combo.setCurrentIndex(combo.findData("Wind"))
+    insp._fx_inputs[(AudioEmitterComponent, "falloff")].setValue(48)
+    insp._fx_inputs[(AudioEmitterComponent, "panning")].setChecked(True)
+    assert (comp.sfx_name, comp.falloff, comp.panning) == ("Wind", 48, True)
+    get_history().undo()
+    insp.deleteLater()
+
+
 def test_l_inspecteur_masque_ce_qui_n_a_pas_de_sens_pour_une_area_et_ses_edits_sont_annulables(qapp, editor):
     from ui.scene_manager.inspectors.area_inspector import AreaInspector
     project = editor._project

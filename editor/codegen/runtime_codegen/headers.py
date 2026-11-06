@@ -378,6 +378,11 @@ def generate_runtime_api(
             "{(void)id;(void)loop;(void)volume;}",
         ]
 
+    # Émetteurs sonores d'Area : le pas appelle `sfx_*`, définis ci-dessus dans les deux branches.
+    from codegen.runtime_codegen.physics.audio_emitters import emitter_function_lines, project_has_emitters
+    if project_has_emitters(p):
+        a += emitter_function_lines()
+
     # ── destroy() + SoundFxComponent("on_destroy") ─────────────────────
     # `actor_destroy_internal` (runtime_api_inline.h) ne connaît que le
     # matériel : désactiver l'actor. Le SFX déclaré sur le trigger

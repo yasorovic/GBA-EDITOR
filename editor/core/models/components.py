@@ -422,6 +422,31 @@ class ForceFieldComponent:
 
 
 @dataclass
+class AudioEmitterComponent:
+    """Fait d'une Area un ÉMETTEUR sonore : un effet (`Sfx`) joué en continu tant que l'écouteur est dans la zone audible.
+
+    L'écouteur est le centre de la caméra. La zone audible est la forme de l'Area plus une marge de `falloff` pixels : plein
+    volume dans la forme, puis décroissance linéaire jusqu'à zéro à `falloff` pixels du rectangle (distance sans racine
+    carrée). Hors de la zone audible l'émetteur est coupé et ne tient plus de canal. `volume` : pourcentage du volume de
+    l'effet. `panning` : placer le son à gauche ou à droite selon la position de l'Area par rapport à l'écouteur.
+
+    La boucle se fait par relance : quand l'effet est fini et que l'écouteur est toujours dans la zone, il repart à la frame
+    suivante (au plus une frame de silence). Un effet n'a pas de boucle d'échantillon."""
+    id: str = "audio_emitter"
+    active: bool = True
+    sfx_name: Optional[str] = None
+    volume: int = 100
+    falloff: int = 64
+    panning: bool = False
+
+    def __post_init__(self):
+        if not 0 <= int(self.volume) <= 100:
+            raise ValueError("audio emitter volume must be between 0 and 100")
+        if not 0 <= int(self.falloff) <= 255:
+            raise ValueError("audio emitter falloff must be between 0 and 255")
+
+
+@dataclass
 class ScriptComponent:
     id: str = "script"
     active: bool = True
@@ -441,13 +466,14 @@ COMPONENT_REGISTRY: dict = {
     "trigger":       TriggerComponent,
     "gravity_override": GravityOverrideComponent,
     "force_field":   ForceFieldComponent,
+    "audio_emitter": AudioEmitterComponent,
     "script":        ScriptComponent,
 }
 
 
 # Un seul composant de ces types par acteur : le script et le moteur les adressent par leur
 # type (`self:physics_body()`), jamais par un id. L'inspecteur n'en montre donc pas.
-SINGLETON_COMPONENTS = frozenset({"physics_body", "interactive", "trigger", "gravity_override", "force_field", "script"})
+SINGLETON_COMPONENTS = frozenset({"physics_body", "interactive", "trigger", "gravity_override", "force_field", "audio_emitter", "script"})
 
 
 def component_type_name(comp) -> str:

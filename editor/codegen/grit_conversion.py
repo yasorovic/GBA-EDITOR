@@ -649,6 +649,13 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
             except ValueError:
                 continue
 
+    # ② bis Un émetteur sonore d'Area nomme son effet de la même façon.
+    for scene in p.scenes:
+        for area in getattr(scene, "areas", []) or []:
+            for comp in area.components:
+                if component_type_name(comp) == "audio_emitter" and comp.sfx_name:
+                    sfx_names.add(comp.sfx_name)
+
     # ③ Ce que les trois boîtes citent. Un emplacement posé sur une frame ne
     # nomme aucun asset ; c'est l'état qui dit vers quoi il pointe. Un effet
     # cité seulement là doit tout de même entrer en ROM, sinon sa constante

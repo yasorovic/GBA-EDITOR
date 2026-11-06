@@ -5182,6 +5182,16 @@
     "areainsp.fx.drag": { "text": "Drag" },
     "areainsp.fx.drag_tip": { "text": "Share of the velocity lost every frame inside the area (viscosity). 0 is free air." },
     "areainsp.fx.characters": { "text": "Affects characters" },
-    "areainsp.fx.characters_tip": { "text": "Also pushes CharacterBody actors. Off by default: a character is driven by its script." }
+    "areainsp.fx.characters_tip": { "text": "Also pushes CharacterBody actors. Off by default: a character is driven by its script." },
+    "areainsp.fx.emitter": { "text": "Sound emitter" },
+    "areainsp.fx.emitter_tip": { "text": "Plays a sound effect in a loop while the camera centre is inside the area or within the fall-off distance around it. Outside, the sound stops and frees its channel." },
+    "areainsp.fx.sfx": { "text": "Sound effect" },
+    "areainsp.fx.sfx_tip": { "text": "The effect to play. It restarts as soon as it ends, as long as the listener stays in range." },
+    "areainsp.fx.volume": { "text": "Volume" },
+    "areainsp.fx.volume_tip": { "text": "Percentage of the volume of the effect itself." },
+    "areainsp.fx.falloff": { "text": "Fall-off" },
+    "areainsp.fx.falloff_tip": { "text": "Distance in pixels around the area over which the volume fades to zero. 0 cuts the sound as soon as the camera centre leaves the area." },
+    "areainsp.fx.panning": { "text": "Pan with position" },
+    "areainsp.fx.panning_tip": { "text": "Places the sound to the left or right according to where the area is relative to the camera centre." }
   }
 }

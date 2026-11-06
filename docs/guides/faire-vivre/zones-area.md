@@ -157,6 +157,24 @@ Règles :
 - Le coût se lit dans le journal de débogage : le compteur `fx=` donne le nombre de couples (zone, corps) testés
   par frame.
 
+## 6. Faire sonner la zone
+
+Une Area peut aussi jouer un son d'ambiance (une cascade, un moteur, le vent dans un couloir) sans script. Dans la carte
+**Physics effects**, cochez **Sound emitter** et choisissez un **Sound effect** du projet.
+
+- L'**écouteur** est le centre de la caméra. Le son est à **plein volume** quand il est dans la forme de l'Area, puis
+  **décroît linéairement** jusqu'à zéro à la distance **Fall-off** (en pixels) autour de la forme. Au-delà, le son est
+  coupé et ne tient plus de canal.
+- **Volume** est un pourcentage du volume de l'effet lui-même. **Pan with position** place le son à gauche ou à droite
+  selon la position de l'Area par rapport au centre de la caméra.
+- Il n'y a pas de boucle d'échantillon : quand l'effet se termine et que l'écouteur est toujours à portée, il **repart à la
+  frame suivante** (au plus une frame de silence). Choisissez donc un effet qui se raccorde bien à lui-même.
+- Chaque émetteur à portée occupe **un canal** du projet (8 par défaut). Quand tous les canaux sont pris, l'émetteur
+  retente à la frame suivante ; le validateur avertit si une scène porte plus d'émetteurs que le projet n'a de canaux.
+- Une Area **inactive**, ou dont le parent est désactivé ou détruit, se tait. Elle peut suivre un acteur (son qui accompagne
+  un monstre) comme n'importe quelle Area.
+- Seuls les **effets** sonores sont possibles : la musique n'a qu'une couche et reste pilotée par `music`.
+
 ## Choisir entre une Area et un acteur sensor
 
 Un **acteur** dont la boîte est vide fait déjà office de déclencheur : il reste le bon choix s'il

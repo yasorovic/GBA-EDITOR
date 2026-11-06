@@ -8,12 +8,12 @@ from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QCheckBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QComboBox, QSpinBox, QVBoxLayout, QWidget
 
 from core.command_dispatcher import get_dispatcher
 from core.history import AddListItemCmd, SetFieldCmd, get_history
 from core.models.components import (
-    CollisionShapeComponent, ForceFieldComponent, GravityOverrideComponent, TriggerComponent,
+    AudioEmitterComponent, CollisionShapeComponent, ForceFieldComponent, GravityOverrideComponent, TriggerComponent,
 )
 from core.models.scene import Area, Scene
 from core.project import Project
@@ -33,10 +33,12 @@ _EFFECTS = (
     (ForceFieldComponent, "force", [("force_x", -8.0, 8.0, 0.05, 3), ("force_y", -8.0, 8.0, 0.05, 3),
                                     ("turbulence", 0.0, 8.0, 0.05, 3), ("buoyancy", 0.0, 4.0, 0.05, 2),
                                     ("drag", 0.0, 1.0, 0.05, 2)]),
+    (AudioEmitterComponent, "emitter", []),    # ses réglages ont des widgets propres (cf. `_build_emitter_rows`)
 )
 _FIELD_TIPS = {"gravity_x": "areainsp.fx.gravity_tip", "gravity_y": "areainsp.fx.gravity_tip",
                "force_x": "areainsp.fx.force_xy_tip", "force_y": "areainsp.fx.force_xy_tip"}
-_EFFECT_NAMES = {GravityOverrideComponent: "gravity_override", ForceFieldComponent: "force_field"}
+_EFFECT_NAMES = {GravityOverrideComponent: "gravity_override", ForceFieldComponent: "force_field",
+                 AudioEmitterComponent: "audio_emitter"}
 
 
 class AreaInspector(QWidget):
@@ -128,6 +130,8 @@ class AreaInspector(QWidget):
                                         body=label(_FIELD_TIPS.get(field_name, f'areainsp.fx.{field_name}_tip'))))
                 W.row(label(f'areainsp.fx.{field_name}'), spin, card.body_layout)
                 self._fx_inputs[(kind, field_name)] = spin
+            if kind is AudioEmitterComponent:
+                self._build_emitter_rows(card)
         characters = QCheckBox(label('areainsp.fx.characters'))
         characters.setFont(QFont(T.UI, T.SM))
         characters.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
@@ -136,6 +140,43 @@ class AreaInspector(QWidget):
         card.body_layout.addWidget(characters)
         self._fx_inputs[(ForceFieldComponent, "affects_characters")] = characters
         self._layout.addWidget(card)
+
+    def _build_emitter_rows(self, card) -> None:
+        """Les réglages de l'émetteur sonore : l'effet, son volume, la marge d'atténuation et le panoramique."""
+        kind = AudioEmitterComponent
+        sfx = QComboBox()
+        sfx.setToolTip(tooltip(title=label('areainsp.fx.sfx'), body=label('areainsp.fx.sfx_tip')))
+        sfx.currentIndexChanged.connect(lambda _i: self._set_effect_field(kind, "sfx_name", sfx.currentData()))
+        W.row(label('areainsp.fx.sfx'), sfx, card.body_layout)
+        self._fx_inputs[(kind, "sfx_name")] = sfx
+        for field_name, high in (("volume", 100), ("falloff", 255)):
+            spin = W.spinbox(0, 0, high)
+            spin.setToolTip(tooltip(title=label(f'areainsp.fx.{field_name}'), body=label(f'areainsp.fx.{field_name}_tip')))
+            spin.valueChanged.connect(lambda v, f=field_name: self._set_effect_field(kind, f, int(v)))
+            W.row(label(f'areainsp.fx.{field_name}'), spin, card.body_layout)
+            self._fx_inputs[(kind, field_name)] = spin
+        panning = QCheckBox(label('areainsp.fx.panning'))
+        panning.setFont(QFont(T.UI, T.SM))
+        panning.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
+        panning.setToolTip(tooltip(title=label('areainsp.fx.panning'), body=label('areainsp.fx.panning_tip')))
+        panning.toggled.connect(lambda on: self._set_effect_field(kind, "panning", bool(on)))
+        card.body_layout.addWidget(panning)
+        self._fx_inputs[(kind, "panning")] = panning
+
+    def _fill_sfx_choices(self, combo: QComboBox, current) -> None:
+        """Les effets du projet, et l'effet cité s'il a disparu (visible plutôt que réécrit en silence)."""
+        if self._project:
+            self._project.load_audio()      # catalogue différé
+        names = [s.name for s in self._project.sfx.items] if self._project else []
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(label('common.none_dash'), None)
+        for name in names:
+            combo.addItem(name, name)
+        if current and current not in names:
+            combo.addItem(current, current)
+        combo.setCurrentIndex(max(0, combo.findData(current)))
+        combo.blockSignals(False)
 
     def _effect(self, kind):
         return next((c for c in self._actor.components if isinstance(c, kind)), None) if self._actor else None
@@ -153,6 +194,10 @@ class AreaInspector(QWidget):
                 value = getattr(source, field_name)
                 if isinstance(widget, QCheckBox):
                     widget.setChecked(bool(value))
+                elif isinstance(widget, QComboBox):
+                    self._fill_sfx_choices(widget, value)
+                elif isinstance(widget, QSpinBox):
+                    widget.setValue(int(value))
                 else:
                     widget.setValue(float(value))
                 widget.setEnabled(on)

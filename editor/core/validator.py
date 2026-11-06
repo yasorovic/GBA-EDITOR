@@ -498,6 +498,28 @@ def _check_areas(ctx: ValidationContext, scene):
         if not any(c.active for c in area.components if isinstance(c, CollisionShapeComponent)):
             ctx.warn(area, "The Area has no active collision shape: it covers nothing.")
         _check_components(ctx, area, area.components)
+    _check_audio_emitters(ctx, scene)
+
+
+def _check_audio_emitters(ctx: ValidationContext, scene):
+    """Un émetteur sonore nomme un effet du projet, et la scène n'en porte pas plus que le projet n'a de canaux : chacun tient
+    un canal tant que l'écouteur est dans sa zone, et un effet sans canal libre ne sonne pas."""
+    from core.models.components import AudioEmitterComponent
+    sfx_names = {s.name for s in getattr(ctx.project, "sfx", [])}
+    active = []
+    for area in scene.areas:
+        comp = area.effect(AudioEmitterComponent)
+        if comp is None:
+            continue
+        if not comp.sfx_name or comp.sfx_name not in sfx_names:
+            ctx.warn(area, f"The audio emitter of Area \"{area.name}\" has no valid sound effect"
+                           + (f" (\"{comp.sfx_name}\" is not in the project)." if comp.sfx_name else "."))
+        else:
+            active.append(area)
+    channels = int(getattr(ctx.project.settings, "sound_channels", 8))
+    if len(active) > channels:
+        ctx.warn(active[0], f"Scene '{scene.name}' has {len(active)} audio emitters but the project has {channels} sound "
+                            "channels: some will stay silent while the others sound.")
 
 
 def _check_area_handlers(ctx: ValidationContext, scene):
