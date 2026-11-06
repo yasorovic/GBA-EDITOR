@@ -4,6 +4,7 @@
   "source": "assets/Lance.png",
   "frame_w": 8,
   "frame_h": 8,
+  "source_stamp": "357:1793954759524094900:15a2b48db21f879d",
   "own_palette": [
     "#181020",
     "#8898B0",
