@@ -1,4 +1,4 @@
-"""editor/codegen/oam_budget.py — les décomptes d'un projet contre les plafonds du matériel.
+"""editor/codegen/oam_budget.py : les décomptes d'un projet contre les plafonds du matériel.
 
 Matrices affines, tuiles OBJ, taille de `g_oam_entries[]` et de `g_actors[]`. Lit la géométrie
 de `oam_alloc` ; ne la décide pas."""

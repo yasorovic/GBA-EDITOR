@@ -1,4 +1,4 @@
-"""ui/sound_mixer/music_graph_hints.py — contenu de la table des raccourcis du
+"""ui/sound_mixer/music_graph_hints.py : contenu de la table des raccourcis du
 graphe de musique (états et transitions). Pas d'outil : une seule table."""
 from __future__ import annotations
 

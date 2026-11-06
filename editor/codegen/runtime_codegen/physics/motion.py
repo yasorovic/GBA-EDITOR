@@ -1,95 +1,79 @@
-"""Mouvement automatique : gravité de scène des Character et Kinematic qui la suivent, intégration des Kinematic et Rigid."""
+"""Mouvement automatique : gravité de scène des Character et Kinematic qui la suivent, intégration des Kinematic et Rigid.
+
+Le sommeil Rigid (`physics_sleep_lines`) garde encore un chemin posé et un chemin par modèle du pool : il migre au
+descripteur de modèle dans un pas suivant du chantier « posé et spawné »."""
 from __future__ import annotations
 
+from codegen.runtime_codegen.model_desc import model_desc_sym, scene_has_moving_bodies
 from codegen.runtime_codegen.physics.body import physics_body, physics_body_mode
 from codegen.runtime_codegen.shared_pool_gen import shared_models
-from core.models.components import PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID
+from core.models.components import PHYSICS_BODY_RIGID
 
 
-def _move_lines(target: str, mode: str, gravity_x: int | str, gravity_y: int | str,
-                damping_retain: int, max_fall: int, sleep_frames: int,
-                indent: str) -> list[str]:
-    if mode in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC):
-        # gravity_x et gravity_y valent 0 quand le corps ignore la gravité de scène.
-        body = []
-        if gravity_x != 0 or gravity_y != 0:
-            body.append(f"{indent}({target})->vx+={gravity_x}; ({target})->vy+={gravity_y};")
-            if max_fall:
-                body.append(f"{indent}if(({target})->vy>{max_fall}) ({target})->vy={max_fall};")
-        if mode == PHYSICS_BODY_KINEMATIC:
-            body.append(f"{indent}actor_apply_velocity({target});")
-        return body
-    if mode == PHYSICS_BODY_RIGID:
-        body = [f"{indent}({target})->vx+={gravity_x}; ({target})->vy+={gravity_y};"]
-        if damping_retain == 0:
-            body.append(f"{indent}({target})->vx=0; ({target})->vy=0;")
-        elif damping_retain != 256:
-            body.append(f"{indent}({target})->vx=(({target})->vx*{damping_retain})/256; "
-                        f"({target})->vy=(({target})->vy*{damping_retain})/256;")
-        if max_fall:
-            body.append(f"{indent}if(({target})->vy>{max_fall}) ({target})->vy={max_fall};")
-        body.append(f"{indent}actor_apply_velocity({target});")
-        if sleep_frames:
-            # Le compteur ne se remet pas à zéro ici : une vitesse résiduelle sous le seuil ne doit pas empêcher le sommeil.
-            # `physics_sleep_lines` le remet à zéro quand la vitesse dépasse le seuil, et l'API de script quand elle l'écrit.
-            return [f"{indent}if(({target})->physics_sleep<{sleep_frames}||({target})->vx||({target})->vy){{",
-                    *[f"    {line}" for line in body], f"{indent}}}"]
-        return body
-    return []
+def motion_helper_lines() -> list[str]:
+    """L'aide C du mouvement automatique, un seul code pour un acteur posé ou né : le descripteur `d` de son type dit
+    son mode et sa part de gravité, la scène donne le reste. Character et Kinematic reçoivent la gravité (un Character
+    l'applique par son script) ; Kinematic et Rigid intègrent leur vitesse ; le Rigid est amorti et peut dormir.
+
+      gx, gy        gravité de scène, Q8 (constante, ou `g_gravity_x/y` quand un script l'écrit) ;
+      damping       part de vitesse gardée par un Rigid, sur 256 ;
+      max_fall      vitesse de chute maximale, Q8 (0 : aucune) ;
+      sleep_frames  délai du sommeil de scène, 0 s'il est coupé. Le compteur ne se remet pas à zéro ici : une vitesse
+                    résiduelle sous le seuil ne doit pas empêcher le sommeil (`physics_sleep_lines` le remet à zéro
+                    quand la vitesse dépasse le seuil, l'API de script quand elle l'écrit).
+
+    Inline forcé : appelée dans la boucle d'un tick, une vraie fonction double le coût de la passe (mesure du
+    2026-11-06, `internal/development/TODO.md`)."""
+    return [
+        "static inline __attribute__((always_inline, unused)) void body_motion_step(Actor* a,const ModelDesc* d,",
+        "        int gx,int gy,int damping,int max_fall,int sleep_frames){",
+        "    int mode=d->body_mode;",
+        "    if(mode==BODY_MODE_NONE) return;",
+        "    int bgx=(gx*d->gravity_scale)/256, bgy=(gy*d->gravity_scale)/256;",
+        "    if(mode==BODY_MODE_RIGID){",
+        "        if(sleep_frames&&d->can_sleep&&a->physics_sleep>=sleep_frames&&!a->vx&&!a->vy) return;",
+        "        a->vx+=bgx; a->vy+=bgy;",
+        "        if(damping==0){ a->vx=0; a->vy=0; }",
+        "        else if(damping!=256){ a->vx=(a->vx*damping)/256; a->vy=(a->vy*damping)/256; }",
+        "        if(max_fall&&a->vy>max_fall) a->vy=max_fall;",
+        "        actor_apply_velocity(a);",
+        "        return;",
+        "    }",
+        "    if(bgx||bgy){",
+        "        a->vx+=bgx; a->vy+=bgy;",
+        "        if(max_fall&&a->vy>max_fall) a->vy=max_fall;",
+        "    }",
+        "    if(mode==BODY_MODE_KINEMATIC) actor_apply_velocity(a);",
+        "}",
+        "",
+    ]
 
 
 def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: int, pi: list[dict],
                          dynamic_gravity: bool = False) -> list[str]:
-    """Le pas automatique, après les scripts et avant toute résolution de collision.
+    """Le pas automatique, après les scripts et avant toute résolution de collision : `body_motion_step` pour chaque
+    emplacement actif, posé ou né, avec la ligne de son type dans le descripteur de modèle (`model_desc`). Le build ne
+    spécialise plus rien par acteur ni par modèle ; il donne seulement les constantes de la scène.
 
     `dynamic_gravity` : un script écrit `scene.gravity` (cf. `project_sets_gravity`), la gravité se lit donc dans
     `g_gravity_x/y` au lieu d'être une constante de la scène."""
-    gravity_x, gravity_y = scene.effective_physics_gravity(project_settings)
-    gx = round(gravity_x * 256)
-    gy = round(gravity_y * 256)
-
-    def gravity_terms(body, mode):
-        if mode in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC) and not (body and body.use_scene_gravity):
-            return 0, 0
-        scale = body.gravity_scale if body else 1.0
-        if not dynamic_gravity:
-            return round(gx * scale), round(gy * scale)
-        if scale == 1.0:
-            return "g_gravity_x", "g_gravity_y"
-        k = round(scale * 256)
-        return f"(g_gravity_x*{k})/256", f"(g_gravity_y*{k})/256"
-
+    if not scene_has_moving_bodies(scene_actors, pi):
+        return []
+    if dynamic_gravity:
+        gx, gy = "g_gravity_x", "g_gravity_y"
+    else:
+        gravity_x, gravity_y = scene.effective_physics_gravity(project_settings)
+        gx, gy = round(gravity_x * 256), round(gravity_y * 256)
     _iterations, max_fall_speed, damping, sleep_enabled, _sleep_threshold, sleep_delay = (
         scene.effective_physics_simulation(project_settings))
-    damping_retain = round((1.0 - damping) * 256)
-    max_fall = round(max_fall_speed * 256)
-    sleep_frames = sleep_delay if sleep_enabled else 0
-    lines: list[str] = []
-    for index, (actor, _sprite) in enumerate(scene_actors):
-        mode = physics_body_mode(actor)
-        body = physics_body(actor)
-        body_gx, body_gy = gravity_terms(body, mode)
-        body_sleep = sleep_frames if body is None or body.can_sleep else 0
-        move = _move_lines(f"&g_actors[{actor_offset + index}]", mode, body_gx, body_gy,
-                           damping_retain, max_fall, body_sleep, "        ")
-        if move:
-            lines += [f"    if(g_actors[{actor_offset + index}].active){{", *move, "    }"]
-
-    cases = []
-    for model in shared_models(pi):
-        mode = physics_body_mode(model["prefab"])
-        body = physics_body(model["prefab"])
-        body_gx, body_gy = gravity_terms(body, mode)
-        body_sleep = sleep_frames if body is None or body.can_sleep else 0
-        move = _move_lines("_a", mode, body_gx, body_gy, damping_retain, max_fall, body_sleep, "            ")
-        if move:
-            cases += [f"        case {model['model_id']}: {{", *move, "        } break;"]
-    if cases:
-        lines += ["    POOL_EACH(_pm){", "        Actor* _a=&g_actors[_pm];",
-                  "        if(!_a->active) continue;", "        switch(_a->model){",
-                  *cases, "        default: break;", "        }", "    }"]
-    if lines:
-        lines.insert(0, "    /* Kinematic/Rigid : mouvement avant les collisions */")
+    step = (f"body_motion_step(_a,&{model_desc_sym(scene)}[_a->model],{gx},{gy},"
+            f"{round((1.0 - damping) * 256)},{round(max_fall_speed * 256)},{sleep_delay if sleep_enabled else 0});")
+    lines = ["    /* Kinematic/Rigid : mouvement avant les collisions, un seul pas pour les posés et les nés */"]
+    if scene_actors:
+        lines += [f"    for(int _k={actor_offset}; _k<{actor_offset + len(scene_actors)}; _k++){{",
+                  "        Actor* _a=&g_actors[_k];", f"        if(_a->active) {step}", "    }"]
+    if shared_models(pi):
+        lines += ["    POOL_EACH(_pm){", "        Actor* _a=&g_actors[_pm];", f"        if(_a->active) {step}", "    }"]
     return lines
 
 

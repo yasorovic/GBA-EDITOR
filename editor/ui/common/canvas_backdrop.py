@@ -1,4 +1,4 @@
-"""ui/common/canvas_backdrop.py — grille de fond + halo au survol.
+"""ui/common/canvas_backdrop.py : grille de fond + halo au survol.
 
 Source unique de l'effet visuel introduit par le Font Editor (comparaison
 couverture/sortie) : une grille grise à peine visible, dont un dégradé radial

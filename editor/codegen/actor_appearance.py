@@ -1,4 +1,4 @@
-"""editor/codegen/actor_appearance.py — les apparences d'un porteur (acteur, prefab, partie de prefab).
+"""editor/codegen/actor_appearance.py : les apparences d'un porteur (acteur, prefab, partie de prefab).
 
 Une apparence est un composant sprite dont le sprite existe et a une image. C'est le fait
 unique que lisent le budget OAM, le writer OAM, le chargement des tuiles en VRAM et les

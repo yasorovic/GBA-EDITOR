@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_scene_tick.py — le `scene_tick_<scène>` : les quatre phases du tick d'une scène (hooks, physique,
+"""runtime_codegen/gen_scene_tick.py : le `scene_tick_<scène>` : les quatre phases du tick d'une scène (hooks, physique,
 late, rendu) et le répartiteur qui les appelle.
 
 Les phases sont celles d'`iwram_plan.TICK_PHASES` ; chacune peut être placée en IWRAM par le build."""
@@ -20,6 +20,7 @@ from codegen.runtime_codegen.gen_sprite import (
     anim_tick_variants, anim_variants, appearances, oam_write_lines, shown,
 )
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
+from codegen.runtime_codegen.model_desc import model_desc_lines
 from core.models.components import SFX_AUTO_TRIGGERS
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
 from codegen.runtime_codegen.physics.body import (
@@ -373,7 +374,8 @@ def gen_scene_tick(
     # script a déjà tourné, l'index bouge dans la même frame que l'appui. Cette fin est la même pour toutes les
     # scènes : `scene_render_end` (cf. `gen_globals`) la porte en un seul exemplaire.
     L.append("    scene_render_end(_oamn);")
-    out: list[str] = iwram_macros(sym, phases)
+    # Le descripteur de modèle, lu par les passes migrées (aujourd'hui le mouvement) : défini avant les phases.
+    out: list[str] = model_desc_lines(p, scene, scene_actors, pi) + iwram_macros(sym, phases)
     for name in TICK_PHASES:
         out += [f"BS_ATTR_{sym}_{name} static void scene_tick_{sym}_{name}(void) {{", *phases[name], "}", ""]
     out += [f"static void scene_tick_{sym}(void) {{",

@@ -1,4 +1,4 @@
-"""core/project_variables.py — globals et constantes du projet.
+"""core/project_variables.py : globals et constantes du projet.
 
 Leur I/O, leur identité et leur CRUD. Le renommage d'une variable vit ICI et non
 avec les renommages d'assets : il partage `_variable_list` et la vérification

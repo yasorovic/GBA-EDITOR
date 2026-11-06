@@ -1,4 +1,4 @@
-"""ui/sound_mixer/sfx_editor.py — la découpe d'un effet : l'onde de son fichier, la barre de découpe dessous, le poids ROM qui en résulte.
+"""ui/sound_mixer/sfx_editor.py : la découpe d'un effet : l'onde de son fichier, la barre de découpe dessous, le poids ROM qui en résulte.
 
 Comme l'éditeur d'une musique, il montre aussi le son TEL QUE LA ROM LE JOUERA — le `Track` de l'aperçu (cf.
 `box_playback.track_for`, qui rend le fichier découpé, fondu et réglé en hauteur) : la barre du CANAL qu'il occupe parmi

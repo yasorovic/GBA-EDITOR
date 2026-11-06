@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_scene_init.py — le `scene_init_<scène>` : tout ce qu'une scène pose à son activation.
+"""runtime_codegen/gen_scene_init.py : le `scene_init_<scène>` : tout ce qu'une scène pose à son activation.
 
 Une section par fonction, dans l'ordre où le C est émis : l'ordre compte (les registres d'affichage après le
 texte, les windows après DISPCNT, les `on_start` en dernier). Le texte et l'interface vivent dans `gen_ui_scene`,
@@ -77,7 +77,7 @@ def gen_scene_init(
     L += scene_ui_lines(p, scene, sym, sprite_offsets, obj_text_oam, obj_text_tile, emit)
     L += scene_display_lines(p, scene, dispcnt, cam_idx, emit)
     L += _placed_actor_lines(p, scene, scene_actors, actor_offset, obj_layout, alay, affine_info)
-    L += _shared_pool_lines(pi)
+    L += _shared_pool_lines(pi, scene_oam_layout(p, scene).kinds)
     L += _start_lines(p, scene, sym, scene_actors, actor_offset, lua_idx, pi, has_sound, sound_assets,
                       actor_defined_events)
     L.append("}")
@@ -341,6 +341,8 @@ def _placed_actor_lines(p, scene, scene_actors: list, actor_offset: int, obj_lay
             f"    g_oam_entries[{_e}].frame_w = {sprite.frame_w if sprite else 0};",
             f"    g_oam_entries[{_e}].frame_h = {sprite.frame_h if sprite else 0};",
             f"    g_actors[{idx}].name     = ACTOR_{s.upper()};",
+            # Son type d'emplacement : la ligne du descripteur de modèle que le runtime lit pour lui, comme pour un né.
+            f"    g_actors[{idx}].model    = {_lay.placed_model[j]};",
             # Transform MONDE : émise pour TOUT acteur, affine ou non. Un acteur
             # non-affine ne l'AFFICHE pas (aucun slot de matrice), mais un enfant
             # en HÉRITE par la composition parent→enfant — un enfant hérite des
@@ -397,8 +399,12 @@ def _placed_actor_lines(p, scene, scene_actors: list, actor_offset: int, obj_lay
     return L
 
 
-def _shared_pool_lines(pi: list[dict]) -> list[str]:
-    """Le pool PARTAGÉ : sa fenêtre d'emplacements, ses modèles à parties, ses entrées d'état."""
+def _shared_pool_lines(pi: list[dict], kinds: int) -> list[str]:
+    """Le pool PARTAGÉ : sa fenêtre d'emplacements, ses modèles à parties, ses entrées d'état.
+
+    `kinds` : tous les types d'emplacement de la scène, posés compris (`OamLayout.kinds`). Les tables `g_spool_*` sont
+    lues par `Actor.model` pour TOUT acteur détruit (`actor_destroy_internal`) : elles couvrent donc aussi les types des
+    posés, à 0."""
     L: list[str] = []
     # Le pool PARTAGÉ : les emplacements que tout modèle qui naît prend. Posés ici, puisque les
     # globales survivent à la scène : une scène sans pool partagé le dit aussi (début = fin = 0).
@@ -410,8 +416,7 @@ def _shared_pool_lines(pi: list[dict]) -> list[str]:
         # Les modèles à parties : taille du groupe (pour la racine) et rang de la partie, par type d'emplacement.
         _grouped = [m for m in pi if m.get("shared") and m["group"] > 1]
         if _grouped:
-            _kinds = max(m["model_id"] + m["group"] for m in pi if m.get("shared"))
-            _grp, _part, _par = [0] * _kinds, [0] * _kinds, [0] * _kinds
+            _grp, _part, _par = [0] * kinds, [0] * kinds, [0] * kinds
             for m in _grouped:
                 _grp[m["model_id"]] = m["group"]
                 _parts = list(getattr(m["prefab"], "children", []) or [])
@@ -420,9 +425,9 @@ def _shared_pool_lines(pi: list[dict]) -> list[str]:
                     _part[m["model_id"] + k] = k
                     # La partie parente : une autre partie nommée par `parent`, sinon la racine (rang 0).
                     _par[m["model_id"] + k] = _rank.get(getattr(pt, "parent", None) or "", 0)
-            L.append(f"    {{ static const u8 _g[{_kinds}]={{{','.join(map(str, _grp))}}}; "
-                     f"static const u8 _pt[{_kinds}]={{{','.join(map(str, _part))}}}; "
-                     f"static const u8 _pr[{_kinds}]={{{','.join(map(str, _par))}}}; "
+            L.append(f"    {{ static const u8 _g[{kinds}]={{{','.join(map(str, _grp))}}}; "
+                     f"static const u8 _pt[{kinds}]={{{','.join(map(str, _part))}}}; "
+                     f"static const u8 _pr[{kinds}]={{{','.join(map(str, _par))}}}; "
                      f"g_spool_grp = _g; g_spool_part = _pt; g_spool_parent = _pr; }}")
         else:
             L.append("    g_spool_grp = g_spool_part = g_spool_parent = 0;")

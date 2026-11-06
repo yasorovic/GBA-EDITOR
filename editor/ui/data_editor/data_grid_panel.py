@@ -1,4 +1,4 @@
-"""ui/data_editor/data_grid_panel.py — panneau central : la grille d'une table.
+"""ui/data_editor/data_grid_panel.py : panneau central : la grille d'une table.
 
 Deux objets d'édition dans un seul widget, et c'est le point délicat de cet
 écran : les COLONNES (le schéma) et les LIGNES (les données). Ils se

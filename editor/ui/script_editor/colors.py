@@ -1,4 +1,4 @@
-"""ui/script_editor/colors.py — proxys de couleur partagés par tout l'écran Script Editor."""
+"""ui/script_editor/colors.py : proxys de couleur partagés par tout l'écran Script Editor."""
 from ui.common.theme import C
 from ui.common.icons import COLOR_EVENT, COLOR_BEHAVIOR, COLOR_GLOBAL, COLOR_CONST
 

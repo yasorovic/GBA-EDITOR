@@ -1,8 +1,9 @@
-"""editor/codegen/pool_model.py — le modèle d'un prefab : ce qui le fait compter pour un seul code.
+"""editor/codegen/pool_model.py : le modèle d'un prefab : ce qui le fait compter pour un seul code.
 
 Un modèle est compilé une fois ; ses instances (posées ou nées) n'ont que leurs valeurs propres.
-Ce module dit QUELS acteurs posés rejoignent le modèle de leur prefab, et combien d'emplacements
-d'acteurs occupe une instance. La géométrie qui en découle vit dans `oam_alloc`."""
+Ce module dit QUELS acteurs posés rejoignent le modèle de leur prefab, combien d'emplacements
+d'acteurs occupe une instance, et quel type d'emplacement reçoit chaque posé. La géométrie qui en découle vit
+dans `oam_alloc`."""
 from __future__ import annotations
 
 from codegen.actor_appearance import sprite_key
@@ -49,4 +50,37 @@ def model_members(project, posed: list) -> dict:
         if script and script.active and script.script and not script.script.lower().endswith(".lua"):
             continue
         out.setdefault(pf.name, []).append(i)
+    return out
+
+
+# Les champs de composant qui vivent dans l'EMPLACEMENT (`Actor`, `OamEntry`, état du script) : deux instances qui ne
+# diffèrent que par eux restent le même type. Tout autre champ est lu au modèle (descripteur) et sépare deux types.
+_SLOT_FIELDS = {
+    "collision_shape": {"x", "y", "w", "h", "solid", "active", "tag"},
+    "sprite": {"initial_state", "affine_transform", "scale_x", "scale_y", "rotation",
+               "offset_x", "offset_y", "pivot_x", "pivot_y"},
+    "script": {"exports_values"},
+}
+
+
+def _variant_key(prefab_name: str, actor) -> tuple:
+    from core.models.components import components_to_list
+    comps = []
+    for c in components_to_list(actor.components):
+        drop = _SLOT_FIELDS.get(c.get("component_type"), set())
+        comps.append(tuple(sorted((k, repr(v)) for k, v in c.items() if k not in drop)))
+    return (prefab_name, tuple(comps), bool(getattr(actor, "screen_space", False)),
+            bool(getattr(actor, "is_player", False)))
+
+
+def placed_types(posed: list, members: dict, first: int) -> list[int]:
+    """Le type d'emplacement (`Actor.model`) de chaque acteur POSÉ, à partir de `first` (les types du pool partagé
+    occupent ceux d'avant). Un membre d'un modèle partage son type avec les autres membres du même prefab qui ont les
+    mêmes valeurs lues au modèle (une variante) ; un acteur qui n'est membre de rien est un modèle à lui seul."""
+    member_of = {i: name for name, idx in members.items() for i in idx}
+    ids: dict = {}
+    out = []
+    for i, a in enumerate(posed):
+        key = _variant_key(member_of[i], a) if i in member_of else ("singleton", i)
+        out.append(ids.setdefault(key, first + len(ids)))
     return out

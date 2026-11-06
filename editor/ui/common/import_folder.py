@@ -1,4 +1,4 @@
-"""ui/common/import_folder.py — le dossier où naît un fichier importé depuis un écran.
+"""ui/common/import_folder.py : le dossier où naît un fichier importé depuis un écran.
 
 Tous les boutons d'import (sprite, fond, remplacement d'image) posent le fichier dans le dossier que
 l'onglet Disk affiche (cf. `core.asset_creation.import_folder`). La fenêtre branche l'onglet une fois ;

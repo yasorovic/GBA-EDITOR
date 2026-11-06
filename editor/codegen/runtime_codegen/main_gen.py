@@ -20,6 +20,7 @@ from codegen.runtime_codegen.physics.body import project_has_one_way, project_on
 from codegen.runtime_codegen.physics.budget import physics_budget_line
 from codegen.runtime_codegen.physics.impulses import impulse_helper_lines
 from codegen.runtime_codegen.physics.kinematic import kinematic_helper_lines, project_has_kinematic
+from codegen.runtime_codegen.physics.motion import motion_helper_lines
 from codegen.runtime_codegen.physics.floor import project_has_floors, floor_helper_lines
 from codegen.runtime_codegen.gen_affine import compute_affine_info
 from codegen.runtime_codegen.gen_camera import camera_table_lines
@@ -182,6 +183,8 @@ def generate_main(
 
     # ── Character solver (dispatch via pointeur) ──────────────────
     L += character_solver_lines(project_one_way_tile_dirs(p))
+    # Le pas du mouvement automatique, lu par le descripteur de modèle (cf. physics/motion.py).
+    L += motion_helper_lines()
     if project_has_kinematic(p):
         L += kinematic_helper_lines()
     if project_has_floors(p):

@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_affine.py — les slots de matrice affine OAM.
+"""codegen/runtime_codegen/gen_affine.py : les slots de matrice affine OAM.
 
 Extrait de `main_gen` (A3), au-dessus de la couche de requêtes : il consomme
 `parent_depths` de `gen_scene_query` (vers le bas, sans

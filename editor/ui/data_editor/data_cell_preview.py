@@ -1,4 +1,4 @@
-"""ui/data_editor/data_cell_preview.py — ce que la cellule sélectionnée désigne, montré dans l'inspecteur.
+"""ui/data_editor/data_cell_preview.py : ce que la cellule sélectionnée désigne, montré dans l'inspecteur.
 
 Un texte s'y relit et s'y corrige ; une palette montre ses couleurs ; un sprite ou un fond, son image ; un son, son
 fichier source. Le reste (scène, police, caméra…) n'a rien à montrer de plus que sa description.

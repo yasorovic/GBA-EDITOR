@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_sfx_trigger.py — les déclencheurs SoundFx d'un acteur ou d'un prefab (`on_spawn`, `on_destroy`)."""
+"""runtime_codegen/gen_sfx_trigger.py : les déclencheurs SoundFx d'un acteur ou d'un prefab (`on_spawn`, `on_destroy`)."""
 from __future__ import annotations
 
 from codegen.c_names import sym as c_sym

@@ -395,3 +395,58 @@ def test_un_prefab_ne_avec_script_lua_appelle_pool_init(tmp_path):
     p.prefabs.items[0].actor.components.append(ScriptComponent(script="assets/bullet.lua"))
     code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
     assert "extern void S_Bullet_pool_init(Actor* self);" in code and "S_Bullet_pool_init(&g_actors[_i]);" in code
+
+
+def _scene_de_copies(tmp_path, *, masses=(1.0, 1.0, 2.0), spawne=False):
+    """Une scène où le prefab « Coin » (Rigid) est posé une fois par masse, chaque copie à une autre position et avec une
+    autre boîte ; un acteur « Rock » sans prefab ; si `spawne`, le script de scène fait aussi naître « Coin »."""
+    import copy
+    from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
+    coin = Prefab(name="Coin")
+    coin.actor.components += [CollisionShapeComponent(w=8, h=8), PhysicsBodyComponent(mode="RigidBody")]
+    posed = []
+    for i, masse in enumerate(masses):
+        a = Actor(name=f"Coin{i}", prefab_name="Coin", components=copy.deepcopy(coin.actor.components), x=10 * i)
+        a.components[0].w = 8 + i                                   # la boîte vit dans l'emplacement
+        a.components[1].mass = masse                                # la masse est lue au modèle
+        posed.append(a)
+    posed.append(Actor(name="Rock", components=[PhysicsBodyComponent(mode="RigidBody")]))
+    scene = Scene(name="S", actors=posed, physics_enabled=True)
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    p.prefabs.items = [coin]
+    if spawne:
+        from oam_fixtures import faire_naitre
+        faire_naitre(tmp_path, scene, "Coin")
+    return p, scene
+
+
+def test_les_copies_posees_qui_ne_different_que_par_l_emplacement_partagent_un_type(tmp_path):
+    """Variante de modèle : même code et mêmes valeurs lues au modèle = un type ; une autre masse = un autre type ;
+    un acteur qui n'est la copie d'aucun prefab est un modèle à lui seul."""
+    p, scene = _scene_de_copies(tmp_path)
+    lay = scene_oam_layout(p, scene)
+    assert lay.placed_model == [1, 1, 2, 3]
+    assert lay.kinds == 4                                           # le type 0, puis trois types de posés
+
+
+def test_les_types_des_poses_viennent_apres_ceux_du_pool(tmp_path):
+    p, scene = _scene_de_copies(tmp_path, spawne=True)
+    lay = scene_oam_layout(p, scene)
+    (coin,) = [pl for pl in lay.pools if pl.shared]
+    assert coin.model_id == 1
+    assert lay.placed_model == [2, 2, 3, 4] and lay.kinds == 5
+
+
+def test_les_tables_par_type_couvrent_les_poses(tmp_path):
+    """`actor_destroy_internal` lit `g_spool_grp[Actor.model]` pour tout acteur détruit : la table d'un modèle à parties
+    doit avoir une ligne pour chaque type de posé."""
+    from codegen.runtime_codegen.gen_scene_init import _shared_pool_lines
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    p, scene = _scene_de_copies(tmp_path, spawne=True)
+    p.prefabs.items[0].children = [Actor(name="Aile")]
+    lay = scene_oam_layout(p, scene)
+    code = "\n".join(_shared_pool_lines(scene_pi(p, scene), lay.kinds))
+    # Un prefab à parties n'a pas de membres posés : chaque copie est un modèle à elle seule (types 3 à 6).
+    assert lay.placed_model == [3, 4, 5, 6]
+    assert lay.kinds == 7 and "static const u8 _g[7]={0,2,0,0,0,0,0};" in code

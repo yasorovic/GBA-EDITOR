@@ -1,4 +1,4 @@
-"""ui/sprite_editor/import_png_dialog.py — import sprite NON-DESTRUCTIF.
+"""ui/sprite_editor/import_png_dialog.py : import sprite NON-DESTRUCTIF.
 
 Aligné sur le pipeline background : Watcher/UI → **Validator** (detect_sprite_import_mode)
 → **Encodage** (encode_sprite, métadonnées) → asset éditable. Le PNG source n'est

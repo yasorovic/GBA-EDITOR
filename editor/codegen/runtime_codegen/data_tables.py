@@ -1,4 +1,4 @@
-"""runtime_codegen/data_tables.py — les tables de données du projet, en ROM.
+"""runtime_codegen/data_tables.py : les tables de données du projet, en ROM.
 
 Émet `data_tables.h` (un typedef et une déclaration par table) et
 `data_tables.c` (les valeurs, en `const`). Un script les lit par indexation —

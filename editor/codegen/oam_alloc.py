@@ -1,4 +1,4 @@
-"""editor/codegen/oam_alloc.py — la géométrie des acteurs d'une scène, PAR SCÈNE.
+"""editor/codegen/oam_alloc.py : la géométrie des acteurs d'une scène, PAR SCÈNE.
 
 Source de vérité UNIQUE pour « quel emplacement de `g_actors[]` occupe chaque
 acteur posé et chaque instance de pool d'UNE scène », et « quelle entrée d'ÉTAT
@@ -43,7 +43,7 @@ from typing import Optional
 from codegen.actor_appearance import has_oam_entry
 from codegen.c_names import sym as c_sym
 from codegen.layout_cache import layout_memo
-from codegen.pool_model import model_members, prefab_group
+from codegen.pool_model import model_members, placed_types, prefab_group
 from codegen.ui_obj_budget import scene_ui_obj_slots
 from core.models.scene import Scene
 
@@ -149,6 +149,14 @@ class OamLayout:
     pools: list[PoolSlot]
     shared: Optional[SharedPool] = None
     capacity: int = OBJECT_CAPACITY
+    # Par acteur posé : son type d'emplacement (`Actor.model`), après ceux du pool partagé (cf. `pool_model.placed_types`).
+    placed_model: list[int] = field(default_factory=list)
+
+    @property
+    def kinds(self) -> int:
+        """Longueur des tables indexées par `Actor.model` (descripteur de modèle, `g_spool_*`) : le type 0, ceux du
+        pool partagé, puis ceux des posés. Au-delà de 256, un type ne tient plus dans l'octet `Actor.model`."""
+        return 1 + max([shared_kinds(self.shared), *self.placed_model])
 
     @property
     def placed_entries(self) -> int:
@@ -243,7 +251,8 @@ def _compute_oam_layout(project, scene: Scene) -> OamLayout:
 
     capacity = scene_object_capacity(project, scene)
     # `Actor.model` est un octet : au-delà de 255 types d'emplacement, les modèles suivants ne naissent plus
-    # (le validateur le dit, cf. `shared_kinds`).
+    # (le validateur le dit, cf. `_check_actor_budget`). Les types des posés viennent après, et le validateur refuse
+    # aussi une scène dont le total dépasse l'octet (`OamLayout.kinds`).
     kinds, shared_names = 0, []
     for pf in project.prefabs:
         if pf.name in spawned and kinds + prefab_group(pf) <= 255:
@@ -282,4 +291,5 @@ def _compute_oam_layout(project, scene: Scene) -> OamLayout:
         pools += shared_models
 
     return OamLayout(scene=scene, scene_sym=scene_sym, placed=placed,
-                     placed_entry=placed_entry, ui=ui, pools=pools, shared=shared, capacity=capacity)
+                     placed_entry=placed_entry, ui=ui, pools=pools, shared=shared, capacity=capacity,
+                     placed_model=placed_types(posed, members, shared_kinds(shared) + 1))

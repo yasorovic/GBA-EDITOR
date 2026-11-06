@@ -1,4 +1,4 @@
-"""core/bg_adjust.py — teinte, saturation, luminosité, contraste d'une image PIL, avant la compression.
+"""core/bg_adjust.py : teinte, saturation, luminosité, contraste d'une image PIL, avant la compression.
 
 Une image INDEXÉE (mode 'P') est réglée par sa PALETTE : les index des pixels ne bougent pas, la palette d'auteur reste
 l'autorité (le chemin « indexé direct » de `core.bg_import` s'applique donc toujours). Une image en couleurs directes est

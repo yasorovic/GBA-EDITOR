@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_globals.py — les variables globales de main.c : acteurs, entrées OAM, états de script,
+"""runtime_codegen/gen_globals.py : les variables globales de main.c : acteurs, entrées OAM, états de script,
 entrées manette, caméra, scène courante, pool partagé."""
 from __future__ import annotations
 

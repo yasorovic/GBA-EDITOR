@@ -1,4 +1,4 @@
-"""editor/codegen/vram_alloc.py — allocation de la VRAM BG, par scène.
+"""editor/codegen/vram_alloc.py : allocation de la VRAM BG, par scène.
 
 **Le problème.** 64 Ko de VRAM BG sont découpés de DEUX façons qui se
 recouvrent : 4 charblocks de 16 Ko (les tuiles) et 32 screenblocks de 2 Ko (les

@@ -1,4 +1,4 @@
-"""core/bg_mirror.py — miroir d'une image PIL autour d'un axe, avant la compression.
+"""core/bg_mirror.py : miroir d'une image PIL autour d'un axe, avant la compression.
 
 L'axe est une coordonnée en pixels de l'image préparée (recadrée, redimensionnée). Par défaut le côté GAUCHE d'un axe
 vertical (le côté HAUT d'un axe horizontal) est gardé, l'autre côté en est le reflet ; `flip` garde l'autre côté. Si le reflet n'atteint pas le bord, il

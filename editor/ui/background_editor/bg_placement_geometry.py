@@ -1,4 +1,4 @@
-"""ui/background_editor/bg_placement_geometry.py — géométrie de l'image posée dans le canvas d'un fond.
+"""ui/background_editor/bg_placement_geometry.py : géométrie de l'image posée dans le canvas d'un fond.
 
 Pur calcul, sans Qt : l'item graphique (bg_placement_overlay) ne fait que tenir la souris et dessiner, les règles de
 modificateurs vivent ici pour être testées.

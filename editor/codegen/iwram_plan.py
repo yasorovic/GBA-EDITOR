@@ -1,4 +1,4 @@
-"""codegen/iwram_plan.py — quelles phases du tick vont en IWRAM.
+"""codegen/iwram_plan.py : quelles phases du tick vont en IWRAM.
 
 Le moteur est compilé en Thumb et exécuté depuis la ROM de la cartouche, dont chaque accès coûte des états d'attente
 (cf. `memory_timing_init`) ; l'IWRAM n'en a pas, et du code ARM y va encore plus vite (mesuré sous mGBA sur un banc de

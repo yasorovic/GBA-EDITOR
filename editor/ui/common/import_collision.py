@@ -1,4 +1,4 @@
-"""ui/common/import_collision.py — la question unique posée quand un import rencontre un fichier du même nom."""
+"""ui/common/import_collision.py : la question unique posée quand un import rencontre un fichier du même nom."""
 from __future__ import annotations
 
 from ui.common.labels import label

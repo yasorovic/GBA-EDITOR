@@ -1,4 +1,4 @@
-"""ui/sound_mixer/channel_meters.py — une barre verticale par canal, qui se remplit quand le canal sonne.
+"""ui/sound_mixer/channel_meters.py : une barre verticale par canal, qui se remplit quand le canal sonne.
 
 Les barres lisent le pic de chaque canal au tick où se trouve la tête de lecture (cf. `ChannelLevels`) : arrêtée,
 la jauge est vide ; en lecture, elle monte d'un coup et retombe doucement, comme un vumètre.

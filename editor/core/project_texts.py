@@ -1,4 +1,4 @@
-"""core/project_texts.py — la table de textes destinés au joueur.
+"""core/project_texts.py : la table de textes destinés au joueur.
 
 Son I/O, son CRUD, et les règles de la CLÉ (`rename_text_key`, `resync`,
 `restore`, `_apply`). La clé reste ici et non avec les renommages d'assets :

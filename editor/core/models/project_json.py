@@ -1,4 +1,4 @@
-"""editor/core/project_json.py — comment le projet écrit son JSON.
+"""editor/core/project_json.py : comment le projet écrit son JSON.
 
 POINT DE VÉRITÉ UNIQUE de la MISE EN PAGE des fichiers de projet. Ce que contiennent ces fichiers appartient aux modèles ; la façon dont
 ils se posent sur des lignes appartient ici, parce que c'est une seule règle

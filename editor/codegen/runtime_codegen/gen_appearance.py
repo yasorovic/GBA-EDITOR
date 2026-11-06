@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_appearance.py — les constantes d'ACTIVATION des apparences.
+"""codegen/runtime_codegen/gen_appearance.py : les constantes d'ACTIVATION des apparences.
 
 Un porteur (acteur, partie de prefab) peut avoir plusieurs apparences ; une seule est
 affichée (`OamEntry.appearance`). Activer l'une pose sur l'entrée OAM ce qui dépend du

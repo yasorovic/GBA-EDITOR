@@ -1,4 +1,4 @@
-"""core/bg_tile_merge.py — fusion des tuiles d'un fond tuilé jusqu'à une cible.
+"""core/bg_tile_merge.py : fusion des tuiles d'un fond tuilé jusqu'à une cible.
 
 Le budget de tuiles (512 en 4bpp, 256 en 8bpp par charblock, 1024 au plus : l'index
 de tuile tient sur 10 bits) est ce qui fait qu'une photo ne rentre pas. La

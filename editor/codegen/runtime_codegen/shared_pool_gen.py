@@ -1,4 +1,4 @@
-"""runtime_codegen/shared_pool_gen.py — le C qui parcourt le pool PARTAGÉ d'une scène.
+"""runtime_codegen/shared_pool_gen.py : le C qui parcourt le pool PARTAGÉ d'une scène.
 
 Un emplacement du pool accueille n'importe quel modèle simple (`oam_alloc.is_plain_model`) : le build ne
 peut donc plus dérouler, modèle par modèle, des boucles sur des emplacements qu'il connaît. Chaque

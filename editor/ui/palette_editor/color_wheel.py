@@ -1,4 +1,4 @@
-"""editor/ui/palette_editor/color_wheel.py — Roue chromatique anneau + triangle.
+"""editor/ui/palette_editor/color_wheel.py : Roue chromatique anneau + triangle.
 
 Sélecteur de couleur « type Krita » : un anneau extérieur choisit la TEINTE,
 un triangle intérieur (qui tourne pour pointer la teinte courante) choisit

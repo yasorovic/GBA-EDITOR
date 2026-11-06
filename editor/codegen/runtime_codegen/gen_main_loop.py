@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_main_loop.py — le `main()` de main.c : démarrage du matériel, du son, puis la boucle de frame."""
+"""runtime_codegen/gen_main_loop.py : le `main()` de main.c : démarrage du matériel, du son, puis la boucle de frame."""
 from __future__ import annotations
 
 from codegen.c_names import sym as c_sym

@@ -1,4 +1,4 @@
-"""tools/run_perf_bench.py — mesure le coût CPU des fonctions et des patrons de l'API Lua dans mGBA.
+"""tools/run_perf_bench.py : mesure le coût CPU des fonctions et des patrons de l'API Lua dans mGBA.
 
     python tools/run_perf_bench.py [--mgba CHEMIN] [--seconds 22] [--output FICHIER.json]
 

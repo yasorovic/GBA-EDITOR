@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_view.py — la vue zoomable du canvas.
+"""ui/scene_manager/canvas/canvas_view.py : la vue zoomable du canvas.
 
 Extrait de `scene_canvas` (A3) : `GBAView`, le `QGraphicsView` — zoom/pan,
 souris, drag&drop de prefabs, multi-sélection, menu contextuel, et le DISPATCH

@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_sprite.py — l'émetteur du domaine sprite/animation.
+"""codegen/runtime_codegen/gen_sprite.py : l'émetteur du domaine sprite/animation.
 
 Extrait de `main_gen` (A3), au-dessus de la couche de requêtes (il n'en a pas
 besoin : il ne dépend que de `grit_conversion`/`c_names`, vers le bas). Deux

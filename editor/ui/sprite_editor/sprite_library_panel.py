@@ -1,4 +1,4 @@
-"""ui/sprite_editor/sprite_library_panel.py — panneau gauche : liste des sprites + arbre d'animations."""
+"""ui/sprite_editor/sprite_library_panel.py : panneau gauche : liste des sprites + arbre d'animations."""
 from __future__ import annotations
 from ui.common.labels import label
 from ui.common.tooltip import tooltip

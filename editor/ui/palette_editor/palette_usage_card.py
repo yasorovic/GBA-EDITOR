@@ -1,4 +1,4 @@
-"""ui/palette_editor/palette_usage_card.py — carte « USAGE », ferrée en bas de
+"""ui/palette_editor/palette_usage_card.py : carte « USAGE », ferrée en bas de
 l'inspecteur du Palette Editor.
 
 Répond à « qui se sert de cette palette ? » : sprites, fonds, prefabs et scènes,

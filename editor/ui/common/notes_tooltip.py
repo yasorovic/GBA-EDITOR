@@ -1,4 +1,4 @@
-"""ui/common/notes_tooltip.py — un tooltip qui mène par la note de l'auteur.
+"""ui/common/notes_tooltip.py : un tooltip qui mène par la note de l'auteur.
 
 Un seul endroit décide de l'ordre « note d'abord, détail matériel ensuite » et
 du séparateur, pour que tous les items du canvas et du graphe le composent

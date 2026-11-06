@@ -1,4 +1,4 @@
-"""editor/ui/common/palette_slot_grid.py — grille de banques de palettes partagée.
+"""editor/ui/common/palette_slot_grid.py : grille de banques de palettes partagée.
 
 `PaletteSlotGridAsset` matérialise l'allocation de palettes d'un pool (jusqu'à 16
 banques) sous forme de grille compacte de swatches, sur le **modèle du Scene

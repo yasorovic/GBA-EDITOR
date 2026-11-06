@@ -1,4 +1,4 @@
-"""core/bg_import.py — import & encodage d'un fond GBA (Mode 0, 4bpp).
+"""core/bg_import.py : import & encodage d'un fond GBA (Mode 0, 4bpp).
 
 Encode un PNG de fond en sa représentation matérielle GBA, stockée en métadonnées
 (le PNG source n'est jamais modifié) — opération NON-DESTRUCTIVE pour un asset déjà

@@ -1,4 +1,4 @@
-"""ui/background_editor/background_editor_screen.py — écran Background Editor.
+"""ui/background_editor/background_editor_screen.py : écran Background Editor.
 
 3 colonnes : library (backgrounds) · canvas d'inpainting (BackgroundInpainting :
 repeindre la palette par tuile 8×8, partagé entre scènes, cf. bg_inpaint_canvas) ·

@@ -1,4 +1,4 @@
-"""ui/script_editor/sidebar_widgets.py — briques réutilisables de la sidebar (section, sous-section, bouton d'entrée)."""
+"""ui/script_editor/sidebar_widgets.py : briques réutilisables de la sidebar (section, sous-section, bouton d'entrée)."""
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton, QSizePolicy
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtCore import Qt, QSize

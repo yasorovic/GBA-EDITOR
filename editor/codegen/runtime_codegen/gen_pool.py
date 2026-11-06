@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_pool.py — le C des instances d'un modèle de prefab : le spawn, la composition de la hiérarchie
+"""runtime_codegen/gen_pool.py : le C des instances d'un modèle de prefab : le spawn, la composition de la hiérarchie
 (parent, enfant) et le nom du symbole qui répond d'un acteur.
 
 `scene_pi` est la liste des pools d'une scène, lue de `oam_alloc.scene_oam_layout`."""

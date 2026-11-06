@@ -1,4 +1,4 @@
-"""ui/common/canvas_top_bar.py — barre d'état au-dessus d'un canvas.
+"""ui/common/canvas_top_bar.py : barre d'état au-dessus d'un canvas.
 
 Barre unique partagée par tous les écrans à canvas (Scene Manager, Background
 Editor…) : zoom (−/%/+/ajuster) à gauche, toggles d'affichage propres à l'écran

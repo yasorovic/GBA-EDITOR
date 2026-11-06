@@ -1,4 +1,4 @@
-"""ui/scene_manager/inspectors/bg_layer_row.py — ligne de calque de fond de
+"""ui/scene_manager/inspectors/bg_layer_row.py : ligne de calque de fond de
 l'inspecteur de scène.
 
 Un calque BG par ligne : sa vignette, son image, sa palette, son décalage de

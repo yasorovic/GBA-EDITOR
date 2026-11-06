@@ -40,6 +40,15 @@ typedef struct ModelSlot { u16 slot; s16 entry; } ModelSlot;
 /* Seules les instances POSÉES d'un modèle et celles de sa réserve à part y figurent ; celles qui naissent
    dans le pool partagé se retrouvent à `Actor.model`. */
 
+/* Le DESCRIPTEUR d'un type d'emplacement : ce que le runtime lit au modèle, pour un acteur posé comme pour un
+   acteur né, par `Actor.model`. Une table par scène (`g_model_desc_<Scène>[]`), émise par le build et rangée en
+   IWRAM. Le type 0 ne décrit rien.
+     body_mode     : 0 aucun mouvement automatique (pas de corps, ou Static), 1 Character, 2 Kinematic, 3 Rigid ;
+     can_sleep     : un Rigid peut s'endormir ;
+     gravity_scale : facteur de la gravité de scène, Q8 (256 = x1) ; 0 pour un corps qui l'ignore. */
+typedef struct ModelDesc { u8 body_mode; u8 can_sleep; s16 gravity_scale; } ModelDesc;
+enum { BODY_MODE_NONE = 0, BODY_MODE_CHARACTER = 1, BODY_MODE_KINEMATIC = 2, BODY_MODE_RIGID = 3 };
+
 /* Deux tables, deux unités :
 
      g_actors[]      — un indice = un ACTEUR : identité, position, vélocité,

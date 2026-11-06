@@ -1,4 +1,4 @@
-"""ui/scene_manager/scene_graph_breadcrumb.py — fil d'Ariane du Graphe.
+"""ui/scene_manager/scene_graph_breadcrumb.py : fil d'Ariane du Graphe.
 
 Barre en bas de la vue Graphe qui montre le chemin du niveau courant
 (`All scenes / Game / Village`) et laisse remonter en cliquant un maillon. Elle

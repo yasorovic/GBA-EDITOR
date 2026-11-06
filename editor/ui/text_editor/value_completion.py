@@ -1,4 +1,4 @@
-"""ui/text_editor/value_completion.py — l'autocomplétion de `$nom` dans les champs de texte.
+"""ui/text_editor/value_completion.py : l'autocomplétion de `$nom` dans les champs de texte.
 
 Taper `$` ouvre la liste des globals et constantes du projet ; chaque lettre
 suivante la filtre. Les noms viennent de la même source que le bouton `$name` de

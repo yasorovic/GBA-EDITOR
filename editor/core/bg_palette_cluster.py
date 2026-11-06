@@ -1,4 +1,4 @@
-"""core/bg_palette_cluster.py — répartir les tuiles d'un fond entre N sous-palettes.
+"""core/bg_palette_cluster.py : répartir les tuiles d'un fond entre N sous-palettes.
 
 Le packing glouton exact (`bg_import._pack_palettes`) est sans perte tant que les
 tuiles tiennent chacune en 15 couleurs ET que le nombre de palettes suffit — le cas

@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_hints.py — contenu de la table des raccourcis
+"""ui/scene_manager/canvas/canvas_hints.py : contenu de la table des raccourcis
 du canvas de scène, par outil actif (ids de `FloatingToolbar.tool_changed`)."""
 from __future__ import annotations
 

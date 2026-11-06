@@ -39,19 +39,21 @@ def test_un_projet_sans_dossier_de_scripts_reste_statique():
 
 
 def test_le_rigid_lit_la_gravite_du_runtime_selon_son_gravity_scale():
+    from codegen.runtime_codegen.model_desc import body_desc
     from codegen.runtime_codegen.physics.motion import physics_motion_lines
     scene = Scene(name="S")
     settings = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
     plain, flipped = _actor("Crate", "RigidBody"), _actor("Balloon", "RigidBody", gravity_scale=-2.0)
     actors = [(plain, None), (flipped, None)]
 
+    # La gravité de la scène est passée au pas ; la part de chaque corps vient de son descripteur.
     dynamic = "\n".join(physics_motion_lines(scene, settings, actors, 0, [], dynamic_gravity=True))
-    assert "(&g_actors[0])->vx+=g_gravity_x; (&g_actors[0])->vy+=g_gravity_y;" in dynamic
-    assert "(&g_actors[1])->vx+=(g_gravity_x*-512)/256; (&g_actors[1])->vy+=(g_gravity_y*-512)/256;" in dynamic
+    assert "body_motion_step(_a,&g_model_desc_S[_a->model],g_gravity_x,g_gravity_y," in dynamic
+    assert body_desc(plain)[2] == 256 and body_desc(flipped)[2] == -512
 
     static = "\n".join(physics_motion_lines(scene, settings, actors, 0, []))
     assert "g_gravity_x" not in static
-    assert "(&g_actors[0])->vx+=64; (&g_actors[0])->vy+=128;" in static
+    assert "body_motion_step(_a,&g_model_desc_S[_a->model],64,128," in static
 
 
 def test_le_transport_kinematic_lit_le_cote_d_appui_du_runtime(tmp_path):

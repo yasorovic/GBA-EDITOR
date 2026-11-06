@@ -1628,6 +1628,11 @@ def _check_actor_budget(ctx: ValidationContext):
             ctx.error(None,
                 f"Scene '{scene.name}': prefab '{name}' is spawned but cannot be born — the 255 actor "
                 "types of a scene (one per prefab, plus one per part) are taken.")
+        if lay.kinds > 256:
+            ctx.error(None,
+                f"Scene '{scene.name}': {lay.kinds - 1} actor types for 255 (spawned prefabs and their parts, then "
+                "one per placed actor that differs from the others). Make placed copies of a prefab identical, "
+                "or place fewer distinct actors.")
         ctx.focus(None)
 
 

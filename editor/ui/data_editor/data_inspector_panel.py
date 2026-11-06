@@ -1,4 +1,4 @@
-"""ui/data_editor/data_inspector_panel.py — panneau droit : la sélection.
+"""ui/data_editor/data_inspector_panel.py : panneau droit : la sélection.
 
 Deux sujets, dans cet ordre : la COLONNE de la cellule sélectionnée (son nom,
 son type) et ce que la CELLULE désigne quand sa colonne est une référence.

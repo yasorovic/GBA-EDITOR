@@ -1,4 +1,4 @@
-"""ui/sprite_editor/sprite_canvas_hints.py — contenu de la table des raccourcis du canvas
+"""ui/sprite_editor/sprite_canvas_hints.py : contenu de la table des raccourcis du canvas
 de composition du Sprite Editor. Contexte = ce que le canvas offre : « brush »
 (brosse active), « pick » (pas de brosse : on ramasse des tuiles posées),
 « readonly » (direction miroir)."""

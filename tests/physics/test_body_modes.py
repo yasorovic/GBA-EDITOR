@@ -175,6 +175,7 @@ def test_une_relation_de_collider_absente_est_refusee_par_la_validation():
 
 def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
     from types import SimpleNamespace
+    from codegen.runtime_codegen.model_desc import body_desc
     from codegen.runtime_codegen.physics.motion import physics_motion_lines
     from core.models.scene import Scene
 
@@ -186,19 +187,18 @@ def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
     lines = "\n".join(physics_motion_lines(
         scene, settings, [(character, None), (kinematic, None), (rigid, None)], 3, []))
 
-    assert "(&g_actors[3])->vx+=64; (&g_actors[3])->vy+=128;" in lines   # Character : gravité seule, son script l'applique.
-    assert "actor_apply_velocity(&g_actors[3]);" not in lines
-    assert "(&g_actors[4])->vx+=64; (&g_actors[4])->vy+=128;" in lines
-    assert "actor_apply_velocity(&g_actors[4]);" in lines
-    assert "(&g_actors[5])->vx+=64; (&g_actors[5])->vy+=128;" in lines
-    assert "actor_apply_velocity(&g_actors[5]);" in lines
+    # Un seul pas pour tous les emplacements posés, avec la gravité de la scène en Q8 ; le mode vient du descripteur.
+    assert "for(int _k=3; _k<6; _k++)" in lines
+    assert "body_motion_step(_a,&g_model_desc_Platform[_a->model],64,128," in lines
+    assert "POOL_EACH" not in lines                               # aucun modèle ne naît dans cette scène
+    assert body_desc(character) == (1, 1, 256)                    # Character : gravité seule, son script l'applique
+    assert body_desc(kinematic) == (2, 1, 256)
+    assert body_desc(rigid) == (3, 1, 256)
 
 
 def test_character_et_kinematic_peuvent_ignorer_la_gravite_de_scene():
-    from types import SimpleNamespace
-    from codegen.runtime_codegen.physics.motion import physics_motion_lines
+    from codegen.runtime_codegen.model_desc import body_desc
     from core.models.components import components_from_list, components_to_list
-    from core.models.scene import Scene
 
     assert PhysicsBodyComponent(mode="CharacterBody").use_scene_gravity is True
     assert PhysicsBodyComponent(mode="KinematicBody").use_scene_gravity is True
@@ -209,12 +209,8 @@ def test_character_et_kinematic_peuvent_ignorer_la_gravite_de_scene():
     character.components[-1].use_scene_gravity = False
     kinematic = _actor("Lift", mode="KinematicBody")
     kinematic.components[-1].use_scene_gravity = False
-    settings = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
-    lines = "\n".join(physics_motion_lines(
-        Scene(name="Platform"), settings, [(character, None), (kinematic, None)], 0, []))
-    assert "g_actors[0]" not in lines
-    assert "vy+=" not in lines
-    assert "actor_apply_velocity(&g_actors[1]);" in lines
+    assert body_desc(character) == (1, 1, 0)                      # aucune part de gravité
+    assert body_desc(kinematic) == (2, 1, 0)                      # la vitesse s'intègre, sans gravité
 
 
 def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
@@ -233,10 +229,8 @@ def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
     motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], 2, []))
     sleep = "\n".join(physics_sleep_lines(scene, settings, [(rigid, None)], 2, []))
 
-    assert "physics_sleep<20" in motion
-    assert "->vy+=128" in motion
-    assert "->vy*192" in motion
-    assert "->vy>768" in motion
+    # gravité (0, 128), part de vitesse gardée 192 / 256, chute max 768, sommeil après 20 images.
+    assert "body_motion_step(_a,&g_model_desc_Inherited[_a->model],0,128,192,768,20);" in motion
     assert "physics_sleep++" in sleep
     # Le repos se lit sur la position : rayon = seuil (13 en Q8) x délai (20 frames), autour d'une ancre par emplacement.
     assert "_dy<= 260&&_dy>=-260" in sleep
@@ -247,6 +241,7 @@ def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
 
 def test_un_rigid_module_sa_gravite_et_peut_refuser_le_sommeil():
     from types import SimpleNamespace
+    from codegen.runtime_codegen.model_desc import body_desc
     from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
     from core.models.scene import Scene
 
@@ -265,8 +260,8 @@ def test_un_rigid_module_sa_gravite_et_peut_refuser_le_sommeil():
     motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], 0, []))
     sleep = physics_sleep_lines(scene, settings, [(rigid, None)], 0, [])
 
-    assert "->vx+=-32;" in motion and "->vy+=-64;" in motion
-    assert "physics_sleep" not in motion
+    assert "body_motion_step(_a,&g_model_desc_Air[_a->model],64,128,256,2048,30);" in motion
+    assert body_desc(rigid) == (3, 0, -128)                       # gravité x -0,5, ne dort pas
     assert sleep == []
 
 

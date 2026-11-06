@@ -1,4 +1,4 @@
-"""editor/codegen/ui_obj_budget.py — ce que l'interface en sprites coûte en OAM et en tuiles OBJ.
+"""editor/codegen/ui_obj_budget.py : ce que l'interface en sprites coûte en OAM et en tuiles OBJ.
 
 Bandes de texte en cible OBJ, images d'UI, fonds de conteneur en sprites. `oam_alloc` en lit le
 poste « UI » du budget OAM d'une scène ; `gen_text.obj_text_alloc` en lit le placement."""

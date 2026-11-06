@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_scene.py — la scène graphique du canvas.
+"""ui/scene_manager/canvas/canvas_scene.py : la scène graphique du canvas.
 
 Extrait de `scene_canvas` (A3) : `GBAScene`, le `QGraphicsScene` qui possède les
 items (sprites d'acteurs, caméras, overlays, zones d'interface), gère l'item actif

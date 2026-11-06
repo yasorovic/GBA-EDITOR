@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_scene_query.py — la couche de REQUÊTES du codegen.
+"""codegen/runtime_codegen/gen_scene_query.py : la couche de REQUÊTES du codegen.
 
 Extrait de `main_gen` (A3). Les émetteurs de domaine (`gen_sprite`, `gen_affine`,
 `gen_ui`…) et l'orchestrateur `generate_main` partagent des fonctions d'ANALYSE

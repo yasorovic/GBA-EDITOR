@@ -1,4 +1,4 @@
-"""deleted_files.py — le dossier `.temp/` où va ce que l'auteur supprime.
+"""deleted_files.py : le dossier `.temp/` où va ce que l'auteur supprime.
 
 Supprimer une ressource depuis l'éditeur ne laisse plus ses fichiers en place
 jusqu'à la fermeture : ils sont DÉPLACÉS dans `<projet>/.temp/`, sous le même
