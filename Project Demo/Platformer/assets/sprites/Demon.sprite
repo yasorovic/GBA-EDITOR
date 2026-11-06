@@ -4,7 +4,7 @@
   "source": "assets/sprites/Demon.png",
   "frame_w": 32,
   "frame_h": 32,
-  "source_stamp": "952:1791342608871250500:9f6180ec96dd9633",
+  "source_stamp": "952:1793955294553338400:9f6180ec96dd9633",
   "own_palette": [
     "#181020",
     "#384060",
@@ -278,6 +278,106 @@
             {
               "tiles": [
                 {
+                  "src_col": 0,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 2,
+                  "src_row": 0,
+                  "dst_col": 2,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 0,
+                  "dst_col": 3,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 0,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 2,
+                  "src_row": 1,
+                  "dst_col": 2,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 1,
+                  "dst_col": 3,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 0,
+                  "src_row": 2,
+                  "dst_col": 0,
+                  "dst_row": 2
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 2,
+                  "dst_col": 1,
+                  "dst_row": 2
+                },
+                {
+                  "src_col": 2,
+                  "src_row": 2,
+                  "dst_col": 2,
+                  "dst_row": 2
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 2,
+                  "dst_col": 3,
+                  "dst_row": 2
+                },
+                {
+                  "src_col": 0,
+                  "src_row": 3,
+                  "dst_col": 0,
+                  "dst_row": 3
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 3,
+                  "dst_col": 1,
+                  "dst_row": 3
+                },
+                {
+                  "src_col": 2,
+                  "src_row": 3,
+                  "dst_col": 2,
+                  "dst_row": 3
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 3,
+                  "dst_col": 3,
+                  "dst_row": 3
+                }
+              ]
+            },
+            {
+              "tiles": [
+                {
                   "src_col": 4,
                   "src_row": 0,
                   "dst_col": 0,
@@ -376,404 +476,16 @@
               ]
             },
             {
-              "tiles": [
-                {
-                  "src_col": 8,
-                  "src_row": 0,
-                  "dst_col": 0,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 9,
-                  "src_row": 0,
-                  "dst_col": 1,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 10,
-                  "src_row": 0,
-                  "dst_col": 2,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 11,
-                  "src_row": 0,
-                  "dst_col": 3,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 8,
-                  "src_row": 1,
-                  "dst_col": 0,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 9,
-                  "src_row": 1,
-                  "dst_col": 1,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 10,
-                  "src_row": 1,
-                  "dst_col": 2,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 11,
-                  "src_row": 1,
-                  "dst_col": 3,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 8,
-                  "src_row": 2,
-                  "dst_col": 0,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 9,
-                  "src_row": 2,
-                  "dst_col": 1,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 10,
-                  "src_row": 2,
-                  "dst_col": 2,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 11,
-                  "src_row": 2,
-                  "dst_col": 3,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 8,
-                  "src_row": 3,
-                  "dst_col": 0,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 9,
-                  "src_row": 3,
-                  "dst_col": 1,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 10,
-                  "src_row": 3,
-                  "dst_col": 2,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 11,
-                  "src_row": 3,
-                  "dst_col": 3,
-                  "dst_row": 3
-                }
-              ]
+              "tiles": []
             },
             {
-              "tiles": [
-                {
-                  "src_col": 12,
-                  "src_row": 0,
-                  "dst_col": 0,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 13,
-                  "src_row": 0,
-                  "dst_col": 1,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 14,
-                  "src_row": 0,
-                  "dst_col": 2,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 15,
-                  "src_row": 0,
-                  "dst_col": 3,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 12,
-                  "src_row": 1,
-                  "dst_col": 0,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 13,
-                  "src_row": 1,
-                  "dst_col": 1,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 14,
-                  "src_row": 1,
-                  "dst_col": 2,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 15,
-                  "src_row": 1,
-                  "dst_col": 3,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 12,
-                  "src_row": 2,
-                  "dst_col": 0,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 13,
-                  "src_row": 2,
-                  "dst_col": 1,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 14,
-                  "src_row": 2,
-                  "dst_col": 2,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 15,
-                  "src_row": 2,
-                  "dst_col": 3,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 12,
-                  "src_row": 3,
-                  "dst_col": 0,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 13,
-                  "src_row": 3,
-                  "dst_col": 1,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 14,
-                  "src_row": 3,
-                  "dst_col": 2,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 15,
-                  "src_row": 3,
-                  "dst_col": 3,
-                  "dst_row": 3
-                }
-              ]
+              "tiles": []
             },
             {
-              "tiles": [
-                {
-                  "src_col": 16,
-                  "src_row": 0,
-                  "dst_col": 0,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 17,
-                  "src_row": 0,
-                  "dst_col": 1,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 18,
-                  "src_row": 0,
-                  "dst_col": 2,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 19,
-                  "src_row": 0,
-                  "dst_col": 3,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 16,
-                  "src_row": 1,
-                  "dst_col": 0,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 17,
-                  "src_row": 1,
-                  "dst_col": 1,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 18,
-                  "src_row": 1,
-                  "dst_col": 2,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 19,
-                  "src_row": 1,
-                  "dst_col": 3,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 16,
-                  "src_row": 2,
-                  "dst_col": 0,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 17,
-                  "src_row": 2,
-                  "dst_col": 1,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 18,
-                  "src_row": 2,
-                  "dst_col": 2,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 19,
-                  "src_row": 2,
-                  "dst_col": 3,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 16,
-                  "src_row": 3,
-                  "dst_col": 0,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 17,
-                  "src_row": 3,
-                  "dst_col": 1,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 18,
-                  "src_row": 3,
-                  "dst_col": 2,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 19,
-                  "src_row": 3,
-                  "dst_col": 3,
-                  "dst_row": 3
-                }
-              ]
+              "tiles": []
             },
             {
-              "tiles": [
-                {
-                  "src_col": 8,
-                  "src_row": 0,
-                  "dst_col": 0,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 9,
-                  "src_row": 0,
-                  "dst_col": 1,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 10,
-                  "src_row": 0,
-                  "dst_col": 2,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 11,
-                  "src_row": 0,
-                  "dst_col": 3,
-                  "dst_row": 0
-                },
-                {
-                  "src_col": 8,
-                  "src_row": 1,
-                  "dst_col": 0,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 9,
-                  "src_row": 1,
-                  "dst_col": 1,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 10,
-                  "src_row": 1,
-                  "dst_col": 2,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 11,
-                  "src_row": 1,
-                  "dst_col": 3,
-                  "dst_row": 1
-                },
-                {
-                  "src_col": 8,
-                  "src_row": 2,
-                  "dst_col": 0,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 9,
-                  "src_row": 2,
-                  "dst_col": 1,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 10,
-                  "src_row": 2,
-                  "dst_col": 2,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 11,
-                  "src_row": 2,
-                  "dst_col": 3,
-                  "dst_row": 2
-                },
-                {
-                  "src_col": 8,
-                  "src_row": 3,
-                  "dst_col": 0,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 9,
-                  "src_row": 3,
-                  "dst_col": 1,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 10,
-                  "src_row": 3,
-                  "dst_col": 2,
-                  "dst_row": 3
-                },
-                {
-                  "src_col": 11,
-                  "src_row": 3,
-                  "dst_col": 3,
-                  "dst_row": 3
-                }
-              ]
+              "tiles": []
             }
           ]
         }

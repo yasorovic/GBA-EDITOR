@@ -1125,10 +1125,15 @@ class _ActiveSceneTree(_Tree):
         # silence par `Project.rename_camera` : le rebuild qui suit remontre
         # alors l'ancien nom, sans message dédié.
         old_name = camera.name
+        state = self._panel._content_state
+        if new_name in (proj.camera_names() - {old_name}):
+            state = None
+        if state:
+            # Le rangement doit précéder le rafraîchissement synchrone du renommage.
+            state.rename_member(self._scene.name, f"camera:{old_name}", f"camera:{new_name}")
         proj.rename_camera(self._scene, camera, new_name)
-        if self._panel._content_state:
-            self._panel._content_state.rename_member(
-                self._scene.name, f"camera:{old_name}", f"camera:{camera.name}")
+        if state and camera.name != new_name:
+            state.rename_member(self._scene.name, f"camera:{new_name}", f"camera:{old_name}")
         get_dispatcher()._emit("cameras_list_changed")
 
     def _commit_rename_ui_elem(self, item: QTreeWidgetItem):
@@ -1154,11 +1159,11 @@ class _ActiveSceneTree(_Tree):
             item.setText(0, el.name)
             self.blockSignals(False)
             return
-        proj.rename_ui_element(layout, el, chosen)
         if self._panel._content_state and self._scene:
             self._panel._content_state.rename_member(
                 self._scene.name, f"ui_element:{layout.name}:{old_name}",
-                f"ui_element:{layout.name}:{el.name}")
+                f"ui_element:{layout.name}:{chosen}")
+        proj.rename_ui_element(layout, el, chosen)
         self._panel._after_ui_change()
 
     def _commit_rename_actor(self, item: QTreeWidgetItem):
@@ -1176,15 +1181,20 @@ class _ActiveSceneTree(_Tree):
             # ne plus y toucher après cet appel (même mise en garde que
             # ci-dessus et que `_commit_rename_scene` dans scene_library_panel).
             old_name = actor.name
+            state = self._panel._content_state
+            if any(a is not actor and a.name == new_name for a in self._scene.actors):
+                state = None
+            if state:
+                # Le rebuild purge les anciennes clés : les migrer avant son déclenchement.
+                state.rename_member(self._scene.name, f"actor:{old_name}", f"actor:{new_name}")
             if not proj.rename_actor(actor, new_name, scene=self._scene):
+                if state:
+                    state.rename_member(self._scene.name, f"actor:{new_name}", f"actor:{old_name}")
                 # Nom déjà pris dans la scène : refusé, la ligne reprend l'ancien nom.
                 self.blockSignals(True)
                 self._update_actor_item(item, actor)
                 self.blockSignals(False)
                 return
-            if self._panel._content_state:
-                self._panel._content_state.rename_member(
-                    self._scene.name, f"actor:{old_name}", f"actor:{actor.name}")
         else:
             actor.name = new_name
             self.blockSignals(True)

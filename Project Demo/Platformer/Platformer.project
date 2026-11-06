@@ -4,6 +4,8 @@
   "last_scene": "Scene_01",
   "author": "",
   "version": "0.1",
+  "physics_gravity_x": 0.0,
+  "physics_gravity_y": 0.0,
   "backdrop_color": 16912,
   "save_slots": 1,
   "transition_kind": "none",

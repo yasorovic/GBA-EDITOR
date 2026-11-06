@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 
 # ── Le gating de `_show_screen` ───────────────────────────────────────────
 
@@ -85,14 +87,16 @@ def test_refresh_appele_en_revisite_pas_a_la_premiere_visite():
     assert len(win.rescans) == 3                # chaque changement d'écran rattrape d'abord le disque
 
 
-def test_premiere_visite_palettes_recoit_le_store_partage():
+@pytest.mark.parametrize("screen_name", ["Sounds", "Palettes", "Animations"])
+def test_premiere_visite_recoit_le_store_partage(screen_name):
     from window import MainWindow
 
     screen = _FakeScreen()
     received = []
     screen.set_folder_store = received.append
     win = _make_window(screen)
-    win._screens[0].name = "Palettes"
+    win.project = SimpleNamespace(load_audio=lambda: None, load_sprites=lambda: None)
+    win._screens[0].name = screen_name
     store = object()
     win.scene_library_panel = SimpleNamespace(folder_store=store)
 

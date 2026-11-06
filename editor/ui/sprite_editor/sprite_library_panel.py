@@ -90,7 +90,7 @@ class SpriteLibraryPanel(QWidget):
         self._sprites = AssetLibrary(label('spritelibrary.sprite_library'), [SPRITES],
                                     min_width=180, max_width=420)
         self._sprites.selected.connect(lambda _kind, sp: self._on_sprite_chosen(sp))
-        self._sprites.add_requested.connect(lambda _label: self._import_sprite())
+        self._sprites.add_requested.connect(lambda _label: self._show_sprite_add_menu())
         self._sprites.emptied.connect(lambda _label: self._on_sprite_chosen(None))
         root.addWidget(self._sprites, 1)
 
@@ -136,6 +136,13 @@ class SpriteLibraryPanel(QWidget):
 
 
     # ── API publique ──────────────────────────────────────────────
+
+    def set_folder_store(self, store) -> None:
+        """Raccorde la bibliothèque au rangement partagé de la session."""
+        if self._project is not None:
+            store.prune("sprites", {sprite.id for sprite in self._project.sprites})
+        self._sprites.set_folder_store(store)
+        self._sprites._sections[SPRITES.label].set_add_menu(True)
 
     def load_project(self, project: Project):
         self._project = project
@@ -298,6 +305,19 @@ class SpriteLibraryPanel(QWidget):
         QTimer.singleShot(0, lambda: self._rename_current_state())
 
     # ── Sprites : import (le reste est porté par AssetLibrary/SPRITES) ──
+
+    def _show_sprite_add_menu(self):
+        scheme = self._sprites.folder_scheme(SPRITES.label)
+        if scheme is None:
+            self._import_sprite()
+            return
+        menu = QMenu(self)
+        menu.setStyleSheet(QSS.menu)
+        menu.addAction(label(SPRITES.add_tooltip_key), self._import_sprite)
+        menu.addAction(label("assetlibrary.new_folder"),
+                       lambda: self._sprites._trees[SPRITES.label]._create_folder(scheme, None))
+        menu.exec(self._sprites._sections[SPRITES.label]._btn_add.mapToGlobal(
+            self._sprites._sections[SPRITES.label]._btn_add.rect().bottomLeft()))
 
     def _import_sprite(self):
         """Le « + » de la library délègue ici : le dialogue d'import a besoin d'un

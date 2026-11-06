@@ -551,7 +551,8 @@
     "common.copy": {
       "text": "Copier"
     },
-    "settings.shortcuts.action.sprite.flip_h": {
+    "settings.shortcuts.action.sprite.delete_frame": { "text": "Supprimer la frame d’animation" },
+  "settings.shortcuts.action.sprite.flip_h": {
       "text": "Retourner le pinceau horizontalement"
     },
     "settings.shortcuts.action.sprite.flip_v": {
