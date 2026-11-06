@@ -114,3 +114,46 @@ def test_un_projet_avec_areas_se_compile_et_emet_les_contacts_poses_et_pool(tmp_
     assert "g_areas[0].held = !(g_actors[1].active && g_actors[1].alive);" in main_c
     assert main_c.index("Areas that follow an actor") < main_c.index("static const AreaContact _area_pairs")   # avant les contacts
     assert "area_get_parent(area)" in sources and "area_set_size(door," in sources
+
+
+def test_une_zone_d_effet_se_compile_et_agit_sur_le_pose_et_le_spawne(tmp_path):
+    """Une Area à champ de force et gravité de zone, un Rigid posé et un Rigid spawné : le C compile avec le vrai gcc, et les
+    deux passent par `area_effects_apply` avec la même table `_fx`."""
+    from core.models.components import ForceFieldComponent, GravityOverrideComponent, PhysicsBodyComponent
+    projet = Project.create(tmp_path / "Game", "Game")
+    scripts = projet.user_library_dir / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    (scripts / "Spawner.lua").write_text(SPAWNER.replace("Bullet", "Ball"), encoding="utf-8")
+
+    def rigid(name):
+        actor = Actor(name=name, x=40, y=20)
+        actor.components = [CollisionShapeComponent(id="body", tag="body", solid=True),
+                            PhysicsBodyComponent(mode="rigid")]
+        return actor
+
+    projet.scenes[0].actors.append(rigid("Crate"))
+    balle = Prefab(name="Ball", actor=rigid("Ball"))
+    projet.prefabs.append(balle)
+    projet.prefabs.save(balle, None)
+    zone = Area(name="Water", x=20, y=40)
+    zone.components += [GravityOverrideComponent(gravity_y=0.05),
+                        ForceFieldComponent(force_x=0.1, turbulence=0.1, buoyancy=0.5, drag=0.1)]
+    projet.scenes[0].areas.append(zone)
+    projet.scenes[0].physics_enabled = True
+    projet.scenes[0].script = "assets/scripts/Spawner.lua"
+    projet.save()
+
+    worker = BuildWorker(Project.open(projet.root), Toolchain())
+    worker._step_launch_mgba = lambda _p: True
+    diagnostics, verdict = [], []
+    worker.on("diagnostic", diagnostics.append)
+    worker.on("finished", verdict.append)
+    worker.run()
+    assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
+
+    main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
+    assert "static const AreaEffect _fx[1]" in main_c
+    assert "{&g_areas[0],0,13,26,0,128,26,230,AREAFX_GRAVITY}" in main_c
+    assert "area_effects_apply(_fx,1,&g_actors[" in main_c          # le posé
+    assert "area_effects_apply(_fx,1,_a," in main_c                  # le pool
+    assert "g_fx_rng=1;" in main_c                                   # la suite de la turbulence repart à chaque scène

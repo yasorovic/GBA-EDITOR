@@ -51,6 +51,7 @@ static int  _debug_physics_characters = 0;
 static int  _debug_physics_blocks = 0;
 static int  _debug_physics_contacts = 0;
 static int  _debug_physics_areas = 0;
+static int  _debug_physics_fx = 0;
 
 static inline void debug_init(void) {
     MGBA_DEBUG_ENABLE = 0xC0DE;
@@ -101,6 +102,7 @@ static inline void debug_budget_start(void) {
     _debug_physics_blocks = 0;
     _debug_physics_contacts = 0;
     _debug_physics_areas = 0;
+    _debug_physics_fx = 0;
     REG_TM3CNT_H = 0;                 /* arrêt avant remise à zéro */
     REG_TM3CNT_L = 0;
     REG_TM3CNT_H = TIMER_START | DEBUG_TIMER_PRESCALER_64;
@@ -110,6 +112,7 @@ static inline void debug_physics_character_test(void) { _debug_physics_character
 static inline void debug_physics_block_test(void)     { _debug_physics_blocks++; }
 static inline void debug_physics_contact_test(void)   { _debug_physics_contacts++; }
 static inline void debug_physics_area_test(void)      { _debug_physics_areas++; }   /* un couple (Area, acteur) testé */
+static inline void debug_physics_fx_test(void)        { _debug_physics_fx++; }      /* un couple (zone d'effet, corps) testé */
 
 /* `n_oam_visible` : nombre de slots shadow_oam non cachés cette frame,
  * compté par l'appelant (cf. main_gen.py, boucle principale) — c'est lui
@@ -131,6 +134,8 @@ static inline void debug_budget_report(int n_oam_visible) {
     debug_write_int(_debug_physics_contacts);
     debug_write_str(" area=");
     debug_write_int(_debug_physics_areas);
+    debug_write_str(" fx=");
+    debug_write_int(_debug_physics_fx);
     debug_flush();
 }
 
@@ -145,6 +150,7 @@ static inline void debug_physics_character_test(void) {}
 static inline void debug_physics_block_test(void) {}
 static inline void debug_physics_contact_test(void) {}
 static inline void debug_physics_area_test(void) {}
+static inline void debug_physics_fx_test(void) {}
 static inline void debug_budget_report(int n_oam_visible) { (void)n_oam_visible; }
 
 #endif /* GBA_DEBUG_BUILD */

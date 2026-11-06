@@ -696,5 +696,64 @@ int main(void) {
         area_set_position(h, (Vec2){ 5, 6 });
         printf("area_libre %d %d %d\n", g_areas[0].x >> 8, g_areas[0].y >> 8, area_get_parent(h) == 0);
     }
+
+    /* Les effets de zone : `area_effects_apply` est le pas commun du posé et du pool, il n'a qu'une forme. Le corps est
+       l'acteur 4 (boîte 0 de 8x8, centre à (104, 54)) ; la zone couvre (100,50)..(116,66). */
+    {
+        static const AreaEffect gravite = { &g_areas[0], 0, 64, 0, 0, 0, 0, 256, AREAFX_GRAVITY };
+        static const AreaEffect force   = { &g_areas[0], 0, 0, 2560, -1280, 0, 0, 256, 0 };
+        static const AreaEffect trainee = { &g_areas[0], 0, 0, 0, 0, 0, 0, 128, 0 };
+        static const AreaEffect flotte  = { &g_areas[0], 0, 0, 0, 0, 256, 0, 256, 0 };
+        static const AreaEffect secoue  = { &g_areas[0], 0, 0, 0, 0, 0, 100, 256, 0 };
+        static const AreaEffect persos  = { &g_areas[0], 0, 0, 1000, 0, 0, 0, 256, AREAFX_CHARACTER };
+        Actor *c = &g_actors[4];
+        int gx, gy;
+        g_actors[4] = (Actor){0};
+        c->alive = 1; c->active = 1; c->x = 100 << 8; c->y = 50 << 8;
+        c->collision.box_count = 1;
+        c->collision.boxes[0] = (CollisionShape){ 0, 0, 8, 8, 0, 1, TAG_HIT };
+        g_areas[0] = (Area){ 100 << 8, 50 << 8, (CollisionShape){ 0, 0, 16, 16, 0, 1, TAG_HIT }, 1 };
+
+        gx = 5; gy = 100; area_effects_apply(&gravite, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        printf("fx_gravite %d %d\n", gx, gy);                                   /* remplacée par celle de la zone */
+        gx = 5; gy = 100; area_effects_apply(&gravite, 1, c, 0, AREAFX_FOLLOWS, 512, &gx, &gy);
+        printf("fx_gravite_echelle %d %d\n", gx, gy);                           /* multipliée par le gravity_scale du corps */
+        gx = 5; gy = 100; area_effects_apply(&gravite, 1, c, 0, 0, 256, &gx, &gy);
+        printf("fx_gravite_ignoree %d %d\n", gx, gy);                           /* un corps qui ne suit pas la gravité */
+        c->vx = 0; c->vy = 0; gx = 0; gy = 0;
+        area_effects_apply(&force, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        printf("fx_force %d %d\n", c->vx, c->vy);
+        c->vx = 256; c->vy = -256;
+        area_effects_apply(&trainee, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        printf("fx_trainee %d %d\n", c->vx, c->vy);
+        gx = 40; gy = 100;
+        area_effects_apply(&flotte, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        printf("fx_flottaison %d %d\n", gx, gy);                                /* le centre est dans la zone : neutre */
+        c->x = 112 << 8;                                                        /* centre à (116, 54) : hors de la zone */
+        gx = 40; gy = 100;
+        area_effects_apply(&flotte, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        printf("fx_flottaison_bord %d %d\n", gx, gy);                           /* il recouvre la zone mais flotte pas */
+        c->x = 100 << 8;
+        c->vx = 0; c->vy = 0; g_fx_rng = 1;
+        area_effects_apply(&secoue, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        int t1x = c->vx, t1y = c->vy;
+        c->vx = 0; c->vy = 0; g_fx_rng = 1;
+        area_effects_apply(&secoue, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        printf("fx_turbulence %d %d %d\n", t1x == c->vx && t1y == c->vy, (c->vx >= -100 && c->vx <= 100),
+               (c->vy >= -100 && c->vy <= 100));                                /* déterministe, bornée */
+        c->vx = 0; c->vy = 0;
+        area_effects_apply(&persos, 1, c, 0, AREAFX_IS_CHARACTER, 256, &gx, &gy);
+        printf("fx_personnage_ok %d\n", c->vx);                                 /* la zone le demande : il subit */
+        c->vx = 0;
+        area_effects_apply(&force, 1, c, 0, AREAFX_IS_CHARACTER, 256, &gx, &gy);
+        printf("fx_personnage_exclu %d\n", c->vx);                              /* la zone ne le demande pas : rien */
+        c->vx = 0;
+        g_areas[0].active = 0;
+        area_effects_apply(&force, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        printf("fx_zone_inactive %d\n", c->vx);
+        g_areas[0].active = 1; c->x = 200 << 8;
+        area_effects_apply(&force, 1, c, 0, AREAFX_FOLLOWS, 256, &gx, &gy);
+        printf("fx_hors_zone %d\n", c->vx);
+    }
     return 0;
 }

@@ -1,14 +1,35 @@
 """Mouvement automatique : gravité de scène des Character et Kinematic qui la suivent, intégration des Kinematic et Rigid."""
 from __future__ import annotations
 
-from codegen.runtime_codegen.physics.body import physics_body, physics_body_mode
+from codegen.runtime_codegen.physics.areas import effect_areas, effect_table_lines, effects_affect_characters
+from codegen.runtime_codegen.physics.body import physics_body, physics_body_mode, physics_collider_entries
 from codegen.runtime_codegen.shared_pool_gen import shared_models
-from core.models.components import PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID
+from core.models.components import (
+    PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID, ForceFieldComponent, GravityOverrideComponent,
+)
 
 
 def _move_lines(target: str, mode: str, gravity_x: int | str, gravity_y: int | str,
                 damping_retain: int, max_fall: int, sleep_frames: int,
-                indent: str) -> list[str]:
+                indent: str, effects: tuple | None = None) -> list[str]:
+    """`effects` : (nombre de zones, rang de la boîte de physique, drapeaux du corps, échelle de gravité Q8) quand le corps passe par
+    `area_effects_apply`. La fonction ajuste la vélocité (force, traînée, turbulence) et la gravité `_gx/_gy` du corps avant
+    qu'elle soit ajoutée : le reste du pas est celui d'un corps sans zone. Elle précède la garde de sommeil des Rigid, pour
+    qu'une force réveille un corps endormi."""
+    if effects is None:
+        return _body_move_lines(target, mode, gravity_x, gravity_y, damping_retain, max_fall, sleep_frames, indent)
+    count, rank, body_flags, scale = effects
+    follows = bool(body_flags & 1)
+    # Un corps qui ne suit pas la gravité de scène n'en reçoit pas non plus de la zone : `_gx/_gy` restent à zéro.
+    inner = _body_move_lines(target, mode, "_gx" if follows else 0, "_gy" if follows else 0,
+                             damping_retain, max_fall, sleep_frames, indent + "  ")
+    return [f"{indent}{{ int _gx={gravity_x if follows else 0}, _gy={gravity_y if follows else 0};",
+            f"{indent}  area_effects_apply(_fx,{count},{target},{rank},{body_flags},{scale},&_gx,&_gy);",
+            *inner, f"{indent}}}"]
+
+
+def _body_move_lines(target: str, mode: str, gravity_x: int | str, gravity_y: int | str,
+                     damping_retain: int, max_fall: int, sleep_frames: int, indent: str) -> list[str]:
     if mode in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC):
         # gravity_x et gravity_y valent 0 quand le corps ignore la gravité de scène.
         body = []
@@ -64,6 +85,26 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
     damping_retain = round((1.0 - damping) * 256)
     max_fall = round(max_fall_speed * 256)
     sleep_frames = sleep_delay if sleep_enabled else 0
+    zones = effect_areas(scene)
+    has_gravity_zone = any(a.effect(GravityOverrideComponent) for _i, a in zones)
+    has_force_zone = any(a.effect(ForceFieldComponent) for _i, a in zones)
+    characters_affected = effects_affect_characters(scene)
+
+    def effects_of(owner, mode, body):
+        """Le tuple `effects` de `_move_lines` si ce corps subit une zone de la scène, sinon None (le C émis est alors celui
+        d'une scène sans zone). Le rang est celui de sa boîte de physique : pas de boîte, pas de recouvrement possible."""
+        if not zones or mode not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID):
+            return None
+        colliders = physics_collider_entries(owner)
+        if not colliders:
+            return None
+        follows = mode == PHYSICS_BODY_RIGID or bool(body and body.use_scene_gravity)
+        is_character = mode == PHYSICS_BODY_CHARACTER
+        if not ((has_gravity_zone and follows) or (has_force_zone and (characters_affected or not is_character))):
+            return None
+        flags = (1 if follows else 0) | (2 if is_character else 0)
+        return len(zones), colliders[0][0], flags, round((body.gravity_scale if body else 1.0) * 256)
+
     lines: list[str] = []
     for index, (actor, _sprite) in enumerate(scene_actors):
         mode = physics_body_mode(actor)
@@ -71,7 +112,7 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
         body_gx, body_gy = gravity_terms(body, mode)
         body_sleep = sleep_frames if body is None or body.can_sleep else 0
         move = _move_lines(f"&g_actors[{actor_offset + index}]", mode, body_gx, body_gy,
-                           damping_retain, max_fall, body_sleep, "        ")
+                           damping_retain, max_fall, body_sleep, "        ", effects_of(actor, mode, body))
         if move:
             lines += [f"    if(g_actors[{actor_offset + index}].active){{", *move, "    }"]
 
@@ -81,7 +122,8 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
         body = physics_body(model["prefab"])
         body_gx, body_gy = gravity_terms(body, mode)
         body_sleep = sleep_frames if body is None or body.can_sleep else 0
-        move = _move_lines("_a", mode, body_gx, body_gy, damping_retain, max_fall, body_sleep, "            ")
+        move = _move_lines("_a", mode, body_gx, body_gy, damping_retain, max_fall, body_sleep, "            ",
+                           effects_of(model["prefab"], mode, body))
         if move:
             cases += [f"        case {model['model_id']}: {{", *move, "        } break;"]
     if cases:
@@ -89,7 +131,8 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
                   "        if(!_a->active) continue;", "        switch(_a->model){",
                   *cases, "        default: break;", "        }", "    }"]
     if lines:
-        lines.insert(0, "    /* Kinematic/Rigid : mouvement avant les collisions */")
+        table = effect_table_lines(scene) if any("_fx," in line for line in lines) else []
+        lines = ["    /* Kinematic/Rigid : mouvement avant les collisions */", *table, *lines]
     return lines
 
 

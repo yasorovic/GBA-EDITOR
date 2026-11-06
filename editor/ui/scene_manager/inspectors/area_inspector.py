@@ -12,7 +12,9 @@ from PyQt6.QtWidgets import QCheckBox, QVBoxLayout, QWidget
 
 from core.command_dispatcher import get_dispatcher
 from core.history import AddListItemCmd, SetFieldCmd, get_history
-from core.models.components import CollisionShapeComponent, TriggerComponent
+from core.models.components import (
+    CollisionShapeComponent, ForceFieldComponent, GravityOverrideComponent, TriggerComponent,
+)
 from core.models.scene import Area, Scene
 from core.project import Project
 from ui.common.deferred_writes import schedule_save
@@ -24,6 +26,17 @@ from ui.common.widgets import CollapsibleCard, NotesEdit, W
 from .component_editors.collision import CollisionEditor
 
 _COORD_RANGE = 32767
+
+# Les effets physiques d'une Area : (composant, clé de libellé, [(champ, min, max, pas, décimales)]). Mêmes bornes que le modèle.
+_EFFECTS = (
+    (GravityOverrideComponent, "gravity", [("gravity_x", -8.0, 8.0, 0.05, 3), ("gravity_y", -8.0, 8.0, 0.05, 3)]),
+    (ForceFieldComponent, "force", [("force_x", -8.0, 8.0, 0.05, 3), ("force_y", -8.0, 8.0, 0.05, 3),
+                                    ("turbulence", 0.0, 8.0, 0.05, 3), ("buoyancy", 0.0, 4.0, 0.05, 2),
+                                    ("drag", 0.0, 1.0, 0.05, 2)]),
+)
+_FIELD_TIPS = {"gravity_x": "areainsp.fx.gravity_tip", "gravity_y": "areainsp.fx.gravity_tip",
+               "force_x": "areainsp.fx.force_xy_tip", "force_y": "areainsp.fx.force_xy_tip"}
+_EFFECT_NAMES = {GravityOverrideComponent: "gravity_override", ForceFieldComponent: "force_field"}
 
 
 class AreaInspector(QWidget):
@@ -89,7 +102,90 @@ class AreaInspector(QWidget):
         self._shape_card = CollapsibleCard(label('areainsp.shape'))
         self._layout.addWidget(self._shape_card)
         self._shape_container: Optional[QWidget] = None
+        self._build_effects_card()
         self._layout.addStretch()
+
+    # ── Effets physiques ──────────────────────────────────────────
+
+    def _build_effects_card(self) -> None:
+        """Une case par effet (ajoute ou réactive le composant, comme le déclencheur) et ses réglages, grisés tant que la case est
+        décochée. Les widgets sont construits une fois et resynchronisés par `_sync_effects`."""
+        card = CollapsibleCard(label('areainsp.fx.card'))
+        self._fx_checks: dict = {}
+        self._fx_inputs: dict = {}
+        for kind, key, fields in _EFFECTS:
+            check = QCheckBox(label(f'areainsp.fx.{key}'))
+            check.setFont(QFont(T.UI, T.SM))
+            check.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
+            check.setToolTip(tooltip(title=label(f'areainsp.fx.{key}'), body=label(f'areainsp.fx.{key}_tip')))
+            check.toggled.connect(lambda on, k=kind: self._set_effect(k, on))
+            card.body_layout.addWidget(check)
+            self._fx_checks[kind] = check
+            for field_name, low, high, step, decimals in fields:
+                spin = W.double_spinbox(0.0, low, high, step, decimals)
+                spin.valueChanged.connect(lambda v, k=kind, f=field_name: self._set_effect_field(k, f, float(v)))
+                spin.setToolTip(tooltip(title=label(f'areainsp.fx.{field_name}'),
+                                        body=label(_FIELD_TIPS.get(field_name, f'areainsp.fx.{field_name}_tip'))))
+                W.row(label(f'areainsp.fx.{field_name}'), spin, card.body_layout)
+                self._fx_inputs[(kind, field_name)] = spin
+        characters = QCheckBox(label('areainsp.fx.characters'))
+        characters.setFont(QFont(T.UI, T.SM))
+        characters.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
+        characters.setToolTip(tooltip(title=label('areainsp.fx.characters'), body=label('areainsp.fx.characters_tip')))
+        characters.toggled.connect(lambda on: self._set_effect_field(ForceFieldComponent, "affects_characters", bool(on)))
+        card.body_layout.addWidget(characters)
+        self._fx_inputs[(ForceFieldComponent, "affects_characters")] = characters
+        self._layout.addWidget(card)
+
+    def _effect(self, kind):
+        return next((c for c in self._actor.components if isinstance(c, kind)), None) if self._actor else None
+
+    def _sync_effects(self) -> None:
+        """Remet cases et réglages à la valeur du modèle (sous `_blocking`) ; sans composant, les valeurs par défaut."""
+        for kind, _key, _fields in _EFFECTS:
+            comp = self._effect(kind)
+            on = comp is not None and comp.active
+            self._fx_checks[kind].setChecked(on)
+            source = comp if comp is not None else kind()
+            for (k, field_name), widget in self._fx_inputs.items():
+                if k is not kind:
+                    continue
+                value = getattr(source, field_name)
+                if isinstance(widget, QCheckBox):
+                    widget.setChecked(bool(value))
+                else:
+                    widget.setValue(float(value))
+                widget.setEnabled(on)
+
+    def _set_effect(self, kind, on: bool) -> None:
+        area = self._actor
+        existing = self._effect(kind)
+        if self._blocking or area is None or (existing is not None and existing.active == on) or (existing is None and not on):
+            return
+        name = _EFFECT_NAMES[kind]
+        if existing is None:
+            get_history().push(AddListItemCmd(area.components, kind(), persist_fn=self._after_effect,
+                                              label=f"{area.name}.{name}"))
+        else:
+            get_history().push(SetFieldCmd(existing, "active", not on, on, label=f"{area.name}.{name}.active",
+                                           persist_fn=self._after_effect))
+
+    def _set_effect_field(self, kind, field_name: str, value) -> None:
+        comp = self._effect(kind)
+        if self._blocking or comp is None or getattr(comp, field_name) == value:
+            return
+        get_history().push(SetFieldCmd(comp, field_name, getattr(comp, field_name), value,
+                                       label=f"{self._actor.name}.{_EFFECT_NAMES[kind]}.{field_name}",
+                                       persist_fn=self._persist))
+
+    def _after_effect(self) -> None:
+        """Ajouter ou (dés)activer un effet change aussi l'état grisé des réglages."""
+        self._blocking = True
+        try:
+            self._sync_effects()
+        finally:
+            self._blocking = False
+        self._persist()
 
     # ── Chargement ────────────────────────────────────────────────
 
@@ -103,6 +199,7 @@ class AreaInspector(QWidget):
             self._spin_y.setValue(area.y)
             self._refresh_parent_choices()
             self._notes_edit.set_text_silent(area.notes)
+            self._sync_effects()
         finally:
             self._blocking = False
         self._build_shape(area)
@@ -161,6 +258,7 @@ class AreaInspector(QWidget):
             self._spin_x.setValue(area.x)
             self._spin_y.setValue(area.y)
             self._refresh_parent_choices()
+            self._sync_effects()
             shape = self._shape()
             if shape is not None:
                 for field_name, sync in self._field_syncers.items():

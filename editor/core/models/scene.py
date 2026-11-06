@@ -593,7 +593,7 @@ class Area(SceneMember, ComponentOwnerMixin):
     carte : `conform_shapes` le force sur ses formes, quelle que soit la façon dont elles sont arrivées.
 
     Posée dans la scène, jamais un asset : elle se réutilise d'une scène à l'autre par le copier/coller du canvas. Elle peut
-    SUIVRE un acteur posé (`parent`) ; elle n'a jamais d'enfant. (Les composants d'effet viennent avec les tranches suivantes.)"""
+    SUIVRE un acteur posé (`parent`) ; elle n'a jamais d'enfant. Elle peut porter des effets physiques (`GravityOverrideComponent`, `ForceFieldComponent`) qui agissent sur les corps qu'elle recouvre."""
     name: str = "Area"
     active: bool = True
     components: list = field(default_factory=default_area_components)
@@ -615,6 +615,10 @@ class Area(SceneMember, ComponentOwnerMixin):
     def is_trigger(self) -> bool:
         """Cette Area prévient-elle les scripts des acteurs qui la touchent ? Oui avec un déclencheur actif."""
         return any(isinstance(c, TriggerComponent) and c.active for c in self.components)
+
+    def effect(self, kind):
+        """Le composant d'effet physique ACTIF de ce type (`GravityOverrideComponent` ou `ForceFieldComponent`), ou None."""
+        return next((c for c in self.components if isinstance(c, kind) and c.active), None)
 
     def conform_shapes(self) -> None:
         """Les formes d'une Area sont des capteurs que la carte n'arrête pas : `solid`, `response` et `one_way`

@@ -12,6 +12,7 @@ from __future__ import annotations
 from codegen.c_names import sym as c_sym
 from codegen.runtime_codegen.gen_pool import world_to_local_offset
 from codegen.runtime_codegen.gen_scene_query import actor_collision_shapes
+from core.models.components import ForceFieldComponent, GravityOverrideComponent
 from core.models.field_value import FieldValue as _FV, var_names_from_project
 from core.models.settings import tags_collide
 from scripting.api import AREA_EVENTS
@@ -50,6 +51,41 @@ def area_globals_lines(p, all_scene_data: list[dict]) -> list[str]:
             f"u16 g_area_prev[{max(1, n_prev)}] EWRAM_BSS;   /* le recouvrement de la frame précédente, par couple posé */"]
 
 
+def effect_areas(scene) -> list[tuple[int, object]]:
+    """(rang dans `g_areas`, Area) des Areas qui ont un effet physique : une forme, et un GravityOverrideComponent ou un
+    ForceFieldComponent actif. Leur ordre est celui de la table `_fx` ; la dernière zone de gravité l'emporte."""
+    return [(i, a) for i, a in enumerate(scene.areas) if a.shape() is not None
+            and (a.effect(GravityOverrideComponent) or a.effect(ForceFieldComponent))]
+
+
+def effects_affect_characters(scene) -> bool:
+    """Une zone de la scène agit-elle sur les CharacterBody ? Sans cela, ils ne passent jamais par `area_effects_apply` pour
+    la force (la gravité de zone, elle, les atteint s'ils suivent la gravité de scène)."""
+    return any(a.effect(ForceFieldComponent).affects_characters
+               for _i, a in effect_areas(scene) if a.effect(ForceFieldComponent))
+
+
+def effect_table_lines(scene) -> list[str]:
+    """La table `const` `_fx` des zones d'effet de la scène (Q8), posée en tête du bloc de mouvement. Vide sans zone : le C émis
+    d'une scène sans effet reste celui d'avant."""
+    rows = effect_areas(scene)
+    if not rows:
+        return []
+    out = []
+    for i, area in rows:
+        gravity, force = area.effect(GravityOverrideComponent), area.effect(ForceFieldComponent)
+        flags = (("AREAFX_GRAVITY" if gravity else "0"),
+                 ("AREAFX_CHARACTER" if force and force.affects_characters else "0"))
+        gx, gy = (round(gravity.gravity_x * 256), round(gravity.gravity_y * 256)) if gravity else (0, 0)
+        fx, fy = (round(force.force_x * 256), round(force.force_y * 256)) if force else (0, 0)
+        buoyancy = round(force.buoyancy * 256) if force else 0
+        turbulence = round(force.turbulence * 256) if force else 0
+        retain = round((1.0 - force.drag) * 256) if force else 256
+        out.append(f"        {{&g_areas[{i}],{gx},{gy},{fx},{fy},{buoyancy},{turbulence},{retain},"
+                   f"{'|'.join(f for f in flags if f != '0') or '0'}}},")
+    return [f"    static const AreaEffect _fx[{len(rows)}]={{", *out, "    };"]
+
+
 def _parent_slots(scene, scene_actors: list, actor_offset: int) -> dict:
     """{rang de l'Area dans `g_areas`: emplacement de son parent dans `g_actors`} : les Areas dont le parent nomme un acteur posé
     de la scène (un parent inconnu est refusé avant, par le validateur)."""
@@ -63,7 +99,7 @@ def area_init_lines(p, scene, scene_actors: list, actor_offset: int) -> list[str
         return []
     names = var_names_from_project(p)
     parents = _parent_slots(scene, scene_actors, actor_offset)
-    L = ["    for(unsigned _i=0;_i<sizeof(g_areas)/sizeof(g_areas[0]);_i++) g_areas[_i]=(Area){0};",
+    L = ["    g_fx_rng=1;","    for(unsigned _i=0;_i<sizeof(g_areas)/sizeof(g_areas[0]);_i++) g_areas[_i]=(Area){0};",
          "    for(unsigned _i=0;_i<sizeof(g_area_prev)/sizeof(g_area_prev[0]);_i++) g_area_prev[_i]=0;"]
     for i, area in enumerate(scene.areas):
         a = f"g_areas[{i}]"

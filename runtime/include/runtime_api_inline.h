@@ -1106,6 +1106,53 @@ static void __attribute__((unused)) area_contact_run(const AreaContact* c, u16* 
     area_contact_step(c->area, &g_actors[c->actor], c->allowed, c->on, prev);
 }
 
+/* ── Effets de zone ───────────────────────────────────────────────────────────
+   Une Area qui porte un GravityOverrideComponent et/ou un ForceFieldComponent agit sur les corps dont la boîte de physique la
+   recouvre. Les acteurs posés et les instances du pool passent par la MÊME fonction, appelée dans le pas de mouvement juste
+   avant que la gravité soit ajoutée à la vélocité. Les réglages sont une table `const` du build (Q8). `g_fx_rng` est le
+   générateur congruentiel linéaire de la turbulence : statique du fichier, remis à 1 à l entrée de chaque scène (`area_init_lines`), donc déterministe. */
+#define AREAFX_GRAVITY    1u   /* zone : remplace la gravité de la scène */
+#define AREAFX_CHARACTER  2u   /* zone : agit aussi sur les CharacterBody (force, turbulence, flottaison, traînée) */
+#define AREAFX_FOLLOWS    1u   /* corps : suit la gravité de la scène */
+#define AREAFX_IS_CHARACTER 2u /* corps : CharacterBody */
+typedef struct { Area* area; s16 gx, gy, fx, fy, buoyancy; u16 turbulence, retain; u8 flags; } AreaEffect;   /* Q8 ; retain 256 = pas de traînée */
+static u32 g_fx_rng __attribute__((unused)) = 1;
+
+BS_ATTR_IWRAM
+static void __attribute__((unused)) area_effects_apply(const AreaEffect* fx, u8 n, Actor* a, u8 rank, u8 body, int gscale,
+                                                       int* gx, int* gy) {
+    const CollisionShape* b = &a->collision.boxes[rank];
+    int buoyancy = 0;
+    if (!b->active) return;
+    for (u8 i = 0; i < n; i++) {
+        const AreaEffect* e = &fx[i];
+        const Area* ar = e->area;
+        if (!ar->active || ar->held || !ar->box.active) continue;
+        debug_physics_fx_test();
+        if (!box_overlap(ar->x>>8, ar->y>>8, &ar->box, a->x>>8, a->y>>8, b)) continue;
+        if ((e->flags & AREAFX_GRAVITY) && (body & AREAFX_FOLLOWS)) {
+            *gx = (e->gx * gscale) >> 8;
+            *gy = (e->gy * gscale) >> 8;
+        }
+        if ((body & AREAFX_IS_CHARACTER) && !(e->flags & AREAFX_CHARACTER)) continue;
+        if (e->retain != 256) { a->vx = (a->vx * e->retain) >> 8; a->vy = (a->vy * e->retain) >> 8; }
+        a->vx += e->fx; a->vy += e->fy;
+        if (e->turbulence) {
+            int span = 2 * e->turbulence + 1;
+            g_fx_rng = g_fx_rng * 1664525u + 1013904223u;
+            a->vx += (int)((g_fx_rng >> 16) % span) - e->turbulence;
+            g_fx_rng = g_fx_rng * 1664525u + 1013904223u;
+            a->vy += (int)((g_fx_rng >> 16) % span) - e->turbulence;
+        }
+        if (e->buoyancy) {
+            int cx = (a->x>>8) + b->x + b->w/2, cy = (a->y>>8) + b->y + b->h/2;
+            int ax = (ar->x>>8) + ar->box.x, ay = (ar->y>>8) + ar->box.y;
+            if (cx >= ax && cx < ax + ar->box.w && cy >= ay && cy < ay + ar->box.h) buoyancy += e->buoyancy;
+        }
+    }
+    if (buoyancy) { *gx -= (*gx * buoyancy) >> 8; *gy -= (*gy * buoyancy) >> 8; }
+}
+
 /* La référence `area` d'un script : le rang de l'Area dans `g_areas`, plus un (0 = pas d'Area), comme la référence d'une
    boîte. `g_areas` existe dans tout projet (une entrée au moins), l'extern est donc toujours satisfait. */
 extern Area g_areas[];

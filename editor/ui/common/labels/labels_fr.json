@@ -2786,6 +2786,24 @@
     "hints.scene.place_area": { "text": "Place une area sur la grille" },
     "areainsp.trigger": { "text": "Déclencheur" },
     "areainsp.trigger_tip": { "text": "Fait de l'area un déclencheur : les scripts des acteurs qui la touchent reçoivent on_area_enter, on_area_collide et on_area_exit. Sans lui, l'area ne teste aucun contact." },
-    "areainsp.parent_tip": { "text": "Exprime la position de cette area dans le repère d'un acteur de la scène : elle le suit. Tant que l'acteur est inactif ou détruit, l'area ne touche personne. Un script ne peut pas déplacer une area qui a un parent." }
+    "areainsp.parent_tip": { "text": "Exprime la position de cette area dans le repère d'un acteur de la scène : elle le suit. Tant que l'acteur est inactif ou détruit, l'area ne touche personne. Un script ne peut pas déplacer une area qui a un parent." },
+    "areainsp.fx.card": { "text": "Effets physiques" },
+    "areainsp.fx.gravity": { "text": "Gravité de zone" },
+    "areainsp.fx.gravity_tip": { "text": "Dans la zone, les corps qui suivent la gravité de la scène reçoivent cette gravité à la place (multipliée par leur échelle de gravité). En pixels par frame au carré. Quand des zones se recouvrent, la dernière de la scène l'emporte." },
+    "areainsp.fx.gravity_x": { "text": "Gravité X" },
+    "areainsp.fx.gravity_y": { "text": "Gravité Y" },
+    "areainsp.fx.force": { "text": "Champ de force" },
+    "areainsp.fx.force_tip": { "text": "Dans la zone, les acteurs KinematicBody et RigidBody dont la boîte de physique la recouvre sont poussés à chaque frame (vent, courant, eau)." },
+    "areainsp.fx.force_x": { "text": "Force X" },
+    "areainsp.fx.force_y": { "text": "Force Y" },
+    "areainsp.fx.force_xy_tip": { "text": "Accélération constante, en pixels par frame au carré." },
+    "areainsp.fx.turbulence": { "text": "Turbulence" },
+    "areainsp.fx.turbulence_tip": { "text": "Amplitude d'une poussée aléatoire ajoutée à chaque frame sur les deux axes. La suite est déterministe : elle repart à chaque scène." },
+    "areainsp.fx.buoyancy": { "text": "Flottaison" },
+    "areainsp.fx.buoyancy_tip": { "text": "Part de la gravité annulée tant que le centre de la boîte du corps est dans la zone. 1 flotte sans monter ni descendre, au-dessus de 1 le corps remonte." },
+    "areainsp.fx.drag": { "text": "Traînée" },
+    "areainsp.fx.drag_tip": { "text": "Part de la vitesse perdue à chaque frame dans la zone (viscosité). 0 est l'air libre." },
+    "areainsp.fx.characters": { "text": "Agit sur les personnages" },
+    "areainsp.fx.characters_tip": { "text": "Pousse aussi les acteurs CharacterBody. Désactivé par défaut : un personnage est conduit par son script." }
   }
 }

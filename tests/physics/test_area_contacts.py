@@ -261,3 +261,19 @@ def test_l_entree_de_scene_pose_les_areas_et_remet_les_contacts_a_zero():
     assert "g_areas[0].box.w=(u8)48;" in text and "g_areas[0].box.tag=BOXTAG_DOOR;" in text
     assert "g_area_prev[_i]=0" in text                              # la mémoire des couples ne survit pas à la scène
     assert area_init_lines(project, Scene(name="Empty"), [], 0) == []     # une scène sans Area n'émet rien
+
+
+def test_c_les_effets_de_zone(sortie_sonde):
+    """`area_effects_apply` : le pas commun du posé et du pool (un seul code, une seule forme)."""
+    assert sortie_sonde["fx_gravite"] == [0, 64]                    # la gravité de zone remplace celle de la scène
+    assert sortie_sonde["fx_gravite_echelle"] == [0, 128]           # multipliée par le gravity_scale du corps
+    assert sortie_sonde["fx_gravite_ignoree"] == [5, 100]           # un corps qui ne suit pas la gravité n'en reçoit pas
+    assert sortie_sonde["fx_force"] == [2560, -1280]
+    assert sortie_sonde["fx_trainee"] == [128, -128]                # la moitié de la vitesse est retenue
+    assert sortie_sonde["fx_flottaison"] == [0, 0]                  # centre dans la zone : flottaison neutre
+    assert sortie_sonde["fx_flottaison_bord"] == [40, 100]          # il recouvre la zone mais son centre est dehors
+    assert sortie_sonde["fx_turbulence"] == [1, 1, 1]               # déterministe (générateur remis à 1), bornée
+    assert sortie_sonde["fx_personnage_ok"] == [1000]
+    assert sortie_sonde["fx_personnage_exclu"] == [0]               # CharacterBody : seulement sur option de la zone
+    assert sortie_sonde["fx_zone_inactive"] == [0]
+    assert sortie_sonde["fx_hors_zone"] == [0]

@@ -132,6 +132,31 @@ end
 Renommer une Area dans l'éditeur réécrit aussi les `area:get("…")` et les `area.name == "…"` des
 scripts, et l'annulation les remet.
 
+## 5. Faire agir la zone sur la physique
+
+Une Area peut aussi pousser les corps qui la traversent, sans script ni événement. Dans la carte **Physics
+effects** de l'inspecteur, cochez l'effet voulu :
+
+- **Gravity override** : dans la zone, les corps qui suivent la gravité de la scène reçoivent cette gravité à
+  la place, multipliée par leur échelle de gravité (en pixels par frame au carré). Quand plusieurs zones se
+  recouvrent, la dernière de la scène l'emporte.
+- **Force field** : une force constante (**Force X / Y**, vent ou courant), une **Turbulence** (une poussée
+  aléatoire à chaque frame, la même suite à chaque entrée dans la scène), une **Buoyancy** (la part de gravité
+  annulée tant que le centre de la boîte du corps est dans la zone : 1 flotte sans monter ni descendre) et une
+  **Drag** (la part de vitesse perdue à chaque frame, la viscosité : 0 est l'air libre).
+
+Règles :
+
+- Seuls les corps **KinematicBody** et **RigidBody** dont la boîte de physique recouvre la zone sont touchés.
+  Un **CharacterBody**, conduit par son script, ne l'est que si la zone coche **Affects characters** (la
+  gravité de zone, elle, atteint tout corps qui suit la gravité de la scène).
+- La force s'ajoute à la vitesse avant la gravité du pas physique, donc avant toute collision : un corps poussé
+  est arrêté par un mur comme n'importe quel autre. Elle réveille un RigidBody endormi.
+- Un acteur posé et un acteur créé par `actor:spawn` suivent exactement la même règle.
+- Une zone inactive, ou sans forme, n'agit pas. Désactivez-la avec `area:deactivate()`.
+- Le coût se lit dans le journal de débogage : le compteur `fx=` donne le nombre de couples (zone, corps) testés
+  par frame.
+
 ## Choisir entre une Area et un acteur sensor
 
 Un **acteur** dont la boîte est vide fait déjà office de déclencheur : il reste le bon choix s'il

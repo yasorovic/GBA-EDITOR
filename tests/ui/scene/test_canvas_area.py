@@ -450,6 +450,29 @@ def test_la_case_declencheur_ajoute_desactive_et_reactive_le_composant(qapp, edi
     insp.deleteLater()
 
 
+def test_les_effets_physiques_s_ajoutent_se_reglent_et_s_annulent(qapp, editor):
+    from core.models.components import ForceFieldComponent, GravityOverrideComponent
+    from ui.scene_manager.inspectors.area_inspector import AreaInspector
+    project = editor._project
+    area = project.active_scene.areas[0]
+    insp = AreaInspector()
+    insp.load(area, project, project.active_scene)
+    assert not insp._fx_checks[ForceFieldComponent].isChecked()
+    assert not insp._fx_inputs[(ForceFieldComponent, "force_x")].isEnabled()           # grisé sans composant
+    insp._fx_checks[ForceFieldComponent].setChecked(True)                               # ajouté
+    force = area.effect(ForceFieldComponent)
+    assert force is not None and insp._fx_inputs[(ForceFieldComponent, "force_x")].isEnabled()
+    insp._fx_inputs[(ForceFieldComponent, "force_x")].setValue(0.5)
+    insp._fx_inputs[(ForceFieldComponent, "affects_characters")].setChecked(True)
+    assert force.force_x == 0.5 and force.affects_characters
+    insp._fx_checks[ForceFieldComponent].setChecked(False)                              # désactivé, jamais retiré
+    assert area.effect(ForceFieldComponent) is None and force in area.components
+    assert area.effect(GravityOverrideComponent) is None                                # l'autre effet ne bouge pas
+    get_history().undo()                                                                # annuler rend la zone active
+    assert area.effect(ForceFieldComponent) is force and insp._fx_checks[ForceFieldComponent].isChecked()
+    insp.deleteLater()
+
+
 def test_l_inspecteur_masque_ce_qui_n_a_pas_de_sens_pour_une_area_et_ses_edits_sont_annulables(qapp, editor):
     from ui.scene_manager.inspectors.area_inspector import AreaInspector
     project = editor._project
