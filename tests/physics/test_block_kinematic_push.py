@@ -32,6 +32,7 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
+#define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 u8 *g_drop_through = 0;
 Actor g_actors[4];
 int g_spool_start, g_spool_hw;
@@ -64,34 +65,49 @@ int main(void){
 """
 
 
-def _lignes(tmp_path, mode: str, bloqueur_pose: bool) -> list[str]:
+def _lignes(tmp_path, mode: str) -> dict:
+    """Les lignes émises pour une vraie scène où les prefabs `Joueur` et `Bloqueur` sont posés ET spawnés : un seul
+    chemin, la topologie ne choisit que les emplacements vivants. Rend aussi le type de chacun."""
+    import copy
+    from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     from codegen.runtime_codegen.physics.blocks import block_tick_lines
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
-    from core.models.scene import Actor
+    from core.models.scene import Actor, Prefab, Scene
     from core.project import Project
+    from oam_fixtures import faire_naitre
 
-    project = Project.create(tmp_path / f"Pousse_{mode}", "Pousse")
-    scene = project.active_scene
-    joueur = Actor(name="Joueur", components=[CollisionShapeComponent(solid=True),
-                                              PhysicsBodyComponent(mode="CharacterBody")])
-    bloqueur = Actor(name="Bloqueur", components=[CollisionShapeComponent(solid=False, response="block"),
-                                                  PhysicsBodyComponent(mode=mode)])
-    posés = [joueur] + ([bloqueur] if bloqueur_pose else [])
-    pool = [] if bloqueur_pose else [{"shared": True, "model_id": 2, "sym": "bloqueur", "prefab": bloqueur}]
-    return block_tick_lines(project, scene, [(a, None) for a in posés], 0, pool, shown)
+    dossier = tmp_path / f"Pousse_{mode}"
+    joueur = Prefab(name="Joueur")
+    joueur.actor.components += [CollisionShapeComponent(solid=True), PhysicsBodyComponent(mode="CharacterBody")]
+    bloqueur = Prefab(name="Bloqueur")
+    bloqueur.actor.components += [CollisionShapeComponent(solid=False, response="block"), PhysicsBodyComponent(mode=mode)]
+    scene = Scene(name="S", physics_enabled=True, actors=[
+        Actor(name=f"{pf.name}Pose", prefab_name=pf.name, components=copy.deepcopy(pf.actor.components))
+        for pf in (joueur, bloqueur)])
+    project = Project(dossier)
+    project.scenes.items = [scene]
+    project.prefabs.items = [joueur, bloqueur]
+    faire_naitre(dossier, scene, "Joueur", "Bloqueur")
+    pi = scene_pi(project, scene)
+    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
+    return {"lines": block_tick_lines(project, scene, [(a, None) for a in scene.actors], 0, pi, shown),
+            "joueur": ids["Joueur"], "bloqueur": ids["Bloqueur"]}
 
 
-def _topologie_c(nom: str, bloqueur_pose: bool, lignes: list[str]) -> str:
+def _topologie_c(nom: str, bloqueur_pose: bool, e: dict) -> str:
+    """Le joueur est posé (emplacement 0) ; le bloqueur est posé (1) ou né dans le pool (2)."""
     slot = 1 if bloqueur_pose else 2
     placement = (f"    g_actors[{slot}] = boite(bx, 160, bvx, 32, 32, 0, 0); g_actors[{slot}].inst = {slot};"
-                 if bloqueur_pose else f"    pose_en_pool({slot}, boite(bx, 160, bvx, 32, 32, 0, 0), 2);")
+                 f" g_actors[{slot}].model = {e['bloqueur']};"
+                 if bloqueur_pose else f"    pose_en_pool({slot}, boite(bx, 160, bvx, 32, 32, 0, 0), {e['bloqueur']});")
     return (f"static void topo_{nom}(const char* cas, int bvx, int mvx){{\n    int bx = 90;\n    reinit();\n"
-            "    g_actors[0] = boite(60, 177, mvx, 17, 4, -7, 11); g_actors[0].inst = 0;\n"
+            "    g_actors[0] = boite(60, 177, mvx, 17, 4, -7, 11); g_actors[0].inst = 0;"
+            f" g_actors[0].model = {e['joueur']};\n"
             f"{placement}\n"
             f"    for(int f = 0; f < {FRAMES}; f++){{\n"
             f"        g_actors[{slot}].x += g_actors[{slot}].vx; g_actors[0].x += g_actors[0].vx;\n"
-            + "\n".join(lignes) + "\n"
+            + "\n".join(e["lines"]) + "\n"
             f"        printf(\"{nom} %s %d %d %d\\n\", cas, f, g_actors[0].x >> 8, g_actors[0].y >> 8);\n"
             "    }\n}\n")
 
@@ -106,11 +122,9 @@ def trajets(tmp_path_factory):
     dossier = tmp_path_factory.mktemp("pousse_kinematic")
     resultats: dict[tuple[str, str], list[tuple[int, int]]] = {}
     for cas, mode, bvx, mvx in CAS:
-        topologies = []
-        for nom, pose in (("pose", True), ("pool", False)):
-            lignes = _lignes(dossier, mode, pose)
-            assert any("actors_resolve_blocks" in ligne for ligne in lignes)
-            topologies.append(_topologie_c(nom, pose, lignes))
+        emis = _lignes(dossier, mode)
+        assert any("actors_resolve_blocks" in ligne for ligne in emis["lines"])
+        topologies = [_topologie_c(nom, pose, emis) for nom, pose in (("pose", True), ("pool", False))]
         runs = "\n".join(f'    topo_{nom}("{cas}", {bvx}, {mvx});' for nom in ("pose", "pool"))
         source = (SONDE.replace("@HELPERS@", "\n".join(block_helper_lines()))
                   .replace("@TOPOLOGIES@", "\n".join(topologies)).replace("@RUNS@", runs))

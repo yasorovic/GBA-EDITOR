@@ -248,12 +248,16 @@ def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path
     pi = scene_pi(p, scene)
     ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
     code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, shown))
-    # le héros né est repoussé par le mur né (modèle) ET par le rocher posé (emplacement)
-    assert f"case {ids['Hero']}: {{" in code and f"case {ids['Wall']}:" not in code     # le mur n'est pas un mobile
-    assert f"static const u8 _bk_pm[]={{{ids['Wall']}}};" in code
-    assert "static const u16 _bk_idx[]={0};" in code
-    assert "actors_resolve_blocks_pool(_a,1,_bk_pm,_bk_pb,1);" in code
-    assert "POOL_EACH(_bm){" in code
+    import re
+    table = lambda nom: [int(v) for v in re.search(rf"{nom}\[\d+\][^=]*=\{{([^}}]*)\}};", code)[1].split(",")]
+    rock = scene_oam_layout(p, scene).placed_model[0]
+    mobiles, bloqueurs = table("_bk_mi"), table("_bk_bi")
+    # Le héros né est le seul mobile ; le mur né et le rocher posé sont ses bloqueurs, lus par type.
+    assert [k for k, i in enumerate(mobiles) if i != 255] == [ids["Hero"]]
+    assert {k for k, i in enumerate(bloqueurs) if i != 255} == {ids["Wall"], rock}
+    # Posés puis pool, pour le mobile comme pour ses bloqueurs.
+    assert f"actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,{len(scene.actors)},1);" in code
+    assert "POOL_EACH(_pm){" in code
 
 
 def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
@@ -266,7 +270,9 @@ def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
                                                encoding="utf-8")
     pi = scene_pi(p, scene)
     code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, shown))
-    assert "actors_resolve_blocks_pool" not in code and "actors_resolve_blocks(_a,1,_bk_idx" in code
+    # Le héros né reste un mobile (POOL_EACH), mais le pool n'est pas parcouru comme bloqueur (dernier argument 0).
+    assert f"actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,{len(scene.actors)},0);" in code
+    assert "POOL_EACH(_pm){" in code
 
 
 def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteurs_nes(tmp_path):
@@ -450,6 +456,15 @@ def test_les_copies_posees_qui_ne_different_que_par_l_emplacement_partagent_un_t
     lay = scene_oam_layout(p, scene)
     assert lay.placed_model == [1, 1, 2, 3]
     assert lay.kinds == 4                                           # le type 0, puis trois types de posés
+
+
+def test_un_autre_tag_de_boite_separe_deux_types(tmp_path):
+    """Le tag est lu au modèle (les tables de paires appliquent la matrice des tags par couple de types) : deux copies
+    de même masse dont les boîtes ont des tags différents ne partagent pas leur type."""
+    p, scene = _scene_de_copies(tmp_path, masses=(1.0, 1.0))
+    scene.actors[1].components[0].tag = "pied"
+    lay = scene_oam_layout(p, scene)
+    assert lay.placed_model == [1, 2, 3]
 
 
 def test_une_copie_identique_au_prefab_ne_prend_le_type_du_modele_ne(tmp_path):

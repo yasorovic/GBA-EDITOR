@@ -6,6 +6,7 @@ Une face n'arrête un mobile que s'il était ENTIÈREMENT du côté de sa normal
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +24,7 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
+#define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 Actor g_actors[8];
 int g_spool_start = 0, g_spool_hw = 0;
 u32 g_alive_bits[1];
@@ -41,9 +43,11 @@ static void mk(int i, int x, int y, int vx, int vy, int w, int h){
     CollisionShape* b = &a->collision.boxes[0];
     b->w = w; b->h = h; b->solid = 1; b->active = 1;
 }
+/* Le bloqueur (emplacement 1) est du type 1, rang compact 0 ; sa boîte 0 porte la face `dir`. */
 static void run(const char* nom, int dir){
-    const u16 idx[] = {1}; const u8 box[] = {0}; const u8 ow[] = {dir};
-    actors_resolve_blocks_ow(&g_actors[0], 1, idx, box, ow, 1);
+    const u8 bi[] = {255, 0}; const BlockRun runs[] = {{0, 1}}; const u8 box[] = {0}; const u8 ow[] = {dir};
+    g_actors[1].model = 1;
+    actors_resolve_blocks_ow(&g_actors[0], 1, runs, bi, box, ow, 0, 2, 0);
     printf("%%s %%d %%d %%d %%d\n", nom, g_actors[0].x >> 8, g_actors[0].y >> 8, g_actors[0].vx, g_actors[0].vy);
 }
 
@@ -151,27 +155,36 @@ def _acteur(nom, **boite):
     return a
 
 
-def _lignes(*acteurs, gravite=(0, 0.25)):
-    from codegen.runtime_codegen.physics.blocks import block_tick_lines
-    p = SimpleNamespace(settings=SimpleNamespace(collision_disabled_pairs=[], collision_tags=[]))
-    return "\n".join(block_tick_lines(p, _scene(*gravite), [(a, None) for a in acteurs], 0, [], lambda _p, _o: (None, None)))
+@pytest.fixture
+def lignes(tmp_path):
+    """`lignes(*acteurs, gravite=...)` : la passe de blocage émise pour une vraie scène de ces acteurs posés."""
+    def emet(*acteurs, gravite=(0, 0.25)):
+        from codegen.runtime_codegen.physics.blocks import block_tick_lines
+        from core.models.scene import Scene
+        from core.project import Project
+        scene = Scene(name="S", actors=list(acteurs), physics_enabled=True, physics_gravity_override=True,
+                      physics_gravity_x=gravite[0], physics_gravity_y=gravite[1])
+        p = Project(tmp_path)
+        p.scenes.items = [scene]
+        return "\n".join(block_tick_lines(p, scene, [(a, None) for a in acteurs], 0, [], lambda _p, _o: (None, None)))
+    return emet
 
 
-def test_le_build_cuit_le_sens_de_la_face_dans_la_table_du_mobile():
+def test_le_build_cuit_le_sens_de_la_face_dans_la_table_du_mobile(lignes):
     hero = _acteur("Hero", tag="Player")
     plateforme = _acteur("Plateforme", tag="body", response="block", solid=False, one_way="gravity")
-    lignes = _lignes(hero, plateforme)
-    assert "static const u8 _bk_ow[]={1};" in lignes
-    assert "actors_resolve_blocks_ow(&g_actors[0],1,_bk_idx,_bk_box,_bk_ow,1);" in lignes
-    assert "static const u8 _bk_ow[]={2};" in _lignes(hero, plateforme, gravite=(0, -0.25))
+    emis = lignes(hero, plateforme)
+    assert re.search(r"static u8 _bk_ow\[1\][^=]*=\{1\};", emis)
+    assert "actors_resolve_blocks_ow(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,_bk_ow,0,2,0);" in emis
+    assert re.search(r"static u8 _bk_ow\[1\][^=]*=\{2\};", lignes(hero, plateforme, gravite=(0, -0.25)))
 
 
-def test_sans_face_a_sens_unique_le_build_emet_l_appel_historique():
+def test_sans_face_a_sens_unique_le_build_emet_l_appel_historique(lignes):
     hero = _acteur("Hero", tag="Player")
     coffre = _acteur("Chest", tag="body", response="block", solid=False)
-    lignes = _lignes(hero, coffre)
-    assert "actors_resolve_blocks(&g_actors[0],1,_bk_idx,_bk_box,1);" in lignes
-    assert "_ow" not in lignes
+    emis = lignes(hero, coffre)
+    assert "actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,2,0);" in emis
+    assert "_ow" not in emis
 
 
 def test_la_carte_et_les_acteurs_partagent_une_seule_condition_de_traversee(tmp_path):

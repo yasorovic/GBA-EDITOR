@@ -33,7 +33,6 @@ SENS = [
 LIMITES = (8, 216, 16, 128)
 
 TOPOLOGIES = {"pose_pose": (True, True), "plateforme_pool": (True, False), "mobile_pool": (False, True)}
-MOBILE_MODEL, PLATEFORME_MODEL = 1, 2
 
 SONDE = r"""
 #include <stdio.h>
@@ -41,6 +40,7 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
+#define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 u8 *g_drop_through = 0;
 u8 g_support_normal = 1;
 Actor g_actors[4];
@@ -80,43 +80,55 @@ int main(void){
 """
 
 
-def _lignes(tmp_path, mobile_pose: bool, plateforme_pose: bool) -> list[str]:
+def _emissions(tmp_path) -> dict:
+    """Les lignes émises pour une vraie scène à carte où les prefabs `Mobile` et `Plateforme` sont posés ET spawnés : un
+    seul chemin, chaque topologie ne choisit que les emplacements vivants. Rend aussi le type de chacun."""
+    import copy
+    from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     from codegen.runtime_codegen.physics.blocks import block_tick_lines
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
-    from core.models.scene import Actor
+    from core.models.scene import Actor, Prefab, Scene
     from core.project import Project
+    from oam_fixtures import faire_naitre
 
-    project = Project.create(tmp_path / "PousseCarte", "PousseCarte")
-    scene = project.active_scene
+    mobile = Prefab(name="Mobile")
+    mobile.actor.components += [CollisionShapeComponent(solid=True), PhysicsBodyComponent(mode="CharacterBody")]
+    plateforme = Prefab(name="Plateforme")
+    plateforme.actor.components += [CollisionShapeComponent(solid=False, response="block"),
+                                    PhysicsBodyComponent(mode="KinematicBody")]
+    scene = Scene(name="S", physics_enabled=True, actors=[
+        Actor(name=f"{pf.name}Pose", prefab_name=pf.name, components=copy.deepcopy(pf.actor.components))
+        for pf in (mobile, plateforme)])
     scene.collision_map = [[1] * LARGEUR] + [[0] * LARGEUR for _ in range(HAUTEUR - 1)]
-    mobile = Actor(name="Mobile", components=[CollisionShapeComponent(solid=True),
-                                              PhysicsBodyComponent(mode="CharacterBody")])
-    plateforme = Actor(name="Plateforme", components=[CollisionShapeComponent(solid=False, response="block"),
-                                                      PhysicsBodyComponent(mode="KinematicBody")])
-    posés = [a for a, pose in ((mobile, mobile_pose), (plateforme, plateforme_pose)) if pose]
-    pool = [{"shared": True, "model_id": model, "sym": a.name.lower(), "prefab": a}
-            for a, pose, model in ((mobile, mobile_pose, MOBILE_MODEL), (plateforme, plateforme_pose, PLATEFORME_MODEL))
-            if not pose]
-    return block_tick_lines(project, scene, [(a, None) for a in posés], 0, pool, shown)
+    project = Project(tmp_path)
+    project.scenes.items = [scene]
+    project.prefabs.items = [mobile, plateforme]
+    faire_naitre(tmp_path, scene, "Mobile", "Plateforme")
+    pi = scene_pi(project, scene)
+    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
+    return {"lines": block_tick_lines(project, scene, [(a, None) for a in scene.actors], 0, pi, shown),
+            "m": ids["Mobile"], "p": ids["Plateforme"]}
 
 
-def _topologie_c(nom: str, mobile_pose: bool, plateforme_pose: bool, lignes: list[str]) -> str:
-    cles = (("m", mobile_pose), ("p", plateforme_pose))
-    poses = [k for k, pose in cles if pose]
-    pool = [k for k, pose in cles if not pose]
-    slot = {k: i for i, k in enumerate(poses)} | {k: 2 + i for i, k in enumerate(pool)}
+def _topologie_c(nom: str, mobile_pose: bool, plateforme_pose: bool, e: dict) -> str:
+    """Le mobile vit à l'emplacement 0 (posé) ou 2 (pool), la plateforme à 1 ou 3."""
+    slot = {"m": 0 if mobile_pose else 2, "p": 1 if plateforme_pose else 3}
     corps = {"m": "boite(mx, my, 0, 0, 16, 16)", "p": "boite(px, py, pvx, pvy, 32, 32)"}
-    placement = [f"    g_actors[{slot[k]}] = {corps[k]}; g_actors[{slot[k]}].inst = {slot[k]};" for k in poses]
-    placement += [f"    pose_en_pool({slot[k]}, {corps[k]}, {MOBILE_MODEL if k == 'm' else PLATEFORME_MODEL});"
-                  for k in pool]
+    placement = []
+    for k, pose in (("m", mobile_pose), ("p", plateforme_pose)):
+        if pose:
+            placement.append(f"    g_actors[{slot[k]}] = {corps[k]}; g_actors[{slot[k]}].inst = {slot[k]};"
+                             f" g_actors[{slot[k]}].model = {e[k]};")
+        else:
+            placement.append(f"    pose_en_pool({slot[k]}, {corps[k]}, {e[k]});")
     m, p = slot["m"], slot["p"]
     return (f"static void topo_{nom}(const char* cas, int mx, int my, int px, int py, int pvx, int pvy){{\n    reinit();\n"
             + "\n".join(placement) + "\n"
             f"    int xmin = 99999, xmax = -99999, ymin = 99999, ymax = -99999;\n"
             f"    for(int f = 0; f < {FRAMES}; f++){{\n"
             f"        g_actors[{p}].x += g_actors[{p}].vx; g_actors[{p}].y += g_actors[{p}].vy;\n"
-            + "\n".join(lignes) + "\n"
+            + "\n".join(e["lines"]) + "\n"
             f"        int x = g_actors[{m}].x >> 8, y = g_actors[{m}].y >> 8;\n"
             "        if(x < xmin) xmin = x; if(x > xmax) xmax = x; if(y < ymin) ymin = y; if(y > ymax) ymax = y;\n"
             "    }\n"
@@ -133,12 +145,12 @@ def trajets(tmp_path_factory):
     from codegen.runtime_codegen.physics.character import character_solver_lines
 
     dossier = tmp_path_factory.mktemp("pousse_carte")
+    emis = _emissions(dossier)
+    assert any("mover_in_wall" in ligne for ligne in emis["lines"]), (
+        "le blocage ne garde pas la carte : le mobile poussé traverserait le mur")
     topologies = []
     for nom, (mobile_pose, plateforme_pose) in TOPOLOGIES.items():
-        lignes = _lignes(dossier, mobile_pose, plateforme_pose)
-        assert any("mover_in_wall" in ligne for ligne in lignes), (
-            f"{nom} ne garde pas la carte après le blocage : le mobile poussé traverserait le mur")
-        topologies.append(_topologie_c(nom, mobile_pose, plateforme_pose, lignes))
+        topologies.append(_topologie_c(nom, mobile_pose, plateforme_pose, emis))
     runs = "\n".join(f'    topo_{nom}("{cas}", {mx}, {my}, {px}, {py}, {vx}, {vy});'
                      for cas, mx, my, px, py, (vx, vy) in SENS for nom in TOPOLOGIES)
     source = (SONDE.replace("@BLOCKS@", "\n".join(block_helper_lines()))

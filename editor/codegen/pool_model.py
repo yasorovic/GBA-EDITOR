@@ -55,12 +55,25 @@ def model_members(project, posed: list) -> dict:
 
 # Les champs de composant qui vivent dans l'EMPLACEMENT (`Actor`, `OamEntry`, état du script) : deux instances qui ne
 # diffèrent que par eux restent le même type. Tout autre champ est lu au modèle (descripteur) et sépare deux types.
+# Le tag d'une boîte est au modèle : les tables de paires (blocage, appui, transport, impulsions) appliquent la
+# matrice des tags au build, par couple de types.
 _SLOT_FIELDS = {
-    "collision_shape": {"x", "y", "w", "h", "solid", "active", "tag"},
+    "collision_shape": {"x", "y", "w", "h", "solid", "active"},
     "sprite": {"initial_state", "affine_transform", "scale_x", "scale_y", "rotation",
                "offset_x", "offset_y", "pivot_x", "pivot_y"},
     "script": {"exports_values"},
 }
+
+
+def _box_roles(actor) -> tuple:
+    """Les rôles de boîtes que le build tire de `solid` et `active` (champs d'emplacement) : le mode du corps, ses boîtes
+    de corps, ses boîtes bloquantes. Deux copies dont les rôles diffèrent sont deux types, sinon une table de paires par
+    type donnerait à l'une les boîtes de l'autre."""
+    from codegen.runtime_codegen.physics.body import (
+        physics_blocker_entries, physics_body_mode, physics_collider_mask,
+    )
+    return (physics_body_mode(actor), physics_collider_mask(actor),
+            tuple(rank for rank, _box in physics_blocker_entries(actor)))
 
 
 def _variant_key(prefab_name: str, actor) -> tuple:
@@ -70,7 +83,7 @@ def _variant_key(prefab_name: str, actor) -> tuple:
         drop = _SLOT_FIELDS.get(c.get("component_type"), set())
         comps.append(tuple(sorted((k, repr(v)) for k, v in c.items() if k not in drop)))
     return (prefab_name, tuple(comps), bool(getattr(actor, "screen_space", False)),
-            bool(getattr(actor, "is_player", False)))
+            bool(getattr(actor, "is_player", False)), _box_roles(actor))
 
 
 def placed_types(posed: list, members: dict, first: int, spawned: dict | None = None) -> list[int]:

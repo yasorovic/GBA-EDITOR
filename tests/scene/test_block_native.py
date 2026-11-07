@@ -45,67 +45,78 @@ static void report_motion(const char* nom, int i){
            g_actors[i].vx, g_actors[i].vy);
 }
 
+/* Le mobile est du type 1, les bloqueurs du type 2 (rang compact 0, boîte 0) ; le type 7 bloque aussi (rang compact 1),
+   le type 9 ne bloque pas. Une seule ligne de mobile : `run[0]`. */
+static const u8 bi[10] = {255, 255, 0, 255, 255, 255, 255, 1, 255, 255};
+static const BlockRun run[1][2] = {{{0, 1}, {0, 1}}};
+static const u8 box[1] = {0};
+static void bloque(int i, u8 mask, int hi, int pool){
+    actors_resolve_blocks(&g_actors[i], mask, run[0], bi, box, 0, hi, pool);
+}
+
 int main(void){
-    const u16 idx[] = {1, 2};
-    const u8 box[] = {0, 0};
     /* le bloqueur : 16x16 en (50, 50) ; le mobile 16x16 */
     mk(1, 50, 50, 0, 0, 16, 16, 0); mk(2, 200, 200, 0, 0, 16, 16, 0);
+    g_actors[1].model = 2; g_actors[2].model = 2;
 
     mk(0, 40, 52, 256, 0, 16, 16, 1);                          /* vient de la gauche : 6 px dedans */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("gauche", 0);
+    bloque(0, 1, 3, 0);  report("gauche", 0);
     mk(0, 60, 52, -256, 0, 16, 16, 1);                         /* vient de la droite : 6 px dedans */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("droite", 0);
+    bloque(0, 1, 3, 0);  report("droite", 0);
     mk(0, 52, 40, 0, 256, 16, 16, 1);                          /* vient du haut */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("haut", 0);
+    bloque(0, 1, 3, 0);  report("haut", 0);
     report_motion("character_stop", 0);
     mk(0, 52, 60, 0, -256, 16, 16, 1);                         /* vient du bas */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("bas", 0);
+    bloque(0, 1, 3, 0);  report("bas", 0);
     mk(0, 38, 40, 256, 256, 16, 16, 1);                        /* coin : 4 px en x, 6 px en y -> glisse en x */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("coin", 0);
+    bloque(0, 1, 3, 0);  report("coin", 0);
 
     mk(0, 40, 52, 0, 0, 16, 16, 1);                            /* sans vitesse : téléporté, laissé */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("immobile", 0);
+    bloque(0, 1, 3, 0);  report("immobile", 0);
     mk(0, 40, 52, 256, 0, 16, 16, 0);                          /* sans forme de corps : laissé */
-    actors_resolve_blocks(&g_actors[0], 0, idx, box, 2);  report("non_solide", 0);
+    bloque(0, 0, 3, 0);  report("non_solide", 0);
     mk(0, 10, 10, 256, 0, 16, 16, 1);                          /* loin : laissé */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("loin", 0);
+    bloque(0, 1, 3, 0);  report("loin", 0);
 
     mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[1].active = 0;  /* bloqueur inactif : traversé */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("inactif", 0);
+    bloque(0, 1, 3, 0);  report("inactif", 0);
     g_actors[1].active = 1; g_actors[1].collision.boxes[0].active = 0;   /* boîte inactive : traversée */
     mk(0, 40, 52, 256, 0, 16, 16, 1);
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("boite_inactive", 0);
+    bloque(0, 1, 3, 0);  report("boite_inactive", 0);
     g_actors[1].collision.boxes[0].active = 1;
 
     mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[0].x += 128;    /* la fraction (1/2 px) survit */
-    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);
+    bloque(0, 1, 3, 0);
     printf("fraction %%d\n", g_actors[0].x & 255);
 
-    {   /* un acteur ne se bloque pas lui-même */
-        const u16 moi[] = {0}; const u8 b0[] = {0};
-        mk(0, 40, 52, 256, 0, 16, 16, 1);
-        actors_resolve_blocks(&g_actors[0], 1, moi, b0, 1);  report("soi_meme", 0);
-    }
+    /* un acteur ne se bloque pas lui-même : le mobile est ici du type bloqueur, seul dans les posés */
+    mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[0].model = 2;
+    bloque(0, 1, 1, 0);  report("soi_meme", 0);
 
-    {   /* Le pool PARTAGÉ : un bloqueur né à l'emplacement 3 (modèle 7, boîte 0), un autre modèle à l'emplacement 4. */
-        const u8 pm[] = {7}, pb[] = {0};
+    {   /* Le pool PARTAGÉ : un bloqueur né à l'emplacement 3 (type 7, boîte 0), un autre type à l'emplacement 4. Les
+           posés ne sont pas parcourus (hi = 0) : seul le pool bloque. */
         mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].model = 7;
-        mk(4, 50, 50, 0, 0, 16, 16, 0); g_actors[4].model = 9;     /* un autre modèle : traversé */
+        mk(4, 50, 50, 0, 0, 16, 16, 0); g_actors[4].model = 9;     /* un autre type : traversé */
         g_spool_start = 3; g_spool_hw = 5;
         pool_bit_set(3); pool_bit_set(4);
         mk(0, 40, 52, 256, 0, 16, 16, 1);
-        actors_resolve_blocks_pool(&g_actors[0], 1, pm, pb, 1);   report("pool_gauche", 0);
+        bloque(0, 1, 0, 1);   report("pool_gauche", 0);
         mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[3].model = 9;
-        actors_resolve_blocks_pool(&g_actors[0], 1, pm, pb, 1);   report("pool_autre_modele", 0);
+        bloque(0, 1, 0, 1);   report("pool_autre_modele", 0);
         g_actors[3].model = 7; g_actors[3].active = 0;
         mk(0, 40, 52, 256, 0, 16, 16, 1);
-        actors_resolve_blocks_pool(&g_actors[0], 1, pm, pb, 1);   report("pool_inactif", 0);
+        bloque(0, 1, 0, 1);   report("pool_inactif", 0);
         g_actors[3].active = 1; g_spool_hw = 3;
         mk(0, 40, 52, 256, 0, 16, 16, 1);
-        actors_resolve_blocks_pool(&g_actors[0], 1, pm, pb, 1);   report("pool_hors_hw", 0);
+        bloque(0, 1, 0, 1);   report("pool_hors_hw", 0);
         g_spool_hw = 5;
         mk(3, 40, 52, 0, 0, 16, 16, 1); g_actors[3].model = 7; g_actors[3].vx = 256;   /* un bloqueur ne se bloque pas lui-même */
-        actors_resolve_blocks_pool(&g_actors[3], 1, pm, pb, 1);   report("pool_soi_meme", 3);
+        bloque(3, 1, 0, 1);   report("pool_soi_meme", 3);
+        /* posés et pool à la fois : le posé de type 2 en (50, 50) arrête le mobile avant le pool */
+        g_actors[4].active = 0;
+        mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].model = 7;
+        mk(0, 40, 52, 256, 0, 16, 16, 1);
+        bloque(0, 1, 3, 1);   report("pose_puis_pool", 0);
     }
 
     {   /* Rigid au-dessus d'un Static : toute la correction et l'impulsion vont au Rigid. */
@@ -274,9 +285,43 @@ def _projet(paires_desactivees=()):
                                                     collision_tags=[]))
 
 
-def _lignes(p, acteurs):
-    from codegen.runtime_codegen.physics.blocks import block_tick_lines
-    return block_tick_lines(p, None, _scene(*acteurs), 0, [], lambda _p, _o: (None, None))
+@pytest.fixture
+def lignes(tmp_path):
+    """`lignes(acteurs, paires_desactivees)` : la passe de blocage émise pour une vraie scène de ces acteurs posés."""
+    def emet(acteurs, paires_desactivees=()):
+        from codegen.runtime_codegen.physics.blocks import block_tick_lines
+        from core.models.scene import Scene
+        from core.project import Project
+        scene = Scene(name="S", actors=list(acteurs), physics_enabled=True)
+        p = Project(tmp_path)
+        p.scenes.items = [scene]
+        p.settings.collision_disabled_pairs = list(paires_desactivees)
+        return block_tick_lines(p, scene, _scene(*acteurs), 0, [], lambda _p, _o: (None, None))
+    return emet
+
+
+def _tables(lignes) -> dict[str, list[int]]:
+    """Les tables `_bk_*` émises, à plat."""
+    import re
+    out = {}
+    for ligne in lignes:
+        if m := re.search(r"static \w+ (_bk_\w+)(?:\[\d+\])+[^=]*=\{(.*)\};", ligne):
+            out[m[1]] = [int(v) for v in re.findall(r"\d+", m[2])]
+    return out
+
+
+def _rencontres(lignes) -> dict[int, tuple[int, dict[int, list[int]]]]:
+    """Par type mobile : (masque de corps, {type bloqueur : rangs des boîtes qui l'arrêtent}), lu dans les tables."""
+    t = _tables(lignes)
+    nb = sum(1 for j in t["_bk_bi"] if j != 255)
+    out = {}
+    for kind, i in enumerate(t["_bk_mi"]):
+        if i == 255:
+            continue
+        row = t["_bk_run"][2 * nb * i: 2 * nb * (i + 1)]
+        out[kind] = (t["_bk_mask"][i], {b: t["_bk_box"][row[2 * j]: row[2 * j] + row[2 * j + 1]]
+                                        for b, j in enumerate(t["_bk_bi"]) if j != 255 and row[2 * j + 1]})
+    return out
 
 
 def _lignes_impulsions(p, acteurs):
@@ -285,27 +330,24 @@ def _lignes_impulsions(p, acteurs):
     return impulse_tick_lines(p, Scene(name="Physics"), _scene(*acteurs), 0, [], None)
 
 
-def test_le_mobile_recoit_la_table_des_boites_bloquantes():
+def test_le_mobile_recoit_la_table_des_boites_bloquantes(lignes):
     hero = _acteur("Hero", tag="Player")
     coffre = _acteur("Chest", tag="body", response="block", solid=False)
-    lignes = "\n".join(_lignes(_projet(), [hero, coffre]))
-    assert "static const u16 _bk_idx[]={1};" in lignes
-    assert "actors_resolve_blocks(&g_actors[0],1,_bk_idx,_bk_box,1);" in lignes
-    # Le coffre n'a pas de boîte solide : il n'est pas un mobile.
-    assert "g_actors[1]," not in lignes
+    emis = lignes([hero, coffre])
+    # Types 1 (Hero) et 2 (Chest) : le coffre n'a pas de boîte solide, il n'est pas un mobile.
+    assert _rencontres(emis) == {1: (1, {2: [0]})}
+    assert any("actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,2,0);" in l for l in emis)
 
 
-def test_un_static_body_bloque_sans_devenir_un_mobile():
+def test_un_static_body_bloque_sans_devenir_un_mobile(lignes):
     from core.models.components import PhysicsBodyComponent
     hero = _acteur("Hero", tag="Player")
     mur = _acteur("Wall", tag="body", response="block", solid=False)
     mur.components.append(PhysicsBodyComponent(mode="StaticBody"))
-    lignes = "\n".join(_lignes(_projet(), [hero, mur]))
-    assert "static const u16 _bk_idx[]={1};" in lignes
-    assert "g_actors[1]," not in lignes
+    assert _rencontres(lignes([hero, mur])) == {1: (1, {2: [0]})}
 
 
-def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_historique():
+def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_historique(lignes):
     from core.models.components import PhysicsBodyComponent
     from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
     from core.models.scene import Scene
@@ -314,8 +356,7 @@ def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_histori
     sol = _acteur("Floor", tag="body", response="block", solid=False)
     sol.components.append(PhysicsBodyComponent(mode="StaticBody"))
 
-    assert not any("actors_resolve_blocks(&g_actors[0]" in line
-                   for line in _lignes(_projet(), [rigid, sol]))
+    assert lignes([rigid, sol]) == []
     lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, sol]))
     assert "static const RigidPair _rigid_pairs[1]" in lignes
     assert "{0,1,256,0,0,0,0,0}" in lignes
@@ -394,7 +435,7 @@ def test_un_character_est_une_masse_infinie_pour_un_rigid():
     assert "{0,1,0,256,0,0,0,0}" in lignes
 
 
-def test_un_kinematic_n_est_repousse_que_par_un_static():
+def test_un_kinematic_n_est_repousse_que_par_un_static(lignes):
     from core.models.components import PhysicsBodyComponent
     platform = _acteur("Platform", tag="body", response="block")
     platform.components.append(PhysicsBodyComponent(mode="KinematicBody"))
@@ -403,13 +444,16 @@ def test_un_kinematic_n_est_repousse_que_par_un_static():
     wall = _acteur("Wall", tag="body", response="block", solid=False)
     wall.components.append(PhysicsBodyComponent(mode="StaticBody"))
 
-    lignes = "\n".join(_lignes(_projet(), [platform, character, wall]))
+    rencontres = _rencontres(lignes([platform, character, wall]))
 
-    assert "static const u16 _bk_idx[]={2};" in lignes
-    assert "static const u16 _bk_idx[]={1,2};" not in lignes
+    # Types 1 (Platform), 2 (Character), 3 (Wall). La plateforme n'est arrêtée que par le mur ; le Character l'est par
+    # la plateforme (bit haut : un Kinematic pousse même un mobile immobile), par un autre Character de son type et par
+    # le mur.
+    assert rencontres[1] == (1, {3: [0]})
+    assert rencontres[2] == (1, {1: [0x80], 2: [0], 3: [0]})
 
 
-def test_la_relation_du_body_restreint_forme_mobile_et_bloqueur():
+def test_la_relation_du_body_restreint_forme_mobile_et_bloqueur(lignes):
     from core.models.components import PhysicsBodyComponent
     hero = Actor(name="Hero", components=[
         CollisionShapeComponent(id="hurt", tag="Hurt", solid=True),
@@ -422,10 +466,7 @@ def test_la_relation_du_body_restreint_forme_mobile_et_bloqueur():
         PhysicsBodyComponent(mode="StaticBody", collider_id="shape"),
     ])
 
-    lignes = "\n".join(_lignes(_projet(), [hero, wall]))
-
-    assert "actors_resolve_blocks(&g_actors[0],2,_bk_idx,_bk_box,1);" in lignes
-    assert "static const u8 _bk_box[]={1};" in lignes
+    assert _rencontres(lignes([hero, wall])) == {1: (2, {2: [1]})}
 
 
 def test_la_relation_du_body_restreint_les_paires_d_impulsion():
@@ -447,18 +488,17 @@ def test_la_relation_du_body_restreint_les_paires_d_impulsion():
     assert "_rigid_pairs[1]" in lignes
 
 
-def test_sans_bloqueur_rien_n_est_emis():
-    assert _lignes(_projet(), [_acteur("Hero", tag="Player"), _acteur("Wall", tag="body")]) == []
+def test_sans_bloqueur_rien_n_est_emis(lignes):
+    assert lignes([_acteur("Hero", tag="Player"), _acteur("Wall", tag="body")]) == []
 
 
-def test_la_matrice_de_collision_laisse_passer_un_couple_desactive():
+def test_la_matrice_de_collision_laisse_passer_un_couple_desactive(lignes):
     from core.models.settings import pair_key
     hero = _acteur("Hero", tag="Player")
     coffre = _acteur("Chest", tag="body", response="block")
-    passe = _lignes(_projet([pair_key("Player", "body")]), [hero, coffre])
-    assert not any("actors_resolve_blocks(&g_actors[0]" in l for l in passe)
-    bloque = _lignes(_projet(), [hero, coffre])
-    assert any("actors_resolve_blocks(&g_actors[0]" in l for l in bloque)
+    # Le coffre (boîte solide) est aussi un mobile, que le héros (boîte bloquante ? non : `sensor`) n'arrête pas.
+    assert 1 not in _rencontres(lignes([hero, coffre], [pair_key("Player", "body")]))
+    assert _rencontres(lignes([hero, coffre]))[1] == (1, {2: [0]})
 
 
 def test_le_masque_de_contact_est_cuit_par_couple_de_boites():
@@ -506,22 +546,19 @@ def test_la_boite_propre_d_un_interactive_facing_est_un_obstacle():
     assert plaque.response == "sensor" and plaque.solid is False      # on doit pouvoir la recouvrir
 
 
-def test_un_coffre_facing_arrete_le_joueur_sans_boite_dessinee_par_l_auteur():
+def test_un_coffre_facing_arrete_le_joueur_sans_boite_dessinee_par_l_auteur(lignes):
     hero = _acteur("Hero", tag="Player")
-    lignes = "\n".join(_lignes(_projet(), [hero, _coffre("facing")]))
-    assert "static const u16 _bk_idx[]={1};" in lignes and "static const u8 _bk_box[]={0};" in lignes
-    assert "actors_resolve_blocks(&g_actors[0],1,_bk_idx,_bk_box,1);" in lignes
+    assert _rencontres(lignes([hero, _coffre("facing")])) == {1: (1, {2: [0]})}
 
 
-def test_une_plaque_hover_n_arrete_personne():
-    assert _lignes(_projet(), [_acteur("Hero", tag="Player"), _coffre("hover")]) == []
+def test_une_plaque_hover_n_arrete_personne(lignes):
+    assert lignes([_acteur("Hero", tag="Player"), _coffre("hover")]) == []
 
 
-def test_la_case_de_matrice_player_interactive_decide_si_le_coffre_arrete():
+def test_la_case_de_matrice_player_interactive_decide_si_le_coffre_arrete(lignes):
     from core.models.settings import pair_key
     hero = _acteur("Hero", tag="Player")
-    passe = _lignes(_projet([pair_key("Player", "Interactive")]), [hero, _coffre("facing")])
-    assert passe == []
+    assert lignes([hero, _coffre("facing")], [pair_key("Player", "Interactive")]) == []
 
 
 def test_le_projet_declare_un_bloqueur_pour_les_aides_c():
@@ -538,3 +575,4 @@ def test_une_instance_du_pool_bloque_par_son_modele(resultats):
     assert resultats["pool_inactif"] == (40, 52)
     assert resultats["pool_hors_hw"] == (40, 52)         # au-delà du plus haut emplacement utilisé : ignoré
     assert resultats["pool_soi_meme"] == (40, 52)
+    assert resultats["pose_puis_pool"] == (34, 52)

@@ -14,9 +14,8 @@ dans un mur. La matrice de collision filtre au build (un couple de tags qui ne s
 traverse). Rien n'est émis sans mobile ni bloqueur ; les aides C ne le sont que si le projet a une box
 bloquante.
 
-Les instances du pool PARTAGÉ (cf. `shared_pool_gen`) ne sont pas à des emplacements connus du build :
-une table y désigne des MODÈLES (`Actor.model`) et des rangs de boîte, et l'aide C parcourt les emplacements
-utilisés du pool pour trouver ceux qui en sont. Un mobile né dans le pool est traité par le cas de son modèle.
+Posés et nés passent par le même chemin : les tables sont indexées par TYPE d'emplacement (`Actor.model`), et l'aide
+C parcourt les posés puis les emplacements utilisés du pool partagé.
 """
 from __future__ import annotations
 
@@ -30,13 +29,19 @@ from codegen.runtime_codegen.physics.body import (
     physics_collider_mask, shape_one_way_dir, uses_body_collider, uses_character_solver,
 )
 from codegen.runtime_codegen.physics.oneway import oneway_common_lines
+from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.gen_scene_query import scene_has_cmap
+from codegen.runtime_codegen.model_desc import each_slot
 from codegen.runtime_codegen.shared_pool_gen import shared_models
 
 
 # Bit haut du rang de boîte d'un bloqueur dans les tables C : un bloqueur Kinematic en mouvement pousse un mobile même
 # immobile, les autres (Static, Rigid, Character) ne repoussent qu'un mobile en mouvement. Le rang tient dans les 7 bits bas.
 BLOCKER_MOVING = 0x80
+
+# Les tables de la passe sont lues à chaque couple testé : rangées en IWRAM, comme le descripteur de modèle (la ROM coûte
+# des états d'attente à chaque lecture ; sans section, GCC remet en ROM une table jamais écrite).
+_IW = ' __attribute__((section(".data.model_desc")))'
 
 
 def project_has_blockers(p) -> bool:
@@ -66,7 +71,7 @@ def _one_way_block_lines() -> list[str]:
         "   monte le porte). Il est repoussé le long de la normale seule : jamais de côté, la pénétration minimale",
         "   n'a pas de sens pour une face qu'on franchit. `dir` : 1 haut, 2 bas, 3 gauche, 4 droite. */",
         "extern u8 *g_drop_through;",
-        "static void __attribute__((unused)) block_push_one_way(Actor* a,const CollisionShape* m,const Actor* t,const CollisionShape* b,u8 dir){",
+        "static inline __attribute__((always_inline, unused)) void block_push_one_way(Actor* a,const CollisionShape* m,const Actor* t,const CollisionShape* b,u8 dir){",
         "    int ml=(a->x>>8)+m->x, mt=(a->y>>8)+m->y, mr=ml+m->w, mb=mt+m->h;",
         "    int bl=(t->x>>8)+b->x, bt=(t->y>>8)+b->y, br=bl+b->w, bb=bt+b->h;",
         "    if(ml>=br||mr<=bl||mt>=bb||mb<=bt) return;",
@@ -78,48 +83,7 @@ def _one_way_block_lines() -> list[str]:
         "    else { a->x+=d<<8; if(dir&1?a->vx>0:a->vx<0) a->vx=0; }",
         "}",
         "/* `drop_through` : tant que le compteur du mobile n'est pas nul, ses faces à sens unique sont ignorées. */",
-        "static void __attribute__((unused)) actors_resolve_blocks_ow(Actor* a,u8 body_mask,const u16* idx,const u8* box,const u8* ow,int n){",
-        "    if(!a->active) return;",
-        "    int idle=!a->vx&&!a->vy;",
-        "    int drop=g_drop_through&&g_drop_through[a->inst];",
-        "    for(int i=0;i<a->collision.box_count;i++){",
-        "        const CollisionShape* m=&a->collision.boxes[i];",
-        "        if(!(body_mask&(1u<<i))||!m->active) continue;",
-        "        for(int k=0;k<n;k++){",
-        "            const Actor* t=&g_actors[idx[k]];",
-        "            if(t==a||!t->active||(box[k]&0x7F)>=t->collision.box_count) continue;",
-        "            if(idle&&!((box[k]&0x80)&&(t->vx||t->vy))) continue;",
-        "            const CollisionShape* b=&t->collision.boxes[box[k]&0x7F];",
-        "            if(!b->active) continue;",
-        "            debug_physics_block_test();",
-        "            if(!ow[k]) block_push(a,m,t,b);",
-        "            else if(!drop) block_push_one_way(a,m,t,b,ow[k]);",
-        "        }",
-        "    }",
-        "}",
-        "static void __attribute__((unused)) actors_resolve_blocks_pool_ow(Actor* a,u8 body_mask,const u8* model,const u8* box,const u8* ow,int n){",
-        "    if(!a->active) return;",
-        "    int idle=!a->vx&&!a->vy;",
-        "    int drop=g_drop_through&&g_drop_through[a->inst];",
-        "    for(int i=0;i<a->collision.box_count;i++){",
-        "        const CollisionShape* m=&a->collision.boxes[i];",
-        "        if(!(body_mask&(1u<<i))||!m->active) continue;",
-        "        POOL_EACH(s){",
-        "            const Actor* t=&g_actors[s];",
-        "            if(t==a||!t->active) continue;",
-        "            for(int k=0;k<n;k++){",
-        "                if(t->model!=model[k]||(box[k]&0x7F)>=t->collision.box_count) continue;",
-        "                if(idle&&!((box[k]&0x80)&&(t->vx||t->vy))) continue;",
-        "                const CollisionShape* b=&t->collision.boxes[box[k]&0x7F];",
-        "                if(!b->active) continue;",
-        "                debug_physics_block_test();",
-        "                if(!ow[k]) block_push(a,m,t,b);",
-        "                else if(!drop) block_push_one_way(a,m,t,b,ow[k]);",
-        "            }",
-        "        }",
-        "    }",
-        "}",
-        "",
+        *_typed_lines(one_way=True),
     ]
 
 
@@ -130,7 +94,7 @@ def _block_lines() -> list[str]:
         "   non nulle) est repoussé, pour chacune de ses boîtes de carte, de la pénétration minimale, sur",
         "   l'axe le plus court (l'horizontal en cas d'égalité). La position garde sa fraction (Q8) et la",
         "   composante de vitesse sur cet axe est annulée. */",
-        "static void __attribute__((unused)) block_push(Actor* a,const CollisionShape* m,const Actor* t,const CollisionShape* b){",
+        "static inline __attribute__((always_inline, unused)) void block_push(Actor* a,const CollisionShape* m,const Actor* t,const CollisionShape* b){",
         "    int ml=(a->x>>8)+m->x, mt=(a->y>>8)+m->y, mr=ml+m->w, mb=mt+m->h;",
         "    int bl=(t->x>>8)+b->x, bt=(t->y>>8)+b->y, br=bl+b->w, bb=bt+b->h;",
         "    if(ml>=br||mr<=bl||mt>=bb||mb<=bt) return;",
@@ -140,40 +104,62 @@ def _block_lines() -> list[str]:
         "    if(apx<=apy){ a->x+=px<<8; a->vx=0; }",
         "    else { a->y+=py<<8; a->vy=0; }",
         "}",
-        "static void __attribute__((unused)) actors_resolve_blocks(Actor* a,u8 body_mask,const u16* idx,const u8* box,int n){",
+        "/* Les boîtes qui peuvent arrêter un mobile se lisent par COUPLE DE TYPES (`Actor.model`), que le mobile et le",
+        "   bloqueur soient posés ou nés : `BlockRun` désigne, dans `box` (rang, bit haut BLOCKER_MOVING), la suite des",
+        "   boîtes bloquantes du type du bloqueur que ce type de mobile rencontre. */",
+        "typedef struct { u16 first; u8 n; } BlockRun;",
+        *_typed_lines(one_way=False),
+    ]
+
+
+def _typed_lines(one_way: bool) -> list[str]:
+    """Le blocage d'un mobile contre tous les emplacements, posés `[lo,hi)` puis nés du pool si `pool`. `runs` est la
+    ligne du type du mobile, indexée par le rang compact du type du bloqueur (`bi[model]`, 255 = pas un bloqueur). Les
+    posés passent avant le pool, chaque boîte du mobile à son tour : l'ordre des poussées de l'ancien chemin posé."""
+    sfx = "_ow" if one_way else ""
+    ow_param = ",const u8* ow" if one_way else ""
+    ow_arg = ",ow+runs[j].first" if one_way else ""
+    push = (["            if(!ow[k]) block_push(a,m,t,b);",
+             "            else if(!drop) block_push_one_way(a,m,t,b,ow[k]);"]
+            if one_way else ["            block_push(a,m,t,b);"])
+    target = [
+        "            const Actor* t=&g_actors[s]; u8 j=bi[t->model];",
+        "            if(j==255||t==a||!t->active||!runs[j].n) continue;",
+        f"            block_run{sfx}(a,m,t,box+runs[j].first{ow_arg},runs[j].n,idle"
+        f"{',drop' if one_way else ''});",
+    ]
+    return [
+        f"static inline __attribute__((always_inline)) void block_run{sfx}(Actor* a,const CollisionShape* m,"
+        f"const Actor* t,const u8* box{ow_param},u8 n,int idle{',int drop' if one_way else ''}){{",
+        "    for(int k=0;k<n;k++){",
+        "        if((box[k]&0x7F)>=t->collision.box_count) continue;",
+        "        if(idle&&!((box[k]&0x80)&&(t->vx||t->vy))) continue;",
+        "        const CollisionShape* b=&t->collision.boxes[box[k]&0x7F];",
+        "        if(!b->active) continue;",
+        "        debug_physics_block_test();",
+        *[line[4:] for line in push],
+        "    }",
+        "}",
+        "/* Parcourt tous les emplacements pour chaque mobile : en IWRAM, ARM, sans temps d'attente. */",
+        "BS_ATTR_IWRAM",
+        f"static void __attribute__((unused)) actors_resolve_blocks{sfx}(Actor* a,u8 body_mask,const BlockRun* runs,"
+        f"const u8* bi,const u8* box{ow_param},int lo,int hi,int pool){{",
         "    if(!a->active) return;",
         "    int idle=!a->vx&&!a->vy;",
+        *(["    int drop=g_drop_through&&g_drop_through[a->inst];"] if one_way else []),
         "    for(int i=0;i<a->collision.box_count;i++){",
         "        const CollisionShape* m=&a->collision.boxes[i];",
         "        if(!(body_mask&(1u<<i))||!m->active) continue;",
-        "        for(int k=0;k<n;k++){",
-        "            const Actor* t=&g_actors[idx[k]];",
-        "            if(t==a||!t->active||(box[k]&0x7F)>=t->collision.box_count) continue;",
-        "            if(idle&&!((box[k]&0x80)&&(t->vx||t->vy))) continue;",
-        "            const CollisionShape* b=&t->collision.boxes[box[k]&0x7F];",
-        "            if(!b->active) continue;",
-        "            debug_physics_block_test();",
-        "            block_push(a,m,t,b);",
+        "        for(int s=lo;s<hi;s++){",
+        *target,
         "        }",
         "    }",
-        "}",
-        "/* Le même blocage contre les instances du pool PARTAGÉ : `model[k]` / `box[k]` désignent un modèle et",
-        "   le rang de sa k-ième boîte bloquante ; les emplacements utilisés du pool sont parcourus. */",
-        "static void __attribute__((unused)) actors_resolve_blocks_pool(Actor* a,u8 body_mask,const u8* model,const u8* box,int n){",
-        "    if(!a->active) return;",
-        "    int idle=!a->vx&&!a->vy;",
+        "    if(!pool) return;",
         "    for(int i=0;i<a->collision.box_count;i++){",
         "        const CollisionShape* m=&a->collision.boxes[i];",
         "        if(!(body_mask&(1u<<i))||!m->active) continue;",
         "        POOL_EACH(s){",
-        "            const Actor* t=&g_actors[s];",
-        "            if(t==a||!t->active) continue;",
-        "            for(int k=0;k<n;k++){",
-        "                if(t->model!=model[k]||(box[k]&0x7F)>=t->collision.box_count) continue;",
-        "                if(idle&&!((box[k]&0x80)&&(t->vx||t->vy))) continue;",
-        "                const CollisionShape* b=&t->collision.boxes[box[k]&0x7F];",
-        "                if(b->active){ debug_physics_block_test(); block_push(a,m,t,b); }",
-        "            }",
+        *target,
         "        }",
         "    }",
         "}",
@@ -181,143 +167,110 @@ def _block_lines() -> list[str]:
     ]
 
 
-def _blocking_boxes(owner, sprite) -> list[tuple[int, CollisionShapeComponent]]:
-    """(rang, tag) de chacune des boîtes bloquantes de ce porteur, parmi les boîtes que le build pose
-    dessus (la boîte propre d'un Interactive en `facing` comprise)."""
-    return [(rank, box)
-            for rank, box in physics_blocker_entries(owner, sprite)]
-
-
-def _body_colliders(owner, sprite) -> list[CollisionShapeComponent]:
-    return [box for _rank, box in physics_collider_entries(owner, sprite)]
-
-
 def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[str]:
-    """Les appels de la boucle de scène : pour chaque mobile, la table des boîtes qui peuvent l'arrêter.
+    """La passe de blocage de la scène : chaque mobile, posé ou né, contre chaque bloqueur, posé ou né.
 
-    `pi` : les modèles de la scène. Ceux du pool PARTAGÉ (`p2["shared"]`) n'ont pas d'emplacement connu du build :
-    leurs bloqueurs et leurs mobiles se décident à l'exécution, par modèle."""
+    Tout se décide par TYPE d'emplacement (`Actor.model`, `OamLayout.placed_model` pour les posés, `model_id` pour le
+    pool partagé) : un type mobile a ses boîtes de corps (`_bk_mask`) et, pour chaque type bloqueur, la suite des boîtes
+    qui peuvent l'arrêter (`_bk_run`), filtrée au build par la matrice des tags, le mode des deux corps et la règle du
+    Rigid. Le runtime ne demande jamais si un emplacement est posé ou né (règle « posé = spawné »)."""
+    lay = scene_oam_layout(p, scene)
     shared = shared_models(pi)
-    # Les bloqueurs : (indice d'acteur, rang de boîte, tag de la boîte, mode du porteur).
-    blockers = []
-    for j, (actor, sprite) in enumerate(scene_actors):
-        for rank, box in _blocking_boxes(actor, sprite):
-            blockers.append((actor_offset + j, rank, box, physics_body_mode(actor),
-                             shape_one_way_dir(box, scene, p.settings)))
-    # Les bloqueurs du pool partagé : (identité du modèle, rang de boîte, tag, mode du porteur).
-    pool_blockers = [(m["model_id"], rank, box, physics_body_mode(m["prefab"]),
-                      shape_one_way_dir(box, scene, p.settings)) for m in shared
-                     for rank, box in _blocking_boxes(m["prefab"], shown(p, m["prefab"])[1])]
-    if not blockers and not pool_blockers:
+    owners: dict[int, tuple] = {}       # type -> (porteur, sprite) ; les copies d'un type ont les mêmes rôles de boîtes
+    for (actor, sprite), kind in zip(scene_actors, lay.placed_model):
+        owners.setdefault(kind, (actor, sprite))
+    for m in shared:
+        owners.setdefault(m["model_id"], (m["prefab"], shown(p, m["prefab"])[1]))
+
+    # Les boîtes bloquantes de chaque type : (rang | BLOCKER_MOVING, sens unique, boîte, mode du porteur).
+    blocking = {}
+    for kind, (owner, sprite) in owners.items():
+        mode = physics_body_mode(owner)
+        flag = BLOCKER_MOVING if mode == PHYSICS_BODY_KINEMATIC else 0
+        if rows := [(rank | flag, shape_one_way_dir(box, scene, p.settings), box, mode)
+                    for rank, box in physics_blocker_entries(owner, sprite)]:
+            blocking[kind] = rows
+    if not blocking:
         return []
 
-    def can_stop(mover_owner, mover_sprite, blocker):
-        return any(tags_collide(p.settings, mover.tag or "body", blocker.tag or "body")
-                   for mover in _body_colliders(mover_owner, mover_sprite))
-
-    def moving_flag(blocker_mode) -> int:
-        """Le bit haut du rang d'un bloqueur Kinematic : il pousse même un mobile immobile (cf. `block_helper_lines`)."""
-        return BLOCKER_MOVING if blocker_mode == PHYSICS_BODY_KINEMATIC else 0
-
-    def table(mover_owner, mover_sprite):
-        """Les boîtes qui peuvent arrêter ce mobile : celles dont le tag rencontre un des siens dans la
-        matrice de collision (le tag de la boîte propre d'un Interactive compris)."""
-        mode = physics_body_mode(mover_owner)
-        return [(i, r | moving_flag(blocker_mode), ow) for i, r, blocker, blocker_mode, ow in blockers
+    def stops(owner, sprite, rows) -> list:
+        """Les boîtes de `rows` qui arrêtent ce mobile : un tag qui rencontre un des siens ; un Kinematic n'est arrêté
+        que par un Static ; les paires d'un Rigid sont au solveur d'impulsions, sauf les faces à sens unique (un Rigid y
+        est posé sans rebond, cf. `block_push_one_way`)."""
+        mode = physics_body_mode(owner)
+        colliders = [box for _rank, box in physics_collider_entries(owner, sprite)]
+        return [(rank, ow) for rank, ow, box, blocker_mode in rows
                 if (mode != PHYSICS_BODY_KINEMATIC or blocker_mode == PHYSICS_BODY_STATIC)
-                and can_stop(mover_owner, mover_sprite, blocker)]
+                and (mode != PHYSICS_BODY_RIGID or ow)
+                and any(tags_collide(p.settings, c.tag or "body", box.tag or "body") for c in colliders)]
 
-    def pool_table(mover_owner, mover_sprite):
-        mode = physics_body_mode(mover_owner)
-        return [(m, r | moving_flag(blocker_mode), ow) for m, r, blocker, blocker_mode, ow in pool_blockers
-                if (mode != PHYSICS_BODY_KINEMATIC or blocker_mode == PHYSICS_BODY_STATIC)
-                and can_stop(mover_owner, mover_sprite, blocker)]
+    def wall_mask(owner, sprite) -> int:
+        """Les boîtes que la carte résout pour ce mobile, 0 sans carte ni résolution (cf. la garde de `mover_in_wall`).
 
-    L: list[str] = []
-
-    def tables(entries: list, pool_entries: list, pad: str) -> list[str]:
-        """Les tables statiques d'un mobile : ses bloqueurs d'emplacement connu, puis ceux du pool."""
-        out = []
-        if entries:
-            out += [f"{pad}static const u16 _bk_idx[]={{{','.join(str(i) for i, _, _ in entries)}}};",
-                    f"{pad}static const u8 _bk_box[]={{{','.join(str(r) for _, r, _ in entries)}}};"]
-            if any(ow for _, _, ow in entries):
-                out.append(f"{pad}static const u8 _bk_ow[]={{{','.join(str(ow) for _, _, ow in entries)}}};")
-        if pool_entries:
-            out += [f"{pad}static const u8 _bk_pm[]={{{','.join(str(m) for m, _, _ in pool_entries)}}};",
-                    f"{pad}static const u8 _bk_pb[]={{{','.join(str(r) for _, r, _ in pool_entries)}}};"]
-            if any(ow for _, _, ow in pool_entries):
-                out.append(f"{pad}static const u8 _bk_pw[]={{{','.join(str(ow) for _, _, ow in pool_entries)}}};")
-        return out
-
-    def calls(entries: list, pool_entries: list, target: str, mask: int, pad: str) -> list[str]:
-        out = []
-        if entries and any(ow for _, _, ow in entries):
-            out.append(f"{pad}actors_resolve_blocks_ow({target},{mask},_bk_idx,_bk_box,_bk_ow,{len(entries)});")
-        elif entries:
-            out.append(f"{pad}actors_resolve_blocks({target},{mask},_bk_idx,_bk_box,{len(entries)});")
-        if pool_entries and any(ow for _, _, ow in pool_entries):
-            out.append(f"{pad}actors_resolve_blocks_pool_ow({target},{mask},_bk_pm,_bk_pb,_bk_pw,{len(pool_entries)});")
-        elif pool_entries:
-            out.append(f"{pad}actors_resolve_blocks_pool({target},{mask},_bk_pm,_bk_pb,{len(pool_entries)});")
-        return out
-
-    def map_mask_of(owner, sprite) -> int:
-        """Les boîtes que la carte résout pour ce mobile (celles de `gen_scene_tick`), 0 sans carte ni résolution."""
+        La résolution contre la carte ne bouge un acteur que d'après sa VITESSE : à vitesse nulle elle le prend pour un
+        téléport et le laisse où il est, et le blocage annule la vitesse sur l'axe qu'il repousse. Sans garde, un mobile
+        poussé par un bloqueur traversait donc le mur derrière lui : un déplacement qui le ferait entrer dans un mur est
+        refusé, la carte garde le dernier mot."""
         if not scene_has_cmap(scene) or physics_body_mode(owner) not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
             return 0
         return physics_collider_mask(owner, sprite, map_only=True) if uses_character_solver(owner, sprite) else 0
 
-    def pushed(ref: str, map_mask: int, pad: str) -> tuple[list[str], list[str]]:
-        """Avant et après les appels de blocage d'un mobile que la carte résout.
-
-        La résolution contre la carte ne bouge un acteur que d'après sa VITESSE : à vitesse nulle elle le prend pour un
-        téléport et le laisse où il est, et le blocage annule la vitesse sur l'axe qu'il repousse. Sans garde, un mobile
-        poussé par un bloqueur traversait donc le mur, le sol ou le plafond derrière lui. Un déplacement qui le ferait
-        entrer dans un mur est refusé : le mobile reste où il était, la carte garde bien le dernier mot."""
-        if not map_mask:
-            return [], []
-        return ([f"{pad}int _bx={ref}->x,_by={ref}->y;"],
-                [f"{pad}if(({ref}->x!=_bx||{ref}->y!=_by)&&mover_in_wall({ref},{map_mask})){{ {ref}->x=_bx; {ref}->y=_by; }}"])
-
-    def emit(target: str, entries: list, pool_entries: list, mask: int, map_mask: int = 0):
-        if not entries and not pool_entries:
-            return
-        before, after = pushed(f"(&g_actors[{target}])", map_mask, "        ")
-        L.append("    {")
-        L.extend(tables(entries, pool_entries, "        "))
-        L.extend(before)
-        L.extend(calls(entries, pool_entries, f"&g_actors[{target}]", mask, "        "))
-        L.extend(after)
-        L.append("    }")
-
-    def not_rigid_pairs(owner, entries: list) -> list:
-        """Les paires d'un Rigid (posé ou né) appartiennent au solveur d'impulsions, posé ou pool, sauf les faces à
-        sens unique : un Rigid y est posé sans rebond, par le blocage (cf. `block_push_one_way`)."""
-        return [e for e in entries if e[2]] if physics_body_mode(owner) == PHYSICS_BODY_RIGID else entries
-
-    for j, (actor, sprite) in enumerate(scene_actors):
-        if uses_body_collider(actor, sprite):
-            emit(str(actor_offset + j), not_rigid_pairs(actor, table(actor, sprite)),
-                 not_rigid_pairs(actor, pool_table(actor, sprite)), physics_collider_mask(actor, sprite),
-                 map_mask_of(actor, sprite))
-    # Les mobiles du pool partagé : une boucle sur les emplacements utilisés, les tables de chaque modèle dans son cas.
-    cases = []
-    for m in shared:
-        sp = shown(p, m["prefab"])[1]
-        if not uses_body_collider(m["prefab"], sp):
+    blocker_kinds = sorted(blocking)
+    movers = []         # (type, masque de corps, masque de carte, [suite de boîtes par type bloqueur])
+    for kind in sorted(owners):
+        owner, sprite = owners[kind]
+        if not uses_body_collider(owner, sprite):
             continue
-        mask = physics_collider_mask(m["prefab"], sp)
-        entries = not_rigid_pairs(m["prefab"], table(m["prefab"], sp))
-        pool_entries = not_rigid_pairs(m["prefab"], pool_table(m["prefab"], sp))
-        if entries or pool_entries:
-            before, after = pushed("_a", map_mask_of(m["prefab"], sp), "            ")
-            cases += [f"        case {m['model_id']}: {{", *tables(entries, pool_entries, "            "), *before,
-                      *calls(entries, pool_entries, "_a", mask, "            "), *after, "        } break;"]
-    if cases:
-        L += ["    POOL_EACH(_bm){",
-              "        Actor* _a=&g_actors[_bm];",
-              "        switch(_a->model){", *cases, "        default: break;", "        }", "    }"]
-    if L:
-        L.insert(0, "    /* Blocage entre acteurs : avant la carte de collision, qui a le dernier mot */")
-    return L
+        runs = [stops(owner, sprite, blocking[b]) for b in blocker_kinds]
+        if any(runs):
+            movers.append((kind, physics_collider_mask(owner, sprite), wall_mask(owner, sprite), runs))
+    if not movers:
+        return []
+
+    box: list[int] = []
+    ow: list[int] = []
+    run_rows = []
+    for _kind, _mask, _wall, runs in movers:
+        row = []
+        for run in runs:
+            row.append(f"{{{len(box)},{len(run)}}}")
+            box += [rank for rank, _ow in run]
+            ow += [d for _rank, d in run]
+        run_rows.append("{" + ",".join(row) + "}")
+    kinds = lay.kinds
+    mover_index = {kind: i for i, (kind, *_rest) in enumerate(movers)}
+    blocker_index = {kind: i for i, kind in enumerate(blocker_kinds)}
+    one_way = any(ow)
+    walls = any(wall for _k, _m, wall, _r in movers)
+
+    placed_kinds = set(lay.placed_model)
+    pool_kinds = {m["model_id"] for m in shared}
+    hi = actor_offset + len(scene_actors) if placed_kinds & set(blocking) else actor_offset
+    pool = 1 if pool_kinds & set(blocking) else 0
+    call = (f"actors_resolve_blocks{'_ow' if one_way else ''}(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,"
+            f"{'_bk_ow,' if one_way else ''}{actor_offset},{hi},{pool});")
+    if walls:
+        step = ("{ u8 _mi=_bk_mi[_a->model]; if(_mi!=255){ int _bx=_a->x,_by=_a->y; " + call
+                + " if(_bk_wall[_mi]&&(_a->x!=_bx||_a->y!=_by)&&mover_in_wall(_a,_bk_wall[_mi])){ _a->x=_bx; _a->y=_by; } } }")
+    else:
+        step = "{ u8 _mi=_bk_mi[_a->model]; if(_mi!=255) " + call + " }"
+
+    def by_kind(index: dict) -> str:
+        return ",".join(str(index.get(k, 255)) for k in range(kinds))
+
+    return [
+        "    /* Blocage entre acteurs, par couple de types : avant la carte de collision, qui a le dernier mot. */",
+        "    {",
+        f"        static u8 _bk_mi[{kinds}]{_IW}={{{by_kind(mover_index)}}};",
+        f"        static u8 _bk_bi[{kinds}]{_IW}={{{by_kind(blocker_index)}}};",
+        f"        static u8 _bk_mask[{len(movers)}]{_IW}={{{','.join(str(m) for _k, m, _w, _r in movers)}}};",
+        *([f"        static u8 _bk_wall[{len(movers)}]{_IW}={{{','.join(str(w) for _k, _m, w, _r in movers)}}};"]
+          if walls else []),
+        f"        static BlockRun _bk_run[{len(movers)}][{len(blocker_kinds)}]{_IW}={{{','.join(run_rows)}}};",
+        f"        static u8 _bk_box[{len(box)}]{_IW}={{{','.join(map(str, box))}}};",
+        *([f"        static u8 _bk_ow[{len(ow)}]{_IW}={{{','.join(map(str, ow))}}};"] if one_way else []),
+        *("    " + line for line in each_slot(
+            step, len(scene_actors) if placed_kinds & set(mover_index) else 0, actor_offset,
+            bool(pool_kinds & set(mover_index)))),
+        "    }",
+    ]

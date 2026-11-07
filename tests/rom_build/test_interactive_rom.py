@@ -162,7 +162,7 @@ def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
 
     assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
-    h, c = scene.actors.index(heros), scene.actors.index(coffre)       # le Player du modèle prend le rang 0
-    assert f"static const u16 _bk_idx[]={{{c}}};" in main_c
-    assert f"actors_resolve_blocks(&g_actors[{h}],1,_bk_idx,_bk_box,1);" in main_c
+    # La passe est par type : le héros est un mobile, le coffre un bloqueur, posés tous deux.
+    assert "static BlockRun _bk_run[" in main_c
+    assert f"actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,{len(scene.actors)},0);" in main_c
     assert "static void __attribute__((unused)) actors_resolve_blocks(" in main_c
