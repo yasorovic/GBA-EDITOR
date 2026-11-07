@@ -50,10 +50,10 @@ def _styles(radius: int) -> tuple[str, str, str]:
         f"background:{C.BG_SEL};}}"
     )
     mirrored = (
-        f"QToolButton{{color:{C.ACCENT_COOL};background:{tint(C.ACCENT_COOL, 0.08)};"
-        f"border:1px dashed {tint(C.ACCENT_COOL, 0.45)};border-radius:{radius}px;padding:0;}}"
-        f"QToolButton:checked{{color:{C.ACCENT_COOL};border:2px dashed {C.ACCENT_COOL};"
-        f"background:{tint(C.ACCENT_COOL, 0.18)};}}"
+        f"QToolButton{{color:{C.ACCENT};background:{tint(C.ACCENT, 0.08)};"
+        f"border:1px dashed {tint(C.ACCENT, 0.45)};border-radius:{radius}px;padding:0;}}"
+        f"QToolButton:checked{{color:{C.ACCENT};border:2px dashed {C.ACCENT};"
+        f"background:{tint(C.ACCENT, 0.18)};}}"
     )
     omni = (
         f"QToolButton{{color:{C.TEXT_DIM};background:{C.BG_INPUT};"
@@ -88,7 +88,7 @@ class DirectionButton(QToolButton):
             self.setIcon(_ico(self._icon_key, C.TEXT_DIM, C.ACCENT))
         elif mirrored:
             self.setStyleSheet(self._sty_mirrored)
-            self.setIcon(_ico(self._icon_key, tint(C.ACCENT_COOL, 0.6), C.ACCENT_COOL))
+            self.setIcon(_ico(self._icon_key, tint(C.ACCENT, 0.6), C.ACCENT))
         else:
             self.setStyleSheet(self._sty_normal)
             self.setIcon(_ico(self._icon_key, C.TEXT_DIM, C.ACCENT))

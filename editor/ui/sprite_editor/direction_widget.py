@@ -49,8 +49,8 @@ class DirectionWidget(QWidget):
             f"QToolButton{{color:{C.TEXT_DIM};background:{C.BG_INPUT};"
             f"border:1px solid {C.BORDER};border-radius:4px;"
             f"font-family:{T.UI_STACK};font-size:{T.XS}px;padding:4px 8px;}}"
-            f"QToolButton:checked{{color:{C.ACCENT_COOL};border-color:{C.ACCENT_COOL};"
-            f"background:{tint(C.ACCENT_COOL, 0.18)};}}"
+            f"QToolButton:checked{{color:{C.ACCENT};border-color:{C.ACCENT};"
+            f"background:{tint(C.ACCENT, 0.18)};}}"
             f"QToolButton:hover{{color:{C.TEXT_HI};background:{C.BG_HOVER};}}"
         )
 
@@ -61,7 +61,7 @@ class DirectionWidget(QWidget):
         from ui.common.icons import get as _ico
 
         self._btn_h = QToolButton(); self._btn_h.setText(label('dirwidget.h_mirror'))
-        self._btn_h.setIcon(_ico("mirror_h", C.TEXT_DIM, C.ACCENT_COOL))
+        self._btn_h.setIcon(_ico("mirror_h", C.TEXT_DIM, C.ACCENT))
         self._btn_h.setIconSize(QSize(16, 16))
         self._btn_h.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._btn_h.setCheckable(True); self._btn_h.setStyleSheet(_MIRROR_BTN)
@@ -72,7 +72,7 @@ class DirectionWidget(QWidget):
         self._btn_h.toggled.connect(self._on_h_mirror)
 
         self._btn_v = QToolButton(); self._btn_v.setText(label('dirwidget.v_mirror'))
-        self._btn_v.setIcon(_ico("mirror_v", C.TEXT_DIM, C.ACCENT_COOL))
+        self._btn_v.setIcon(_ico("mirror_v", C.TEXT_DIM, C.ACCENT))
         self._btn_v.setIconSize(QSize(16, 16))
         self._btn_v.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._btn_v.setCheckable(True); self._btn_v.setStyleSheet(_MIRROR_BTN)

@@ -533,10 +533,10 @@ class SpriteCanvas(QWidget):
             rmin, rmax = min(r0, r1), max(r0, r1)
             rect = QRect(ox + cmin * tile_px, oy + rmin * tile_px,
                          (cmax - cmin + 1) * tile_px, (rmax - rmin + 1) * tile_px)
-            fill_color = QColor(C.ACCENT_COOL)
+            fill_color = QColor(C.ACCENT)
             fill_color.setAlpha(64)
             painter.fillRect(rect, fill_color)
-            painter.setPen(QPen(QColor(C.ACCENT_COOL), 2))
+            painter.setPen(QPen(QColor(C.ACCENT), 2))
             painter.drawRect(rect)
 
         # Indicateur de zoom manuel
@@ -708,8 +708,8 @@ class SpriteCanvasPanel(QWidget):
         self._ro_lbl = QLabel("", self)
         self._ro_lbl.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
         self._ro_lbl.setStyleSheet(
-            f"color:{C.ACCENT_COOL};background:{tint(C.ACCENT_COOL, 0.15)};"
-            f"border:1px solid {C.ACCENT_COOL};border-radius:4px;padding:3px 8px;"
+            f"color:{C.ACCENT};background:{tint(C.ACCENT, 0.15)};"
+            f"border:1px solid {C.ACCENT};border-radius:4px;padding:3px 8px;"
         )
         self._ro_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._ro_lbl.hide()

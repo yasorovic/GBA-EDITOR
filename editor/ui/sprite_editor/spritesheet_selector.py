@@ -182,7 +182,7 @@ class SpritesheetCanvas(QWidget):
         painter.drawPixmap(QRect(0, 0, pw, ph), self._pixmap)
 
         tpx = 8 * self._zoom
-        painter.setPen(QPen(QColor(0, 200, 100, 60), 1))
+        painter.setPen(QPen(QColor(C.GRAPH_GRID), 1))
         x = 0
         while x <= pw:
             painter.drawLine(x, 0, x, ph); x += tpx
@@ -192,7 +192,9 @@ class SpritesheetCanvas(QWidget):
 
         for col, row in self._selection:
             r = QRect(col * tpx, row * tpx, tpx, tpx)
-            painter.fillRect(r, QColor(155, 140, 255, 80))
+            fill = QColor(C.ACCENT)
+            fill.setAlpha(80)
+            painter.fillRect(r, fill)
             painter.setPen(QPen(QColor(C.ACCENT), 1))
             painter.drawRect(r)
 
