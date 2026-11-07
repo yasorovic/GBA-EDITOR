@@ -575,8 +575,7 @@ class SceneEditor(QWidget):
         self._duplicate_selection(8, 8)
 
     # ── Dupliquer / copier / coller ───────────────────────────────
-    # Ctrl+D, Alt+glisser et Ctrl+V passent par le même chemin, seule l'origine
-    # du décalage change. Acteurs ET éléments d'interface.
+    # Ctrl+D et Alt+glisser partagent la duplication de la sélection.
 
     def _duplicate_selection(self, dx: int, dy: int):
         """Duplique la sélection courante, décalée de (dx, dy)."""
@@ -589,8 +588,7 @@ class SceneEditor(QWidget):
         hbar = self._gba_view.horizontalScrollBar()
         vbar = self._gba_view.verticalScrollBar()
         scroll = (hbar.value(), vbar.value())
-        new_actors = get_dispatcher().duplicate_actors(actors, dx, dy)
-        new_areas = get_dispatcher().duplicate_areas(areas, dx, dy)
+        new_actors, new_areas = get_dispatcher().duplicate_scene_members(actors, areas, dx, dy)
         # Une zone en cible BG s'écrit dans une tilemap : son origine ne peut
         # pas tomber entre deux tuiles, donc décalage aimanté.
         edx, edy = _tile_snap(dx), _tile_snap(dy)

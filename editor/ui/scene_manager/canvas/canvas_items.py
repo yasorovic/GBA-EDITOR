@@ -128,6 +128,65 @@ def hw_layer_z(priority: int, is_obj: bool) -> float:
 # ──────────────────────────────────────────────────────────────────
 #  Item sprite draggable
 # ──────────────────────────────────────────────────────────────────
+def _begin_drag_peers(grabbed):
+    """Arme les autres membres que Qt déplace avec l'item saisi."""
+    scene = grabbed.scene()
+    if scene is None:
+        return []
+    candidates = [it for it in scene.selectedItems()
+                  if isinstance(it, (SpriteItem, AreaItem)) and it is not grabbed]
+    # Les descendants suivent déjà leur acteur, même s'ils sont aussi sélectionnés.
+    followers = {id(child) for it in (grabbed, *candidates) if isinstance(it, SpriteItem)
+                 for child in (*scene.descendant_sprite_items(it), *scene.descendant_area_items(it))}
+    peers = [it for it in candidates if id(it) not in followers]
+    for it in peers:
+        it._begin_drag()
+    return peers
+
+
+def _drag_start_poses(nodes):
+    """Positions de départ des membres armés et de leurs descendants, chacun une fois."""
+    seen = set()
+    for node in nodes:
+        if node._drag_origin is None:
+            continue
+        for it, member, ox, oy in node._drag_start_poses():
+            if id(member) not in seen:
+                seen.add(id(member))
+                yield it, member, ox, oy
+
+
+def _finish_drag(grabbed):
+    if grabbed._drag_origin is None:
+        return
+    nodes = (grabbed, *grabbed._drag_peers)
+    moves = []
+    has_area = False
+    for it, member, ox, oy in _drag_start_poses(nodes):
+        nx, ny = it.pos_px() if isinstance(it, SpriteItem) else (member.x, member.y)
+        if (ox, oy) != (nx, ny):
+            moves.append((member, ox, oy, nx, ny))
+            has_area |= isinstance(it, AreaItem)
+    for node in nodes:
+        node._end_drag()
+    grabbed._drag_peers = []
+    if not moves:
+        return
+    persist = None
+    if has_area:
+        from core.command_dispatcher import get_dispatcher
+        persist = get_dispatcher().persist_areas
+    cmd = (MoveActorGroupCmd(moves, persist_fn=persist) if len(moves) > 1
+           else MoveActorCmd(*moves[0], persist_fn=persist))
+    # Le glisser a déjà écrit le modèle : pousser la commande sans la rejouer.
+    get_history().push_executed(cmd)
+    if grabbed._save_fn:
+        grabbed._save_fn()
+    if has_area:
+        # L'inspecteur peut recréer des vues : attendre la fin de l'évènement.
+        QTimer.singleShot(0, lambda: get_dispatcher()._emit("actors_list_changed"))
+
+
 class SpriteItem(QGraphicsPixmapItem):
     def __init__(
         self,
@@ -169,11 +228,10 @@ class SpriteItem(QGraphicsPixmapItem):
         self._drag_confirmed = False
         # Sous-arbre (Actor.parent) capturé au press, pour le
         # faire suivre en translation groupée pendant le drag — cf. itemChange.
-        self._drag_descendants: list = []
         self._drag_desc_origin: list = []
         # Les Areas qui suivent cet acteur ou ses descendants : elles bougent avec lui (cf. `Area.parent`).
         self._drag_area_origin: list = []
-        self._drag_peers: list = []     # les autres acteurs sélectionnés, déplacés avec celui-ci
+        self._drag_peers: list = []
         self._mask_rects: list = []   # découpe par les windows (cf. set_mask_rects)
         self._canvas_w = canvas_w
         self._canvas_h = canvas_h
@@ -253,89 +311,44 @@ class SpriteItem(QGraphicsPixmapItem):
         self._drag_origin = self.pos_px()
         self._drag_confirmed = False
         sc = self.scene()
-        self._drag_descendants = sc.descendant_sprite_items(self) if sc is not None else []
-        self._drag_desc_origin = [(it, *it.pos_px()) for it in self._drag_descendants]
+        descendants = sc.descendant_sprite_items(self) if sc is not None else []
+        self._drag_desc_origin = [(it, *it.pos_px()) for it in descendants]
         self._drag_area_origin = ([(it, it.area.x, it.area.y) for it in sc.descendant_area_items(self)]
                                   if sc is not None else [])
 
     def _end_drag(self) -> None:
         self._drag_origin = None
         self._drag_confirmed = False
-        self._drag_descendants = []
         self._drag_desc_origin = []
         self._drag_area_origin = []
 
     def mousePressEvent(self, e):
         self._begin_drag()
         super().mousePressEvent(e)
-        # Qt déplace TOUTE la sélection avec l'item saisi, mais seul celui-ci recevrait le clic : les autres armés
-        # ici écrivent eux aussi leur position au modèle (itemChange), et entrent dans la même entrée d'historique.
-        sc = self.scene()
-        candidates = [] if sc is None else [
-            it for it in sc.selectedItems() if isinstance(it, SpriteItem) and it is not self]
-        # Un acteur sélectionné dont un ancêtre l'est aussi (ou dont l'ancêtre est l'item saisi) suit déjà par la
-        # translation groupée de cet ancêtre : l'armer en plus le déplacerait deux fois.
-        followers = {id(d) for it in (self, *candidates)
-                     for d in (it._drag_descendants if it is self else sc.descendant_sprite_items(it))}
-        self._drag_peers = [it for it in candidates if id(it) not in followers]
-        for peer in self._drag_peers:
-            peer._begin_drag()
+        self._drag_peers = _begin_drag_peers(self)
 
-    def _dragged_poses(self) -> list:
-        """[(actor, ancien x, ancien y, nouveau x, nouveau y)] de ce qui a bougé : cet item, son sous-arbre, puis les
-        autres acteurs sélectionnés et leurs sous-arbres, chacun une fois."""
-        moves, seen = [], set()
-        for node in (self, *self._drag_peers):
-            if node._drag_origin is None:
-                continue
-            poses = [(node, *node._drag_origin)] + list(node._drag_desc_origin)
-            for it, ox, oy in poses:
-                nx, ny = it.pos_px()
-                if (ox, oy) != (nx, ny) and id(it.scene_sprite) not in seen:
-                    seen.add(id(it.scene_sprite))
-                    moves.append((it.scene_sprite, ox, oy, nx, ny))
-            # Les Areas suivies : même entrée d'historique (`.x`/`.y` entiers, comme un acteur), chacune une fois.
-            for it, ox, oy in node._drag_area_origin:
-                if (ox, oy) != (it.area.x, it.area.y) and id(it.area) not in seen:
-                    seen.add(id(it.area))
-                    moves.append((it.area, ox, oy, it.area.x, it.area.y))
-        return moves
+    def _drag_start_poses(self):
+        yield self, self.scene_sprite, *self._drag_origin
+        for it, ox, oy in self._drag_desc_origin:
+            yield it, it.scene_sprite, ox, oy
+        for it, ox, oy in self._drag_area_origin:
+            yield it, it.area, ox, oy
 
     def mouseReleaseEvent(self, e):
         super().mouseReleaseEvent(e)
-        if self._drag_origin is not None:
-            items = self._dragged_poses()
-            if items:
-                # Le sous-arbre et les autres acteurs sélectionnés ont suivi en direct (itemChange) : tous les
-                # déplacements entrent dans la MÊME entrée d'historique que l'item saisi.
-                cmd = (MoveActorGroupCmd(items) if len(items) > 1 else
-                       MoveActorCmd(*items[0]))
-                # Pousser la commande SANS re-exécuter (le drag a déjà modifié actor)
-                get_history().push_executed(cmd)
-                if self._save_fn:
-                    self._save_fn()
-            for peer in self._drag_peers:
-                peer._end_drag()
-            self._drag_peers = []
-            self._end_drag()
+        _finish_drag(self)
 
     def cancel_drag(self) -> None:
-        """Abandonne le déplacement en cours : l'acteur (et son sous-arbre) retrouve sa pose du press, et le
-        relâchement qui suivra n'écrira aucune entrée d'historique. Pour un glisser qui QUITTE le canvas."""
+        """Restaure la sélection au départ, pour un glisser qui quitte le canvas."""
         if self._drag_origin is None:
             return
         nodes = (self, *self._drag_peers)
-        poses = [(it, ox, oy) for node in nodes if node._drag_origin is not None
-                 for it, ox, oy in [(node, *node._drag_origin)] + list(node._drag_desc_origin)]
-        area_poses = [pose for node in nodes for pose in node._drag_area_origin]
+        poses = list(_drag_start_poses(nodes))
         for node in nodes:
-            node._end_drag()                      # d'abord : itemChange ne doit plus réécrire le modèle
+            node._end_drag()
         self._drag_peers = []
-        for it, ox, oy in poses:
-            it.scene_sprite.x, it.scene_sprite.y = ox, oy
-            it.setPos(ox, oy)
-        for it, ox, oy in area_poses:
-            it.area.x, it.area.y = ox, oy
+        for it, member, ox, oy in poses:
+            member.x, member.y = ox, oy
             it.sync_pos()
         if self.scene() is not None:
             self.scene().sprite_moved.emit()
@@ -1154,13 +1167,14 @@ class AreaItem(QGraphicsItem):
                 return
         self._begin_drag()
         super().mousePressEvent(e)
-        # Qt déplace TOUTE la sélection avec l'item saisi : les autres Areas sélectionnées écrivent elles aussi leur
-        # position au modèle (itemChange) et entrent dans la même entrée d'historique.
-        sc = self.scene()
-        self._drag_peers = [] if sc is None else [
-            it for it in sc.selectedItems() if isinstance(it, AreaItem) and it is not self]
-        for peer in self._drag_peers:
-            peer._begin_drag()
+        self._drag_peers = _begin_drag_peers(self)
+
+    def _drag_start_poses(self):
+        yield self, self.area, *self._drag_origin
+
+    def _end_drag(self) -> None:
+        self._drag_origin = None
+        self._drag_confirmed = False
 
     def mouseMoveEvent(self, e):
         if self._resize_handle:
@@ -1212,35 +1226,15 @@ class AreaItem(QGraphicsItem):
             e.accept()
             return
         super().mouseReleaseEvent(e)
-        if self._drag_origin is None:
-            return
-        moves = []
-        for it in (self, *self._drag_peers):
-            if it._drag_origin is None:
-                continue
-            ox, oy = it._drag_origin
-            if (ox, oy) != (it.area.x, it.area.y):
-                moves.append((it.area, ox, oy, it.area.x, it.area.y))
-            it._drag_origin = None
-            it._drag_confirmed = False
-        self._drag_peers = []
-        if not moves:
-            return
-        from core.command_dispatcher import get_dispatcher
-        persist = get_dispatcher().persist_areas   # annuler / rétablir : sauve et redessine
-        cmd = (MoveActorGroupCmd(moves, persist_fn=persist) if len(moves) > 1
-               else MoveActorCmd(*moves[0], persist_fn=persist))
-        # Le glisser a déjà écrit le modèle : pousser la commande SANS la rejouer.
-        get_history().push_executed(cmd)
-        if self._save_fn:
-            self._save_fn()
-        # L'inspecteur relit la position (après la fin de l'évènement : il peut recréer des vues).
-        QTimer.singleShot(0, lambda: get_dispatcher()._emit("actors_list_changed"))
+        _finish_drag(self)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and not self._syncing:
+            if self._drag_origin is None:
+                # Une Area non armée suit son parent par sync_pos, même si Qt la déplace aussi.
+                return self.pos()
             x, y = value.x(), value.y()
-            if self._drag_origin is not None and not self._drag_confirmed:
+            if not self._drag_confirmed:
                 ox, oy = self._drag_origin
                 if abs(x - ox) < self._CLICK_THRESHOLD and abs(y - oy) < self._CLICK_THRESHOLD:
                     return QPointF(ox, oy)       # jitter de clic : ignorer

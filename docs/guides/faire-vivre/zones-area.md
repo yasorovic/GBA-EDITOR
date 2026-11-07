@@ -20,14 +20,24 @@ Le bouton **+** de l'arbre de scène propose aussi **Area**.
 
 Sélectionnez l'Area pour régler dans l'inspecteur :
 
-- **Active on start** : l'Area touche-t-elle quelqu'un dès l'entrée dans la scène ?
-- **Trigger** : l'Area prévient-elle les scripts ? Une Area neuve est un déclencheur. Sans cette case,
-  elle ne teste aucun contact.
+- **Active on start** indique si l'Area est active au chargement de la scène.
+- **Trigger** active les événements de contact envoyés aux scripts des acteurs. Cette case est cochée
+  pour une Area neuve.
 - **Position**, puis la carte **Shape** : le **Tag** de la forme, son décalage (**Offset**) et sa
   taille (**Size**). La taille se règle aussi à la souris, avec les poignées d'une Area sélectionnée.
 
 Le nom se change dans l'en-tête de l'inspecteur, comme pour un acteur. Il est **local à la scène** :
 deux scènes peuvent chacune avoir une Area `Porte`.
+
+### Déplacer ou dupliquer une sélection
+
+Dans le canvas, ajoutez des acteurs ou des Areas à la sélection avec `Shift+clic`. Glissez l'un
+des éléments sélectionnés pour déplacer le groupe. Un seul `Ctrl+Z` annule le déplacement des
+acteurs et des Areas.
+
+Maintenez `Alt` pendant le glisser pour poser des copies au point de chute, ou utilisez `Ctrl+D`
+pour les dupliquer avec un décalage fixe. Si la sélection contient une Area et son parent,
+la copie de l'Area suit la copie de l'acteur. Un seul `Ctrl+Z` retire les copies des acteurs et des Areas.
 
 ### Faire suivre un acteur à une Area
 
@@ -63,8 +73,9 @@ C'est la même matrice que celle des acteurs, dans **Project Settings → Collis
 Area (`area` par défaut) y apparaît comme n'importe quel autre. Si le couple est coupé dans la
 matrice, l'Area n'appelle jamais ce tag.
 
-Les contacts sont calculés **au build** : un acteur dont aucun tag ne rencontre celui de l'Area, ou
-dont le script ne répond à aucun événement d'Area, n'est jamais testé.
+Le build détermine quelles boîtes peuvent déclencher un événement, d'après la matrice des tags et
+les événements définis dans le script de l'acteur. Le jeu teste ensuite leur recouvrement à chaque
+frame.
 
 ## 3. Réagir dans le script de l'acteur
 
@@ -78,7 +89,7 @@ function on_area_enter(area, my_box)
 end
 
 function on_area_collide(area, my_box)
-    -- appelé à chaque frame passée dans la zone
+    -- appelé à partir de la deuxième frame de contact
 end
 
 function on_area_exit(area, my_box)
@@ -86,9 +97,11 @@ function on_area_exit(area, my_box)
 end
 ```
 
-- `area` est une **référence** vers l'Area touchée ; `area.name` se compare à son nom
-  (`area.name == "Porte"`), `area.tag` au tag de sa forme.
-- `my_box` est la boîte de l'acteur qui est en contact, comme pour `on_collision_enter`.
+- `area` désigne l'Area touchée. `area.name` se compare à un nom local à la scène, par exemple
+  `area.name == "Porte"`. Pour un script partagé entre plusieurs scènes, un tag de forme commun
+  au projet permet de retrouver le même usage dans chaque scène avec `area.tag`.
+- `my_box` désigne la boîte de l'acteur qui touche la zone. Chaque boîte autorisée reçoit ses propres
+  événements. Filtrez sur `my_box.tag` si une seule boîte doit déclencher l'action.
 - Les événements ne sont envoyés qu'à l'acteur qui touche l'Area. Un acteur **détruit** dans la zone
   n'apprend aucune sortie ; une Area **désactivée** envoie `on_area_exit` aux acteurs encore en jeu.
 
@@ -173,14 +186,36 @@ Une Area peut aussi jouer un son d'ambiance (une cascade, un moteur, le vent dan
   retente à la frame suivante ; le validateur avertit si une scène porte plus d'émetteurs que le projet n'a de canaux.
 - Une Area **inactive**, ou dont le parent est désactivé ou détruit, se tait. Elle peut suivre un acteur (son qui accompagne
   un monstre) comme n'importe quelle Area.
-- Seuls les **effets** sonores sont possibles : la musique n'a qu'une couche et reste pilotée par `music`.
+- L'émetteur joue des **effets sonores**. Le module Lua `music` pilote la piste musicale.
+
+### Baisser la musique dans une zone
+
+Donnez le tag `musique_calme` à la forme d'une Area avec **Trigger** activé. La matrice de
+collision doit autoriser le contact avec le tag `body` du personnage. Dans son script, baissez le
+volume quand sa boîte `body` entre dans la zone, puis rétablissez le volume habituel de la piste
+à la sortie. Ici, il est de 100 %.
+
+```lua
+function on_area_enter(area, my_box)
+    if area.tag == "musique_calme" and my_box.tag == "body" then
+        music:set_volume(45)
+    end
+end
+
+function on_area_exit(area, my_box)
+    if area.tag == "musique_calme" and my_box.tag == "body" then
+        music:set_volume(100)
+    end
+end
+```
+
+La piste continue à jouer pendant le changement de volume.
 
 ## Choisir entre une Area et un acteur sensor
 
-Un **acteur** dont la boîte est vide fait déjà office de déclencheur : il reste le bon choix s'il
-**bouge**, s'il a un sprite, ou s'il porte son propre script. Une **Area** est plus légère (aucune
-place dans le pool, aucun sprite, aucun script) : elle convient à tout ce qui est **fixe** et qui
-ne sert qu'à prévenir les acteurs qui la touchent.
+Un **acteur** avec une boîte capteur convient à un déclencheur qui a besoin d'un sprite, d'un script
+propre ou d'être créé pendant le jeu. Une **Area** convient à un volume posé dans la scène qui
+prévient les acteurs qui le touchent, modifie la physique ou émet un son.
 
 Une Area suit la scène : elle ne naît pas pendant la partie et ne se détruit pas. Elle ne bouge que
 si un script écrit `area.position` (sans parent), ou si son parent bouge.

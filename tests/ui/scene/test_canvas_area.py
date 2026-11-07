@@ -94,6 +94,81 @@ def test_glisser_une_area_ecrit_le_modele_en_une_entree_annulable(editor):
     assert (area.x, area.y) == before
 
 
+@pytest.mark.parametrize("grab_area", [False, True], ids=["acteur-saisi", "area-saisie"])
+def test_glisser_un_acteur_et_une_area_s_annule_et_se_retablit_ensemble(editor, grab_area):
+    view = editor._gba_view
+    viewport = view.viewport()
+    area_item = _item(editor, "Zone")
+    actor_item = next(it for it in editor._gba_scene._sprite_items if _hit_point(view, it) is not None)
+    actor_item.setSelected(True)
+    area_item.setSelected(True)
+    actor, area = actor_item.scene_sprite, area_item.area
+
+    def positions():
+        return (actor.x, actor.y), (area.x, area.y)
+
+    before = positions()
+    start = (view.mapFromScene(area_item.mapToScene(area_item.shape_rect().center()))
+             if grab_area else _hit_point(view, actor_item))
+    assert start is not None
+    QTest.mousePress(viewport, Qt.MouseButton.LeftButton, pos=start)
+    for step in range(1, 6):
+        QTest.mouseMove(viewport, start + QPoint(step * 8, step * 4))
+    QTest.mouseRelease(viewport, Qt.MouseButton.LeftButton, pos=start + QPoint(40, 20))
+
+    after = positions()
+    deltas = [(nx - ox, ny - oy) for (ox, oy), (nx, ny) in zip(before, after)]
+    assert deltas[0] == deltas[1] != (0, 0)
+    history = get_history()
+    assert len(history._undo) == 1
+    history.undo()
+    assert positions() == before
+    history.redo()
+    assert positions() == after
+
+
+@pytest.mark.parametrize("parent_selected", [False, True], ids=["area-seule", "avec-parent"])
+def test_alt_glisser_duplique_les_areas_en_une_entree(editor, parent_selected):
+    view = editor._gba_view
+    viewport = view.viewport()
+    scene = editor._project.active_scene
+    area_item = _item(editor, "Zone")
+    area = area_item.area
+    actor_item = editor._gba_scene._sprite_items[0]
+    actor = actor_item.scene_sprite
+    if parent_selected:
+        area.parent = actor.name
+        actor_item.setSelected(True)
+        area_item.setSelected(True)
+    actors_before = list(scene.actors)
+    areas_before = list(scene.areas)
+    area_origin = (area.x, area.y)
+    actor_origin = (actor.x, actor.y)
+    start = view.mapFromScene(area_item.mapToScene(area_item.shape_rect().center()))
+    end = start + QPoint(40, 20)
+    delta = view.mapToScene(end) - view.mapToScene(start)
+
+    QTest.mousePress(viewport, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.AltModifier, start)
+    QTest.mouseMove(viewport, end)
+    assert scene.actors == actors_before and scene.areas == areas_before
+    QTest.mouseRelease(viewport, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.AltModifier, end)
+
+    assert (area.x, area.y) == area_origin
+    assert (actor.x, actor.y) == actor_origin
+    assert len(scene.areas) == len(areas_before) + 1
+    assert len(scene.actors) == len(actors_before) + int(parent_selected)
+    copied_area = scene.areas[-1]
+    assert (copied_area.x, copied_area.y) == (area.x + round(delta.x()), area.y + round(delta.y()))
+    assert copied_area.parent == (scene.actors[-1].name if parent_selected else None)
+    history = get_history()
+    assert len(history._undo) == 1
+    history.undo()
+    assert scene.actors == actors_before and scene.areas == areas_before
+    history.redo()
+    assert scene.areas[-1] is copied_area
+    assert copied_area.parent == (scene.actors[-1].name if parent_selected else None)
+
+
 def test_selectionner_une_area_la_publie_sur_le_bus(editor):
     from core.selection_bus import get_bus
     item = _item(editor, "Zone")

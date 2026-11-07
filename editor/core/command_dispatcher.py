@@ -271,6 +271,28 @@ class CommandDispatcher(EventEmitter):
         sources = [a for a in actors if any(x is a for x in scene.actors)]
         return self._add_actor_copies(sources, dx, dy, "Duplicated")
 
+    def duplicate_scene_members(self, actors: list, areas: list, dx: int, dy: int) -> tuple[list, list]:
+        """Duplique les acteurs et Areas sélectionnés dans une seule entrée d'historique."""
+        from core.history import AddListItemsCmd, MacroCmd, RefreshAfterCmd
+        if not self._project or not self._project.active_scene:
+            return [], []
+        scene = self._project.active_scene
+        actors = [a for a in actors if any(a is item for item in scene.actors)]
+        areas = [a for a in areas if any(a is item for item in scene.areas)]
+        if not actors or not areas:
+            return self._add_actor_copies(actors, dx, dy, "Duplicated"), self._add_area_copies(areas, dx, dy, "Duplicated")
+
+        actor_copies = self._make_actor_copies(scene, actors, dx, dy)
+        area_copies = self._make_area_copies(scene, areas, dx, dy)
+        renamed = {actor.name: clone.name for actor, clone in zip(actors, actor_copies)}
+        for area in area_copies:
+            area.parent = renamed.get(area.parent, area.parent)
+
+        label = f"Duplicated {len(actor_copies) + len(area_copies)} elements"
+        cmds = [AddListItemsCmd(scene.actors, actor_copies), AddListItemsCmd(scene.areas, area_copies)]
+        get_history().push(RefreshAfterCmd(MacroCmd(cmds, label), self.persist_areas))
+        return actor_copies, area_copies
+
     def paste_actors(self, actors: list, dx: int = 0, dy: int = 0) -> list:
         """Colle des actors venus du presse-papier du canvas dans la scène active.
 
@@ -286,6 +308,24 @@ class CommandDispatcher(EventEmitter):
         if not self._project or not self._project.active_scene or not sources:
             return []
         scene = self._project.active_scene
+        copies = self._make_actor_copies(scene, sources, dx, dy)
+
+        def persist():
+            self._save_scene()
+            self._emit("actors_list_changed")
+            self._emit("scene_sprites_changed")
+
+        n = len(copies)
+        get_history().push(AddListItemsCmd(
+            scene.actors, copies, persist_fn=persist,
+            label=f"{verb} {n} actor{'s' if n > 1 else ''}"))
+        get_bus().select(copies[0])
+        self._emit("status_message",
+                   f"{verb} actor: {copies[0].name}" if n == 1
+                   else f"{verb} {n} actors")
+        return copies
+
+    def _make_actor_copies(self, scene, sources: list, dx: int, dy: int) -> list[Actor]:
         # La position peut être un littéral px/tile ou une réf de variable :
         # on la résout en pixels avant d'appliquer le décalage (la copie devient
         # un placement littéral distinct).
@@ -312,20 +352,6 @@ class CommandDispatcher(EventEmitter):
                 new.parent = renamed[new.parent]
             elif new.parent and new.parent not in kept:
                 new.parent = None
-
-        def persist():
-            self._save_scene()
-            self._emit("actors_list_changed")
-            self._emit("scene_sprites_changed")
-
-        n = len(copies)
-        get_history().push(AddListItemsCmd(
-            scene.actors, copies, persist_fn=persist,
-            label=f"{verb} {n} actor{'s' if n > 1 else ''}"))
-        get_bus().select(copies[0])
-        self._emit("status_message",
-                   f"{verb} actor: {copies[0].name}" if n == 1
-                   else f"{verb} {n} actors")
         return copies
 
     def instantiate_prefab(self, prefab_name: str, x: int, y: int) -> Optional[Actor]:
@@ -432,6 +458,16 @@ class CommandDispatcher(EventEmitter):
         if not self._project or not self._project.active_scene or not sources:
             return []
         scene = self._project.active_scene
+        copies = self._make_area_copies(scene, sources, dx, dy)
+        n = len(copies)
+        get_history().push(AddListItemsCmd(scene.areas, copies, persist_fn=self.persist_areas,
+                                           label=f"{verb} {n} area{'s' if n > 1 else ''}"))
+        get_bus().select(copies[0])
+        self._emit("status_message", f"{verb} area: {copies[0].name}" if n == 1 else f"{verb} {n} areas")
+        return copies
+
+    @staticmethod
+    def _make_area_copies(scene, sources: list, dx: int, dy: int) -> list[Area]:
         taken = {a.name for a in scene.areas}
         actors = {a.name for a in scene.actors}
         copies: list[Area] = []
@@ -444,11 +480,6 @@ class CommandDispatcher(EventEmitter):
             taken.add(new.name)
             new.x, new.y = src.x + dx, src.y + dy
             copies.append(new)
-        n = len(copies)
-        get_history().push(AddListItemsCmd(scene.areas, copies, persist_fn=self.persist_areas,
-                                           label=f"{verb} {n} area{'s' if n > 1 else ''}"))
-        get_bus().select(copies[0])
-        self._emit("status_message", f"{verb} area: {copies[0].name}" if n == 1 else f"{verb} {n} areas")
         return copies
 
     def persist_areas(self):
