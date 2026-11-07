@@ -355,9 +355,7 @@ def _start_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, lua_
                  actor_defined_events: dict[str, set[str]] | None) -> list[str]:
     """La musique de la scène, l'état des instances d'un modèle, puis les `on_start` (acteurs, scène)."""
     L: list[str] = []
-    # Les acteurs posés qui sont des instances d'un modèle : leur rang dans le modèle (l'indice de leur
-    # état de script). Les membres sont les premières instances ; la réserve du spawn suit.
-    _member_rank = {j: r for pl in pi for r, j in enumerate(pl["members"])}
+    members = {j for pl in pi for j in pl["members"]}
     # ── Musique de la scène ───────────────────────
     # Posée AVANT les on_start : le réglage déclaratif passe en premier et le
     # script ajuste ensuite, exactement comme pour la caméra (v0.6.1). Un
@@ -365,32 +363,29 @@ def _start_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, lua_
     if has_sound:
         L += scene_music_lines(p, scene, sound_assets)
 
-    # on_start actors (seulement si défini dans le script Lua)
-    def _def_init(s, ev):
-        if actor_defined_events is None:
-            return True
-        return ev in actor_defined_events.get(s, set())
-
-    _dsym = dispatch_sym(scene, scene_actors, pi)
+    symbol = dispatch_sym(scene, scene_actors, pi)
+    scripts = [(j, symbol(scene.name, scene_actors[j - actor_offset][0].name)) for j in sorted(lua_idx)]
     # L'état des instances POSÉES d'un modèle, AVANT tout on_start : l'un peut lire l'autre. Le modèle
     # remet l'état de départ de son script, puis chaque valeur d'export propre au membre y est posée.
-    if _member_rank:
+    if members:
         from codegen.runtime_codegen.lua_compiler import member_export_inits
         from scripting.codegen import export_setter_c_type
-        for j in sorted(lua_idx):
-            if j not in _member_rank:
+        for j, s in scripts:
+            if j not in members:
                 continue
             actor, _ = scene_actors[j - actor_offset]
-            s = _dsym(scene.name, actor.name)
             L.append(f"    {s}_pool_init(&g_actors[{j}]);")
             for name, typ, literal in member_export_inits(p, scene, actor):
                 arg = f"({export_setter_c_type(typ)}){literal}" if literal.startswith("{") else literal
                 L.append(f"    {s}_set_{name}(&g_actors[{j}], {arg});")
-    for j in sorted(lua_idx):
-        actor, _ = scene_actors[j - actor_offset]
-        s = _dsym(scene.name, actor.name)
-        if _def_init(s, "on_start"):
-            L.append(f"    {s}_on_start(&g_actors[{j}]);")
+    starts = [(j, s) for j, s in scripts
+              if actor_defined_events is None or "on_start" in actor_defined_events.get(s, ())]
+    # Le lot garde la génération initiale de chaque acteur. Un callback peut en détruire un
+    # autre et réutiliser sa place par un spawn, qui a déjà appelé son propre on_start.
+    for j, _ in starts:
+        L.append(f"    int _start_ref_{j} = actor_ref_make(&g_actors[{j}]);")
+    for j, s in starts:
+        L.append(f"    actor_start(_start_ref_{j}, {s}_on_start);")
     # on_start scene
     if getattr(scene, "script", ""):
         L.append(f"    {sym}_scene_on_start();")

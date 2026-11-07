@@ -122,17 +122,16 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
     for pi in pool_info:
         s, pf = pi["sym"], pi["prefab"]
         # `pool_init` sort du script Lua du prefab : sans script, il n'y a rien à initialiser ni à lier.
-        from codegen.runtime_codegen.lua_compiler import prefab_lua_script
+        from codegen.runtime_codegen.lua_compiler import prefab_lua_script, script_exports
         has_script = prefab_lua_script(p, pf) is not None
+        script = pf.get_component("script")
+        exports = script_exports(p, script.script) if script else {}
         if has_script:
             L.append(f"extern void {s}_pool_init(Actor* self);")
         # Les instances POSÉES du modèle reçoivent leurs valeurs d'export à l'entrée de scène, par les
         # setters du modèle (comme une instance née d'un spawn avec une table).
         if pi["members"]:
-            from codegen.runtime_codegen.lua_compiler import script_exports
-            from core.models.components import ScriptComponent
-            _sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
-            for _name, _meta in (script_exports(p, _sc.script) if _sc and _sc.script else {}).items():
+            for _name, _meta in exports.items():
                 from scripting.codegen import export_setter_c_type
                 L.append(f"extern void {s}_set_{_name}(Actor* self, {export_setter_c_type(_meta['type'])} v);")
         for ev, sig in [
@@ -159,11 +158,12 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
         L.append("};")
         if not pi["shared"]:
             continue            # aucun script de la scène ne le fait naître : pas de spawn
+        init = f"actor_spawn_init_{s}" if exports else f"spawn_{s}"
         L += [
             # Rend un Actor* sur l'instance née : un handle
             # directement chaînable côté script, et NULL quand le pool est plein —
             # là où l'ancien -1, un entier, ressortait TOUJOURS vrai dans un test.
-            f"Actor* spawn_{s}(int x, int y) {{",
+            f"Actor* {init}(int x, int y) {{",
             *_shared_spawn_head(s, pi, any(m["shared"] and m["group"] > 1 for m in pool_info)),
         ]
 
@@ -188,9 +188,10 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
         L += part_link_lines(pf, "_i", "            ")
         if has_script:
             L.append(f"            {s}_pool_init(&g_actors[_i]);")
-        L += sfx_on_spawn_lines(p, pf, "            ")
-        if _def(s, "on_start"):
-            L.append(f"            {s}_on_start(&g_actors[_i]);")
+        if not exports:
+            L += sfx_on_spawn_lines(p, pf, "            ")
+            if _def(s, "on_start"):
+                L.append(f"            actor_start(actor_ref_make(&g_actors[_i]), {s}_on_start);")
         L += [
             f"            return &g_actors[_i];",
             f"        }}",
@@ -199,6 +200,16 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
             f"}}",
             "",
         ]
+        if exports:
+            # Avec une table Lua, le script pose les exports entre ces deux appels.
+            L += [f"void actor_spawn_start_{s}(Actor* actor) {{", "    if (!actor) return;"]
+            L += sfx_on_spawn_lines(p, pf, "    ")
+            if _def(s, "on_start"):
+                L.append(f"    actor_start(actor_ref_make(actor), {s}_on_start);")
+            L += ["}", f"Actor* spawn_{s}(int x, int y) {{",
+                  f"    Actor* actor = {init}(x, y);",
+                  f"    actor_spawn_start_{s}(actor);",
+                  "    return actor;", "}", ""]
     return L
 
 

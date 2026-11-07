@@ -453,6 +453,12 @@ static inline Actor* actor_ref_get(int h) {
     return (((u32)h >> 16) == a->gen) ? a : (Actor*)0;
 }
 
+/* Un acteur désactivé peut démarrer. Une naissance différée ne vise que son occupant initial. */
+static inline void actor_start(int ref, void (*on_start)(Actor*)) {
+    Actor* actor = actor_ref_get(ref);
+    if (actor && actor->alive) on_start(actor);
+}
+
 /* Un script qui agit sur une RÉFÉRENCE d'acteur (`boss:move(...)`, `b:hide()`, `boss.hp`) : l'acteur a pu
    être détruit ou désactivé depuis qu'on l'a obtenu, ou la référence vaut nil. Rien n'est exigé de
    l'auteur (il n'est pas obligé de tester) ; l'appel est simplement sauté, et un build DEBUG
