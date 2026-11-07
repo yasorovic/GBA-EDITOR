@@ -41,11 +41,12 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.v.outputs.version }}
-      # Le commit du tag (celui qui part en release), pas celui de la branche d'un
-      # `workflow_dispatch` : c'est lui qu'on cherche dans les runs de tests et de pré-build.
+      # Commit exact lu par ce job et repris par tous les autres.
       sha: ${{ steps.v.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ (github.event.release.tag_name || inputs.tag) && format('refs/tags/{0}', github.event.release.tag_name || inputs.tag) || github.sha }}
 
       # La version vit dans le dépôt (editor/core/app_info.py) ; le tag de la
       # release la CONFIRME. Un tag qui diverge fait échouer la release ici, avant
@@ -57,9 +58,6 @@ jobs:
           # Par l'environnement, pas collé dans le script : un tag contenant `"` ou `$(…)`
           # s'exécuterait sinon dans le job.
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          DEFAULT_SHA: ${{ github.sha }}
         run: |
           FILE_VERSION="$(python3 packaging/nuitka_build.py --print-version)"
           if [ -n "$TAG" ] && [ "${TAG#v}" != "$FILE_VERSION" ]; then
@@ -67,11 +65,7 @@ jobs:
             exit 1
           fi
           echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
-          if [ -n "$TAG" ]; then
-            SHA="$(gh api "repos/$REPO/commits/$TAG" --jq .sha)"
-          else
-            SHA="$DEFAULT_SHA"
-          fi
+          SHA="$(git rev-parse HEAD)"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       # `packaging/update.json` dit si cette version mérite une pop-up au lancement
@@ -82,9 +76,23 @@ jobs:
           "import json; from core.update_check import parse_importance;
           parse_importance(json.load(open('packaging/update.json')))"
 
+      # Seuls les pré-builds sans tag portent la preuve du commit compilé.
+      - name: Enregistrer le commit du pré-build
+        if: github.event_name == 'workflow_dispatch' && inputs.tag == ''
+        env:
+          SHA: ${{ steps.v.outputs.sha }}
+        run: printf '%s\n' "$SHA" > "$RUNNER_TEMP/release-source.txt"
+
+      - uses: actions/upload-artifact@v7
+        if: github.event_name == 'workflow_dispatch' && inputs.tag == ''
+        with:
+          name: release-source-${{ steps.v.outputs.sha }}
+          path: ${{ runner.temp }}/release-source.txt
+          if-no-files-found: error
+
   # Les mêmes contrôles que `tests.yml`, rejoués sur le commit EXACT du tag publié : une CI
   # verte sur une poussée antérieure ne dit rien du commit qui part en release. Un échec ici
-  # arrête tout, avant les ~heures de compilation de l'éditeur.
+  # empêche la publication. Les compilations tournent en parallèle.
   #
   # Si tests.yml a DÉJÀ un run vert pour ce commit exact (le cas courant : on a poussé, la CI a
   # tourné), on ne les rejoue pas : le job réussit aussitôt. Sans run vert (commit de doc seule
@@ -115,6 +123,8 @@ jobs:
 
       - if: steps.gate.outputs.green != 'true'
         uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - if: steps.gate.outputs.green != 'true'
         uses: actions/setup-python@v6
@@ -144,9 +154,8 @@ jobs:
 
   # Un build déjà fait pour CE commit ? Sans tag, c'est le pré-build lui-même : rien à chercher.
   # Avec tag, on cherche un `workflow_dispatch` de ce workflow, sur le commit du tag, dont les
-  # quatre livrables existent encore (les artefacts expirent). Le run n'a pas besoin d'avoir
-  # fini « vert » : un job annexe (windows-rom-build) peut échouer sans toucher aux livrables,
-  # qui ne sont déposés qu'après leurs smoke tests et leurs tests d'installation.
+  # quatre livrables et la preuve du commit existent encore. Les deux jobs de tests du run
+  # courant décident si les livrables peuvent être publiés.
   prebuilt:
     needs: [version]
     runs-on: ubuntu-24.04
@@ -166,7 +175,7 @@ jobs:
           for id in $(gh run list --repo "$REPO" --workflow release.yml --event workflow_dispatch --commit "$SHA" --limit 20 --json databaseId --jq '.[].databaseId'); do
             names="$(gh api "repos/$REPO/actions/runs/$id/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name')"
             complete=1
-            for wanted in windows-portable linux-appimage linux-packages "Backstage-$VERSION-windows-setup.exe"; do
+            for wanted in "release-source-$SHA" windows-portable linux-appimage linux-packages "Backstage-$VERSION-windows-setup.exe"; do
               echo "$names" | grep -qxF "$wanted" || complete=0
             done
             if [ "$complete" = 1 ]; then
@@ -177,12 +186,10 @@ jobs:
           done
           echo "Aucun pré-build complet pour $SHA : compilation normale."
 
-  # Le build de ROM sous Windows : msys2 de devkitPro, chemins C:\devkitPro, limite de
-  # 260 caractères, relance de `make` — du code qui ne tournait que sur le poste de
-  # l'auteur. Hors `needs` des builds tant qu'il n'a pas passé un workflow_dispatch :
-  # l'installation silencieuse de devkitPro (`/S`) n'a pas encore été vérifiée sur un
-  # runner. Une fois verte, ajouter `windows-rom-build` aux `needs` de build-windows.
+  # Le build de ROM sous Windows vérifie devkitPro, les chemins et la relance de make.
+  # Ce job bloque la publication en cas d'échec.
   windows-rom-build:
+    needs: [version]
     runs-on: windows-latest
     timeout-minutes: 60
     env:
@@ -190,6 +197,8 @@ jobs:
       GBA_TESTS_REQUIRE_DEVKITPRO: "1"
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - uses: actions/setup-python@v6
         with:
@@ -280,6 +289,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - uses: actions/setup-python@v6
         with:
@@ -293,7 +304,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: '~\AppData\Local\Nuitka\Nuitka\Cache'
-          key: nuitka-windows-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
+          key: nuitka-windows-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ needs.version.outputs.sha }}
           restore-keys: |
             nuitka-windows-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-
             nuitka-windows-
@@ -317,7 +328,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: '~\AppData\Local\Nuitka\Nuitka\Cache'
-          key: nuitka-windows-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
+          key: nuitka-windows-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ needs.version.outputs.sha }}
 
       # Le binaire LIVRE démarre-t-il, crée-t-il un projet, ouvre-t-il chaque écran,
       # trouve-t-il ses données embarquées ? Les écrans sont importés paresseusement :
@@ -369,6 +380,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - uses: actions/setup-python@v6
         with:
@@ -435,6 +448,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - uses: actions/setup-python@v6
         with:
@@ -458,7 +473,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ~/.cache/Nuitka
-          key: nuitka-linux-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
+          key: nuitka-linux-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ needs.version.outputs.sha }}
           restore-keys: |
             nuitka-linux-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-
             nuitka-linux-
@@ -478,7 +493,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: ~/.cache/Nuitka
-          key: nuitka-linux-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
+          key: nuitka-linux-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ needs.version.outputs.sha }}
 
       # Même vérification que sous Windows, sur le binaire livré. Sous xvfb, avec
       # la vraie plateforme Qt « xcb » : c'est elle qui sera dans l'AppImage.
@@ -632,6 +647,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Bibliothèques système (xcb, EGL) et xvfb
         run: |
@@ -694,18 +711,21 @@ jobs:
     if: >-
       !cancelled() && (github.event_name == 'release' || inputs.tag != '')
       && needs.tests.result == 'success'
+      && needs.windows-rom-build.result == 'success'
       && (needs.prebuilt.outputs.run_id != ''
           || (needs.windows-installer.result == 'success'
               && needs.windows-portable.result == 'success'
               && needs.linux-appimage.result == 'success'
               && needs.linux-packages.result == 'success'))
-    needs: [tests, prebuilt, windows-installer, windows-portable, linux-appimage, linux-packages]
+    needs: [version, tests, windows-rom-build, prebuilt, windows-installer, windows-portable, linux-appimage, linux-packages]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       # Les trois artefacts tombent à plat dans le même dossier (chacun ne
       # contient que des fichiers, pas de sous-arbre), pour un seul upload.

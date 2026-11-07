@@ -137,8 +137,9 @@ def test_soundfx_interaction_sans_script_pose_et_spawne_se_compile(tmp_path):
     worker.run()
     assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
     code = next((project.root / "build").rglob("main.c")).read_text(encoding="utf-8")
-    assert "_ia_action[]" in code and "_ia_paction[" in code
-    assert "{0,SFX_OPEN," in code
+    actions = [line for line in code.splitlines() if "static const IaAction _ia_action[" in line]
+    assert any(table.count("{0,SFX_OPEN,") == 2 for table in actions)
+    assert "_ia_action[g_actors[_t].type_id]" in code
     assert "KEY_ON_INTERACT" not in code and "BTN_ON_INTERACT" not in code
 
 

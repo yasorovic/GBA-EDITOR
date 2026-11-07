@@ -306,7 +306,7 @@ def _tables(lignes) -> dict[str, list[int]]:
     import re
     out = {}
     for ligne in lignes:
-        if m := re.search(r"static \w+ (_bk_\w+)(?:\[\d+\])+[^=]*=\{(.*)\};", ligne):
+        if m := re.search(r"static (?:const )?\w+ (_bk_\w+)(?:\[\d+\])+[^=]*=\{(.*)\};", ligne):
             out[m[1]] = [int(v) for v in re.findall(r"\d+", m[2])]
     return out
 

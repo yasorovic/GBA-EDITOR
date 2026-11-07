@@ -176,9 +176,9 @@ def test_le_build_cuit_le_sens_de_la_face_dans_la_table_du_mobile(lignes):
     hero = _acteur("Hero", tag="Player")
     plateforme = _acteur("Plateforme", tag="body", response="block", solid=False, one_way="gravity")
     emis = lignes(hero, plateforme)
-    assert re.search(r"static u8 _bk_ow\[1\][^=]*=\{1\};", emis)
+    assert re.search(r"static (?:const )?u8 _bk_ow\[1\][^=]*=\{1\};", emis)
     assert "actors_resolve_blocks_ow(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,_bk_box,_bk_ow);" in emis
-    assert re.search(r"static u8 _bk_ow\[1\][^=]*=\{2\};", lignes(hero, plateforme, gravite=(0, -0.25)))
+    assert re.search(r"static (?:const )?u8 _bk_ow\[1\][^=]*=\{2\};", lignes(hero, plateforme, gravite=(0, -0.25)))
 
 
 def test_sans_face_a_sens_unique_le_build_emet_l_appel_historique(lignes):
