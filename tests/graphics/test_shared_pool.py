@@ -396,14 +396,15 @@ def test_chaque_type_d_emplacement_a_son_cas_d_affichage_et_ses_collisions(tmp_p
     code = _passe_rendu(p, scene, monkeypatch, variants=lambda nom: [None],
                         apps=lambda nom: [Appearance(SpriteAsset(name=nom, asset="a.png"), 0)])
     assert "case 1: {" in code and "case 2: {" in code and "case 3: {" in code and "case 4:" not in code   # le marqueur n'affiche rien
-    from codegen.runtime_codegen.physics.contacts import box_contact_lines
-    from core.models.components import CollisionShapeComponent
-    boxed = [(0, scene.actors[0])]
-    scene.actors[0].components.append(CollisionShapeComponent(w=8, h=8))
-    col = "\n".join(shared_pool_gen.collision_lines(
-        pi, 100, boxed, lambda pf, a: True, lambda sym, ev: sym.endswith("Boss") and ev == "on_collision_enter",
-        lambda sym, ev: True, lambda scn, name: f"{scn}_{name}", {0}, "S", box_contact_lines))
-    assert "case 2: case 3: case 4: {" in col     # une partie réagit avec le script de sa racine
+    # Une partie réagit aux contacts avec le script de sa racine : sa ligne du descripteur porte les crochets de la
+    # racine (types 3 et 4, racine 2), lus par la passe de contacts comme pour tout emplacement.
+    from codegen.runtime_codegen.model_desc import model_desc_lines
+    boss = next(m for m in pi if m["shared"] and m["model_id"] == 2)
+    desc = "\n".join(model_desc_lines(p, scene, [(a, None) for a in scene.actors], pi, [None] * len(scene.actors),
+                                      lambda sym, ev: sym == boss["sym"] and ev == "on_collision_enter"))
+    hooks = f".on_contact={{{boss['sym']}_on_collision_enter,0,0}}"
+    for kind in (2, 3, 4):
+        assert any(hooks in line and f"/* {kind} " in line for line in desc.splitlines()), kind
 
 
 def test_un_prefab_ne_sans_script_n_appelle_pas_pool_init(tmp_path):

@@ -1,56 +1,155 @@
-"""Émission des contacts entre colliders."""
+"""Les contacts entre acteurs (`on_collision_enter`, `on_collide`, `on_collision_exit`), posés ou nés.
+
+Un contact est un couple de tags de boîtes qui se recouvrent entre deux acteurs (`actors_overlap_mask`). Les couples
+autorisés se lisent par couple de TYPES d'emplacement (`Actor.model`), cuits au build par la matrice des tags ; les
+crochets, dans le descripteur de modèle (`ModelDesc.on_contact`). Le runtime relève une fois par image l'instantané des
+acteurs concernés, écarte les paires dont les rectangles ne se touchent pas, et compare la liste des contacts de l'image
+à celle de l'image précédente : un contact qui naît appelle enter, un qui dure collide, un qui se défait exit. Il ne
+demande jamais si un emplacement est posé ou né (règle « posé = spawné »).
+
+La liste a une capacité (`CONTACT_CAPACITY`, réduite au nombre de paires possibles de la scène) : au-delà, un contact
+n'est pas suivi et ne prévient personne. Un emplacement réoccupé (`Actor.gen`) repart de zéro, sans exit pour l'ancien
+occupant ; un acteur détruit n'apprend rien et son partenaire non plus ; un acteur désactivé perd ses contacts et seul
+le partenaire resté actif apprend exit.
+"""
 from __future__ import annotations
 
+from codegen.oam_alloc import scene_oam_layout
+from codegen.runtime_codegen.gen_scene_query import collision_pair_mask, has_col_event
+from codegen.runtime_codegen.model_desc import model_desc_sym
+from codegen.runtime_codegen.shared_pool_gen import owners as model_owners, shared_models
 
-def box_contact_lines(a_expr: str, b_expr: str, active: str, prev: str,
-                      events_a: list, events_b: list, indent: str, allowed: int = 0xFFFF) -> list[str]:
-    """Les contacts d'UNE paire d'acteurs, un par couple de tags de colliders.
+# Les contacts suivis à la fois, au plus, dans une scène.
+CONTACT_CAPACITY = 128
+# Les tables sont lues à chaque paire testée : rangées en IWRAM, comme le descripteur de modèle.
+_IW = ' __attribute__((section(".data.model_desc")))'
+# Au-delà de ce nombre d'acteurs possibles (12 octets chacun), l'instantané passe de l'IWRAM à l'EWRAM.
+_SNAPSHOT_IWRAM = 64
 
-    `actors_overlap_mask` rend un bit par couple de tags en contact ; `prev` en
-    garde le souvenir d'une frame à l'autre. Un contact qui naît appelle
-    `on_collision_enter`, un contact qui dure `on_collide`, un contact qui se
-    défait `on_collision_exit` — chacun avec les tags de CE couple. Une paire
-    d'acteurs porte donc plusieurs contacts à la fois (pieds contre tête ET corps
-    contre corps) sans que le premier masque les suivants.
 
-    `events_a` / `events_b` : (événement, fonction C) que reçoit chaque côté ;
-    `my_box` d'un côté est la `other_box` de l'autre."""
-    def calls(events: list, event: str, self_expr: str, other_expr: str,
-              self_tag: str, other_tag: str) -> list[str]:
-        return [f"{fn}({self_expr},{other_expr},{self_tag},{other_tag});"
-                for ev, fn in events if ev == event]
-
-    i = indent
-    lines = [
-        f"{i}if({active}) debug_physics_contact_test();",
-        f"{i}{{ u16 _cur=({active})?actors_overlap_mask({a_expr},{b_expr},{allowed}):0; u16 _prv={prev};",
-        f"{i}  if(_cur|_prv)",
-        f"{i}  for(u8 _bi=0;_bi<MAX_BOXES;_bi++) for(u8 _bj=0;_bj<MAX_BOXES;_bj++){{",
-        f"{i}      u16 _m=(u16)(1u<<(_bi*MAX_BOXES+_bj));",
-        f"{i}      u8 _c=(_cur&_m)!=0, _p=(_prv&_m)!=0;",
-        f"{i}      if(!_c&&!_p) continue;",
-        f"{i}      u8 _ta=({a_expr})->collision.boxes[_bi].tag, _tb=({b_expr})->collision.boxes[_bj].tag;",
-        f"{i}      (void)_ta; (void)_tb;",
+def contact_helper_lines() -> list[str]:
+    """Aides C : l'instantané des acteurs concernés, la liste des contacts de l'image et ses événements."""
+    return [
+        "/* L'instantané d'un acteur concerné par les contacts : emplacement, rang compact de son type, génération (un",
+        "   emplacement réoccupé repart de zéro) et rectangle monde de ses boîtes actives. */",
+        "typedef struct { u16 slot; u8 kind; u8 pad; u16 gen; s16 l, t, r, b; } ContactBody;",
+        "/* Un contact en cours entre deux emplacements (`a` < `b`) : leurs générations et un bit par couple de tags. */",
+        "typedef struct { u16 a, b, gen_a, gen_b, mask; } Contact;",
+        "static inline __attribute__((always_inline)) void contact_body_add(int s,const u8* ki,ContactBody* out,int* n){",
+        "    const Actor* a=&g_actors[s]; u8 j=ki[a->model];",
+        "    if(j==255||!a->active) return;",
+        "    int l=32767,top=32767,r=-32768,b=-32768,x=a->x>>8,y=a->y>>8;",
+        "    for(int k=0;k<a->collision.box_count;k++){",
+        "        const CollisionShape* c=&a->collision.boxes[k];",
+        "        if(!c->active) continue;",
+        "        if(x+c->x<l) l=x+c->x; if(y+c->y<top) top=y+c->y;",
+        "        if(x+c->x+c->w>r) r=x+c->x+c->w; if(y+c->y+c->h>b) b=y+c->y+c->h;",
+        "    }",
+        "    if(r<l) return;",
+        "    ContactBody* e=&out[(*n)++]; e->slot=s; e->kind=j; e->gen=a->gen; e->l=l; e->t=top; e->r=r; e->b=b;",
+        "}",
+        "/* Les événements d'une paire, d'une image à l'autre : `prv` et `cur`, un bit par couple de tags (cf.",
+        "   `actors_overlap_mask`). Un détruit n'apprend rien et son partenaire non plus ; un désactivé n'apprend pas exit. */",
+        "static void __attribute__((unused)) contact_events(const ModelDesc* desc,Actor* a,Actor* b,u16 prv,u16 cur){",
+        "    for(u8 bi=0;bi<MAX_BOXES;bi++) for(u8 bj=0;bj<MAX_BOXES;bj++){",
+        "        u16 m=(u16)(1u<<(bi*MAX_BOXES+bj));",
+        "        u8 now=(cur&m)!=0, was=(prv&m)!=0;",
+        "        if(!now&&!was) continue;",
+        "        u8 event=now?(was?1:0):2;            /* enter : naît ; collide : dure ; exit : se défait */",
+        "        if(event==2&&(!a->alive||!b->alive)) continue;",
+        "        u8 ta=a->collision.boxes[bi].tag, tb=b->collision.boxes[bj].tag;",
+        "        void (*fa)(Actor*,Actor*,u8,u8)=desc[a->model].on_contact[event];",
+        "        void (*fb)(Actor*,Actor*,u8,u8)=desc[b->model].on_contact[event];",
+        "        if(fa&&(event!=2||a->active)) fa(a,b,ta,tb);",
+        "        if(fb&&(event!=2||b->active)) fb(b,a,tb,ta);",
+        "    }",
+        "}",
+        "/* La passe de l'image. Instantané des acteurs concernés (posés `[lo,hi)` puis nés du pool si `pool`, ordre des",
+        "   emplacements) ; pour chaque paire dont les types ont un couple de tags autorisé (`allowed`, `width` entrées par",
+        "   type) et dont les rectangles se recouvrent, les couples de tags en contact (`actors_overlap_mask`). La liste de",
+        "   l'image (`cur`, `cap` au plus) est comparée à celle de l'image précédente (`prev`, `*prev_n`), triées toutes",
+        "   deux par paire d'emplacements ; `cur` devient `prev`. En IWRAM, ARM : elle parcourt toutes les paires. */",
+        "BS_ATTR_IWRAM",
+        "static void __attribute__((unused)) contacts_run(const ModelDesc* desc,const u8* ki,const u16* allowed,int width,",
+        "        ContactBody* list,Contact* prev,int* prev_n,Contact* cur,int cap,int lo,int hi,int pool){",
+        "    int n=0;",
+        "    for(int s=lo;s<hi;s++) contact_body_add(s,ki,list,&n);",
+        "    if(pool){ POOL_EACH(s) contact_body_add(s,ki,list,&n); }",
+        "    int cn=0;",
+        "    for(int i=0;i<n&&cn<cap;i++){",
+        "        const ContactBody* A=&list[i]; const u16* row=allowed+A->kind*width;",
+        "        for(int j=i+1;j<n;j++){",
+        "            const ContactBody* B=&list[j]; u16 al=row[B->kind];",
+        "            if(!al||A->l>=B->r||A->r<=B->l||A->t>=B->b||A->b<=B->t) continue;",
+        "            debug_physics_contact_test();",
+        "            u16 m=actors_overlap_mask(&g_actors[A->slot],&g_actors[B->slot],al);",
+        "            if(!m) continue;",
+        "            if(cn==cap) break;",
+        "            Contact* c=&cur[cn++]; c->a=A->slot; c->b=B->slot; c->gen_a=A->gen; c->gen_b=B->gen; c->mask=m;",
+        "        }",
+        "    }",
+        "    int pn=*prev_n, p=0, q=0;",
+        "    while(p<pn||q<cn){",
+        "        u32 kp=p<pn?((u32)prev[p].a<<16)|prev[p].b:0xFFFFFFFFu, kc=q<cn?((u32)cur[q].a<<16)|cur[q].b:0xFFFFFFFFu;",
+        "        if(kp<kc){                          /* le contact s'est défait (ou un emplacement a changé d'occupant) */",
+        "            const Contact* c=&prev[p++]; Actor* a=&g_actors[c->a]; Actor* b=&g_actors[c->b];",
+        "            if(a->gen==c->gen_a&&b->gen==c->gen_b) contact_events(desc,a,b,c->mask,0);",
+        "        } else {",
+        "            const Contact* c=&cur[q++]; u16 was=0;",
+        "            if(kp==kc){ const Contact* o=&prev[p++]; if(o->gen_a==c->gen_a&&o->gen_b==c->gen_b) was=o->mask; }",
+        "            contact_events(desc,&g_actors[c->a],&g_actors[c->b],was,c->mask);",
+        "        }",
+        "    }",
+        "    for(int k=0;k<cn;k++) prev[k]=cur[k];",
+        "    *prev_n=cn;",
+        "}",
+        "",
     ]
-    for cond, event in (("_c&&!_p", "on_collision_enter"),
-                        ("_c&&_p", "on_collide")):
-        calls_a = calls(events_a, event, a_expr, b_expr, "_ta", "_tb")
-        calls_b = calls(events_b, event, b_expr, a_expr, "_tb", "_ta")
-        if calls_a or calls_b:
-            lines.append(f"{i}      if({cond}){{ " + " ".join(calls_a + calls_b) + " }")
 
-    exit_a = calls(events_a, "on_collision_exit", a_expr, b_expr, "_ta", "_tb")
-    exit_b = calls(events_b, "on_collision_exit", b_expr, a_expr, "_tb", "_ta")
-    if exit_a or exit_b:
-        lines.append(f"{i}      if(!_c&&_p){{")
-        # Détruire est terminal : aucun des deux scripts n'apprend un `exit`.
-        # Désactiver ne l'est pas : seul le partenaire encore actif est averti.
-        if exit_a:
-            lines.append(f"{i}        if(({a_expr})->active&&({a_expr})->alive&&({b_expr})->alive){{ "
-                         + " ".join(exit_a) + " }")
-        if exit_b:
-            lines.append(f"{i}        if(({b_expr})->active&&({b_expr})->alive&&({a_expr})->alive){{ "
-                         + " ".join(exit_b) + " }")
-        lines.append(f"{i}      }}")
-    lines += [f"{i}  }}", f"{i}  {prev}=_cur; }}"]
-    return lines
+
+def contact_tick_lines(p, scene, scene_actors, actor_offset: int, pi, shown, placed_scripts, has_event) -> list[str]:
+    """La passe de contacts de la scène, ou rien si aucun couple de types n'a de contact qui prévient un script.
+
+    `placed_scripts` : le symbole du code Lua de chaque posé (None sans script), aligné sur `scene_actors` ; un modèle
+    du pool a le sien. `has_event(symbole, événement)` dit si le script définit le crochet."""
+    lay = scene_oam_layout(p, scene)
+    shared = shared_models(pi) if shown else []
+    owners: dict[int, object] = {}      # type -> porteur ; les copies d'un type ont les mêmes boîtes et le même code
+    reacts: dict[int, bool] = {}        # type -> son script répond à un contact
+    for (actor, _sprite), kind, script in zip(scene_actors, lay.placed_model, placed_scripts):
+        owners.setdefault(kind, actor)
+        reacts[kind] = reacts.get(kind, False) or bool(script and has_col_event(has_event, script))
+    for m in shared:
+        # Une partie (`model_id + k`) a ses propres boîtes et réagit avec le script de sa racine.
+        for k, owner in enumerate(model_owners(m)[:m["group"]]):
+            owners.setdefault(m["model_id"] + k, owner)
+            reacts[m["model_id"] + k] = reacts.get(m["model_id"] + k, False) or has_col_event(has_event, m["sym"])
+    kinds = sorted(owners)
+    allowed = {(a, b): collision_pair_mask(owners[a], owners[b], p.settings) if reacts[a] or reacts[b] else 0
+               for a in kinds for b in kinds}
+    bodies = [k for k in kinds if any(allowed[(k, o)] or allowed[(o, k)] for o in kinds)]
+    if not bodies:
+        return []
+    index = {k: i for i, k in enumerate(bodies)}
+    placed_kinds = set(lay.placed_model)
+    pool_kinds = {m["model_id"] for m in shared}
+    hi = actor_offset + len(scene_actors) if placed_kinds & set(bodies) else actor_offset
+    pool = 1 if pool_kinds & set(bodies) else 0
+    spool = shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if pool else 0
+    capacity = sum(1 for kind in lay.placed_model if kind in index) + spool
+    cap = max(1, min(CONTACT_CAPACITY, capacity * (capacity - 1) // 2))
+    where = "" if capacity <= _SNAPSHOT_IWRAM else " EWRAM_BSS"
+    rows = ",".join("{" + ",".join(str(allowed[(a, b)]) for b in bodies) + "}" for a in bodies)
+    by_kind = ",".join(str(index.get(k, 255)) for k in range(lay.kinds))
+    return [
+        "    /* Contacts entre acteurs, par couple de types : enter, collide, exit (crochets lus au descripteur) */",
+        "    {",
+        f"        static u8 _ct_ki[{lay.kinds}]{_IW}={{{by_kind}}};",
+        f"        static u16 _ct_allowed[{len(bodies)}][{len(bodies)}]{_IW}={{{rows}}};",
+        f"        static ContactBody _ct_list[{capacity}]{where};",
+        f"        static Contact _ct_prev[{cap}] EWRAM_BSS, _ct_cur[{cap}] EWRAM_BSS;",
+        "        static int _ct_prev_n;",
+        f"        contacts_run({model_desc_sym(scene)},_ct_ki,&_ct_allowed[0][0],{len(bodies)},_ct_list,_ct_prev,"
+        f"&_ct_prev_n,_ct_cur,{cap},{actor_offset},{hi},{pool});",
+        "    }",
+    ]

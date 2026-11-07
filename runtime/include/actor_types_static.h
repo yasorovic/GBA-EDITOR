@@ -53,7 +53,9 @@ typedef struct ModelSlot { u16 slot; s16 entry; } ModelSlot;
      sfx_input      : le masque de ce bouton ou de cette action, 0 sans déclencheur par l'input ;
      on_tile        : le `on_tile_collide` du script du type ;
      on_crushed     : le `on_crushed` d'un Character (appelé aussi quand la carte arrête un transport) ;
-     on_update, on_late_update : les crochets d'image du script du type. */
+     on_update, on_late_update : les crochets d'image du script du type ;
+     on_contact     : `on_collision_enter`, `on_collide`, `on_collision_exit` du script du type (soi, l'autre, tag de sa
+                      boîte, tag de celle de l'autre), dans cet ordre ; NULL s'il n'y répond pas. */
 struct Actor;   /* défini plus bas : sans cette déclaration, le nom ne vivrait que dans le prototype des crochets */
 typedef struct ModelDesc {
     u8 body_mode; u8 can_sleep; u8 tile_mask; u8 interactor;
@@ -62,6 +64,7 @@ typedef struct ModelDesc {
     void (*on_crushed)(struct Actor*, struct Actor*);
     void (*on_update)(struct Actor*);
     void (*on_late_update)(struct Actor*);
+    void (*on_contact[3])(struct Actor*, struct Actor*, u8, u8);
 } ModelDesc;
 enum { BODY_MODE_NONE = 0, BODY_MODE_CHARACTER = 1, BODY_MODE_KINEMATIC = 2, BODY_MODE_RIGID = 3 };
 

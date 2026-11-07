@@ -236,13 +236,15 @@ def sortie_sonde(tmp_path_factory):
         pytest.skip(message + " ; il l'est en CI")
 
     from codegen.runtime_codegen.api_prototypes import build_enum_defines
+    from codegen.runtime_codegen.physics.contacts import contact_helper_lines
     dossier = tmp_path_factory.mktemp("box_probe")
     (dossier / "enums.h").write_text("\n".join(build_enum_defines()) + "\n")
+    (dossier / "contacts_gen.h").write_text("\n".join(contact_helper_lines()) + "\n", encoding="utf-8")
     binaire = dossier / "actor_box_probe"
     env = environnement(compilateur)
     r = subprocess.run(
         [compilateur, "-std=c11", "-w", "-O0", "-include", str(dossier / "enums.h"),
-         "-I", str(NATIVE_DIR / "libgba_shim"), "-I", str(MOTEUR_DIR),
+         "-I", str(NATIVE_DIR / "libgba_shim"), "-I", str(MOTEUR_DIR), "-I", str(dossier),
          str(NATIVE_DIR / "actor_box_probe.c"), "-o", str(binaire)],
         capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
@@ -543,13 +545,20 @@ def test_c_un_groupe_garde_sa_partie_detruite_et_rend_tout_avec_sa_racine(sortie
 
 
 def test_c_une_paire_appelle_enter_collide_exit_dans_l_ordre_avec_les_bons_tags(sortie_sonde):
-    """`contact_pair_run` remplace le bloc de C recopié par paire : même vie d'un contact, une seule copie du code."""
-    assert sortie_sonde["contact_1"] == [1, 0, 0, 1]          # enter des deux côtés qui y répondent
-    assert sortie_sonde["contact_2"] == [1, 1, 0, 1]          # collide : seul le côté A y répond
+    """`contacts_run` : la vie d'un contact (enter, collide, exit), les crochets lus au descripteur de chaque côté.
+    Valeurs : enter, collide, exit de A, puis enter et exit de B."""
+    assert sortie_sonde["contact_1"] == [1, 0, 0, 1, 0]       # enter des deux côtés qui y répondent
+    assert sortie_sonde["contact_2"] == [1, 1, 0, 1, 0]       # collide : seul le côté A y répond
     assert sortie_sonde["contact_tags"] == [1, 0]             # my_box (A) puis other_box (B)
-    assert sortie_sonde["contact_3"] == [1, 1, 1, 1]          # exit
-    assert sortie_sonde["contact_4"] == [1, 1, 1, 1]          # rien de plus une fois éloignés
-    assert sortie_sonde["contact_5"] == [1, 1, 1, 1]          # un côté inactif ne touche pas
+    assert sortie_sonde["contact_3"] == [1, 1, 1, 1, 1]       # exit des deux côtés
+    assert sortie_sonde["contact_4"] == [1, 1, 1, 1, 1]       # rien de plus une fois éloignés
+    assert sortie_sonde["contact_5"] == [1, 1, 1, 1, 1]       # un côté inactif ne touche pas
+    assert sortie_sonde["contact_6"] == [2, 1, 1, 2, 1]       # enter
+    assert sortie_sonde["contact_7"] == [2, 1, 2, 2, 1]       # désactivé : seul A, resté actif, apprend exit
+    assert sortie_sonde["contact_8"] == [3, 1, 2, 3, 1]
+    assert sortie_sonde["contact_9"] == [3, 1, 2, 3, 1]       # détruit : personne n'apprend exit
+    assert sortie_sonde["contact_10"] == [4, 1, 2, 4, 1]
+    assert sortie_sonde["contact_11"] == [5, 1, 2, 5, 1]      # réoccupé : un nouveau enter, pas d'exit pour l'ancien
 
 
 def test_c_scene_gravity_choisit_le_cote_d_appui_et_reveille_les_rigid(sortie_sonde):

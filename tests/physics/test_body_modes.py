@@ -313,7 +313,7 @@ def test_le_tick_emet_on_crushed_pour_un_obstacle_static(tmp_path):
     symbol = scene_actor_sym(scene.name, rider.name)
 
     code = "\n".join(gen_scene_tick(
-        project, scene, 0, [], actors, {1}, [], {}, {}, [],
+        project, scene, 0, [], actors, {1}, [], {}, {},
         actor_defined_events={symbol: {"on_crushed"}},
     ))
 
@@ -338,7 +338,7 @@ def test_le_tick_emet_on_crushed_pour_la_carte_sans_static(tmp_path):
     symbol = scene_actor_sym(scene.name, rider.name)
 
     code = "\n".join(gen_scene_tick(
-        project, scene, 0, [], actors, {1}, [], {}, {}, [],
+        project, scene, 0, [], actors, {1}, [], {}, {},
         actor_defined_events={symbol: {"on_crushed"}},
     ))
 

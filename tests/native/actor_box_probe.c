@@ -16,6 +16,7 @@
 #include "gba_engine.h"
 #include "actor_types_static.h"
 #include "runtime_api_inline.h"
+#include "contacts_gen.h"   /* les aides des contacts, émises par le générateur (cf. physics/contacts.py) */
 
 /* Symboles que main.c fournit d'ordinaire — aucun n'est appelé ici, mais le
    moteur est compilé en entier. */
@@ -94,9 +95,17 @@ static void a_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; s_ev_a
 static void a_collide(Actor *s, Actor *o, u8 m, u8 t) { (void)s; (void)o; (void)m; (void)t; s_ev_a[1]++; }
 static void a_exit(Actor *s, Actor *o, u8 m, u8 t)    { (void)s; (void)o; (void)m; (void)t; s_ev_a[2]++; }
 static void b_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; (void)m; (void)t; s_ev_b[0]++; }
-static void contact_frame(const char *nom, const ContactPair *paire, u16 *prev) {
-    contact_pair_run(paire, prev);
-    printf("%s %d %d %d %d\n", nom, s_ev_a[0], s_ev_a[1], s_ev_a[2], s_ev_b[0]);
+static void b_exit(Actor *s, Actor *o, u8 m, u8 t)    { (void)s; (void)o; (void)m; (void)t; s_ev_b[2]++; }
+/* Le type 1 (emplacement 0) répond aux trois crochets, le type 2 (emplacement 1) à enter et exit. */
+static ModelDesc s_desc[3];
+static const u8 s_ki[3] = {255, 0, 1};
+static const u16 s_allowed[2][2] = {{0, 0xFFFF}, {0xFFFF, 0}};
+static ContactBody s_list[2];
+static Contact s_prev[1], s_cur[1];
+static int s_prev_n;
+static void contact_frame(const char *nom) {
+    contacts_run(s_desc, s_ki, &s_allowed[0][0], 2, s_list, s_prev, &s_prev_n, s_cur, 1, 0, 2, 0);
+    printf("%s %d %d %d %d %d\n", nom, s_ev_a[0], s_ev_a[1], s_ev_a[2], s_ev_b[0], s_ev_b[2]);
 }
 
 int main(void) {
@@ -533,19 +542,35 @@ int main(void) {
     /* Une paire en contact : enter à la naissance, collide tant qu'elle dure, exit quand elle se défait, rien quand elle est
        éloignée ou qu'un côté est inactif. Les tags arrivent du bon côté (my_box d'abord). */
     {
-        for (int i = 0; i < 2; i++) { g_actors[i] = (Actor){0}; g_actors[i].active = 1; g_actors[i].collision.box_count = 1; }
+        for (int i = 0; i < 2; i++) {
+            g_actors[i] = (Actor){0}; g_actors[i].active = 1; g_actors[i].alive = 1; g_actors[i].model = i + 1;
+            g_actors[i].collision.box_count = 1;
+        }
         g_actors[0].collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_HIT };
         g_actors[1].collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_BODY };
-        static const ContactPair paire = { 0, 1, 0xFFFF, { a_enter, a_collide, a_exit }, { b_enter, 0, 0 } };
-        u16 prev = 0;
-        contact_frame("contact_1", &paire, &prev);            /* superposés : enter */
-        contact_frame("contact_2", &paire, &prev);            /* ça dure : collide */
+        s_desc[1].on_contact[0] = a_enter; s_desc[1].on_contact[1] = a_collide; s_desc[1].on_contact[2] = a_exit;
+        s_desc[2].on_contact[0] = b_enter; s_desc[2].on_contact[2] = b_exit;
+        s_prev_n = 0;
+        contact_frame("contact_1");            /* superposés : enter */
+        contact_frame("contact_2");            /* ça dure : collide */
         printf("contact_tags %d %d\n", s_tag_a, s_tag_b);
         g_actors[1].x = 100 << 8;
-        contact_frame("contact_3", &paire, &prev);            /* éloignés : exit */
-        contact_frame("contact_4", &paire, &prev);            /* rien de plus */
+        contact_frame("contact_3");            /* éloignés : exit des deux côtés */
+        contact_frame("contact_4");            /* rien de plus */
         g_actors[1].x = 0; g_actors[1].active = 0;
-        contact_frame("contact_5", &paire, &prev);            /* un côté inactif : pas de contact */
+        contact_frame("contact_5");            /* un côté inactif : pas de contact */
+        g_actors[1].active = 1;
+        contact_frame("contact_6");            /* de nouveau : enter */
+        g_actors[1].active = 0;
+        contact_frame("contact_7");            /* désactivé : seul le partenaire actif (A) apprend exit */
+        g_actors[1].active = 1;
+        contact_frame("contact_8");            /* enter */
+        g_actors[1].alive = 0; g_actors[1].active = 0;
+        contact_frame("contact_9");            /* détruit : personne n'apprend exit */
+        g_actors[1].alive = 1; g_actors[1].active = 1;
+        contact_frame("contact_10");           /* enter */
+        g_actors[1].gen++;
+        contact_frame("contact_11");           /* emplacement réoccupé : un nouveau contact, sans exit de l'ancien */
     }
     {   /* scene.gravity : le côté d'appui suit l'axe dominant (le bas sans gravité ou à égalité), et un Rigid endormi
            reprend sa chute seulement si la gravité change. */

@@ -1017,7 +1017,7 @@ static inline int _box_canonical(const Actor*a, int i) {
     return i;
 }
 BS_ATTR_IWRAM
-static u16 actors_overlap_mask(const Actor*a, const Actor*b,u16 allowed) {
+static u16 __attribute__((unused)) actors_overlap_mask(const Actor*a, const Actor*b,u16 allowed) {
     u16 m = 0;
     for (int i=0; i<a->collision.box_count; i++) {
         if (!a->collision.boxes[i].active) continue;
@@ -1030,32 +1030,6 @@ static u16 actors_overlap_mask(const Actor*a, const Actor*b,u16 allowed) {
         }
     }
     return m;
-}
-
-/* Une paire d'acteurs de la scène dont les contacts préviennent des scripts. Le générateur écrit une table `const` de ces
-   paires et une boucle qui appelle `contact_pair_run` : le code des contacts existe une seule fois, il ne se recopie pas
-   par paire. Les trois fonctions de chaque côté sont dans l'ordre enter, collide, exit ; NULL si le script n'y répond pas. */
-typedef void (*ContactFn)(Actor*, Actor*, u8, u8);
-typedef struct { u8 a, b; u16 allowed; ContactFn on_a[3], on_b[3]; } ContactPair;
-
-/* `prev` garde d'une frame à l'autre les couples de tags en contact (cf. `actors_overlap_mask`) : un contact qui naît appelle
-   enter, un qui dure collide, un qui se défait exit, chacun avec les tags de CE couple. */
-BS_ATTR_IWRAM
-static void __attribute__((unused)) contact_pair_run(const ContactPair* c, u16* prev) {
-    Actor *a = &g_actors[c->a], *b = &g_actors[c->b];
-    u16 cur = (a->active && b->active) ? actors_overlap_mask(a, b, c->allowed) : 0;
-    u16 prv = *prev;
-    if (cur | prv)
-        for (u8 bi = 0; bi < MAX_BOXES; bi++) for (u8 bj = 0; bj < MAX_BOXES; bj++) {
-            u16 m = (u16)(1u << (bi * MAX_BOXES + bj));
-            u8 now = (cur & m) != 0, was = (prv & m) != 0;
-            if (!now && !was) continue;
-            u8 ta = a->collision.boxes[bi].tag, tb = b->collision.boxes[bj].tag;
-            u8 event = now ? (was ? 1 : 0) : 2;           /* enter : naît ; collide : dure ; exit : se défait */
-            if (c->on_a[event]) c->on_a[event](a, b, ta, tb);
-            if (c->on_b[event]) c->on_b[event](b, a, tb, ta);
-        }
-    *prev = cur;
 }
 
 /* Rétrocompatibilité — teste sans récupérer les tags */

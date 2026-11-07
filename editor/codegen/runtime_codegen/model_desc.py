@@ -5,8 +5,8 @@ pour la partie k), puis ceux des acteurs posés (`OamLayout.placed_model`). Le r
 qu'il soit posé ou né : c'est ce qui permet d'écrire un module une seule fois (règle « posé = spawné »).
 
 La table porte le mouvement automatique et le sommeil (`physics.motion`), la résolution contre la carte de collision
-(`physics.character`), les crochets d'image des scripts, le SoundFx déclenché par l'input et l'interacteur
-(`interact_gen`) ; chaque module migré y ajoute ses champs. Elle est rangée en IWRAM (section `.data.*` : sans
+(`physics.character`), les crochets d'image et de contact des scripts (`physics.contacts`), le SoundFx déclenché par
+l'input et l'interacteur (`interact_gen`) ; chaque module migré y ajoute ses champs. Elle est rangée en IWRAM (section `.data.*` : sans
 elle, GCC remet en ROM une table jamais écrite, et la ROM coûte des états d'attente à chaque lecture)."""
 from __future__ import annotations
 
@@ -23,6 +23,8 @@ from core.models.components import (
 
 # Les valeurs de `ModelDesc.body_mode` (enum `BODY_MODE_*` d'actor_types_static.h).
 BODY_MODE_RIGID = 3
+# Les crochets de contact du script d'un type, dans l'ordre de `ModelDesc.on_contact`.
+CONTACT_EVENTS = ("on_collision_enter", "on_collide", "on_collision_exit")
 _BODY_MODE = {PHYSICS_BODY_CHARACTER: 1, PHYSICS_BODY_KINEMATIC: 2, PHYSICS_BODY_RIGID: BODY_MODE_RIGID}
 
 
@@ -134,12 +136,19 @@ def model_desc_lines(p, scene, scene_actors, pi, placed_scripts=None, has_event=
                 out[field] = f"{script}_{event}"
         if script and physics_body_mode(owner) == PHYSICS_BODY_CHARACTER and has_event(script, "on_crushed"):
             out["on_crushed"] = f"{script}_on_crushed"
+        contact = [f"{script}_{ev}" if script and has_event(script, ev) else "0" for ev in CONTACT_EVENTS]
+        if any(fn != "0" for fn in contact):
+            out["on_contact"] = "{" + ",".join(contact) + "}"
         return out
 
     rows: list = [({}, "aucun type")] * lay.kinds
     for m in shared_models(pi):
-        # Une partie suit sa racine : ni mouvement, ni résolution, ni script propres (sa ligne reste vide).
+        # Une partie suit sa racine : ni mouvement, ni résolution, ni script propres...
         rows[m["model_id"]] = (row(m["prefab"], m["sym"], m["member_entries"][0] >= 0), f"né : {m['prefab'].name}")
+        # ... sauf pour les contacts : une partie réagit avec le script de sa racine (`physics.contacts`).
+        contact = rows[m["model_id"]][0].get("on_contact")
+        for k in range(1, m["group"]):
+            rows[m["model_id"] + k] = ({"on_contact": contact} if contact else {}, f"partie {k} : {m['prefab'].name}")
     # Une copie posée identique au prefab porte le `model_id` du modèle né (`pool_model.placed_types`) : sa ligne est
     # celle du modèle, au masque de carte près (union, `solid` est un champ d'emplacement).
     scripts = placed_scripts or [None] * len(scene_actors)
