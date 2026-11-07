@@ -1,4 +1,4 @@
-"""codegen/iwram_plan.py : quelles phases du tick vont en IWRAM.
+"""Placement des phases du tick et des tables de lecture en IWRAM.
 
 Le moteur est compilé en Thumb et exécuté depuis la ROM de la cartouche, dont chaque accès coûte des états d'attente
 (cf. `memory_timing_init`) ; l'IWRAM n'en a pas, et du code ARM y va encore plus vite (mesuré sous mGBA sur un banc de
@@ -11,9 +11,9 @@ le script de lien (gba_cart.ld) ouvre `.iwram` par `*(.iwram .iwram*)`, dont le 
 l'OVERLAY ne les voie. Ils resteraient vides. Un script de lien maison les ferait marcher ; à faire si un jeu à plusieurs
 grosses scènes déborde.
 
-Le générateur choisit un plan de départ (tout en ARM, sauf la physique quand elle est grosse) ; ce module le dégrade quand la
-place manque, d'après les tailles réelles lues dans `main.o`. Un mode vaut 2 (ARM dans l'IWRAM) ou 0 (reste en ROM, en
-Thumb) ; le compilateur le reçoit par `-DBS_IWRAM_<scène>_<phase>=<mode>`.
+Le plan de départ place aussi les tables constantes de la physique en IWRAM, chacune dans une section mesurable.
+Quand la place manque, le build renvoie du code ou des tables en ROM d'après les tailles de `main.o`. Une phase en
+ROM est compilée en Thumb. Une table en ROM garde son contenu et ses index.
 """
 from __future__ import annotations
 
@@ -22,6 +22,8 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from codegen.c_names import sym as c_sym
 
 IWRAM_TOTAL = 32 * 1024
 IWRAM_BASE = 0x03000000
@@ -44,23 +46,34 @@ PHYSICS_IWRAM_CHARS = 3000
 # ROM. Quand la place manque, on retire la phase qui rend le MOINS par octet (valeur / taille) : la physique, énorme, avant
 # l'affichage, et les deux petites boucles en dernier.
 VALUE = {"render": 8, "physics": 4, "hooks": 1, "late": 1}
+TABLE_VALUE = 2  # Priorité indicative : une petite table peut rester avant une grande phase.
+_TABLE_SECTION = re.compile(r"\.data\.bs_table\.(\w+)\.(_\w+)")
 
 _MACRO = re.compile(r"^#define\s+BS_IWRAM_(\w+?)_(hooks|physics|late|render)\s+(\d)\s*(?:/\*.*)?$", re.M)
 _SYMBOL = re.compile(r"^\S+\s+([0-9a-fA-F]+)\s+[tT]\s+scene_tick_(\w+?)_(hooks|physics|late|render)$", re.M)
 
 
 def macro_name(scene_sym: str, phase: str) -> str:
+    if phase.startswith("_"):
+        return f"BS_IWRAM_TABLE_{scene_sym}_{phase}"
     return f"BS_IWRAM_{scene_sym}_{phase}"
 
 
 def read_modes(main_c: str) -> dict[tuple[str, str], int]:
-    """Les modes que le générateur a écrits dans main.c : {(scène, phase): mode}."""
-    return {(m.group(1), m.group(2)): int(m.group(3)) for m in _MACRO.finditer(main_c)}
+    """Le placement initial dans main.c : {(scène, phase ou table): mode}."""
+    modes = {(m.group(1), m.group(2)): int(m.group(3)) for m in _MACRO.finditer(main_c)}
+    modes.update({m.groups(): ARM for m in _TABLE_SECTION.finditer(main_c)})
+    return modes
 
 
-def read_sizes(nm_output: str) -> dict[tuple[str, str], int]:
-    """La taille compilée de chaque phase, d'après `nm -S main.o` : {(scène, phase): octets}."""
-    return {(m.group(2), m.group(3)): int(m.group(1), 16) for m in _SYMBOL.finditer(nm_output)}
+def read_sizes(nm_output: str, size_output: str = "") -> dict[tuple[str, str], int]:
+    """Tailles compilées des phases (`nm -S`) et des tables IWRAM (`size -A`)."""
+    sizes = {(m.group(2), m.group(3)): int(m.group(1), 16) for m in _SYMBOL.finditer(nm_output)}
+    for line in size_output.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and (table := _TABLE_SECTION.fullmatch(parts[0])):
+            sizes[table.groups()] = int(parts[1])
+    return sizes
 
 
 _IWRAM_START, _IWRAM_END = 0x03000000, 0x04000000
@@ -77,9 +90,9 @@ def read_placed(nm_output: str) -> set[tuple[str, str]]:
 @dataclass
 class Plan:
     modes: dict[tuple[str, str], int]       # le mode retenu de chaque phase
-    placed: int                             # octets de code placés en IWRAM
-    budget: int                             # octets que le code placé a le droit de prendre
-    dropped: list[tuple[str, str]]          # les phases renvoyées en ROM
+    placed: int                             # octets de code et de tables placés en IWRAM
+    budget: int                             # octets disponibles pour ces placements
+    dropped: list[tuple[str, str]]          # phases et tables renvoyées en ROM
 
     @property
     def changed(self) -> bool:
@@ -90,8 +103,8 @@ def make_plan(modes: dict[tuple[str, str], int], sizes: dict[tuple[str, str], in
     """Dégrade `modes` jusqu'à ce que le code placé tienne dans ce que l'IWRAM laisse libre.
 
     `sizes` : les tailles AU MODE ACTUEL (celles de `main.o`). `static_bytes` : l'IWRAM prise par le reste (données
-    initialisées, .bss, bibliothèques), code placé exclu. On retire la phase qui rend le moins par octet (cf. `VALUE`)
-    jusqu'à ce que ça tienne."""
+    initialisées, .bss, bibliothèques), placements mobiles exclus. On retire la phase ou la table qui a la plus faible
+    priorité par octet jusqu'à ce que ça tienne."""
     modes = dict(modes)
     budget = max(0, IWRAM_TOTAL - IWRAM_STACK_RESERVE - static_bytes)
     dropped: list[tuple[str, str]] = []
@@ -103,7 +116,7 @@ def make_plan(modes: dict[tuple[str, str], int], sizes: dict[tuple[str, str], in
         candidates = [key for key, mode in modes.items() if mode != ROM]
         if not candidates:
             break
-        victim = min(candidates, key=lambda key: VALUE[key[1]] / max(1, sizes.get(key, 0)))
+        victim = min(candidates, key=lambda key: VALUE.get(key[1], TABLE_VALUE) / max(1, sizes.get(key, 0)))
         modes[victim] = ROM
         dropped.append(victim)
     return Plan(modes, placed(), budget, dropped)
@@ -121,8 +134,10 @@ def static_from_objects(size_outputs: list[str], placed: int) -> int:
     for text in size_outputs:
         for line in text.splitlines():
             parts = line.split()
-            if len(parts) >= 2 and parts[0] in (".bss", ".data", ".iwram") and parts[1].isdigit():
-                total += int(parts[1])
+            if len(parts) >= 2 and parts[1].isdigit():
+                section = parts[0].removeprefix(".").partition(".")[0]
+                if section in ("bss", "data", "iwram"):
+                    total += int(parts[1])
     return max(0, total - placed) + LIBRARIES_IWRAM_ESTIMATE
 
 
@@ -148,7 +163,7 @@ def dropped_cflags(dropped: list[tuple[str, str]]) -> str:
 
 
 def cflags(plan: Plan) -> str:
-    """Les `-D` qui imposent le plan au compilateur : seulement les phases renvoyées en ROM."""
+    """Les `-D` pour les phases et tables renvoyées en ROM."""
     return dropped_cflags(plan.dropped)
 
 
@@ -181,12 +196,22 @@ def save_memo(path: Path, current: str, dropped: list[tuple[str, str]]) -> None:
     path.write_text(json.dumps({"fingerprint": current, "dropped": [list(key) for key in dropped]}), encoding="utf-8")
 
 
+def iwram_table(scene, name: str, declaration: str) -> list[str]:
+    """Place une déclaration statique constante dans sa propre section, avec repli en ROM."""
+    scene_sym = c_sym(scene.name) if scene is not None else "Scene"
+    macro = macro_name(scene_sym, name)
+    return [f"#ifndef {macro}",
+            f'__attribute__((section(".data.bs_table.{scene_sym}.{name}")))',
+            "#endif", declaration]
+
+
 def iwram_macros(sym: str, phases: dict[str, list[str]]) -> list[str]:
     """Pour chaque phase, le mode de départ et l'attribut qui en découle. Le build peut renvoyer une phase en ROM
     par `-DBS_IWRAM_<scène>_<phase>=0` quand la place manque (cf. `iwram_plan`)."""
     out: list[str] = []
     for name in TICK_PHASES:
-        text = "".join(phases[name])
+        text = "".join(line for line in phases[name]
+                       if not line.lstrip().startswith(("#", "__attribute__")))
         mode = ROM if (name == "physics" and len(text) > PHYSICS_IWRAM_CHARS) else ARM
         mac = macro_name(sym, name)
         out += [f"#ifndef {mac}",

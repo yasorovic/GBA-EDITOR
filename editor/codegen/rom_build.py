@@ -1127,8 +1127,8 @@ class BuildWorker(EventEmitter, threading.Thread):
     _IWRAM_FIT_REVISIONS = 3         # révisions du plan permises ; chacune est suivie de son `make`
 
     def _make_fitting_iwram(self, p: Project, make, jobs: int, env: dict) -> bool:
-        """`make`, puis, si le code du tick que le générateur a mis en IWRAM (`iwram_plan`) y prend trop de place, un
-        nouveau `make` où les phases les moins précieuses restent en ROM. Seul `main.o` est recompilé. Le cas ordinaire
+        """`make`, puis, si le code et les tables dépassent le budget IWRAM, un nouveau `make` avec le plan révisé.
+        Les phases et tables les moins prioritaires restent en ROM. Seul `main.o` est recompilé. Le cas ordinaire
         ne compile qu'une fois : le plan de départ tient presque toujours. Un plan révisé est toujours compilé : le
         dernier `make` est celui qui suit la dernière révision, et le bilan se lit sur l'ELF qu'il a produit."""
         import codegen.iwram_plan as iwram_plan
@@ -1151,7 +1151,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             main_o.unlink(missing_ok=True)             # compilé avec un autre plan, ou avec un autre C : make ne le saurait pas
         elif modes:
             modes = {key: (iwram_plan.ROM if key in dropped_all else mode) for key, mode in modes.items()}
-            self._emit("log_line", f"[iwram] plan reused from the last build ({len(dropped_all)} phase(s) in ROM)")
+            self._emit("log_line", f"[iwram] plan reused from the last build ({len(dropped_all)} phase(s) or table(s) in ROM)")
         extra = iwram_plan.dropped_cflags(dropped_all)
         settled = False
         proc = None
@@ -1174,13 +1174,13 @@ class BuildWorker(EventEmitter, threading.Thread):
                 settled = plan is None
                 break                                  # tient, ou rien de plus à retirer
             if attempt == self._IWRAM_FIT_REVISIONS:
-                self._emit("log_line", "[iwram] the tick code placed in IWRAM still does not fit with the stack "
+                self._emit("log_line", "[iwram] the code and tables placed in IWRAM still do not fit with the stack "
                                        f"reserve after {self._IWRAM_FIT_REVISIONS} revisions")
                 break
             modes = plan.modes
             dropped_all = dropped_all + plan.dropped
             extra = iwram_plan.dropped_cflags(dropped_all)
-            self._emit("log_line", "[iwram] the tick code placed in IWRAM does not fit with the "
+            self._emit("log_line", "[iwram] the code and tables placed in IWRAM do not fit with the "
                                    f"{iwram_plan.IWRAM_STACK_RESERVE // 1024} KiB kept for the stack: "
                                    + ", ".join(f"{scene}.{phase}" for scene, phase in plan.dropped)
                                    + " stay in ROM")
@@ -1208,7 +1208,8 @@ class BuildWorker(EventEmitter, threading.Thread):
         if not nm or not size or not main_o.exists():
             return None
         listing = run_tool([str(nm), "-S", main_o.name], cwd=str(main_o.parent), env=tool_environment())
-        sizes = iwram_plan.read_sizes(listing.stdout)
+        main_sections = run_tool([str(size), "-A", main_o.name], cwd=str(main_o.parent), env=tool_environment()).stdout
+        sizes = iwram_plan.read_sizes(listing.stdout, main_sections)
         placed = sum(sizes.get(key, 0) for key, mode in modes.items() if mode != iwram_plan.ROM)
         if proc.returncode == 0:
             _ewram, iwram, _sections = read_ram_use(size, p.build_dir / "rom.elf")
@@ -1216,8 +1217,9 @@ class BuildWorker(EventEmitter, threading.Thread):
                 return None
             static = iwram - placed
         else:
-            reports = [run_tool([str(size), "-A", o.name], cwd=str(o.parent), env=tool_environment()).stdout
-                       for o in sorted((p.build_dir / "obj").glob("*.o"))]
+            reports = [main_sections]
+            reports.extend(run_tool([str(size), "-A", o.name], cwd=str(o.parent), env=tool_environment()).stdout
+                           for o in sorted(main_o.parent.glob("*.o")) if o != main_o)
             static = iwram_plan.static_from_objects(reports, placed)
             # L'estimation des bibliothèques peut conclure que ça tient quand le lien vient de dire le contraire : ce que
             # le lien a mesuré l'emporte, sinon rien ne serait retiré et le build échouerait.

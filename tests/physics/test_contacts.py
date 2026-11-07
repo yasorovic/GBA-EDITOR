@@ -61,3 +61,27 @@ def test_la_matrice_des_tags_retire_un_couple(tmp_path):
                                        lambda s, ev: s == "A"))
     # A (hero) rencontre ses copies ; le couple hero / ghost est retiré par la matrice.
     assert re.search(r"_ct_allowed\[1\]\[1\][^=]*=\{\{1\}\};", code)
+
+
+def test_une_partie_de_prefab_reserve_le_pool_pour_les_contacts(tmp_path):
+    from codegen.oam_alloc import scene_oam_layout
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.runtime_codegen.gen_sprite import resolve_initial_appearance
+    from codegen.runtime_codegen.physics.contacts import contact_tick_lines
+    from core.models.scene import Prefab, Scene
+    from core.project import Project
+    from oam_fixtures import faire_naitre
+
+    cible = _acteur("Cible")
+    prefab = Prefab(name="Boss", children=[_acteur("Bras")])
+    scene = Scene(name="S", actors=[cible])
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    p.prefabs.items = [prefab]
+    faire_naitre(tmp_path, scene, prefab.name)
+    layout = scene_oam_layout(p, scene)
+    code = "\n".join(contact_tick_lines(p, scene, [(cible, None)], scene_pi(p, scene),
+                                        resolve_initial_appearance, [None],
+                                        lambda _s, ev: ev == "on_collision_enter"))
+    assert layout.pool_slots > 0
+    assert f"static ContactBody _ct_list[{1 + layout.pool_slots}]" in code

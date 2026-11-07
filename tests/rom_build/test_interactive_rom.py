@@ -163,6 +163,6 @@ def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
     assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
     # La passe est par type : le héros est un mobile, le coffre un bloqueur, posés tous deux.
-    assert "static PairRun _bk_run[" in main_c
+    assert "static const PairRun _bk_run[" in main_c
     assert "_bk_n=block_targets(_bk_bi,_bk_list);" in main_c and "actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,_bk_box);" in main_c
     assert "static void __attribute__((unused)) actors_resolve_blocks(" in main_c

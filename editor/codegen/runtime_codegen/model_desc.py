@@ -6,11 +6,11 @@ qu'il soit posé ou né : c'est ce qui permet d'écrire un module une seule fois
 
 La table porte le mouvement automatique et le sommeil (`physics.motion`), la résolution contre la carte de collision
 (`physics.character`), les crochets d'image et de contact des scripts (`physics.contacts`), le SoundFx déclenché par
-l'input et l'interacteur (`interact_gen`) ; chaque module migré y ajoute ses champs. Elle est rangée en IWRAM (section `.data.*` : sans
-elle, GCC remet en ROM une table jamais écrite, et la ROM coûte des états d'attente à chaque lecture)."""
+l'input et l'interacteur (`interact_gen`) ; chaque module migré y ajoute ses champs. Le plan mémoire peut la placer en IWRAM pour accélérer les lectures."""
 from __future__ import annotations
 
 from codegen.c_names import sym as c_sym
+from codegen.iwram_plan import iwram_table
 from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.physics.body import (
     physics_body, physics_body_mode, physics_collider_mask, uses_character_solver,
@@ -152,7 +152,7 @@ def model_desc_lines(p, scene, scene_actors, pi, placed_scripts=None, has_event=
     body = [f"    {{{','.join(f'.{k}={v}' for k, v in values.items() if v not in (0, '0')) or '0'}}},   /* {kind} {label} */"
             for kind, (values, label) in enumerate(rows)]
     return [f"/* Descripteur de modèle de la scène {scene.name} : une ligne par type d'emplacement (`Actor.type_id`), "
-            "lue en IWRAM à chaque image. */",
-            f"static ModelDesc {model_desc_sym(scene)}[{lay.type_table_size}] "
-            "__attribute__((section(\".data.model_desc\"), unused)) = {",
+            "lue à chaque image. */",
+            *iwram_table(scene, "_model_desc",
+                         f"static const ModelDesc {model_desc_sym(scene)}[{lay.type_table_size}] __attribute__((unused)) = {{"),
             *body, "};", ""]

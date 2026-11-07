@@ -13,6 +13,7 @@ from core.models.components import (
 )
 from core.models.settings import tags_collide
 from core.models.collision_tiles import ONEWAY_UP
+from codegen.iwram_plan import iwram_table
 from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.model_desc import each_slot, model_desc_sym
 from codegen.runtime_codegen.physics.body import (
@@ -20,8 +21,6 @@ from codegen.runtime_codegen.physics.body import (
 )
 from codegen.runtime_codegen.shared_pool_gen import shared_models
 
-# Les tables sont lues à chaque couple testé : rangées en IWRAM, comme le descripteur de modèle.
-_IW = ' __attribute__((section(".data.model_desc")))'
 # Au-delà de ce nombre de plateformes possibles, l'instantané d'avant mouvement passe de l'IWRAM à l'EWRAM.
 _SNAPSHOT_IWRAM = 32
 
@@ -161,7 +160,7 @@ def _crush_pairs(p, character, character_sprite, wall, wall_sprite) -> list[tupl
             if tags_collide(p.settings, cbox.tag or "body", sbox.tag or "body")]
 
 
-def _pair_table(owners: dict, pairs_of, prefix: str) -> tuple[dict, dict, list[str], int] | None:
+def _pair_table(scene, owners: dict, pairs_of, prefix: str) -> tuple[dict, dict, list[str], int] | None:
     """La table d'un module de paires entre types : (rang compact des types « a », rang compact des types « b », lignes C
     des `PairRun` et des `BoxPair`, largeur d'une ligne), ou None sans aucun couple."""
     kinds = sorted(owners)
@@ -179,8 +178,10 @@ def _pair_table(owners: dict, pairs_of, prefix: str) -> tuple[dict, dict, list[s
             row.append(f"{{{len(flat)},{len(run)}}}")
             flat += run
         run_rows.append("{" + ",".join(row) + "}")
-    lines = [f"    static PairRun {prefix}_run[{len(a_kinds)}][{len(b_kinds)}]{_IW}={{{','.join(run_rows)}}};",
-             f"    static BoxPair {prefix}_pair[{len(flat)}]{_IW}={{{','.join(f'{{{x},{y}}}' for x, y in flat)}}};"]
+    lines = iwram_table(scene, f"{prefix}_run",
+                        f"    static const PairRun {prefix}_run[{len(a_kinds)}][{len(b_kinds)}]={{{','.join(run_rows)}}};")
+    lines += iwram_table(scene, f"{prefix}_pair",
+                         f"    static const BoxPair {prefix}_pair[{len(flat)}]={{{','.join(f'{{{x},{y}}}' for x, y in flat)}}};")
     return {k: i for i, k in enumerate(a_kinds)}, {k: i for i, k in enumerate(b_kinds)}, lines, len(b_kinds)
 
 
@@ -207,7 +208,7 @@ def kinematic_tick_parts(
     for m in shared:
         owners.setdefault(m["root_type_id"], (m["prefab"], resolve_initial_appearance(p, m["prefab"])[1]))
 
-    carry = _pair_table(owners, lambda a, b: _carry_pairs(p, a[0], a[1], b[0], b[1])
+    carry = _pair_table(scene, owners, lambda a, b: _carry_pairs(p, a[0], a[1], b[0], b[1])
                         if physics_body_mode(a[0]) == PHYSICS_BODY_KINEMATIC else [], "_kin")
     if carry is None:
         return [], [], []
@@ -225,8 +226,10 @@ def kinematic_tick_parts(
     capacity = capacity_of(platform_index)
     where = "" if capacity <= _SNAPSHOT_IWRAM else " EWRAM_BSS"
     before = ["    /* Transport : les plateformes et leur position d'avant mouvement, par couple de types */",
-              f"    static u8 _kin_pi[{lay.type_table_size}]{_IW}={{{by_kind(platform_index)}}};",
-              f"    static u8 _kin_ri[{lay.type_table_size}]{_IW}={{{by_kind(rider_index)}}};",
+              *iwram_table(scene, "_kin_pi",
+                           f"    static const u8 _kin_pi[{lay.type_table_size}]={{{by_kind(platform_index)}}};"),
+              *iwram_table(scene, "_kin_ri",
+                           f"    static const u8 _kin_ri[{lay.type_table_size}]={{{by_kind(rider_index)}}};"),
               *carry_lines,
               f"    static CarryPlatform _kin_list[{capacity}]{where};",
               "    int _kin_n=kinematic_platforms(_kin_pi,_kin_list);"]
@@ -240,7 +243,7 @@ def kinematic_tick_parts(
               f"    kinematic_carry_all(_kin_list,_kin_n,&_kin_run[0][0],{width},_kin_riders,_kin_nr,_kin_pair,_kin_d,"
               f"{0 if dynamic else normal});"]
 
-    crush = _pair_table(owners, lambda a, b: _crush_pairs(p, a[0], a[1], b[0], b[1]), "_kc")
+    crush = _pair_table(scene, owners, lambda a, b: _crush_pairs(p, a[0], a[1], b[0], b[1]), "_kc")
     crush_lines: list[str] = []
     if crush is not None:
         body_index, wall_index, table, _width = crush
@@ -251,9 +254,12 @@ def kinematic_tick_parts(
             "    /* L'écrasement d'un Character transporté contre un StaticBody (la carte, elle, écrase par",
             "       `body_tile_step`) : `_kin_d[i][2]` retient qu'il est signalé, pour ne pas le refaire à la carte. */",
             "    {",
-            f"        static u8 _kc_ci[{lay.type_table_size}]{_IW}={{{by_kind(body_index)}}};",
-            f"        static u8 _kc_wi[{lay.type_table_size}]{_IW}={{{by_kind(wall_index)}}};",
-            f"        static u8 _kc_mask[{len(body_index)}]{_IW}={{{','.join(str(masks[k]) for k in body_index)}}};",
+            *iwram_table(scene, "_kc_ci",
+                         f"        static const u8 _kc_ci[{lay.type_table_size}]={{{by_kind(body_index)}}};"),
+            *iwram_table(scene, "_kc_wi",
+                         f"        static const u8 _kc_wi[{lay.type_table_size}]={{{by_kind(wall_index)}}};"),
+            *iwram_table(scene, "_kc_mask",
+                         f"        static const u8 _kc_mask[{len(body_index)}]={{{','.join(str(masks[k]) for k in body_index)}}};"),
             *("    " + line for line in table),
             *("    " + line for line in each_slot(step)),
             "    }",

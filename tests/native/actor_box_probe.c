@@ -96,6 +96,13 @@ static void a_collide(Actor *s, Actor *o, u8 m, u8 t) { (void)s; (void)o; (void)
 static void a_exit(Actor *s, Actor *o, u8 m, u8 t)    { (void)s; (void)o; (void)m; (void)t; s_ev_a[2]++; }
 static void b_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; (void)m; (void)t; s_ev_b[0]++; }
 static void b_exit(Actor *s, Actor *o, u8 m, u8 t)    { (void)s; (void)o; (void)m; (void)t; s_ev_b[2]++; }
+static void a_replace_other(Actor *s, Actor *o, u8 m, u8 t) {
+    (void)s; (void)m; (void)t;
+    if (o->slot_index != 1) return;
+    Actor replacement = *o;
+    actor_destroy_internal(o);
+    actor_init_slot(1, -1, &replacement, 0);
+}
 /* Le type 1 (emplacement 0) répond aux trois crochets, le type 2 (emplacement 1) à enter et exit. */
 static ModelDesc s_desc[3];
 static const u8 s_ki[3] = {255, 0, 1};
@@ -578,6 +585,37 @@ int main(void) {
         contact_frame("contact_10");           /* enter */
         g_actors[1].gen++;
         contact_frame("contact_11");           /* emplacement réoccupé : un nouveau contact, sans exit de l'ancien */
+    }
+    {   /* Un callback réoccupe B : A-C reste valide, A-B et B-C ne doivent plus prévenir l'ancien B. */
+        Actor initial = {.active = 1, .type_id = 2};
+        initial.collision.box_count = 1;
+        initial.collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_BODY };
+        for (int i = 0; i < 3; i++) actor_init_slot(i, -1, &initial, 0);
+        g_actors[0].type_id = 1;
+        g_actor_slot_end = 3;
+        s_desc[1].on_contact[0] = a_replace_other;
+        s_ev_b[0] = 0;
+        const u16 allowed[2][2] = {{0, 1}, {1, 1}};
+        ContactBody list[3];
+        Contact prev[3], cur[3];
+        int prev_n = 0;
+        contacts_run(s_desc, s_ki, &allowed[0][0], 2, list, prev, &prev_n, cur, 3);
+        printf("contact_reoccupation_callback %d\n", s_ev_b[0]);
+
+        /* B-C existe avant que A n'entre. A-C attend une place ; A-B peut entrer tout de suite. */
+        s_desc[1].on_contact[0] = a_enter;
+        s_ev_b[2] = 0;
+        prev_n = 0;
+        g_actors[0].x = 100 << 8;
+        contacts_run(s_desc, s_ki, &allowed[0][0], 2, list, prev, &prev_n, cur, 2);
+        g_actors[0].x = 0;
+        contacts_run(s_desc, s_ki, &allowed[0][0], 2, list, prev, &prev_n, cur, 2);
+        printf("contact_saturation %d %d %d %d\n", prev_n, prev[1].a, prev[1].b, s_ev_b[2]);
+        contacts_run(s_desc, s_ki, &allowed[0][0], 2, list, prev, &prev_n, cur, 2);
+        printf("contact_saturation_dure %d %d %d %d\n", prev_n, prev[1].a, prev[1].b, s_ev_b[2]);
+        g_actors[2].x = 100 << 8;
+        contacts_run(s_desc, s_ki, &allowed[0][0], 2, list, prev, &prev_n, cur, 2);
+        printf("contact_saturation_liberee %d %d %d %d\n", prev_n, prev[0].a, prev[0].b, s_ev_b[2]);
     }
     {   /* scene.gravity : le côté d'appui suit l'axe dominant (le bas sans gravité ou à égalité), et un Rigid endormi
            reprend sa chute seulement si la gravité change. */

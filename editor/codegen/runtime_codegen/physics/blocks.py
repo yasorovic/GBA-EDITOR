@@ -24,6 +24,7 @@ from core.models.components import (
     PHYSICS_BODY_STATIC, CollisionShapeComponent,
 )
 from core.models.settings import tags_collide
+from codegen.iwram_plan import iwram_table
 from codegen.runtime_codegen.physics.body import (
     physics_blocker_entries, physics_body_mode, physics_collider_entries,
     physics_collider_mask, shape_one_way_dir, uses_body_collider, uses_character_solver,
@@ -39,9 +40,6 @@ from codegen.runtime_codegen.shared_pool_gen import shared_models
 # immobile, les autres (Static, Rigid, Character) ne repoussent qu'un mobile en mouvement. Le rang tient dans les 7 bits bas.
 BLOCKER_MOVING = 0x80
 
-# Les tables de la passe sont lues à chaque couple testé : rangées en IWRAM, comme le descripteur de modèle (la ROM coûte
-# des états d'attente à chaque lecture ; sans section, GCC remet en ROM une table jamais écrite).
-_IW = ' __attribute__((section(".data.model_desc")))'
 # Au-delà de ce nombre de bloqueurs possibles (4 octets chacun), la liste de l'image passe de l'IWRAM à l'EWRAM.
 _LIST_IWRAM = 128
 
@@ -268,14 +266,16 @@ def block_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance) -> 
     return [
         "    /* Blocage entre acteurs, par couple de types : avant la carte de collision, qui a le dernier mot. */",
         "    {",
-        f"        static u8 _bk_mi[{type_table_size}]{_IW}={{{by_kind(mover_index)}}};",
-        f"        static u8 _bk_bi[{type_table_size}]{_IW}={{{by_kind(blocker_index)}}};",
-        f"        static u8 _bk_mask[{len(movers)}]{_IW}={{{','.join(str(m) for _k, m, _w, _r in movers)}}};",
-        *([f"        static u8 _bk_wall[{len(movers)}]{_IW}={{{','.join(str(w) for _k, _m, w, _r in movers)}}};"]
+        *iwram_table(scene, "_bk_mi", f"        static const u8 _bk_mi[{type_table_size}]={{{by_kind(mover_index)}}};"),
+        *iwram_table(scene, "_bk_bi", f"        static const u8 _bk_bi[{type_table_size}]={{{by_kind(blocker_index)}}};"),
+        *iwram_table(scene, "_bk_mask",
+                     f"        static const u8 _bk_mask[{len(movers)}]={{{','.join(str(m) for _k, m, _w, _r in movers)}}};"),
+        *([*iwram_table(scene, "_bk_wall", f"        static const u8 _bk_wall[{len(movers)}]={{{','.join(str(w) for _k, _m, w, _r in movers)}}};")]
           if walls else []),
-        f"        static PairRun _bk_run[{len(movers)}][{len(blocker_kinds)}]{_IW}={{{','.join(run_rows)}}};",
-        f"        static u8 _bk_box[{len(box)}]{_IW}={{{','.join(map(str, box))}}};",
-        *([f"        static u8 _bk_ow[{len(ow)}]{_IW}={{{','.join(map(str, ow))}}};"] if one_way else []),
+        *iwram_table(scene, "_bk_run",
+                     f"        static const PairRun _bk_run[{len(movers)}][{len(blocker_kinds)}]={{{','.join(run_rows)}}};"),
+        *iwram_table(scene, "_bk_box", f"        static const u8 _bk_box[{len(box)}]={{{','.join(map(str, box))}}};"),
+        *([*iwram_table(scene, "_bk_ow", f"        static const u8 _bk_ow[{len(ow)}]={{{','.join(map(str, ow))}}};")] if one_way else []),
         f"        static BlockTarget _bk_list[{capacity}]{where};",
         "        int _bk_n=block_targets(_bk_bi,_bk_list);",
         *("    " + line for line in each_slot(step)),

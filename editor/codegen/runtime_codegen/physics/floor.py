@@ -15,6 +15,7 @@ from core.models.components import (
     PHYSICS_BODY_STATIC,
 )
 from core.models.settings import tags_collide
+from codegen.iwram_plan import iwram_table
 from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.model_desc import each_slot
 from codegen.runtime_codegen.shared_pool_gen import shared_models
@@ -27,8 +28,6 @@ from codegen.runtime_codegen.physics.body import (
     support_normal,
 )
 
-# Les tables de la passe sont lues à chaque couple testé : rangées en IWRAM, comme le descripteur de modèle.
-_IW = ' __attribute__((section(".data.model_desc")))'
 # Au-delà de ce nombre d'appuis possibles (12 octets chacun), l'instantané de l'image passe de l'IWRAM à l'EWRAM.
 _SNAPSHOT_IWRAM = 64
 
@@ -223,11 +222,14 @@ def floor_tick_lines(p, scene_actors, scene=None, pi=(), resolve_initial_appeara
     return [
         "    /* Contact au sol final des CharacterBody et RigidBody, par couple de types (corps, appui) */",
         "    {",
-        f"        static u8 _fl_bi[{lay.type_table_size}]{_IW}={{{by_kind(body_index)}}};",
-        f"        static u8 _fl_si[{lay.type_table_size}]{_IW}={{{by_kind(support_index)}}};",
-        f"        static u8 _fl_mask[{len(bodies)}]{_IW}={{{','.join(str(m) for _k, m, _r in bodies)}}};",
-        f"        static PairRun _fl_run[{len(bodies)}][{len(support_kinds)}]{_IW}={{{','.join(run_rows)}}};",
-        f"        static FloorPair _fl_pair[{len(table)}]{_IW}={{{','.join(table)}}};",
+        *iwram_table(scene, "_fl_bi", f"        static const u8 _fl_bi[{lay.type_table_size}]={{{by_kind(body_index)}}};"),
+        *iwram_table(scene, "_fl_si",
+                     f"        static const u8 _fl_si[{lay.type_table_size}]={{{by_kind(support_index)}}};"),
+        *iwram_table(scene, "_fl_mask",
+                     f"        static const u8 _fl_mask[{len(bodies)}]={{{','.join(str(m) for _k, m, _r in bodies)}}};"),
+        *iwram_table(scene, "_fl_run",
+                     f"        static const PairRun _fl_run[{len(bodies)}][{len(support_kinds)}]={{{','.join(run_rows)}}};"),
+        *iwram_table(scene, "_fl_pair", f"        static const FloorPair _fl_pair[{len(table)}]={{{','.join(table)}}};"),
         f"        static FloorSupport _fl_list[{capacity}]{where};",
         "        int _fl_n=floor_supports(_fl_si,_fl_list);",
         *("    " + line for line in each_slot(step)),

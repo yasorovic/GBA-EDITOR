@@ -559,6 +559,10 @@ def test_c_une_paire_appelle_enter_collide_exit_dans_l_ordre_avec_les_bons_tags(
     assert sortie_sonde["contact_9"] == [3, 1, 2, 3, 1]       # détruit : personne n'apprend exit
     assert sortie_sonde["contact_10"] == [4, 1, 2, 4, 1]
     assert sortie_sonde["contact_11"] == [5, 1, 2, 5, 1]      # réoccupé : un nouveau enter, pas d'exit pour l'ancien
+    assert sortie_sonde["contact_reoccupation_callback"] == [1]  # seul le contact A-C reste valide
+    assert sortie_sonde["contact_saturation"] == [2, 1, 2, 0]
+    assert sortie_sonde["contact_saturation_dure"] == [2, 1, 2, 0]
+    assert sortie_sonde["contact_saturation_liberee"] == [1, 0, 1, 2]
 
 
 def test_c_scene_gravity_choisit_le_cote_d_appui_et_reveille_les_rigid(sortie_sonde):

@@ -20,6 +20,7 @@ from core.models.components import (
     shape_material,
 )
 from core.models.settings import tags_collide
+from codegen.iwram_plan import iwram_table
 from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.physics.body import (
     physics_blocker_entries, physics_body, physics_body_mode, physics_collider_entries,
@@ -31,8 +32,6 @@ from codegen.runtime_codegen.shared_pool_gen import shared_models
 # Pixels dont la première passe élargit les rectangles : une paire proche mais pas encore en contact reste dans la liste
 # des passes suivantes, qui la verront se toucher après les corrections de la première.
 RIGID_PAIR_MARGIN = 2
-# Les tables sont lues à chaque paire testée : rangées en IWRAM, comme le descripteur de modèle.
-_IW = ' __attribute__((section(".data.model_desc")))'
 # Au-delà de ce nombre de corps possibles (12 octets chacun), l'instantané passe de l'IWRAM à l'EWRAM.
 _SNAPSHOT_IWRAM = 64
 # Les paires retenues par la première passe, gardées pour les suivantes ; au-delà, les passes suivantes rebalayent toutes
@@ -253,12 +252,15 @@ def impulse_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance) -
     return [
         "    /* Impulsions Rigid, par couple de types : masses et matériaux Q8 */",
         "    {",
-        f"        static u8 _ri_ki[{lay.type_table_size}]{_IW}={{{by_kind}}};",
-        f"        static u16 _ri_mass[{len(bodies)}]{_IW}={{{','.join(str(_inverse_mass(owners[k][0])) for k in bodies)}}};",
-        f"        static u8 _ri_side[{len(bodies)}]{_IW}="
-        f"{{{','.join(str(_side_kind(physics_body_mode(owners[k][0]))) for k in bodies)}}};",
-        f"        static PairRun _ri_run[{len(bodies)}][{len(bodies)}]{_IW}={{{','.join(run_rows)}}};",
-        f"        static RigidBox _ri_pair[{max(1, len(flat))}]{_IW}={{{','.join(flat) or '{0}'}}};",
+        *iwram_table(scene, "_ri_ki", f"        static const u8 _ri_ki[{lay.type_table_size}]={{{by_kind}}};"),
+        *iwram_table(scene, "_ri_mass",
+                     f"        static const u16 _ri_mass[{len(bodies)}]={{{','.join(str(_inverse_mass(owners[k][0])) for k in bodies)}}};"),
+        *iwram_table(scene, "_ri_side", f"        static const u8 _ri_side[{len(bodies)}]="
+        f"{{{','.join(str(_side_kind(physics_body_mode(owners[k][0]))) for k in bodies)}}};"),
+        *iwram_table(scene, "_ri_run",
+                     f"        static const PairRun _ri_run[{len(bodies)}][{len(bodies)}]={{{','.join(run_rows)}}};"),
+        *iwram_table(scene, "_ri_pair",
+                     f"        static const RigidBox _ri_pair[{max(1, len(flat))}]={{{','.join(flat) or '{0}'}}};"),
         f"        static RigidBody _ri_list[{capacity}]{where};",
         f"        static u32 _ri_live[{live}] EWRAM_BSS;",
         f"        rigid_solve(_ri_ki,_ri_mass,_ri_side,&_ri_run[0][0],{len(bodies)},_ri_pair,_ri_list,_ri_live,{live},"
