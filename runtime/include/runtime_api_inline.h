@@ -29,10 +29,10 @@
 /* Globaux définis dans main.c, visibles par tous les scripts */
 extern Actor g_actors[];
 extern u16 *g_actor_floor;
-extern u8 *g_drop_through;   /* frames restantes où un corps ignore les faces à sens unique, par `Actor.inst` */
+extern u8 *g_drop_through;   /* frames restantes où un corps ignore les faces à sens unique, par `Actor.slot_index` */
 extern u8 g_drop_live;       /* au moins un compteur ci-dessus est non nul : le décompte de la frame ne tourne que alors */
 /* L'état de script de TOUS les acteurs : un bloc de `OBJ_STATE_STRIDE` octets par emplacement de
-   `g_actors`, à l'indice `Actor.inst`. Chaque script y range sa structure d'état (la plus grande
+   `g_actors`, à l'indice `Actor.slot_index`. Chaque script y range sa structure d'état (la plus grande
    du projet fixe la taille d'un bloc) ; un emplacement n'en porte qu'une à la fois. */
 extern u32 g_obj_state[];
 extern OamEntry g_oam_entries[];
@@ -98,13 +98,13 @@ extern int g_scene_collision_layer;   /* index BG (0-3) portant la carte de coll
    gravité, comme avant). Un seul endroit le recalcule : scene_set_gravity. */
 extern int g_gravity_x, g_gravity_y;
 extern u8 g_support_normal;
-extern int g_spool_start, g_spool_hw;
+extern int g_spool_start, g_actor_slot_end;
 static inline Vec2 scene_get_gravity(void) { return (Vec2){ g_gravity_x, g_gravity_y }; }
 static inline void scene_set_gravity(Vec2 g) {
     int ax = g.x < 0 ? -g.x : g.x, ay = g.y < 0 ? -g.y : g.y;
     if (g.x != g_gravity_x || g.y != g_gravity_y) {   /* un Rigid endormi doit tomber dans la nouvelle gravité */
         for (int i = 0; i < g_scene_placed; i++) g_actors[i].physics_sleep = 0;
-        for (int i = g_spool_start; i < g_spool_hw; i++) g_actors[i].physics_sleep = 0;
+        for (int i = g_spool_start; i < g_actor_slot_end; i++) g_actors[i].physics_sleep = 0;
     }
     g_gravity_x = g.x; g_gravity_y = g.y;
     g_support_normal = ax > ay ? (g.x > 0 ? 3 : 4) : (g.y < 0 ? 2 : 1);
@@ -320,16 +320,16 @@ static inline Vec2 actor_get_position(const Actor* s)   { return (Vec2){ s->x>>8
 static inline Actor* actor_live(Actor* s) { return (s && s->alive) ? s : (Actor*)0; }
 
 /* Le pool PARTAGÉ de la scène : les emplacements d'acteurs que n'importe quel modèle simple prend en
-   naissant. Posés par `scene_init` (début, fin, première entrée d'état) ; `g_spool_hw` est le plus haut
+   naissant. Posés par `scene_init` (début, fin, première entrée d'état) ; `g_actor_slot_end` est le plus haut
    emplacement utilisé + 1 : les boucles du tick (`POOL_EACH`, actor_types_static.h) s'arrêtent là au lieu de
    parcourir tout le pool, et sautent les blocs de 32 emplacements sans vivant (`g_alive_bits`).
    `g_spool_free` est le curseur du spawn : aucun emplacement libre en dessous. Le spawn cherche à partir
    de lui (au lieu de parcourir le pool depuis le début à chaque naissance) ; une destruction le ramène
    en arrière, un spawn l'avance. */
-extern int g_spool_start, g_spool_end, g_spool_hw, g_spool_entry, g_spool_free;
+extern int g_spool_start, g_spool_end, g_actor_slot_end, g_spool_entry, g_spool_free;
 
 /* Un modèle à PARTIES occupe un groupe d'emplacements contigus (le script atteint la partie k par
-   `self + k`). `Actor.model` dit alors AUSSI quelle partie l'emplacement occupe : la racine porte l'identité
+   `self + k`). `Actor.type_id` dit alors AUSSI quelle partie l'emplacement occupe : la racine porte l'identité
    du modèle, sa partie k cette identité + k. Une table par type d'emplacement, posée par `scene_init` (nulle pour
    une scène sans modèle à parties) : g_spool_part[type] = rang de la partie (k), 0 pour une racine ou un modèle plat.
    Elle ne sert qu'à l'allocation du pool (`group_root_slot`, `spool_slot_free`) : le parent d'une partie est dans
@@ -348,7 +348,7 @@ static inline int group_slot(int root, int k)              { return root + k; }
 static inline int group_entry(int root_entry, int k)       { return root_entry + k; }
 static inline Actor* group_part(Actor* root, int k)        { return root + k; }
 static inline int group_root_slot(int slot) {
-    return slot - (g_spool_part ? g_spool_part[g_actors[slot].model] : 0);
+    return slot - (g_spool_part ? g_spool_part[g_actors[slot].type_id] : 0);
 }
 
 /* `boss.Canon` sur une RÉFÉRENCE : la partie k du groupe de `root`, ou nil si la référence est nil/périmée ou si la partie a été
@@ -363,13 +363,13 @@ static inline Actor* actor_child(Actor* root, int k) {
    parent détruit ses enfants (`actor_destroy_internal`) : un enfant vivant a toujours un parent vivant. */
 static inline Actor* actor_root(Actor* a) {
     if (!a || !a->alive) return (Actor*)0;
-    int s = a->inst;
+    int s = a->slot_index;
     for (int p = slot_parent(s); p >= 0; p = slot_parent(s)) s = p;
     return &g_actors[s];
 }
 static inline Actor* actor_parent(Actor* a) {
     if (!a || !a->alive) return (Actor*)0;
-    int p = slot_parent(a->inst);
+    int p = slot_parent(a->slot_index);
     return p >= 0 ? &g_actors[p] : (Actor*)0;
 }
 
@@ -389,39 +389,39 @@ static inline int spool_slot_free(int k) {
 }
 
 /* Les instances d'un MODÈLE (un prefab dans la scène) se retrouvent par sa table `g_model_*` (les
-   posées, et sa réserve à part s'il en a une) puis, pour un modèle du pool partagé (`model` ≠ 0), par
-   `Actor.model`. `actor:count("Bullet")` compte celles qui existent ; `actor:get("Bullet", i)` rend la
+   posées, et sa réserve à part s'il en a une) puis, pour un modèle du pool partagé (`root_type_id` ≠ 0), par
+   `Actor.type_id`. `actor:count("Bullet")` compte celles qui existent ; `actor:get("Bullet", i)` rend la
    i-ème (0-based ici), ou nil. L'indice est celui des instances VIVANTES, dans l'ordre : détruire une
    instance en cours de boucle décale les suivantes, comme retirer d'une liste. */
-static inline int actor_model_count(const ModelSlot* t, int n, int model) {
+static inline int actor_model_count(const ModelSlot* t, int n, int root_type_id) {
     int c = 0;
     for (int k = 0; k < n; k++) c += g_actors[t[k].slot].alive;
-    if (model) {
+    if (root_type_id) {
         /* La part du pool ne se recompte que si quelqu'un est né ou mort depuis la dernière fois : une boucle
            `for i = 1, actor:count("Balle")` relit sa borne à chaque tour. */
-        if (g_nth.count_epoch != g_alive_epoch || g_nth.count_model != model) {
+        if (g_nth.count_epoch != g_alive_epoch || g_nth.count_root_type_id != root_type_id) {
             int pc = 0;
             POOL_EACH(k)
-                pc += g_actors[k].alive && g_actors[k].model == model;
-            g_nth.count_epoch = g_alive_epoch; g_nth.count_model = model; g_nth.count = pc;
+                pc += g_actors[k].alive && g_actors[k].type_id == root_type_id;
+            g_nth.count_epoch = g_alive_epoch; g_nth.count_root_type_id = root_type_id; g_nth.count = pc;
         }
         c += g_nth.count;
     }
     return c;
 }
-static inline Actor* actor_model_nth(const ModelSlot* t, int n, int model, int n0) {
+static inline Actor* actor_model_nth(const ModelSlot* t, int n, int root_type_id, int n0) {
     if (n0 < 0) return (Actor*)0;
     for (int k = 0; k < n; k++)
         if (g_actors[t[k].slot].alive && n0-- == 0) return &g_actors[t[k].slot];
-    if (!model) return (Actor*)0;
+    if (!root_type_id) return (Actor*)0;
     /* `n0` est maintenant le rang demandé parmi les instances du pool. Le même rang qu'à l'appel précédent rend le même
        acteur ; le rang suivant se cherche à partir de son emplacement : une boucle en avançant de 1 coûte un parcours du
        pool en tout, et non un par tour. Un changement de vie depuis (époque) ou un autre modèle : parcours complet. */
-    if (g_nth.epoch == g_alive_epoch && g_nth.model == model) {
+    if (g_nth.epoch == g_alive_epoch && g_nth.root_type_id == root_type_id) {
         if (n0 == g_nth.rank) return &g_actors[g_nth.slot];
         if (n0 == g_nth.rank + 1) {
-            for (int k = g_nth.slot + 1; k < g_spool_hw; k++)
-                if (g_actors[k].alive && g_actors[k].model == model) {
+            for (int k = g_nth.slot + 1; k < g_actor_slot_end; k++)
+                if (g_actors[k].alive && g_actors[k].type_id == root_type_id) {
                     g_nth.rank = n0; g_nth.slot = k;
                     return &g_actors[k];
                 }
@@ -430,8 +430,8 @@ static inline Actor* actor_model_nth(const ModelSlot* t, int n, int model, int n
     }
     int rank = n0;
     POOL_EACH(k)
-        if (g_actors[k].alive && g_actors[k].model == model && rank-- == 0) {
-            g_nth.epoch = g_alive_epoch; g_nth.model = model; g_nth.rank = n0; g_nth.slot = k;
+        if (g_actors[k].alive && g_actors[k].type_id == root_type_id && rank-- == 0) {
+            g_nth.epoch = g_alive_epoch; g_nth.root_type_id = root_type_id; g_nth.rank = n0; g_nth.slot = k;
             return &g_actors[k];
         }
     return (Actor*)0;
@@ -569,11 +569,11 @@ static inline Vec2 actor_get_velocity(const Actor* s)    { return (Vec2){ s->vx,
    et un sol plein sous lui le reprend aussitôt. */
 static inline void actor_drop_through(Actor* s, int frames){
     if (!g_drop_through) return;
-    g_drop_through[s->inst] = frames < 0 ? 0 : (frames > 255 ? 255 : (u8)frames); g_drop_live = 1;
+    g_drop_through[s->slot_index] = frames < 0 ? 0 : (frames > 255 ? 255 : (u8)frames); g_drop_live = 1;
     if (frames > 0) {
         s->collision.grounded = 0;
         for (int i = 0; i < s->collision.box_count; i++) s->collision.boxes[i].grounded = 0;
-        if (g_actor_floor) g_actor_floor[s->inst] = 0;
+        if (g_actor_floor) g_actor_floor[s->slot_index] = 0;
     }
 }
 /* Applique la vélocité Q8 stockée à la position Q8 stockée — l'accumulateur
@@ -817,7 +817,7 @@ static inline void __attribute__((unused, noinline)) actor_init_slot(
     u16 generation = actor->gen + 1;
     *actor = *initial;
     actor->gen = generation;
-    actor->inst = slot;
+    actor->slot_index = slot;
     actor->oam_entry = entry;
     actor_slot_tables_clear(slot);
     g_slot_link[slot].parent = -1; g_slot_link[slot].depth = 0;   /* racine, jusqu'à `actor_link_slot` */
@@ -828,9 +828,9 @@ static inline void __attribute__((unused, noinline)) actor_init_slot(
 
 /* Activation / destruction */
 static inline void slot_kill(Actor* s) {
-    s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; alive_bit_clear(s->inst);
-    actor_slot_tables_clear(s->inst);
-    if ((int)s->inst >= g_spool_start && (int)s->inst < g_spool_free) g_spool_free = s->inst;   /* l'emplacement redevient le premier libre */
+    s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; alive_bit_clear(s->slot_index);
+    actor_slot_tables_clear(s->slot_index);
+    if ((int)s->slot_index >= g_spool_start && (int)s->slot_index < g_spool_free) g_spool_free = s->slot_index;   /* l'emplacement redevient le premier libre */
 }
 /* Les enfants de l'emplacement `s` (`g_slot_link`), puis les leurs : chaque vivant est détruit. `release` : le sommet
    détruit était une RACINE, tout son sous-arbre est rendu ; ses emplacements perdent leur type (0), morts d'avant
@@ -841,15 +841,15 @@ static inline void slot_destroy_children(int s, int release) {
         if (g_slot_link[k].parent != s) continue;
         if (g_actors[k].alive) slot_kill(&g_actors[k]);
         else if (!release) continue;
-        if (release) g_actors[k].model = 0;
+        if (release) g_actors[k].type_id = 0;
         slot_destroy_children(k, release);
     }
 }
 /* Détruire un acteur détruit son sous-arbre, posé ou né. */
 static inline void actor_destroy_internal(Actor* s)  {
-    int release = slot_parent(s->inst) < 0;
+    int release = slot_parent(s->slot_index) < 0;
     slot_kill(s);
-    if (g_slot_depth) slot_destroy_children(s->inst, release);
+    if (g_slot_depth) slot_destroy_children(s->slot_index, release);
 }
 
 /* La composition d'un enfant, chaque image, posé ou né : son transform monde est celui de son parent composé avec son
@@ -1355,7 +1355,7 @@ extern int save_read_var(int slot, int idx);
    fini de bouger. */
 static inline Actor* actor_get_floor(const Actor* a) {
     if (!a || !a->alive || !a->active || !g_actor_floor) return (Actor*)0;
-    u16 ref = g_actor_floor[a->inst];
+    u16 ref = g_actor_floor[a->slot_index];
     if (!ref) return (Actor*)0;
     Actor* floor = &g_actors[ref - 1];
     return floor->alive && floor->active ? floor : (Actor*)0;

@@ -1,7 +1,7 @@
 """Les contacts entre acteurs (`on_collision_enter`, `on_collide`, `on_collision_exit`), posés ou nés.
 
 Un contact est un couple de tags de boîtes qui se recouvrent entre deux acteurs (`actors_overlap_mask`). Les couples
-autorisés se lisent par couple de TYPES d'emplacement (`Actor.model`), cuits au build par la matrice des tags ; les
+autorisés se lisent par couple de TYPES d'emplacement (`Actor.type_id`), cuits au build par la matrice des tags ; les
 crochets, dans le descripteur de modèle (`ModelDesc.on_contact`). Le runtime relève une fois par image l'instantané des
 acteurs concernés, écarte les paires dont les rectangles ne se touchent pas, et compare la liste des contacts de l'image
 à celle de l'image précédente : un contact qui naît appelle enter, un qui dure collide, un qui se défait exit. Il ne
@@ -36,7 +36,7 @@ def contact_helper_lines() -> list[str]:
         "/* Un contact en cours entre deux emplacements (`a` < `b`) : leurs générations et un bit par couple de tags. */",
         "typedef struct { u16 a, b, gen_a, gen_b, mask; } Contact;",
         "static inline __attribute__((always_inline)) void contact_body_add(int s,const u8* ki,ContactBody* out,int* n){",
-        "    const Actor* a=&g_actors[s]; u8 j=ki[a->model];",
+        "    const Actor* a=&g_actors[s]; u8 j=ki[a->type_id];",
         "    if(j==255||!a->active) return;",
         "    int l=32767,top=32767,r=-32768,b=-32768,x=a->x>>8,y=a->y>>8;",
         "    for(int k=0;k<a->collision.box_count;k++){",
@@ -58,8 +58,8 @@ def contact_helper_lines() -> list[str]:
         "        u8 event=now?(was?1:0):2;            /* enter : naît ; collide : dure ; exit : se défait */",
         "        if(event==2&&(!a->alive||!b->alive)) continue;",
         "        u8 ta=a->collision.boxes[bi].tag, tb=b->collision.boxes[bj].tag;",
-        "        void (*fa)(Actor*,Actor*,u8,u8)=desc[a->model].on_contact[event];",
-        "        void (*fb)(Actor*,Actor*,u8,u8)=desc[b->model].on_contact[event];",
+        "        void (*fa)(Actor*,Actor*,u8,u8)=desc[a->type_id].on_contact[event];",
+        "        void (*fb)(Actor*,Actor*,u8,u8)=desc[b->type_id].on_contact[event];",
         "        if(fa&&(event!=2||a->active)) fa(a,b,ta,tb);",
         "        if(fb&&(event!=2||b->active)) fb(b,a,tb,ta);",
         "    }",
@@ -106,23 +106,23 @@ def contact_helper_lines() -> list[str]:
     ]
 
 
-def contact_tick_lines(p, scene, scene_actors, pi, shown, placed_scripts, has_event) -> list[str]:
+def contact_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance, placed_scripts, has_event) -> list[str]:
     """La passe de contacts de la scène, ou rien si aucun couple de types n'a de contact qui prévient un script.
 
     `placed_scripts` : le symbole du code Lua de chaque posé (None sans script), aligné sur `scene_actors` ; un modèle
     du pool a le sien. `has_event(symbole, événement)` dit si le script définit le crochet."""
     lay = scene_oam_layout(p, scene)
-    shared = shared_models(pi) if shown else []
+    shared = shared_models(pi) if resolve_initial_appearance else []
     owners: dict[int, object] = {}      # type -> porteur ; les copies d'un type ont les mêmes boîtes et le même code
     reacts: dict[int, bool] = {}        # type -> son script répond à un contact
-    for (actor, _sprite), kind, script in zip(scene_actors, lay.placed_model, placed_scripts):
+    for (actor, _sprite), kind, script in zip(scene_actors, lay.placed_type_ids, placed_scripts):
         owners.setdefault(kind, actor)
         reacts[kind] = reacts.get(kind, False) or bool(script and has_col_event(has_event, script))
     for m in shared:
-        # Une partie (`model_id + k`) a ses propres boîtes et réagit avec le script de sa racine.
+        # Une partie (`root_type_id + k`) a ses propres boîtes et réagit avec le script de sa racine.
         for k, owner in enumerate(model_owners(m)[:m["group"]]):
-            owners.setdefault(m["model_id"] + k, owner)
-            reacts[m["model_id"] + k] = reacts.get(m["model_id"] + k, False) or has_col_event(has_event, m["sym"])
+            owners.setdefault(m["root_type_id"] + k, owner)
+            reacts[m["root_type_id"] + k] = reacts.get(m["root_type_id"] + k, False) or has_col_event(has_event, m["sym"])
     kinds = sorted(owners)
     allowed = {(a, b): collision_pair_mask(owners[a], owners[b], p.settings) if reacts[a] or reacts[b] else 0
                for a in kinds for b in kinds}
@@ -130,22 +130,22 @@ def contact_tick_lines(p, scene, scene_actors, pi, shown, placed_scripts, has_ev
     if not bodies:
         return []
     index = {k: i for i, k in enumerate(bodies)}
-    pool = any(m["model_id"] in index for m in shared)
+    pool = any(m["root_type_id"] in index for m in shared)
     spool = shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if pool else 0
-    capacity = sum(1 for kind in lay.placed_model if kind in index) + spool
+    capacity = sum(1 for kind in lay.placed_type_ids if kind in index) + spool
     cap = max(1, min(CONTACT_CAPACITY, capacity * (capacity - 1) // 2))
     where = "" if capacity <= _SNAPSHOT_IWRAM else " EWRAM_BSS"
     rows = ",".join("{" + ",".join(str(allowed[(a, b)]) for b in bodies) + "}" for a in bodies)
-    by_kind = ",".join(str(index.get(k, 255)) for k in range(lay.kinds))
+    by_kind = ",".join(str(index.get(k, 255)) for k in range(lay.type_table_size))
     return [
         "    /* Contacts entre acteurs, par couple de types : enter, collide, exit (crochets lus au descripteur) */",
         "    {",
-        f"        static u8 _ct_ki[{lay.kinds}]{_IW}={{{by_kind}}};",
+        f"        static u8 _ct_type_to_index[{lay.type_table_size}]{_IW}={{{by_kind}}};",
         f"        static u16 _ct_allowed[{len(bodies)}][{len(bodies)}]{_IW}={{{rows}}};",
         f"        static ContactBody _ct_list[{capacity}]{where};",
         f"        static Contact _ct_prev[{cap}] EWRAM_BSS, _ct_cur[{cap}] EWRAM_BSS;",
         "        static int _ct_prev_n;",
-        f"        contacts_run({model_desc_sym(scene)},_ct_ki,&_ct_allowed[0][0],{len(bodies)},_ct_list,_ct_prev,"
+        f"        contacts_run({model_desc_sym(scene)},_ct_type_to_index,&_ct_allowed[0][0],{len(bodies)},_ct_list,_ct_prev,"
         f"&_ct_prev_n,_ct_cur,{cap});",
         "    }",
     ]

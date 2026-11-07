@@ -35,7 +35,7 @@ typedef struct { u16 attr0, attr1, attr2, dummy; } OBJATTR;
 OBJATTR shadow_oam[128];
 int cam_x = 0, cam_y = 0, g_oam_dropped = 0, g_affine_dropped = 0;
 Actor g_actors[2]; OamEntry g_oam_entries[2];
-int g_spool_start = 1, g_spool_end = 2, g_spool_hw = 1, g_spool_free = 1, g_spool_entry = 1, g_scene_placed = 0;
+int g_spool_start = 1, g_spool_end = 2, g_actor_slot_end = 1, g_spool_free = 1, g_spool_entry = 1, g_scene_placed = 0;
 const u8 *g_spool_part = 0;
 SlotLink g_slot_link[2]; int g_slot_depth = 0;
 u16 *g_actor_floor;
@@ -68,7 +68,7 @@ static void place(void){
 }
 static void seul(const char* chemin, int s){
     g_alive_bits[0] = 0;
-    g_spool_hw = g_spool_free = 1;
+    g_actor_slot_end = g_spool_free = 1;
     g_actors[1].alive = g_actors[1].active = 0;
     memset(g_aff_cache, 0, sizeof g_aff_cache);
     place();
@@ -155,7 +155,7 @@ def sortie(tmp_path_factory):
     pi = scene_pi(p, scene)
     lay = scene_oam_layout(p, scene)
     (ne,) = [m for m in pi if m["shared"]]
-    assert lay.placed_model == [ne["model_id"]], "la copie posée doit porter le type du modèle né"
+    assert lay.placed_type_ids == [ne["root_type_id"]], "la copie posée doit porter le type du modèle né"
     actors = [(a, None) for a in scene.actors]
     passe = anim_oam_pass_lines(p, actors, 0, pi, lay, [ne["sym"]], set(compute_affine_info(0, actors)), {})
     assert passe, "rien d'émis : la sonde ne comparerait rien"

@@ -38,14 +38,14 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 #define EWRAM_BSS
 Actor g_actors[4];
-int g_spool_start = 2, g_spool_hw = 2, g_scene_placed = 0;
+int g_spool_start = 2, g_actor_slot_end = 2, g_scene_placed = 0;
 u32 g_alive_bits[1], g_alive_epoch;
 @OVERLAP@
 static int ev[4][3];
-void @J@_on_collision_enter(Actor* s, Actor* o, u8 m, u8 t){ ev[s->inst][0]++; }
-void @J@_on_collide(Actor* s, Actor* o, u8 m, u8 t){ ev[s->inst][1]++; }
-void @J@_on_collision_exit(Actor* s, Actor* o, u8 m, u8 t){ ev[s->inst][2]++; }
-void @P@_on_collision_enter(Actor* s, Actor* o, u8 m, u8 t){ ev[s->inst][0]++; }
+void @J@_on_collision_enter(Actor* s, Actor* o, u8 m, u8 t){ ev[s->slot_index][0]++; }
+void @J@_on_collide(Actor* s, Actor* o, u8 m, u8 t){ ev[s->slot_index][1]++; }
+void @J@_on_collision_exit(Actor* s, Actor* o, u8 m, u8 t){ ev[s->slot_index][2]++; }
+void @P@_on_collision_enter(Actor* s, Actor* o, u8 m, u8 t){ ev[s->slot_index][0]++; }
 @HELPERS@
 @TABLE@
 
@@ -58,16 +58,16 @@ static Actor corps(int x, int vx){
     return a;
 }
 static void place(int slot, Actor a, int model){
-    a.inst = slot; a.model = model; g_actors[slot] = a;
-    if(slot >= g_spool_start && slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
+    a.slot_index = slot; a.type_id = model; g_actors[slot] = a;
+    if(slot >= g_spool_start && slot + 1 > g_actor_slot_end) g_actor_slot_end = slot + 1;
     alive_bit_set(slot);
 }
 static void tick(void){
 @LINES@
 }
 static void joue(const char* topo, int jp, int pp){
-    for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; ev[i][0] = ev[i][1] = ev[i][2] = 0; }
-    g_spool_hw = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
+    for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; ev[i][0] = ev[i][1] = ev[i][2] = 0; }
+    g_actor_slot_end = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
     int j = jp ? 0 : 2, p = pp ? 1 : 3;
     place(j, corps(10, 0), @TYPE_J@);          /* le joueur : x 10..18 */
     place(p, corps(30, -512), @TYPE_P@);       /* la pièce arrive de la droite, 2 px par image, et le traverse */
@@ -100,7 +100,7 @@ def _overlap_source() -> str:
 def _emissions(tmp_path) -> dict:
     import copy
     from codegen.runtime_codegen.gen_pool import scene_pi
-    from codegen.runtime_codegen.gen_sprite import shown
+    from codegen.runtime_codegen.gen_sprite import resolve_initial_appearance
     from codegen.runtime_codegen.model_desc import model_desc_lines
     from codegen.runtime_codegen.physics.contacts import contact_tick_lines
     from core.models.components import CollisionShapeComponent
@@ -125,8 +125,8 @@ def _emissions(tmp_path) -> dict:
     has_event = lambda s, ev: ev in events.get(s, set())
     actors = [(a, None) for a in scene.actors]
     return {"j": sj, "p": sp, "table": model_desc_lines(project, scene, actors, pi, [sj, sp], has_event),
-            "lines": contact_tick_lines(project, scene, actors, pi, shown, [sj, sp], has_event),
-            "types": (models["Joueur"]["model_id"], models["Piece"]["model_id"])}
+            "lines": contact_tick_lines(project, scene, actors, pi, resolve_initial_appearance, [sj, sp], has_event),
+            "types": (models["Joueur"]["root_type_id"], models["Piece"]["root_type_id"])}
 
 
 @pytest.fixture(scope="module")

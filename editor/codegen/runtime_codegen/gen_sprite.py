@@ -486,7 +486,7 @@ def anim_variants(p, owner, owner_sym: str) -> list:
     return variants
 
 
-def shown(p, owner):
+def resolve_initial_appearance(p, owner):
     """(composant, sprite) de l'apparence dont les constantes d'INITIALISATION
     valent pour l'entrée : l'apparence affichée au départ, à défaut la première.
     (None, None) sans apparence. Les autres apparences reposent leurs propres
@@ -511,12 +511,12 @@ def anim_oam_pass_lines(p, scene_actors, actor_offset: int, pi, layout, placed_s
                         sprite_offsets: dict) -> list[str]:
     """L'animation puis l'écriture OAM de chaque emplacement actif de la scène, posé ou né : UNE boucle sur
     `[actor_offset, fin)` (les posés, puis le pool partagé qui les suit dans `g_actors`), et dans le cas du TYPE de
-    l'emplacement (`Actor.model`) le tick d'animation de son porteur puis ses constantes de sprite. `_pk` est
+    l'emplacement (`Actor.type_id`) le tick d'animation de son porteur puis ses constantes de sprite. `_pk` est
     l'acteur, `_pe` son état d'affichage (`Actor.oam_entry`). L'ordre des sprites dans `shadow_oam` est celui des
     emplacements, posés d'abord.
 
     Le code d'un type s'écrit une fois, d'après un de ses porteurs : une copie posée identique au prefab porte le
-    `model_id` du modèle né (`pool_model.placed_types`), les membres d'une variante ont le même sprite et le même
+    `root_type_id` du modèle né (`pool_model.placed_types`), les membres d'une variante ont le même sprite et le même
     code. Ce qui peut différer d'une copie à l'autre se lit dans l'emplacement : la visibilité, l'état d'animation,
     l'affine (`OamEntry.affine_slot` >= 0). Un type est émis avec la branche affine si l'un de ses porteurs l'est.
 
@@ -535,9 +535,9 @@ def anim_oam_pass_lines(p, scene_actors, actor_offset: int, pi, layout, placed_s
     for m in shared:
         for k, owner in enumerate(owners(m)):
             if m["member_entries"][k] >= 0:            # un porteur sans entrée n'anime ni n'affiche rien
-                add(m["model_id"] + k, owner, m["sym"], pool_affine(p, m["prefab"], owner) is not None)
+                add(m["root_type_id"] + k, owner, m["sym"], pool_affine(p, m["prefab"], owner) is not None)
     for j, ((actor, _sprite), kind, entry, sym) in enumerate(
-            zip(scene_actors, layout.placed_model, layout.placed_entry, placed_syms)):
+            zip(scene_actors, layout.placed_type_ids, layout.placed_entry, placed_syms)):
         if entry >= 0:
             add(kind, actor, sym, actor_offset + j in placed_affine)
 
@@ -559,4 +559,4 @@ def anim_oam_pass_lines(p, scene_actors, actor_offset: int, pi, layout, placed_s
             "        Actor* _a=&g_actors[_pk];",
             "        if(!_a->active) continue;",
             "        int _pe=_a->oam_entry;",
-            "        switch(_a->model){", *cases, "        default: break;", "        }", "    }"]
+            "        switch(_a->type_id){", *cases, "        default: break;", "        }", "    }"]

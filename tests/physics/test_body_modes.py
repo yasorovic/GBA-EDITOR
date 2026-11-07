@@ -177,7 +177,7 @@ def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
 
     # Un seul pas pour tous les emplacements posés, avec la gravité de la scène en Q8 ; le mode vient du descripteur.
     assert "SLOT_EACH(_k){" in lines                             # un seul parcours, posés et nés
-    assert "body_motion_step(_a,&g_model_desc_Platform[_a->model],64,128," in lines
+    assert "body_motion_step(_a,&g_model_desc_Platform[_a->type_id],64,128," in lines
     assert "POOL_EACH" not in lines                               # aucun modèle ne naît dans cette scène
     assert body_desc(character) == (1, 1, 256)                    # Character : gravité seule, son script l'applique
     assert body_desc(kinematic) == (2, 1, 256)
@@ -218,12 +218,12 @@ def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
     sleep = "\n".join(physics_sleep_lines(scene, settings, [(rigid, None)], []))
 
     # gravité (0, 128), part de vitesse gardée 192 / 256, chute max 768, sommeil après 20 images.
-    assert "body_motion_step(_a,&g_model_desc_Inherited[_a->model],0,128,192,768,20);" in motion
+    assert "body_motion_step(_a,&g_model_desc_Inherited[_a->type_id],0,128,192,768,20);" in motion
     # Le repos se lit sur la position : rayon = seuil (13 en Q8) x délai (20 frames), autour d'une ancre par emplacement.
     assert "SLOT_EACH(_k){" in sleep
-    assert "body_sleep_step(_a,&g_model_desc_Inherited[_a->model],260,20);" in sleep
+    assert "body_sleep_step(_a,&g_model_desc_Inherited[_a->type_id],260,20);" in sleep
     helpers = "\n".join(motion_helper_lines())
-    assert "int* r=g_rigid_rest[a->inst];" in helpers and "a->physics_sleep=0;" in helpers
+    assert "int* r=g_rigid_rest[a->slot_index];" in helpers and "a->physics_sleep=0;" in helpers
 
 
 def test_un_rigid_module_sa_gravite_et_peut_refuser_le_sommeil():
@@ -247,7 +247,7 @@ def test_un_rigid_module_sa_gravite_et_peut_refuser_le_sommeil():
     motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], []))
     sleep = physics_sleep_lines(scene, settings, [(rigid, None)], [])
 
-    assert "body_motion_step(_a,&g_model_desc_Air[_a->model],64,128,256,2048,30);" in motion
+    assert "body_motion_step(_a,&g_model_desc_Air[_a->type_id],64,128,256,2048,30);" in motion
     assert body_desc(rigid) == (3, 0, -128)                       # gravité x -0,5, ne dort pas
     assert sleep == []
 
@@ -319,7 +319,7 @@ def test_le_tick_emet_on_crushed_pour_un_obstacle_static(tmp_path):
 
     # Le crochet est lu au descripteur, posé ou né : la ligne du Rider le cite, la passe d'écrasement le lit.
     assert f".on_crushed={symbol}_on_crushed}},   /* " in code
-    assert "kinematic_crush(_a,&g_model_desc_Scene_01[_a->model],_kc_mask[_ci],_kc_run[_ci],_kc_wi,_kc_pair," in code
+    assert "kinematic_crush(_a,&g_model_desc_Scene_01[_a->type_id],_kc_mask[_ci],_kc_run[_ci],_kc_wi,_kc_pair," in code
 
 
 def test_le_tick_emet_on_crushed_pour_la_carte_sans_static(tmp_path):
@@ -344,7 +344,7 @@ def test_le_tick_emet_on_crushed_pour_la_carte_sans_static(tmp_path):
 
     # L'écrasement par la carte passe par le descripteur (`body_tile_step`), la ligne du posé cite le crochet.
     assert f".on_crushed={symbol}_on_crushed}},   /* " in code and "posé : Rider" in code
-    assert "body_tile_step(_a,&g_model_desc_Scene_01[_a->model],0,_kin_d[_a->inst]);" in code
+    assert "body_tile_step(_a,&g_model_desc_Scene_01[_a->type_id],0,_kin_d[_a->slot_index]);" in code
 
 
 def _floor_supports(tmp_path, actors) -> dict[int, dict[int, list[tuple[int, int]]]]:

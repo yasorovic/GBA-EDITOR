@@ -170,7 +170,7 @@ def test_prefab_a_sous_arbre_occupe_un_groupe_par_instance(tmp_path):
     p = _projet(tmp_path, scenes=[scene], prefabs=[boss])
     assert prefab_group(boss) == 3
     pool = scene_oam_layout(p, scene).pools[0]
-    assert pool.group == 3 and pool.model_id == 1
+    assert pool.group == 3 and pool.root_type_id == 1
 
 
 # ── Acteurs inactifs : comptés comme le build les traite (exclus) ─────
@@ -207,8 +207,8 @@ def test_layout_deterministe(tmp_path):
     scene = Scene(name="S", actors=[Actor(name="A")])
     faire_naitre(tmp_path, scene, "Boss", "Ball")
     p = _projet(tmp_path, scenes=[scene], prefabs=[Prefab(name="Ball"), Prefab(name="Boss")])
-    a = [(pl.sym, pl.model_id) for pl in scene_oam_layout(p, scene).pools]
-    b = [(pl.sym, pl.model_id) for pl in scene_oam_layout(p, scene).pools]
+    a = [(pl.sym, pl.root_type_id) for pl in scene_oam_layout(p, scene).pools]
+    b = [(pl.sym, pl.root_type_id) for pl in scene_oam_layout(p, scene).pools]
     assert a == b
     # Ordre = ordre du catalogue de prefabs (stable), pas celui des appels dans le script.
     assert [s for s, _ in a] == ["S_Ball", "S_Boss"]

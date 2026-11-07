@@ -38,10 +38,10 @@ typedef struct { int x, y, w, h; } Rect;
    libre, `actor:count("M")` et `actor:get("M", i)` pour parcourir les instances vivantes. */
 typedef struct ModelSlot { u16 slot; s16 entry; } ModelSlot;
 /* Seules les instances POSÉES d'un modèle et celles de sa réserve à part y figurent ; celles qui naissent
-   dans le pool partagé se retrouvent à `Actor.model`. */
+   dans le pool partagé se retrouvent à `Actor.type_id`. */
 
 /* Le DESCRIPTEUR d'un type d'emplacement : ce que le runtime lit au modèle, pour un acteur posé comme pour un
-   acteur né, par `Actor.model`. Une table par scène (`g_model_desc_<Scène>[]`), émise par le build et rangée en
+   acteur né, par `Actor.type_id`. Une table par scène (`g_model_desc_<Scène>[]`), émise par le build et rangée en
    IWRAM. Le type 0 ne décrit rien ; un champ nul veut dire « rien ».
      body_mode      : 0 aucun mouvement automatique (pas de corps, ou Static), 1 Character, 2 Kinematic, 3 Rigid ;
      can_sleep      : un Rigid peut s'endormir ;
@@ -252,7 +252,7 @@ typedef struct Actor {
     /* L'indice de CET emplacement dans `g_actors[]`, posé une fois à l'entrée de scène : c'est aussi
        celui de son bloc d'état de script dans `g_obj_state` (cf. runtime_api_inline.h). Il évite la
        division par la taille d'un `Actor` qu'une soustraction de pointeurs coûterait. */
-    u16 inst;
+    u16 slot_index;
     /* GÉNÉRATION de l'emplacement : +1 quand l'acteur qui l'occupait est détruit, quand un autre y
        naît, et à chaque entrée de scène. Une référence rangée dans une variable
        (`actor_ref_make`) retient la génération qu'elle a vue ; si l'emplacement a changé de
@@ -265,10 +265,9 @@ typedef struct Actor {
        son emplacement (alive = 0) ; un acteur seulement DÉSACTIVÉ (active = 0) le garde, reste
        adressable et peut être réactivé. Seul un emplacement libre est repris par un spawn. */
     u8 alive;
-    /* Le MODÈLE d'un acteur né dans le pool partagé (1.. : `MODELID_*`), 0 ailleurs. Un emplacement du
-       pool accueille n'importe quel modèle simple : c'est ce champ qui dit lequel, donc quel code
-       l'anime et quel sprite l'affiche. */
-    u8 model;
+    /* Type runtime de l’acteur, posé ou spawné. Indexe le descripteur de la scène.
+       Chaque partie de prefab a son propre type. Le type 0 est réservé. */
+    u8 type_id;
     s8 dir_x;              /* TRAJECTOIRE X courante : -1 | 0 | 1 (0 à l'arrêt) */
     s8 dir_y;              /* TRAJECTOIRE Y courante : -1 | 0 | 1 (0 à l'arrêt) */
     /* REGARD : la dernière direction non nulle, conservée à l'arrêt (self.facing).
@@ -309,21 +308,21 @@ typedef struct Actor {
    Posé par le constructeur (`actor_init_slot` : `alive_bit_set`), effacé par `actor_destroy_internal`
    (`alive_bit_clear`), remis à zéro par `scene_init`.
 
-   `g_spool_hw` est le plus haut emplacement utilisé de la scène + 1 : le pool partagé commence juste après les
+   `g_actor_slot_end` est le plus haut emplacement utilisé de la scène + 1 : le pool partagé commence juste après les
    posés (`g_spool_start` = leur nombre), et une scène sans pool le pose au nombre de posés (`scene_init`).
 
-   `SLOT_EACH(v)` parcourt tous les emplacements de la scène `[0, g_spool_hw)`, posés puis nés : c'est le
+   `SLOT_EACH(v)` parcourt tous les emplacements de la scène `[0, g_actor_slot_end)`, posés puis nés : c'est le
    parcours des passes du tick, qui ne demandent jamais si un emplacement est posé ou né. Une boucle simple :
-   `g_spool_hw` est rabattu sur le dernier vivant à chaque image, les corps de boucle testent `active`, et une
+   `g_actor_slot_end` est rabattu sur le dernier vivant à chaque image, les corps de boucle testent `active`, et une
    boucle plus grosse (le saut des blocs vides par `g_alive_bits`) chassait une phase du tick hors de l'IWRAM
    (mesuré le 2026-11-07 : Platformer +5 %). La borne est relue à chaque tour : un acteur né pendant la
    boucle est vu.
 
-   `POOL_EACH(v)` ne parcourt que le pool partagé `[g_spool_start, g_spool_hw)` : `actor:count`,
+   `POOL_EACH(v)` ne parcourt que le pool partagé `[g_spool_start, g_actor_slot_end)` : `actor:count`,
    `actor:get(nom, i)` et `actor:clear` y comptent les nés après avoir lu la table des posés d'un modèle. Il saute
    d'un seul test un bloc de 32 emplacements sans vivant ; dans un bloc occupé le parcours reste linéaire.
    `continue` marche ; un `break` hors d'un `switch` ne sort que du bloc courant. */
-extern int g_spool_start, g_spool_hw;
+extern int g_spool_start, g_actor_slot_end;
 extern u32 g_alive_bits[];
 /* Ce qui rend `actor:get("Balle", i)` et `actor:count("Balle")` rapides dans une boucle : `g_alive_epoch` avance à CHAQUE
    changement de vie d'un emplacement (naissance, destruction, entrée de scène), et `g_nth` retient la dernière réponse avec
@@ -332,18 +331,18 @@ extern u32 g_alive_bits[];
    la recherche repart du début, comme avant : la réponse est toujours celle d'un parcours complet. */
 typedef struct {
     u32 epoch;                          /* époque du dernier `get` */
-    int model, rank, slot;              /* son modèle, son rang parmi les vivants du pool, son emplacement */
+    int root_type_id, rank, slot;              /* son modèle, son rang parmi les vivants du pool, son emplacement */
     u32 count_epoch;                    /* époque du dernier `count` */
-    int count_model, count;             /* son modèle et son résultat (la part du pool) */
+    int count_root_type_id, count;             /* son modèle et son résultat (la part du pool) */
 } PoolCursor;
 extern PoolCursor g_nth;
 extern u32 g_alive_epoch;
 #define POOL_EACH(v) \
-    for(int _pw_ = g_spool_start >> 5; _pw_ <= ((g_spool_hw - 1) >> 5); _pw_++) \
+    for(int _pw_ = g_spool_start >> 5; _pw_ <= ((g_actor_slot_end - 1) >> 5); _pw_++) \
         if(g_alive_bits[_pw_]) \
             for(int v = ((_pw_ << 5) < g_spool_start ? g_spool_start : (_pw_ << 5)), _pe_ = (_pw_ << 5) + 32; \
-                v < _pe_ && v < g_spool_hw; v++)
-#define SLOT_EACH(v) for(int v = 0; v < g_spool_hw; v++)
+                v < _pe_ && v < g_actor_slot_end; v++)
+#define SLOT_EACH(v) for(int v = 0; v < g_actor_slot_end; v++)
 static inline void alive_bit_set(int k)   { g_alive_epoch++; g_alive_bits[k >> 5] |= (1u << (k & 31)); }
 static inline void alive_bit_clear(int k) { g_alive_epoch++; g_alive_bits[k >> 5] &= ~(1u << (k & 31)); }
 

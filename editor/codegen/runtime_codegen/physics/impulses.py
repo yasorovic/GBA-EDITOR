@@ -2,7 +2,7 @@
 
 Le solveur applique la normale et le tangent du contact, avec une masse configurable par Rigid. La restitution et la
 friction des PhysicMaterial des CollisionShape sont combinées au build. Static, Character et Kinematic ont une masse
-inverse nulle. Les couples de boîtes se lisent par couple de TYPES d'emplacement (`Actor.model`), filtrés par les tags ;
+inverse nulle. Les couples de boîtes se lisent par couple de TYPES d'emplacement (`Actor.type_id`), filtrés par les tags ;
 le runtime relève une fois par image l'instantané des corps (rectangle, repos), écarte les paires éloignées, puis
 parcourt plusieurs fois les paires retenues pour stabiliser les petites piles. Il ne demande jamais si un emplacement
 est posé ou né (règle « posé = spawné »).
@@ -86,7 +86,7 @@ def impulse_helper_lines() -> list[str]:
         "typedef struct { u16 slot; u8 kind, rest; s16 l, t, r, b; } RigidBody;",
         "static inline __attribute__((always_inline)) void rigid_body_add(int s,const u8* ki,const u8* side,",
         "        u16 sleep_frames,RigidBody* out,int* n){",
-        "    const Actor* a=&g_actors[s]; u8 j=ki[a->model];",
+        "    const Actor* a=&g_actors[s]; u8 j=ki[a->type_id];",
         "    if(j==255||!a->active) return;",
         "    int l=32767,top=32767,r=-32768,b=-32768,x=a->x>>8,y=a->y>>8;",
         "    for(int k=0;k<a->collision.box_count;k++){",
@@ -216,16 +216,16 @@ def _pair_contacts(p, scene, actor_a, sprite_a, actor_b, sprite_b) -> list[tuple
     return rows
 
 
-def impulse_tick_lines(p, scene, scene_actors, pi, shown) -> list[str]:
+def impulse_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance) -> list[str]:
     """La passe d'impulsions de la scène : chaque paire de corps, posés ou nés, dont un au moins est Rigid. Les couples
     de boîtes se lisent par couple ordonné de types (le corps de plus petit rang dans l'instantané est le côté « a »)."""
     lay = scene_oam_layout(p, scene)
-    shared = shared_models(pi) if shown else []
+    shared = shared_models(pi) if resolve_initial_appearance else []
     owners: dict[int, tuple] = {}       # type -> (porteur, sprite) ; les copies d'un type ont les mêmes rôles de boîtes
-    for (actor, sprite), kind in zip(scene_actors, lay.placed_model):
+    for (actor, sprite), kind in zip(scene_actors, lay.placed_type_ids):
         owners.setdefault(kind, (actor, sprite))
     for m in shared:
-        owners.setdefault(m["model_id"], (m["prefab"], shown(p, m["prefab"])[1]))
+        owners.setdefault(m["root_type_id"], (m["prefab"], resolve_initial_appearance(p, m["prefab"])[1]))
     kinds = sorted(owners)
     contacts = {(a, b): _pair_contacts(p, scene, *owners[a], *owners[b]) for a in kinds for b in kinds}
     bodies = [k for k in kinds if any(contacts[(k, o)] or contacts[(o, k)] for o in kinds)]
@@ -244,16 +244,16 @@ def impulse_tick_lines(p, scene, scene_actors, pi, shown) -> list[str]:
             flat += [f"{{{ra},{rb},{re},{fr}}}" for ra, rb, re, fr in run]
         run_rows.append("{" + ",".join(row) + "}")
     index = {k: i for i, k in enumerate(bodies)}
-    pool = any(m["model_id"] in index for m in shared)
+    pool = any(m["root_type_id"] in index for m in shared)
     spool = shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if pool else 0
-    capacity = sum(1 for kind in lay.placed_model if kind in index) + spool
+    capacity = sum(1 for kind in lay.placed_type_ids if kind in index) + spool
     live = min(_LIVE_CAPACITY, capacity * (capacity - 1) // 2) or 1
     where = "" if capacity <= _SNAPSHOT_IWRAM else " EWRAM_BSS"
-    by_kind = ",".join(str(index.get(k, 255)) for k in range(lay.kinds))
+    by_kind = ",".join(str(index.get(k, 255)) for k in range(lay.type_table_size))
     return [
         "    /* Impulsions Rigid, par couple de types : masses et matériaux Q8 */",
         "    {",
-        f"        static u8 _ri_ki[{lay.kinds}]{_IW}={{{by_kind}}};",
+        f"        static u8 _ri_ki[{lay.type_table_size}]{_IW}={{{by_kind}}};",
         f"        static u16 _ri_mass[{len(bodies)}]{_IW}={{{','.join(str(_inverse_mass(owners[k][0])) for k in bodies)}}};",
         f"        static u8 _ri_side[{len(bodies)}]{_IW}="
         f"{{{','.join(str(_side_kind(physics_body_mode(owners[k][0]))) for k in bodies)}}};",

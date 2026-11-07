@@ -96,12 +96,12 @@ class PoolSlot:
     # scène, cf. `model_members`) : leurs emplacements et leurs entrées sont ceux de la scène.
     members: list[int] = field(default_factory=list)
     # Un modèle que la scène fait naître prend n'importe quel emplacement libre du pool partagé
-    # (`OamLayout.shared`) et se reconnaît à `Actor.model`. Un modèle sans spawn n'a que ses instances posées.
+    # (`OamLayout.shared`) et se reconnaît à `Actor.type_id`. Un modèle sans spawn n'a que ses instances posées.
     shared: bool = False
     # L'identité du modèle dans le pool partagé (1..), ou 0 s'il n'y naît pas. Un modèle à parties prend
-    # `group` identités consécutives : la racine porte `model_id`, sa partie k porte `model_id + k`
-    # (cf. `Actor.model`, qui dit AUSSI quelle partie un emplacement occupe).
-    model_id: int = 0
+    # `group` identités consécutives : la racine porte `root_type_id`, sa partie k porte `root_type_id + k`
+    # (cf. `Actor.type_id`, qui dit AUSSI quelle partie un emplacement occupe).
+    root_type_id: int = 0
 
     @property
     def entries_per_instance(self) -> int:
@@ -117,15 +117,15 @@ class SharedPool:
     size: int
     entry_start: int
     entries: int
-    models: list      # list[PoolSlot], dans l'ordre du catalogue ; `model_id` = rang + 1
+    models: list      # list[PoolSlot], dans l'ordre du catalogue ; `root_type_id` = rang + 1
 
     @property
     def end(self) -> int:
         return self.start + self.size
 
 
-def shared_kinds(shared: Optional[SharedPool]) -> int:
-    """Combien de TYPES d'emplacement le pool partagé distingue (`Actor.model` va de 1 à ce nombre) : un par
+def shared_type_count(shared: Optional[SharedPool]) -> int:
+    """Combien de TYPES d'emplacement le pool partagé distingue (`Actor.type_id` va de 1 à ce nombre) : un par
     modèle plat, et pour un modèle à parties une racine plus une par partie."""
     return sum(m.group for m in shared.models) if shared else 0
 
@@ -149,15 +149,15 @@ class OamLayout:
     pools: list[PoolSlot]
     shared: Optional[SharedPool] = None
     capacity: int = OBJECT_CAPACITY
-    # Par acteur posé : son type d'emplacement (`Actor.model`) : celui du modèle né pour une copie identique au prefab,
+    # Par acteur posé : son type d'emplacement (`Actor.type_id`) : celui du modèle né pour une copie identique au prefab,
     # sinon un type après ceux du pool partagé (cf. `pool_model.placed_types`).
-    placed_model: list[int] = field(default_factory=list)
+    placed_type_ids: list[int] = field(default_factory=list)
 
     @property
-    def kinds(self) -> int:
-        """Longueur des tables indexées par `Actor.model` (descripteur de modèle, `g_spool_*`) : le type 0, ceux du
-        pool partagé, puis ceux des posés. Au-delà de 256, un type ne tient plus dans l'octet `Actor.model`."""
-        return 1 + max([shared_kinds(self.shared), *self.placed_model])
+    def type_table_size(self) -> int:
+        """Longueur des tables indexées par `Actor.type_id` (descripteur de modèle, `g_spool_*`) : le type 0, ceux du
+        pool partagé, puis ceux des posés. Au-delà de 256, un type ne tient plus dans l'octet `Actor.type_id`."""
+        return 1 + max([shared_type_count(self.shared), *self.placed_type_ids])
 
     @property
     def placed_entries(self) -> int:
@@ -251,9 +251,9 @@ def _compute_oam_layout(project, scene: Scene) -> OamLayout:
     members = model_members(project, posed)
 
     capacity = scene_object_capacity(project, scene)
-    # `Actor.model` est un octet : au-delà de 255 types d'emplacement, les modèles suivants ne naissent plus
+    # `Actor.type_id` est un octet : au-delà de 255 types d'emplacement, les modèles suivants ne naissent plus
     # (le validateur le dit, cf. `_check_actor_budget`). Les types des posés viennent après, et le validateur refuse
-    # aussi une scène dont le total dépasse l'octet (`OamLayout.kinds`).
+    # aussi une scène dont le total dépasse l'octet (`OamLayout.type_table_size`).
     kinds, shared_names = 0, []
     for pf in project.prefabs:
         if pf.name in spawned and kinds + prefab_group(pf) <= 255:
@@ -284,7 +284,7 @@ def _compute_oam_layout(project, scene: Scene) -> OamLayout:
             shared_models.append(PoolSlot(
                 prefab=pf, prefab_sym=pref, sym=f"{scene_sym}_{pref}",
                 group=prefab_group(pf), member_entries=shapes[pf.name][0],
-                members=members.get(pf.name, []), shared=True, model_id=next_id,
+                members=members.get(pf.name, []), shared=True, root_type_id=next_id,
             ))
             next_id += prefab_group(pf)
         shared = SharedPool(start=placed, size=size, entry_start=rank,
@@ -293,6 +293,6 @@ def _compute_oam_layout(project, scene: Scene) -> OamLayout:
 
     return OamLayout(scene=scene, scene_sym=scene_sym, placed=placed,
                      placed_entry=placed_entry, ui=ui, pools=pools, shared=shared, capacity=capacity,
-                     placed_model=placed_types(
-                         posed, members, shared_kinds(shared) + 1,
-                         {m.prefab.name: (m.prefab, m.model_id) for m in (shared.models if shared else [])}))
+                     placed_type_ids=placed_types(
+                         posed, members, shared_type_count(shared) + 1,
+                         {m.prefab.name: (m.prefab, m.root_type_id) for m in (shared.models if shared else [])}))

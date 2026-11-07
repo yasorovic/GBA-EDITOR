@@ -14,7 +14,7 @@ dans un mur. La matrice de collision filtre au build (un couple de tags qui ne s
 traverse). Rien n'est émis sans mobile ni bloqueur ; les aides C ne le sont que si le projet a une box
 bloquante.
 
-Posés et nés passent par le même chemin : les tables sont indexées par TYPE d'emplacement (`Actor.model`), et l'aide
+Posés et nés passent par le même chemin : les tables sont indexées par TYPE d'emplacement (`Actor.type_id`), et l'aide
 C parcourt les emplacements vivants de la scène (`SLOT_EACH`).
 """
 from __future__ import annotations
@@ -106,7 +106,7 @@ def _block_lines() -> list[str]:
         "    if(apx<=apy){ a->x+=px<<8; a->vx=0; }",
         "    else { a->y+=py<<8; a->vy=0; }",
         "}",
-        "/* Les boîtes qui peuvent arrêter un mobile se lisent par COUPLE DE TYPES (`Actor.model`), que le mobile et le",
+        "/* Les boîtes qui peuvent arrêter un mobile se lisent par COUPLE DE TYPES (`Actor.type_id`), que le mobile et le",
         "   bloqueur soient posés ou nés : un `PairRun` (actor_types_static.h) désigne, dans `box` (rang, bit haut",
         "   BLOCKER_MOVING), la suite des boîtes bloquantes du type du bloqueur que ce type de mobile rencontre. */",
         "/* La liste des bloqueurs de l'image, relevée avant la passe : emplacement et rang compact de son type, dans",
@@ -114,7 +114,7 @@ def _block_lines() -> list[str]:
         "   boîtes se relisent en direct. Elle évite de relire le type de chaque emplacement pour chaque mobile. */",
         "typedef struct { u16 slot; u8 kind; u8 pad; } BlockTarget;",
         "static inline __attribute__((always_inline)) void block_target_add(int s,const u8* bi,BlockTarget* out,int* n){",
-        "    const Actor* t=&g_actors[s]; u8 j=bi[t->model];",
+        "    const Actor* t=&g_actors[s]; u8 j=bi[t->type_id];",
         "    if(j==255||!t->active) return;",
         "    BlockTarget* e=&out[(*n)++]; e->slot=s; e->kind=j;",
         "}",
@@ -160,7 +160,7 @@ def _typed_lines(one_way: bool) -> list[str]:
         f"const BlockTarget* list,int n,const u8* box{ow_param}){{",
         "    if(!a->active) return;",
         "    int idle=!a->vx&&!a->vy;",
-        *(["    int drop=g_drop_through&&g_drop_through[a->inst];"] if one_way else []),
+        *(["    int drop=g_drop_through&&g_drop_through[a->slot_index];"] if one_way else []),
         "    for(int i=0;i<a->collision.box_count;i++){",
         "        const CollisionShape* m=&a->collision.boxes[i];",
         "        if(!(body_mask&(1u<<i))||!m->active) continue;",
@@ -173,20 +173,20 @@ def _typed_lines(one_way: bool) -> list[str]:
     ]
 
 
-def block_tick_lines(p, scene, scene_actors, pi, shown) -> list[str]:
+def block_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance) -> list[str]:
     """La passe de blocage de la scène : chaque mobile, posé ou né, contre chaque bloqueur, posé ou né.
 
-    Tout se décide par TYPE d'emplacement (`Actor.model`, `OamLayout.placed_model` pour les posés, `model_id` pour le
+    Tout se décide par TYPE d'emplacement (`Actor.type_id`, `OamLayout.placed_type_ids` pour les posés, `root_type_id` pour le
     pool partagé) : un type mobile a ses boîtes de corps (`_bk_mask`) et, pour chaque type bloqueur, la suite des boîtes
     qui peuvent l'arrêter (`_bk_run`), filtrée au build par la matrice des tags, le mode des deux corps et la règle du
     Rigid. Le runtime ne demande jamais si un emplacement est posé ou né (règle « posé = spawné »)."""
     lay = scene_oam_layout(p, scene)
     shared = shared_models(pi)
     owners: dict[int, tuple] = {}       # type -> (porteur, sprite) ; les copies d'un type ont les mêmes rôles de boîtes
-    for (actor, sprite), kind in zip(scene_actors, lay.placed_model):
+    for (actor, sprite), kind in zip(scene_actors, lay.placed_type_ids):
         owners.setdefault(kind, (actor, sprite))
     for m in shared:
-        owners.setdefault(m["model_id"], (m["prefab"], shown(p, m["prefab"])[1]))
+        owners.setdefault(m["root_type_id"], (m["prefab"], resolve_initial_appearance(p, m["prefab"])[1]))
 
     # Les boîtes bloquantes de chaque type : (rang | BLOCKER_MOVING, sens unique, boîte, mode du porteur).
     blocking = {}
@@ -243,7 +243,7 @@ def block_tick_lines(p, scene, scene_actors, pi, shown) -> list[str]:
             box += [rank for rank, _ow in run]
             ow += [d for _rank, d in run]
         run_rows.append("{" + ",".join(row) + "}")
-    kinds = lay.kinds
+    type_table_size = lay.type_table_size
     mover_index = {kind: i for i, (kind, *_rest) in enumerate(movers)}
     blocker_index = {kind: i for i, kind in enumerate(blocker_kinds)}
     one_way = any(ow)
@@ -252,24 +252,24 @@ def block_tick_lines(p, scene, scene_actors, pi, shown) -> list[str]:
     call = (f"actors_resolve_blocks{'_ow' if one_way else ''}(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,"
             f"_bk_box{',_bk_ow' if one_way else ''});")
     # La taille de la liste des bloqueurs : les posés d'un type bloqueur, puis tout le pool partagé s'il en fait naître.
-    pool = any(m["model_id"] in blocking for m in shared)
+    pool = any(m["root_type_id"] in blocking for m in shared)
     spool = shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if pool else 0
-    capacity = sum(1 for kind in lay.placed_model if kind in blocking) + spool
+    capacity = sum(1 for kind in lay.placed_type_ids if kind in blocking) + spool
     where = "" if capacity <= _LIST_IWRAM else " EWRAM_BSS"
     if walls:
-        step = ("{ u8 _mi=_bk_mi[_a->model]; if(_mi!=255){ int _bx=_a->x,_by=_a->y; " + call
+        step = ("{ u8 _mi=_bk_mi[_a->type_id]; if(_mi!=255){ int _bx=_a->x,_by=_a->y; " + call
                 + " if(_bk_wall[_mi]&&(_a->x!=_bx||_a->y!=_by)&&mover_in_wall(_a,_bk_wall[_mi])){ _a->x=_bx; _a->y=_by; } } }")
     else:
-        step = "{ u8 _mi=_bk_mi[_a->model]; if(_mi!=255) " + call + " }"
+        step = "{ u8 _mi=_bk_mi[_a->type_id]; if(_mi!=255) " + call + " }"
 
     def by_kind(index: dict) -> str:
-        return ",".join(str(index.get(k, 255)) for k in range(kinds))
+        return ",".join(str(index.get(k, 255)) for k in range(type_table_size))
 
     return [
         "    /* Blocage entre acteurs, par couple de types : avant la carte de collision, qui a le dernier mot. */",
         "    {",
-        f"        static u8 _bk_mi[{kinds}]{_IW}={{{by_kind(mover_index)}}};",
-        f"        static u8 _bk_bi[{kinds}]{_IW}={{{by_kind(blocker_index)}}};",
+        f"        static u8 _bk_mi[{type_table_size}]{_IW}={{{by_kind(mover_index)}}};",
+        f"        static u8 _bk_bi[{type_table_size}]{_IW}={{{by_kind(blocker_index)}}};",
         f"        static u8 _bk_mask[{len(movers)}]{_IW}={{{','.join(str(m) for _k, m, _w, _r in movers)}}};",
         *([f"        static u8 _bk_wall[{len(movers)}]{_IW}={{{','.join(str(w) for _k, _m, w, _r in movers)}}};"]
           if walls else []),

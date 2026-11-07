@@ -2,7 +2,7 @@
 
 Le composant est un système AUTOMATISÉ : il ne génère aucune logique propre à un acteur. Il se compile
 en code de SCÈNE, comme le déclencheur `SoundFx` : par geste, trois tables indexées par TYPE d'emplacement
-(`Actor.model`, cf. `model_desc`) : le tag de la zone (255 : ce type n'est pas un consommateur de ce geste), la
+(`Actor.type_id`, cf. `model_desc`) : le tag de la zone (255 : ce type n'est pas un consommateur de ce geste), la
 visée, l'action (`on_interact`, son). Le geste (`input_pressed`, tenue de `n` frames, `input_released`) est testé
 UNE fois, et seulement sur la frame où il a lieu chaque interacteur cherche le consommateur atteint le plus proche.
 
@@ -121,8 +121,8 @@ def interact_helper_lines() -> list[str]:
         "    int best=-1, bd=0x7fffffff, d=0;",
         "    SLOT_EACH(k){",
         "        const Actor* t=&g_actors[k];",
-        "        if(!t->active||t==who||tag[t->model]==255) continue;",
-        "        if(ia_reach(&w,&s,fx,fy,t,tag[t->model],aim[t->model],&d)&&d<bd){ bd=d; best=k; }",
+        "        if(!t->active||t==who||tag[t->type_id]==255) continue;",
+        "        if(ia_reach(&w,&s,fx,fy,t,tag[t->type_id],aim[t->type_id],&d)&&d<bd){ bd=d; best=k; }",
         "    }",
         "    return best;",
         "}",
@@ -141,15 +141,15 @@ def _gesture_test(mode: str, frames: int, mask: str) -> str:
     return f"input_pressed({mask})"
 
 
-def _consumers(p, scene_actors, pi, placed_scripts, _def, shown, layout) -> dict[int, tuple]:
+def _consumers(p, scene_actors, pi, placed_scripts, _def, resolve_initial_appearance, layout) -> dict[int, tuple]:
     """Les consommateurs, par type d'emplacement : (composant, tag de la zone, action C).
 
-    Une action a un handler, un son, ou les deux. Un posé prend le type de son layout (`placed_model`), un modèle du
-    pool partagé son identité (`model_id`) ; les variantes d'un même type ont le même composant et le même code."""
+    Une action a un handler, un son, ou les deux. Un posé prend le type de son layout (`placed_type_ids`), un modèle du
+    pool partagé son identité (`root_type_id`) ; les variantes d'un même type ont le même composant et le même code."""
     tags = list(p.collision_tags()) or ["body"]
     candidates = [(a, sprite, kind, script)
-                  for (a, sprite), kind, script in zip(scene_actors, layout.placed_model, placed_scripts)]
-    candidates += [(m["prefab"], shown(p, m["prefab"])[1], m["model_id"], m["sym"]) for m in shared_models(pi)]
+                  for (a, sprite), kind, script in zip(scene_actors, layout.placed_type_ids, placed_scripts)]
+    candidates += [(m["prefab"], resolve_initial_appearance(p, m["prefab"])[1], m["root_type_id"], m["sym"]) for m in shared_models(pi)]
     out = {}
     for owner, sprite, kind, script in candidates:
         comp = next((c for c in getattr(owner, "components", [])
@@ -167,7 +167,7 @@ def _consumers(p, scene_actors, pi, placed_scripts, _def, shown, layout) -> dict
 
 
 def interact_tick_lines(p, scene, scene_actors, pi, placed_scripts, _def, input_layout,
-                        shown) -> list[str]:
+                        resolve_initial_appearance) -> list[str]:
     """Le bloc de la boucle de scène : le regard des interacteurs sans sprite, puis un test de geste par (mode, durée)
     et, sur la frame du geste, pour chaque interacteur la recherche du consommateur atteint. Posés et nés passent par
     les mêmes boucles (`model_desc.each_slot`). Rien n'est émis sans interacteur ni consommateur.
@@ -177,7 +177,7 @@ def interact_tick_lines(p, scene, scene_actors, pi, placed_scripts, _def, input_
     shared = shared_models(pi)
     players = [a for a, _s in scene_actors if getattr(a, "is_player", False)]
     pool_players = [m for m in shared if getattr(m["prefab"], "is_player", False)]
-    consumers = _consumers(p, scene_actors, pi, placed_scripts, _def, shown, layout)
+    consumers = _consumers(p, scene_actors, pi, placed_scripts, _def, resolve_initial_appearance, layout)
     if not (players or pool_players) or not consumers:
         return []
     desc = model_desc_sym(scene)
@@ -197,20 +197,20 @@ def interact_tick_lines(p, scene, scene_actors, pi, placed_scripts, _def, input_
     if placed_blind or pool_blind:
         body = " ".join(line.strip() for line in follow_facing_lines("(*_a)"))
         L.append("    /* Interactive : un interacteur sans sprite suit son regard ici (pas de tick d'animation) */")
-        L += each_slot(f"if({desc}[_a->model].interactor==2){{ {body} }}")
+        L += each_slot(f"if({desc}[_a->type_id].interactor==2){{ {body} }}")
     L.append("    /* Interactive : trois tables par geste, indexées par type ; la recherche quand le geste a lieu */")
     for (mode, frames), items in gestures.items():
-        kinds = layout.kinds
-        tag = ",".join(str(items[k][1]) if k in items else "255" for k in range(kinds))
-        aim = ",".join("1" if k in items and items[k][0].interaction == "facing" else "0" for k in range(kinds))
-        action = ",".join(items[k][2] if k in items else "{0,-1,0}" for k in range(kinds))
-        step = (f"if({desc}[_a->model].interactor){{ "
+        type_table_size = layout.type_table_size
+        tag = ",".join(str(items[k][1]) if k in items else "255" for k in range(type_table_size))
+        aim = ",".join("1" if k in items and items[k][0].interaction == "facing" else "0" for k in range(type_table_size))
+        action = ",".join(items[k][2] if k in items else "{0,-1,0}" for k in range(type_table_size))
+        step = (f"if({desc}[_a->type_id].interactor){{ "
                 f"int _t=interact_pick(_a,_ia_tag,_ia_aim,{reach}); "
-                "if(_t>=0) interact_run(&g_actors[_t],_a,&_ia_action[g_actors[_t].model]); }")
+                "if(_t>=0) interact_run(&g_actors[_t],_a,&_ia_action[g_actors[_t].type_id]); }")
         L += [f"    if({_gesture_test(mode, frames, mask)}){{",
-              f"        static const u8 _ia_tag[{kinds}]={{{tag}}};",
-              f"        static const u8 _ia_aim[{kinds}]={{{aim}}};",
-              f"        static const IaAction _ia_action[{kinds}]={{{action}}};",
+              f"        static const u8 _ia_tag[{type_table_size}]={{{tag}}};",
+              f"        static const u8 _ia_aim[{type_table_size}]={{{aim}}};",
+              f"        static const IaAction _ia_action[{type_table_size}]={{{action}}};",
               *("    " + line for line in each_slot(step)),
               "    }"]
     return L

@@ -1,7 +1,7 @@
 """runtime_codegen/model_desc.py : la table du DESCRIPTEUR DE MODÈLE d'une scène (`ModelDesc`, cf. actor_types_static.h).
 
-Une ligne par type d'emplacement (`Actor.model`) : le type 0, ceux du pool partagé (`model_id`, puis `model_id + k`
-pour la partie k), puis ceux des acteurs posés (`OamLayout.placed_model`). Le runtime lit la ligne de l'emplacement,
+Une ligne par type d'emplacement (`Actor.type_id`) : le type 0, ceux du pool partagé (`root_type_id`, puis `root_type_id + k`
+pour la partie k), puis ceux des acteurs posés (`OamLayout.placed_type_ids`). Le runtime lit la ligne de l'emplacement,
 qu'il soit posé ou né : c'est ce qui permet d'écrire un module une seule fois (règle « posé = spawné »).
 
 La table porte le mouvement automatique et le sommeil (`physics.motion`), la résolution contre la carte de collision
@@ -80,7 +80,7 @@ def hook_pass_lines(scene, pi, placed_scripts, has_event, event: str) -> list[st
     if not (any(s and has_event(s, event) for s in placed_scripts)
             or any(has_event(m["sym"], event) for m in shared_models(pi))):
         return []
-    return each_slot(f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->model]; if(_d->{event}) _d->{event}(_a); }}")
+    return each_slot(f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->type_id]; if(_d->{event}) _d->{event}(_a); }}")
 
 
 def sfx_input_pass_lines(p, scene, scene_actors, pi, input_layout) -> list[str]:
@@ -93,7 +93,7 @@ def sfx_input_pass_lines(p, scene, scene_actors, pi, input_layout) -> list[str]:
     pool = [sfx_input_desc(p, m["prefab"], input_layout) for m in shared_models(pi)]
     out = []
     for mask in dict.fromkeys(d[2] for d in placed + pool if d):
-        step = (f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->model]; "
+        step = (f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->type_id]; "
                 f"if(_d->sfx_input==({mask})) sfx_play(_d->sfx,_d->sfx_vol,0); }}")
         out += [f"    if(input_pressed({mask})){{", *("    " + line for line in each_slot(step)), "    }"]
     return out
@@ -132,27 +132,27 @@ def model_desc_lines(p, scene, scene_actors, pi, placed_scripts=None, has_event=
             out["on_contact"] = "{" + ",".join(contact) + "}"
         return out
 
-    rows: list = [({}, "aucun type")] * lay.kinds
+    rows: list = [({}, "aucun type")] * lay.type_table_size
     for m in shared_models(pi):
         # Une partie suit sa racine : ni mouvement, ni résolution, ni script propres...
-        rows[m["model_id"]] = (row(m["prefab"], m["sym"], m["member_entries"][0] >= 0), f"né : {m['prefab'].name}")
+        rows[m["root_type_id"]] = (row(m["prefab"], m["sym"], m["member_entries"][0] >= 0), f"né : {m['prefab'].name}")
         # ... sauf pour les contacts : une partie réagit avec le script de sa racine (`physics.contacts`).
-        contact = rows[m["model_id"]][0].get("on_contact")
+        contact = rows[m["root_type_id"]][0].get("on_contact")
         for k in range(1, m["group"]):
-            rows[m["model_id"] + k] = ({"on_contact": contact} if contact else {}, f"partie {k} : {m['prefab'].name}")
-    # Une copie posée identique au prefab porte le `model_id` du modèle né (`pool_model.placed_types`) : sa ligne est
+            rows[m["root_type_id"] + k] = ({"on_contact": contact} if contact else {}, f"partie {k} : {m['prefab'].name}")
+    # Une copie posée identique au prefab porte le `root_type_id` du modèle né (`pool_model.placed_types`) : sa ligne est
     # celle du modèle, au masque de carte près (union, `solid` est un champ d'emplacement).
     scripts = placed_scripts or [None] * len(scene_actors)
-    masks: dict[int, int] = {m["model_id"]: tile_mask(m["prefab"]) for m in shared_models(pi)}
-    for (actor, _sprite), kind in zip(scene_actors, lay.placed_model):
+    masks: dict[int, int] = {m["root_type_id"]: tile_mask(m["prefab"]) for m in shared_models(pi)}
+    for (actor, _sprite), kind in zip(scene_actors, lay.placed_type_ids):
         masks[kind] = masks.get(kind, 0) | tile_mask(actor)
-    for (actor, _sprite), kind, script, entry in zip(scene_actors, lay.placed_model, scripts, lay.placed_entry):
+    for (actor, _sprite), kind, script, entry in zip(scene_actors, lay.placed_type_ids, scripts, lay.placed_entry):
         label = rows[kind][1] if rows[kind][0] else f"posé : {actor.name}"
         rows[kind] = (dict(row(actor, script, entry >= 0), tile_mask=masks[kind]), label)
     body = [f"    {{{','.join(f'.{k}={v}' for k, v in values.items() if v not in (0, '0')) or '0'}}},   /* {kind} {label} */"
             for kind, (values, label) in enumerate(rows)]
-    return [f"/* Descripteur de modèle de la scène {scene.name} : une ligne par type d'emplacement (`Actor.model`), "
+    return [f"/* Descripteur de modèle de la scène {scene.name} : une ligne par type d'emplacement (`Actor.type_id`), "
             "lue en IWRAM à chaque image. */",
-            f"static ModelDesc {model_desc_sym(scene)}[{lay.kinds}] "
+            f"static ModelDesc {model_desc_sym(scene)}[{lay.type_table_size}] "
             "__attribute__((section(\".data.model_desc\"), unused)) = {",
             *body, "};", ""]

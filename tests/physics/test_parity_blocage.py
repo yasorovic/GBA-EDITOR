@@ -49,7 +49,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 u8 *g_drop_through = 0;
 u8 g_support_normal = 1;
 Actor g_actors[4];
-int g_spool_start, g_spool_hw, g_scene_placed;
+int g_spool_start, g_actor_slot_end, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 @HELPERS@
 
@@ -74,12 +74,12 @@ static void rapporte(const char* topo, const char* nom, const Actor* a){
 }
 /* Les emplacements 0 et 1 sont posés, 2 et 3 sont le pool partagé (g_spool_start = 2). */
 static void reinit(void){
-    for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
-    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
+    for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; }
+    g_spool_start = 2; g_actor_slot_end = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
 }
 static void pose_en_pool(int slot, Actor a, int model){
-    a.inst = slot; a.model = model; g_actors[slot] = a;
-    if(slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
+    a.slot_index = slot; a.type_id = model; g_actors[slot] = a;
+    if(slot + 1 > g_actor_slot_end) g_actor_slot_end = slot + 1;
     alive_bit_set(slot);
 }
 @TOPOLOGIES@
@@ -98,7 +98,7 @@ def _emissions(tmp_path) -> dict:
     import copy
     from codegen.oam_alloc import scene_oam_layout
     from codegen.runtime_codegen.gen_pool import scene_pi
-    from codegen.runtime_codegen.gen_sprite import shown
+    from codegen.runtime_codegen.gen_sprite import resolve_initial_appearance
     from codegen.runtime_codegen.physics.blocks import block_tick_lines
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
     from core.models.scene import Actor, Prefab, Scene
@@ -118,9 +118,9 @@ def _emissions(tmp_path) -> dict:
     p.prefabs.items = [mobile, bloqueur]
     faire_naitre(tmp_path, scene, "Mobile", "Bloqueur")
     pi = scene_pi(p, scene)
-    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
-    return {"lines": block_tick_lines(p, scene, [(a, None) for a in scene.actors], pi, shown),
-            "placed": scene_oam_layout(p, scene).placed_model, "mobile": ids["Mobile"], "bloqueur": ids["Bloqueur"]}
+    ids = {m["prefab"].name: m["root_type_id"] for m in pi if m["shared"]}
+    return {"lines": block_tick_lines(p, scene, [(a, None) for a in scene.actors], pi, resolve_initial_appearance),
+            "placed": scene_oam_layout(p, scene).placed_type_ids, "mobile": ids["Mobile"], "bloqueur": ids["Bloqueur"]}
 
 
 def _topologie_c(nom: str, mobile_pose: bool, bloqueur_pose: bool, e: dict) -> str:
@@ -132,8 +132,8 @@ def _topologie_c(nom: str, mobile_pose: bool, bloqueur_pose: bool, e: dict) -> s
         model = e["mobile"] if k == "m" else e["bloqueur"]
         acteur = "mobile(x, y, vx, vy)" if k == "m" else "bloqueur()"
         if pose:
-            placement.append(f"    g_actors[{slot[k]}] = {acteur}; g_actors[{slot[k]}].inst = {slot[k]}; alive_bit_set({slot[k]});"
-                             f" g_actors[{slot[k]}].model = {model};")
+            placement.append(f"    g_actors[{slot[k]}] = {acteur}; g_actors[{slot[k]}].slot_index = {slot[k]}; alive_bit_set({slot[k]});"
+                             f" g_actors[{slot[k]}].type_id = {model};")
         else:
             placement.append(f"    pose_en_pool({slot[k]}, {acteur}, {model});")
     m = slot["m"]
@@ -181,7 +181,7 @@ def etats(tmp_path_factory, emissions):
 
 
 def test_le_pose_et_le_ne_d_un_prefab_ont_le_meme_type(emissions):
-    """Les copies posées identiques au prefab prennent son `model_id` : posé ou né, la même ligne des tables."""
+    """Les copies posées identiques au prefab prennent son `root_type_id` : posé ou né, la même ligne des tables."""
     assert emissions["placed"] == [emissions["mobile"], emissions["bloqueur"]]
 
 

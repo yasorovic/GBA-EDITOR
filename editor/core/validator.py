@@ -1621,16 +1621,16 @@ def _check_actor_budget(ctx: ValidationContext):
             ctx.error(None,
                 f"Scene '{scene.name}': {lay.placed} actors are placed for the "
                 f"{lay.capacity} a scene holds — nothing is left for the ones that are born during play.")
-        # `Actor.model` est un octet : 255 types d'emplacement par scène (un par prefab, plus un par partie).
+        # `Actor.type_id` est un octet : 255 types d'emplacement par scène (un par prefab, plus un par partie).
         from scripting.refactor import scene_spawned_prefabs
         born = {pl.prefab.name for pl in lay.pools if pl.shared}
         for name in sorted(scene_spawned_prefabs(p, scene) - born):
             ctx.error(None,
                 f"Scene '{scene.name}': prefab '{name}' is spawned but cannot be born — the 255 actor "
                 "types of a scene (one per prefab, plus one per part) are taken.")
-        if lay.kinds > 256:
+        if lay.type_table_size > 256:
             ctx.error(None,
-                f"Scene '{scene.name}': {lay.kinds - 1} actor types for 255 (spawned prefabs and their parts, then "
+                f"Scene '{scene.name}': {lay.type_table_size - 1} actor types for 255 (spawned prefabs and their parts, then "
                 "one per placed actor that differs from the others). Make placed copies of a prefab identical, "
                 "or place fewer distinct actors.")
         ctx.focus(None)

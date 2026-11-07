@@ -24,7 +24,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #define EWRAM_BSS                                 /* hors GBA : mémoire ordinaire */
 u8 g_support_normal = 1;
 Actor g_actors[8];
-int g_spool_start = 0, g_spool_hw = 0, g_scene_placed = 0;
+int g_spool_start = 0, g_actor_slot_end = 0, g_scene_placed = 0;
 u32 g_alive_bits[1];
 u32 g_alive_epoch;
 PoolCursor g_nth;
@@ -52,17 +52,17 @@ static void report_motion(const char* nom, int i){
 static const u8 bi[10] = {255, 255, 0, 255, 255, 255, 255, 1, 255, 255};
 static const PairRun run[1][2] = {{{0, 1}, {0, 1}}};
 static const u8 box[1] = {0};
-/* La scène du cas : `hi` posés, et le pool (emplacements 3 et plus, jusqu'à `g_spool_hw`) si `pool` ; sans pool, le
+/* La scène du cas : `hi` posés, et le pool (emplacements 3 et plus, jusqu'à `g_actor_slot_end`) si `pool` ; sans pool, le
    parcours s'arrête au dernier posé, comme dans une scène sans pool (`scene_init`). */
 static void bloque(int i, u8 mask, int hi, int pool){
-    g_scene_placed = hi; if(!pool) g_spool_hw = hi; BlockTarget list[8]; int n = block_targets(bi, list);
+    g_scene_placed = hi; if(!pool) g_actor_slot_end = hi; BlockTarget list[8]; int n = block_targets(bi, list);
     actors_resolve_blocks(&g_actors[i], mask, run[0], list, n, box);
 }
 
 int main(void){
     /* le bloqueur : 16x16 en (50, 50) ; le mobile 16x16 */
     mk(1, 50, 50, 0, 0, 16, 16, 0); mk(2, 200, 200, 0, 0, 16, 16, 0);
-    g_actors[1].model = 2; g_actors[2].model = 2;
+    g_actors[1].type_id = 2; g_actors[2].type_id = 2;
 
     mk(0, 40, 52, 256, 0, 16, 16, 1);                          /* vient de la gauche : 6 px dedans */
     bloque(0, 1, 3, 0);  report("gauche", 0);
@@ -95,32 +95,32 @@ int main(void){
     printf("fraction %%d\n", g_actors[0].x & 255);
 
     /* un acteur ne se bloque pas lui-même : le mobile est ici du type bloqueur, seul dans les posés */
-    mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[0].model = 2;
+    mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[0].type_id = 2;
     bloque(0, 1, 1, 0);  report("soi_meme", 0);
 
     {   /* Le pool PARTAGÉ : un bloqueur né à l'emplacement 3 (type 7, boîte 0), un autre type à l'emplacement 4. Les
            bloqueurs posés sont désactivés : seul le pool bloque (un parcours voit tous les emplacements actifs). */
         g_actors[1].active = 0; g_actors[2].active = 0;
-        mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].model = 7;
-        mk(4, 50, 50, 0, 0, 16, 16, 0); g_actors[4].model = 9;     /* un autre type : traversé */
-        g_spool_start = 3; g_spool_hw = 5;
+        mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].type_id = 7;
+        mk(4, 50, 50, 0, 0, 16, 16, 0); g_actors[4].type_id = 9;     /* un autre type : traversé */
+        g_spool_start = 3; g_actor_slot_end = 5;
         alive_bit_set(3); alive_bit_set(4);
         mk(0, 40, 52, 256, 0, 16, 16, 1);
         bloque(0, 1, 0, 1);   report("pool_gauche", 0);
-        mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[3].model = 9;
+        mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[3].type_id = 9;
         bloque(0, 1, 0, 1);   report("pool_autre_modele", 0);
-        g_actors[3].model = 7; g_actors[3].active = 0;
+        g_actors[3].type_id = 7; g_actors[3].active = 0;
         mk(0, 40, 52, 256, 0, 16, 16, 1);
         bloque(0, 1, 0, 1);   report("pool_inactif", 0);
-        g_actors[3].active = 1; g_spool_hw = 3;
+        g_actors[3].active = 1; g_actor_slot_end = 3;
         mk(0, 40, 52, 256, 0, 16, 16, 1);
         bloque(0, 1, 0, 1);   report("pool_hors_hw", 0);
-        g_spool_hw = 5;
-        mk(3, 40, 52, 0, 0, 16, 16, 1); g_actors[3].model = 7; g_actors[3].vx = 256;   /* un bloqueur ne se bloque pas lui-même */
+        g_actor_slot_end = 5;
+        mk(3, 40, 52, 0, 0, 16, 16, 1); g_actors[3].type_id = 7; g_actors[3].vx = 256;   /* un bloqueur ne se bloque pas lui-même */
         bloque(3, 1, 0, 1);   report("pool_soi_meme", 3);
         /* posés et pool à la fois : le posé de type 2 en (50, 50) arrête le mobile avant le pool */
         g_actors[4].active = 0; g_actors[1].active = 1;
-        mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].model = 7;
+        mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].type_id = 7;
         mk(0, 40, 52, 256, 0, 16, 16, 1);
         bloque(0, 1, 3, 1);   report("pose_puis_pool", 0);
     }

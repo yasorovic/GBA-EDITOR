@@ -548,7 +548,7 @@ class CodeGen:
             self._emit_helper(fn)
         # Remise à l'état de départ du slot, pour les prefabs poolés (avant les handlers)
         if self.ctx.is_pooled:
-            self._emit_pool_init()
+            self._emit_init_script_state()
         defined = set()
         for fn in script.functions:
             if fn.name in self._helpers:
@@ -778,7 +778,7 @@ class CodeGen:
         Côté prefab, l'accès passe par `_st`, un pointeur posé en tête de la
         fonction qui en a besoin (cf. `_close_state_scope`). Écrire
         `Ball_state(self)->fx` à chaque site laissait gcc recalculer le bloc plus souvent que
-        nécessaire ; `Actor.inst` évite en plus la division par `sizeof(Actor)`, qui n'est pas une
+        nécessaire ; `Actor.slot_index` évite en plus la division par `sizeof(Actor)`, qui n'est pas une
         puissance de deux, qu'une soustraction de pointeurs coûterait."""
         if self.ctx.is_pooled:
             self._state_touched = True
@@ -923,12 +923,12 @@ class CodeGen:
             step_ref = self._state_ref(f"seq_{plan.name}_step")
             self._w(f"if ({step_ref}) {self._sequence_sym(plan)}({arg});")
 
-    def _emit_pool_init(self):
-        """Génère void SYM_pool_init(Actor* self) : appelée par spawn avant
+    def _emit_init_script_state(self):
+        """Génère void SYM_init_script_state(Actor* self) : appelée par spawn avant
         on_start. Une seule affectation de structure : elle couvre les tableaux
         et les vecteurs, qu'un champ à la fois ne saurait pas réinitialiser."""
         sym = self.ctx.actor_sym
-        self._w(f"void {sym}_pool_init(Actor* self) {{")
+        self._w(f"void {sym}_init_script_state(Actor* self) {{")
         self._indent += 1
         mark = self._open_state_scope()
         if self._pool_state_init:
@@ -1271,7 +1271,7 @@ class CodeGen:
         """L'état par instance d'un prefab poolé : une structure par slot du
         pool, un champ par variable de tête que le script écrit.
 
-        Le rang d'une instance dans son modèle est rangé dans l'acteur (`Actor.inst`, posé
+        L’indice de l’emplacement est rangé dans l’acteur (`Actor.slot_index`, posé
         par le spawn et à l'entrée de scène) : l'état ne suppose plus les instances d'un
         modèle contiguës dans `g_actors[]`.
 
@@ -1354,7 +1354,7 @@ class CodeGen:
         self._w(f'_Static_assert(sizeof({struct_t}) <= OBJ_STATE_STRIDE, '
                 f'"{sym}: the script state does not fit in an object state block");')
         self._w(f"static inline {struct_t}* {sym}_state(Actor* self) {{ "
-                f"return ({struct_t}*)(g_obj_state + (int)self->inst * (OBJ_STATE_STRIDE / 4)); }}")
+                f"return ({struct_t}*)(g_obj_state + (int)self->slot_index * (OBJ_STATE_STRIDE / 4)); }}")
         # Un setter par export réglable : c'est le SEUL point d'accès de l'état
         # depuis un autre `.c` (le script qui spawne). `<sym>_state` reste privé :
         # le setter, lui, est extern (le spawner le forward-
@@ -2731,14 +2731,14 @@ class CodeGen:
         return f"actor_model_clear({pool})" if pool else "0 /* actor:clear(model): a scene is needed */"
 
     def _pool_macro(self, prefab: str):
-        """`g_model_<S>, MODEL_<S>_COUNT, MODELID_<S>` : la table des instances posées (et de réserve) d'un
+        """`g_model_<S>, MODEL_<S>_COUNT, ROOT_TYPE_ID_<S>` : la table des instances posées (et de réserve) d'un
         modèle, leur nombre, et son identité dans le pool partagé (0 s'il n'y est pas), dans la scène
         qui compile ce script (headers.py, main.c), ou None sans scène (script partagé)."""
         if not self.ctx.scene_sym:
             return None
         from codegen.c_names import sym as c_sym
         sym = f"{self.ctx.scene_sym}_{c_sym(prefab)}"
-        return f"g_model_{sym}, MODEL_{sym.upper()}_COUNT, MODELID_{sym.upper()}"
+        return f"g_model_{sym}, MODEL_{sym.upper()}_COUNT, ROOT_TYPE_ID_{sym.upper()}"
 
     def _emit_layer_get(self, args: list) -> str:
         """layer:get(2) → 2 : le numéro EST la référence (un fond n'a pas d'autre identité que

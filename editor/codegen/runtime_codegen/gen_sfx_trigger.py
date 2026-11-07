@@ -53,7 +53,7 @@ def sfx_on_destroy_table(p: Project, all_scene_data: list[dict],
     for d, spi in zip(all_scene_data, scene_pis):
         sym = c_sym(d["scene"].name)
         n = max([len(d["scene_actors"])]
-                + [p2["spool"]["start"] + p2["model_id"] for p2 in spi if p2["shared"]] + [1])
+                + [p2["spool"]["start"] + p2["root_type_id"] for p2 in spi if p2["shared"]] + [1])
         ids  = ["-1"] * n
         vols = ["0"]  * n
         for tag, (actor, _sprite) in enumerate(d["scene_actors"]):
@@ -63,7 +63,7 @@ def sfx_on_destroy_table(p: Project, all_scene_data: list[dict],
         for p2 in spi:
             if not p2["shared"]:
                 continue        # un modèle sans spawn n'a pas d'acteur de ce nom
-            tag = p2["spool"]["start"] + p2["model_id"] - 1
+            tag = p2["spool"]["start"] + p2["root_type_id"] - 1
             sfx_sym, sfx_vol, sfx_trig = sfx_trigger_info(p, p2["prefab"])
             if sfx_sym and sfx_trig == "on_destroy":
                 ids[tag], vols[tag] = sfx_sym, str(sfx_vol)

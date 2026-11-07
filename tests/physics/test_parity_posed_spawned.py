@@ -49,12 +49,12 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 u8 *g_drop_through = 0;
 u8 g_support_normal = 1;
 Actor g_actors[2];
-int g_spool_start = 1, g_spool_hw = 1, g_scene_placed = 0;
+int g_spool_start = 1, g_actor_slot_end = 1, g_scene_placed = 0;
 u32 g_alive_bits[1], g_alive_epoch;
 static int _kin_d[2][3];
 static int appels_carte[2], appels_ecrase[2];
-void @SYM@_on_tile_collide(Actor* a, int nx, int ny){ appels_carte[a->inst]++; }
-void @SYM@_on_crushed(Actor* a, Actor* obstacle){ appels_ecrase[a->inst]++; }
+void @SYM@_on_tile_collide(Actor* a, int nx, int ny){ appels_carte[a->slot_index]++; }
+void @SYM@_on_crushed(Actor* a, Actor* obstacle){ appels_ecrase[a->slot_index]++; }
 @TABLE@
 /* 8 x 6 tuiles : un sol plein sur la rangée 5 (y = 40), un mur plein sur la colonne 6 (x = 48). */
 static u8 carte[8 * 6];
@@ -63,10 +63,10 @@ static void tick(void){
 @TILES@
 }
 /* Le même corps pour les deux chemins : une boîte « pieds » solide de 17 x 4 en (-7, 11). Un seul emplacement vivant :
-   le posé (0, son type de posé) ou le né (1, le `model_id` du prefab). */
+   le posé (0, son type de posé) ou le né (1, le `root_type_id` du prefab). */
 static void joue(const char* chemin, const char* nom, int x, int y, int vx, int vy, int cx, int cy){
-    for(int k = 0; k < 2; k++){ g_actors[k] = (Actor){0}; g_actors[k].inst = k; appels_carte[k] = appels_ecrase[k] = 0; }
-    g_alive_bits[0] = 0; g_spool_hw = 1; g_scene_placed = 1;   /* 0 : le posé */
+    for(int k = 0; k < 2; k++){ g_actors[k] = (Actor){0}; g_actors[k].slot_index = k; appels_carte[k] = appels_ecrase[k] = 0; }
+    g_alive_bits[0] = 0; g_actor_slot_end = 1; g_scene_placed = 1;   /* 0 : le posé */
     int s = chemin[1] == 'o' && chemin[2] == 's' ? 0 : 1;   /* "pose" ou "pool" */
     Actor* a = &g_actors[s];
     a->x = x << 8; a->y = y << 8; a->vx = vx; a->vy = vy;
@@ -74,8 +74,8 @@ static void joue(const char* chemin, const char* nom, int x, int y, int vx, int 
     a->collision.box_count = 1;
     a->collision.boxes[0] = (CollisionShape){-7, 11, 17, 4, 1, 1, 0, 0};
     a->active = 1; a->alive = 1;
-    if(s == 0){ a->model = @TYPE_POSE@; alive_bit_set(0); }
-    else { a->model = @TYPE_NE@; alive_bit_set(1); g_spool_hw = 2; }
+    if(s == 0){ a->type_id = @TYPE_POSE@; alive_bit_set(0); }
+    else { a->type_id = @TYPE_NE@; alive_bit_set(1); g_actor_slot_end = 2; }
     for(int f = 0; f < @FRAMES@; f++){
         /* `apply_velocity()`, puis le transport de la plateforme : il déplace le corps et retient ce qu'il a porté. */
         a->x += a->vx + cx; a->y += a->vy + cy;
@@ -126,8 +126,8 @@ def _emissions(tmp_path):
                                   lambda _s, ev: ev in ("on_tile_collide", "on_crushed")),
         "helpers": character_solver_lines(),
         "tiles": physics_tile_lines(scene, actors, pi, kinematic=False, carry=True),
-        "type_pose": scene_oam_layout(p, scene).placed_model[0],
-        "type_ne": model["model_id"],
+        "type_pose": scene_oam_layout(p, scene).placed_type_ids[0],
+        "type_ne": model["root_type_id"],
     }
 
 
@@ -167,7 +167,7 @@ def etats(tmp_path_factory, emissions):
 
 
 def test_un_pose_et_un_ne_du_meme_prefab_ont_le_meme_type(emissions):
-    """La copie posée identique au prefab prend le `model_id` du modèle né : les deux chemins lisent la même ligne."""
+    """La copie posée identique au prefab prend le `root_type_id` du modèle né : les deux chemins lisent la même ligne."""
     assert emissions["type_pose"] == emissions["type_ne"]
 
 

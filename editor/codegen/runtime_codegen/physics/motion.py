@@ -48,7 +48,7 @@ def motion_helper_lines() -> list[str]:
         "static inline __attribute__((always_inline, unused)) void body_sleep_step(Actor* a,const ModelDesc* d,",
         "        int radius,int frames){",
         "    if(d->body_mode!=BODY_MODE_RIGID||!d->can_sleep) return;",
-        "    int* r=g_rigid_rest[a->inst]; int dx=a->x-r[0], dy=a->y-r[1];",
+        "    int* r=g_rigid_rest[a->slot_index]; int dx=a->x-r[0], dy=a->y-r[1];",
         "    if(dx<=radius&&dx>=-radius&&dy<=radius&&dy>=-radius){",
         "        if(a->physics_sleep<frames) a->physics_sleep++;",
         "        if(a->physics_sleep>=frames){ a->vx=0; a->vy=0; }",
@@ -75,7 +75,7 @@ def physics_motion_lines(scene, project_settings, scene_actors, pi: list[dict],
         gx, gy = round(gravity_x * 256), round(gravity_y * 256)
     _iterations, max_fall_speed, damping, sleep_enabled, _sleep_threshold, sleep_delay = (
         scene.effective_physics_simulation(project_settings))
-    step = (f"body_motion_step(_a,&{model_desc_sym(scene)}[_a->model],{gx},{gy},"
+    step = (f"body_motion_step(_a,&{model_desc_sym(scene)}[_a->type_id],{gx},{gy},"
             f"{round((1.0 - damping) * 256)},{round(max_fall_speed * 256)},{sleep_delay if sleep_enabled else 0});")
     return ["    /* Kinematic/Rigid : mouvement avant les collisions, un seul pas pour les posés et les nés */",
             *each_slot(step)]
@@ -95,6 +95,6 @@ def physics_sleep_lines(scene, project_settings, scene_actors, pi: list[dict]) -
     if not enabled or not any(body_desc(o)[:2] == (BODY_MODE_RIGID, 1) for o in scene_owners(scene_actors, pi)):
         return []
     radius = round(sleep_threshold * 256) * frames
-    step = f"body_sleep_step(_a,&{model_desc_sym(scene)}[_a->model],{radius},{frames});"
+    step = f"body_sleep_step(_a,&{model_desc_sym(scene)}[_a->type_id],{radius},{frames});"
     return ["    /* Sommeil Rigid : mesure apres toutes les resolutions, un seul pas pour les posés et les nés */",
             *each_slot(step)]

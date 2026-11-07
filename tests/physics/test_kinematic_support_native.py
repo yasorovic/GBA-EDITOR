@@ -18,7 +18,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 Actor g_actors[4];
 u8 g_support_normal = 1;
-int g_spool_start, g_spool_hw, g_scene_placed;
+int g_spool_start, g_actor_slot_end, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 %(helpers)s
 

@@ -139,7 +139,7 @@ def test_l_identite_du_modele_sans_spawn_ne_vaut_aucun_nom(tmp_path):
     generate_actor_types(p)
     text = (p.src_dir / "actor_types.h").read_text(encoding="utf-8")
     assert "#define ACTOR_S_COIN -1" in text
-    assert "#define MODEL_S_COIN_COUNT 2" in text and "#define MODELID_S_COIN 0" in text
+    assert "#define MODEL_S_COIN_COUNT 2" in text and "#define ROOT_TYPE_ID_S_COIN 0" in text
 
 
 def test_un_spawn_qui_reprend_l_emplacement_d_un_membre_lui_garde_son_identite(tmp_path):

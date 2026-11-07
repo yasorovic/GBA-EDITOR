@@ -3,7 +3,7 @@
 Une vraie scène : chaque corps est un prefab, posé une fois ET spawné par le script de scène. Les lignes C sont celles
 que le générateur émet pour cette scène : la table du descripteur de modèle (`model_desc_lines`), le pas commun
 (`motion_helper_lines`), puis `physics_motion_lines` et `physics_sleep_lines`. Le type d'emplacement de chaque posé est
-celui du layout (`OamLayout.placed_model`, posé par `scene_init`) ; un né porte le `model_id` de son modèle. Une
+celui du layout (`OamLayout.placed_type_ids`, posé par `scene_init`) ; un né porte le `root_type_id` de son modèle. Une
 partie ne joue qu'un emplacement à la fois, les autres restant inactifs.
 
 Les tables par emplacement hors d'Actor sont remises à zéro par la destruction (`actor_slot_tables_clear`), vérifié
@@ -48,7 +48,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32; typedef
 #define N @N@
 Actor g_actors[2 * N];
 s32 g_rigid_rest[2 * N][2];
-int g_spool_start = N, g_spool_hw = N, g_scene_placed = 0;
+int g_spool_start = N, g_actor_slot_end = N, g_scene_placed = 0;
 u32 g_alive_bits[1], g_alive_epoch;
 static inline void actor_apply_velocity(Actor* s) { s->x+=s->vx; s->y+=s->vy; }
 @HELPERS@
@@ -65,13 +65,13 @@ static void rapporte(const char* chemin, int c, const char* nom, int f, const Ac
 }
 /* Un seul emplacement vivant : le posé `c` (emplacement c), ou le né du même corps (emplacement N + c). */
 static void joue(const char* chemin, int c, const char* nom, int vx, int vy){
-    for(int k = 0; k < 2 * N; k++){ g_actors[k] = (Actor){0}; g_actors[k].inst = k; g_rigid_rest[k][0] = g_rigid_rest[k][1] = 0; }
-    g_alive_bits[0] = 0; g_spool_hw = N; g_scene_placed = N;   /* [0, N) : les posés */
+    for(int k = 0; k < 2 * N; k++){ g_actors[k] = (Actor){0}; g_actors[k].slot_index = k; g_rigid_rest[k][0] = g_rigid_rest[k][1] = 0; }
+    g_alive_bits[0] = 0; g_actor_slot_end = N; g_scene_placed = N;   /* [0, N) : les posés */
     int s = chemin[1] == 'o' && chemin[2] == 's' ? c : N + c;   /* "pose" ou "pool" */
     Actor* a = &g_actors[s];
     a->x = 10 << 8; a->y = 10 << 8; a->vx = vx; a->vy = vy; a->active = 1; a->alive = 1;
-    if(s < N){ a->model = type_pose[c]; alive_bit_set(s); }
-    else { a->model = type_ne[c]; alive_bit_set(s); g_spool_hw = s + 1; }
+    if(s < N){ a->type_id = type_pose[c]; alive_bit_set(s); }
+    else { a->type_id = type_ne[c]; alive_bit_set(s); g_actor_slot_end = s + 1; }
     for(int f = 0; f < @FRAMES@; f++){ tick(); rapporte(chemin, c, nom, f, a); }
 }
 
@@ -116,13 +116,13 @@ def _emissions(tmp_path):
     pi = scene_pi(p, scene)
     actors = [(a, None) for a in scene.actors]
     lay = scene_oam_layout(p, scene)
-    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
+    ids = {m["prefab"].name: m["root_type_id"] for m in pi if m["shared"]}
     return {
         "table": model_desc_lines(p, scene, actors, pi),
         "helpers": motion_helper_lines(),
         "motion": physics_motion_lines(scene, p.settings, actors, pi),
         "sleep": physics_sleep_lines(scene, p.settings, actors, pi),
-        "types_poses": lay.placed_model,
+        "types_poses": lay.placed_type_ids,
         "types_nes": [ids[nom] for nom, _m, _r in CORPS],
     }
 
@@ -164,7 +164,7 @@ def etats(tmp_path_factory, emissions):
 
 
 def test_un_pose_et_un_ne_du_meme_prefab_ont_le_meme_type(emissions):
-    """Une copie posée identique au prefab prend le `model_id` du modèle né : une seule ligne de descripteur."""
+    """Une copie posée identique au prefab prend le `root_type_id` du modèle né : une seule ligne de descripteur."""
     assert emissions["types_poses"] == emissions["types_nes"]
     assert len(set(emissions["types_poses"])) == len(CORPS)
 

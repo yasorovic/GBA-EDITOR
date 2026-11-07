@@ -52,7 +52,7 @@ u16 floor_store[4];
 u16 *g_actor_floor = floor_store;
 u8 *g_drop_through = 0;
 u8 g_support_normal = 1;
-int g_spool_start, g_spool_hw, g_scene_placed;
+int g_spool_start, g_actor_slot_end, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 @HELPERS@
 
@@ -66,12 +66,12 @@ static Actor boite(int x, int y, int vy, int w, int h){
 }
 /* Les emplacements 0 et 1 sont posés, 2 et 3 sont le pool partagé (g_spool_start = 2). */
 static void reinit(void){
-    for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; floor_store[i] = 0; }
-    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
+    for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; floor_store[i] = 0; }
+    g_spool_start = 2; g_actor_slot_end = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
 }
 static void pose_en_pool(int slot, Actor a, int model){
-    a.inst = slot; a.model = model; g_actors[slot] = a;
-    if(slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
+    a.slot_index = slot; a.type_id = model; g_actors[slot] = a;
+    if(slot + 1 > g_actor_slot_end) g_actor_slot_end = slot + 1;
     alive_bit_set(slot);
 }
 @TOPOLOGIES@
@@ -88,7 +88,7 @@ def _emissions(tmp_path, couple) -> dict:
     spawnés : un seul chemin, chaque topologie ne choisit que les emplacements vivants. Rend aussi le type de chacun."""
     import copy
     from codegen.runtime_codegen.gen_pool import scene_pi
-    from codegen.runtime_codegen.gen_sprite import shown
+    from codegen.runtime_codegen.gen_sprite import resolve_initial_appearance
     from codegen.runtime_codegen.physics.floor import floor_tick_lines
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
     from core.models.scene import Actor, Prefab, Scene
@@ -110,8 +110,8 @@ def _emissions(tmp_path, couple) -> dict:
     project.prefabs.items = [corps, appui]
     faire_naitre(dossier, scene, "Corps", "Appui")
     pi = scene_pi(project, scene)
-    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
-    return {"lines": floor_tick_lines(project, [(a, None) for a in scene.actors], scene, pi, shown),
+    ids = {m["prefab"].name: m["root_type_id"] for m in pi if m["shared"]}
+    return {"lines": floor_tick_lines(project, [(a, None) for a in scene.actors], scene, pi, resolve_initial_appearance),
             "c": ids["Corps"], "a": ids["Appui"]}
 
 
@@ -122,8 +122,8 @@ def _topologie_c(nom: str, corps_pose: bool, appui_pose: bool, e: dict) -> str:
     placement = []
     for k, pose in (("c", corps_pose), ("a", appui_pose)):
         if pose:
-            placement.append(f"    g_actors[{slot[k]}] = {boites[k]}; g_actors[{slot[k]}].inst = {slot[k]}; alive_bit_set({slot[k]});"
-                             f" g_actors[{slot[k]}].model = {e[k]};")
+            placement.append(f"    g_actors[{slot[k]}] = {boites[k]}; g_actors[{slot[k]}].slot_index = {slot[k]}; alive_bit_set({slot[k]});"
+                             f" g_actors[{slot[k]}].type_id = {e[k]};")
         else:
             placement.append(f"    pose_en_pool({slot[k]}, {boites[k]}, {e[k]});")
     c, a = slot["c"], slot["a"]

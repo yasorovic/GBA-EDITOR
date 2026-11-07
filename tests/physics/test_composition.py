@@ -38,7 +38,7 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 Actor g_actors[8];
-int g_spool_start, g_spool_hw, g_scene_placed;
+int g_spool_start, g_actor_slot_end, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 SlotLink g_slot_link[8]; int g_slot_depth;
 OamEntry g_oam_entries[1];
@@ -51,7 +51,7 @@ void window_show(int id,int on);
 
 static void membre(int k, int x, int y, int rot, int sx, int sy, int actif){
     g_actors[k] = (Actor){0};
-    g_actors[k].inst = k; g_actors[k].alive = 1; g_actors[k].active = actif; g_actors[k].oam_entry = -1;
+    g_actors[k].slot_index = k; g_actors[k].alive = 1; g_actors[k].active = actif; g_actors[k].oam_entry = -1;
     g_actors[k].x = x; g_actors[k].y = y; g_actors[k].rotation = rot; g_actors[k].scale_x = sx; g_actors[k].scale_y = sy;
     g_slot_link[k].parent = -1; g_slot_link[k].depth = 0;
 }
@@ -83,7 +83,7 @@ static void joue_pool(const char* nom, int x, int y, int rot, int echelle, int r
 }
 
 int main(void){
-    g_spool_hw = 8;
+    g_actor_slot_end = 8;
 @RUNS@
     return 0;
 }
@@ -106,7 +106,7 @@ def _hierarchie():
 
 
 def _liens():
-    from codegen.runtime_codegen.gen_pool import link_depth, part_link_lines, placed_link_lines
+    from codegen.runtime_codegen.gen_actor_hierarchy import link_depth, part_link_lines, placed_link_lines
 
     posés, prefab = _hierarchie()
     scene = [(a, None) for a in posés]

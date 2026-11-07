@@ -108,7 +108,7 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
         "int   g_scene_placed = 0;   /* actors placed in the active scene "
         "(actor:get(i)) */",
         # Le pool PARTAGÉ de la scène courante (cf. runtime_api_inline.h) : posé par chaque scene_init.
-        "int   g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1, g_spool_free = 0;",
+        "int   g_spool_start = 0, g_spool_end = 0, g_actor_slot_end = 0, g_spool_entry = -1, g_spool_free = 0;",
         "const u8 *g_spool_part = 0;",
         "int   g_slot_depth = 0;   /* deepest actor hierarchy level of the scene (0 = none) */",
         "int   g_affine_dropped = 0;   /* instances affines dessinées sans matrice (les 32 sont prises) */",

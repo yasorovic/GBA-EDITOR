@@ -26,8 +26,8 @@ void window_show(int id,int on);
 #include "runtime_api_inline.h"
 
 int main(void){
-    g_actors[0].inst=0; g_actors[0].alive=1; g_actors[0].active=1;
-    g_actors[1].inst=1; g_actors[1].alive=1; g_actors[1].active=1;
+    g_actors[0].slot_index=0; g_actors[0].alive=1; g_actors[0].active=1;
+    g_actors[1].slot_index=1; g_actors[1].alive=1; g_actors[1].active=1;
     floor_store[0]=2;
     printf("%d ", actor_get_floor(&g_actors[0]) == &g_actors[1]);
     g_actors[1].active=0;

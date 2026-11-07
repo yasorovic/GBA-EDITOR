@@ -4,7 +4,7 @@ from __future__ import annotations
 from codegen.c_names import sym as c_sym
 from codegen.runtime_codegen.gen_affine import affine_init_fields
 from codegen.runtime_codegen.gen_appearance import appearance_init_fields
-from codegen.runtime_codegen.gen_sprite import initial_state_rank, shown
+from codegen.runtime_codegen.gen_sprite import initial_state_rank, resolve_initial_appearance
 from codegen.runtime_codegen.interact_gen import owner_boxes
 from core.models.field_value import FieldValue, number_c, var_names_from_project
 from core.models.palette import OWN_PAL_BANK
@@ -14,16 +14,16 @@ def _initial_values(fields: dict) -> str:
     return "{" + ", ".join(f".{key} = {value}" for key, value in fields.items()) + "}"
 
 
-def actor_init_lines(p, owner, obj_layout, *, slot, entry, name, model, position, active,
+def actor_init_lines(p, owner, obj_layout, *, slot, entry, name, type_id, position, active,
                      appearance_base, affine, indent, composed=False) -> list[str]:
     """Émet une commande d'initialisation. Une partie recomposée commence à l'origine."""
-    component, sprite = shown(p, owner)
+    component, sprite = resolve_initial_appearance(p, owner)
     names = var_names_from_project(p)
     dx, dy = getattr(owner, "dir_x", 0), getattr(owner, "dir_y", 0)
     x, y = position
     actor = {
         "name": name,
-        "model": model,
+        "type_id": type_id,
         "x": f"({x}) * 256",
         "y": f"({y}) * 256",
         "active": int(active),

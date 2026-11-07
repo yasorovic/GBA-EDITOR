@@ -47,7 +47,7 @@ static void frame(Actor* a, int vx, int appui_b){
     if(!a->collision.grounded) vy += 64;                    /* le script du joueur */
     if(a->collision.grounded && appui_b) actor_drop_through(a, 10);
     a->vx = vx; a->vy = vy; a->x += a->vx; a->y += a->vy; resolve_actor_tiles(a, 1, 0);
-    if(g_drop_through[a->inst] && --g_drop_through[a->inst]) g_drop_live = 1;   /* le décompte de la phase physique */
+    if(g_drop_through[a->slot_index] && --g_drop_through[a->slot_index]) g_drop_live = 1;   /* le décompte de la phase physique */
 }
 
 int main(void){
@@ -62,7 +62,7 @@ int main(void){
     g_ow_rows = rangees; g_ow_cols = colonnes; g_ow_any = 0x1E;
     for(int vx = 0; vx <= 512; vx += 512){
         g_actors[0] = (Actor){0}; Actor* a = &g_actors[0];
-        a->active = 1; a->alive = 1; a->inst = 0; a->x = 16 << 8; a->y = (32 - 15) << 8; a->collision.last_x = 16;
+        a->active = 1; a->alive = 1; a->slot_index = 0; a->x = 16 << 8; a->y = (32 - 15) << 8; a->collision.last_x = 16;
         a->collision.box_count = 1; a->collision.boxes[0] = (CollisionShape){-7, 11, 17, 4, 1, 1, 0, 0};
         floor_store[0] = 0; drop_store[0] = 0;
         for(int f = 0; f < 6; f++) frame(a, 0, 0);          /* se pose sur la face haute */

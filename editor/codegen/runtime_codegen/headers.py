@@ -75,7 +75,7 @@ def generate_actor_types(p: Project) -> None:
     # Un bloc par scène. ACTOR_<Actor> pour ses acteurs ACTIFS (même ordre et même
     # base 0 que ce que `main_gen` pose dans `g_actors` au scene_init), puis
     # ACTOR_<Scène>_<Prefab>, le nombre d'instances qu'une table donne (MODEL_*_COUNT), l'identité du modèle
-    # dans le pool partagé (MODELID_*) et sa table (`g_model_<Scène>_<Prefab>`, qui dit où sont les
+    # dans le pool partagé (ROOT_TYPE_ID_*) et sa table (`g_model_<Scène>_<Prefab>`, qui dit où sont les
     # instances posées et celles de sa réserve). Le script transpilé les lit : il est compilé PAR scène.
     for sc in p.scenes:
         lay = scene_oam_layout(p, sc)
@@ -93,7 +93,7 @@ def generate_actor_types(p: Project) -> None:
             if pl.shared:
                 # Un modèle du pool partagé n'a pas de plage à lui. Son identité (`other.name == "Bullet"`)
                 # est un nombre qui ne désigne aucun emplacement posé : le début du pool plus son rang.
-                h.append(f"#define ACTOR_{u} {lay.shared.start + pl.model_id - 1}  /* shared pool model */")
+                h.append(f"#define ACTOR_{u} {lay.shared.start + pl.root_type_id - 1}  /* shared pool model */")
             elif f"ACTOR_{u}" not in placed_names:
                 # Un modèle que la scène ne fait pas naître (que des instances posées, chacune sous son nom) n'a
                 # aucun acteur de ce nom : -1 ne vaut jamais un `name`, et ne chevauche pas l'identité d'un autre modèle.
@@ -101,9 +101,9 @@ def generate_actor_types(p: Project) -> None:
                 # lui qui garde la constante : la redéfinir en -1 faisait pointer `actor:get("Player")` hors de `g_actors`.
                 h.append(f"#define ACTOR_{u} -1  /* placed instances only */")
             # Les instances qu'une table donne (`g_model_*`, définie dans main.c) : les posées. Celles qui
-            # naissent dans le pool partagé se retrouvent à `Actor.model` (`MODELID_*`).
+            # naissent dans le pool partagé se retrouvent à `Actor.type_id` (`ROOT_TYPE_ID_*`).
             h.append(f"#define MODEL_{u}_COUNT {len(pl.members)}")
-            h.append(f"#define MODELID_{u} {pl.model_id}")
+            h.append(f"#define ROOT_TYPE_ID_{u} {pl.root_type_id}")
             h.append(f"extern const ModelSlot g_model_{pl.sym}[];")
 
     # ACTORNAME_* — id de lookup par nom logique (runtime_get_actor, décision C).
@@ -409,7 +409,7 @@ def generate_runtime_api(
         "        if(g_actors[t[k].slot].alive){ actor_destroy_with_sfx(&g_actors[t[k].slot]); c++; }",
         "    if(model)",
         "        POOL_EACH(k)",
-        "            if(g_actors[k].alive && g_actors[k].model == model){ actor_destroy_with_sfx(&g_actors[k]); c++; }",
+        "            if(g_actors[k].alive && g_actors[k].type_id == model){ actor_destroy_with_sfx(&g_actors[k]); c++; }",
         "    return c;",
         "}",
     ]

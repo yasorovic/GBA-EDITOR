@@ -13,7 +13,8 @@ from codegen.runtime_codegen.gen_actor_init import actor_init_lines
 from codegen.runtime_codegen.gen_appearance import appearance_layout, appearance_table_lines
 from codegen.runtime_codegen.gen_camera import scene_camera_index
 from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
-from codegen.runtime_codegen.gen_pool import dispatch_sym, link_depth, placed_link_lines
+from codegen.runtime_codegen.gen_actor_hierarchy import link_depth, placed_link_lines
+from codegen.runtime_codegen.gen_pool import dispatch_sym
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
 from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
 from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scene_has_cmap, scene_world_size
@@ -70,7 +71,7 @@ def gen_scene_init(
     L += _background_lines(p, scene, sym, bgi, scene_actors, sprite_offsets, obj_layout, bg_layout, anims, tanims)
     L += scene_ui_lines(p, scene, sym, sprite_offsets, obj_text_oam, obj_text_tile, emit)
     L += scene_display_lines(p, scene, dispcnt, cam_idx, emit)
-    L += _shared_pool_lines(pi, scene_oam_layout(p, scene).kinds)
+    L += _shared_pool_lines(pi, scene_oam_layout(p, scene).type_table_size)
     L += _placed_actor_lines(p, scene, scene_actors, actor_offset, obj_layout, alay, affine_info)
     # La hiérarchie, posés comme nés (`g_slot_link`) : la profondeur de la scène, puis le lien des posés qui ont un
     # parent ; une partie de modèle reçoit le sien à son spawn.
@@ -153,7 +154,7 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     # La génération survit à la remise à zéro et avance : une référence rangée par la scène
     # précédente ne résout dans aucun emplacement de celle-ci.
     L.append("    for(int _i=0; _i<G_ACTOR_COUNT; _i++) { u16 _g=g_actors[_i].gen; g_actors[_i]=(Actor){0}; "
-             "g_actors[_i].gen=_g+1; g_actors[_i].oam_entry=-1; g_actors[_i].inst=_i; "
+             "g_actors[_i].gen=_g+1; g_actors[_i].oam_entry=-1; g_actors[_i].slot_index=_i; "
              "actor_slot_tables_clear(_i); g_slot_link[_i].parent=-1; g_slot_link[_i].depth=0; }")
     L.append("    for(int _i=0; _i<(G_ACTOR_COUNT+31)/32; _i++) g_alive_bits[_i]=0;")
     L.append("    g_alive_epoch++;")
@@ -303,7 +304,7 @@ def _placed_actor_lines(p, scene, scene_actors: list, actor_offset: int, obj_lay
         position = (FieldValue.parse(actor.x, names).c_expr(), FieldValue.parse(actor.y, names).c_expr())
         L += actor_init_lines(
             p, actor, obj_layout, slot=slot, entry=layout.placed_entry[j],
-            name=f"ACTOR_{sym.upper()}", model=layout.placed_model[j], position=position,
+            name=f"ACTOR_{sym.upper()}", type_id=layout.placed_type_ids[j], position=position,
             active=actor.visible, appearance_base=alay.actor_base.get(j),
             affine=(affine_info or {}).get(slot), indent="    ",
         )
@@ -315,27 +316,27 @@ def _placed_actor_lines(p, scene, scene_actors: list, actor_offset: int, obj_lay
     return L
 
 
-def _shared_pool_lines(pi: list[dict], kinds: int) -> list[str]:
+def _shared_pool_lines(pi: list[dict], type_table_size: int) -> list[str]:
     """Le pool PARTAGÉ : sa fenêtre d'emplacements, ses modèles à parties, ses entrées d'état.
 
-    `kinds` : tous les types d'emplacement de la scène, posés compris (`OamLayout.kinds`). La table `g_spool_part` est
-    lue par `Actor.model` pour tout emplacement (`group_root_slot`) : elle couvre donc aussi les types des posés, à 0."""
+    `type_table_size` : tous les types d'emplacement de la scène, posés compris (`OamLayout.type_table_size`). La table `g_spool_part` est
+    lue par `Actor.type_id` pour tout emplacement (`group_root_slot`) : elle couvre donc aussi les types des posés, à 0."""
     L: list[str] = []
     # Le pool PARTAGÉ : les emplacements que tout modèle qui naît prend. Posés ici, puisque les
     # globales survivent à la scène : une scène sans pool partagé le dit aussi (début = fin = 0).
     _spool = next((p2["spool"] for p2 in pi if p2.get("shared")), None)
     if _spool:
         L.append(f"    g_spool_start = {_spool['start']}; g_spool_end = {_spool['end']}; "
-                 f"g_spool_hw = g_spool_free = {_spool['start']}; "
+                 f"g_actor_slot_end = g_spool_free = {_spool['start']}; "
                  f"g_spool_entry = {_spool['entry_start'] if _spool['entries'] else -1};")
         # Les modèles à parties : le rang de la partie, par type d'emplacement (l'allocation du pool, `group_root_slot`).
         _grouped = [m for m in pi if m.get("shared") and m["group"] > 1]
         if _grouped:
-            _part = [0] * kinds
+            _part = [0] * type_table_size
             for m in _grouped:
                 for k in range(1, m["group"]):
-                    _part[m["model_id"] + k] = k
-            L.append(f"    {{ static const u8 _pt[{kinds}]={{{','.join(map(str, _part))}}}; g_spool_part = _pt; }}")
+                    _part[m["root_type_id"] + k] = k
+            L.append(f"    {{ static const u8 _pt[{type_table_size}]={{{','.join(map(str, _part))}}}; g_spool_part = _pt; }}")
         else:
             L.append("    g_spool_part = 0;")
         if _spool["entries"]:
@@ -345,7 +346,7 @@ def _shared_pool_lines(pi: list[dict], kinds: int) -> list[str]:
             L.append("    }")
     else:
         # Sans pool, le plus haut emplacement utilisé est le dernier posé : `SLOT_EACH` s'y arrête.
-        L.append("    g_spool_start = g_spool_end = g_spool_free = 0; g_spool_hw = g_scene_placed; g_spool_entry = -1;")
+        L.append("    g_spool_start = g_spool_end = g_spool_free = 0; g_actor_slot_end = g_scene_placed; g_spool_entry = -1;")
         L.append("    g_spool_part = 0;")
     return L
 
@@ -374,7 +375,7 @@ def _start_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, lua_
             if j not in members:
                 continue
             actor, _ = scene_actors[j - actor_offset]
-            L.append(f"    {s}_pool_init(&g_actors[{j}]);")
+            L.append(f"    {s}_init_script_state(&g_actors[{j}]);")
             for name, typ, literal in member_export_inits(p, scene, actor):
                 arg = f"({export_setter_c_type(typ)}){literal}" if literal.startswith("{") else literal
                 L.append(f"    {s}_set_{name}(&g_actors[{j}], {arg});")

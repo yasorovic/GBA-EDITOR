@@ -48,12 +48,12 @@ def test_le_rigid_lit_la_gravite_du_runtime_selon_son_gravity_scale():
 
     # La gravité de la scène est passée au pas ; la part de chaque corps vient de son descripteur.
     dynamic = "\n".join(physics_motion_lines(scene, settings, actors, [], dynamic_gravity=True))
-    assert "body_motion_step(_a,&g_model_desc_S[_a->model],g_gravity_x,g_gravity_y," in dynamic
+    assert "body_motion_step(_a,&g_model_desc_S[_a->type_id],g_gravity_x,g_gravity_y," in dynamic
     assert body_desc(plain)[2] == 256 and body_desc(flipped)[2] == -512
 
     static = "\n".join(physics_motion_lines(scene, settings, actors, []))
     assert "g_gravity_x" not in static
-    assert "body_motion_step(_a,&g_model_desc_S[_a->model],64,128," in static
+    assert "body_motion_step(_a,&g_model_desc_S[_a->type_id],64,128," in static
 
 
 def test_le_transport_kinematic_lit_le_cote_d_appui_du_runtime(tmp_path):

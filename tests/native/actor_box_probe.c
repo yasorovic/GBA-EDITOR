@@ -47,7 +47,7 @@ u8 g_support_normal = 1;
 int g_gravity_x = 0, g_gravity_y = 0;
 int g_rigid_rest[64][2];
 u32 g_obj_state[16];
-int g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1, g_spool_free = 0;
+int g_spool_start = 0, g_spool_end = 0, g_actor_slot_end = 0, g_spool_entry = -1, g_spool_free = 0;
 u32 g_alive_bits[16];
 int g_scene_placed = 0;
 SlotLink g_slot_link[64]; int g_slot_depth = 0;
@@ -393,9 +393,9 @@ int main(void) {
         /* Et elles n'ont pas à être contiguës ni dans l'ordre des emplacements. */
         const ModelSlot eclate[2] = { {1, 0}, {0, 0} };
         printf("vie_eclate %d %d\n", actor_model_nth(eclate, 2, 0, 0) == y, actor_model_nth(eclate, 2, 0, 1) == x);
-        /* Le pool PARTAGÉ : les instances d'un modèle se retrouvent à `Actor.model`, pas par la table. */
-        g_spool_start = 0; g_spool_end = 2; g_spool_hw = 2;
-        x->alive = 1; x->model = 3; y->alive = 1; y->model = 4;
+        /* Le pool PARTAGÉ : les instances d'un modèle se retrouvent à `Actor.type_id`, pas par la table. */
+        g_spool_start = 0; g_spool_end = 2; g_actor_slot_end = 2;
+        x->alive = 1; x->type_id = 3; y->alive = 1; y->type_id = 4;
         alive_bit_set(0); alive_bit_set(1);
         printf("pool_modele %d %d %d\n", actor_model_count(0, 0, 3), actor_model_count(0, 0, 4), actor_model_count(0, 0, 9));
         printf("pool_nth %d %d\n", actor_model_nth(0, 0, 4, 0) == y, actor_model_nth(0, 0, 3, 1) == 0);
@@ -403,20 +403,20 @@ int main(void) {
         const ModelSlot posee[1] = { {1, 0} };
         printf("pool_mixte %d %d %d\n", actor_model_count(posee, 1, 3), actor_model_nth(posee, 1, 3, 0) == y,
                actor_model_nth(posee, 1, 3, 1) == x);
-        /* Hors du pool utilisé (au-delà de `g_spool_hw`), rien n'est compté. */
-        g_spool_hw = 1; g_alive_epoch++;       /* la borne a changé hors naissance/mort : le compte en cache est périmé */
+        /* Hors du pool utilisé (au-delà de `g_actor_slot_end`), rien n'est compté. */
+        g_actor_slot_end = 1; g_alive_epoch++;       /* la borne a changé hors naissance/mort : le compte en cache est périmé */
         printf("pool_hw %d\n", actor_model_count(0, 0, 4));
         /* Le bloc d'état d'un emplacement : un bloc de OBJ_STATE_STRIDE octets par `inst`. */
-        x->inst = 0; y->inst = 1;
-        printf("pool_etat %d\n", (int)((char*)(g_obj_state + (int)y->inst * (OBJ_STATE_STRIDE / 4)) - (char*)g_obj_state) == OBJ_STATE_STRIDE);
+        x->slot_index = 0; y->slot_index = 1;
+        printf("pool_etat %d\n", (int)((char*)(g_obj_state + (int)y->slot_index * (OBJ_STATE_STRIDE / 4)) - (char*)g_obj_state) == OBJ_STATE_STRIDE);
         /* Un modèle à PARTIES : la racine (type 2) a un groupe de 3 aux emplacements 2..4, ses parties les types 3 et 4. */
         {
             static const u8 part[5] = {0, 0, 0, 1, 2};
             g_spool_part = part;
-            g_spool_start = 2; g_spool_end = 8; g_spool_hw = 5; g_spool_free = 5;
-            for (int i = 0; i < 8; i++) { g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
+            g_spool_start = 2; g_spool_end = 8; g_actor_slot_end = 5; g_spool_free = 5;
+            for (int i = 0; i < 8; i++) { g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; }
             g_alive_bits[0] = 0;
-            for (int i = 2; i < 5; i++) { g_actors[i].alive = 1; g_actors[i].active = 1; g_actors[i].model = i; alive_bit_set(i); }
+            for (int i = 2; i < 5; i++) { g_actors[i].alive = 1; g_actors[i].active = 1; g_actors[i].type_id = i; alive_bit_set(i); }
             /* la partie 1 (emplacement 3) a pour parent la racine, la partie 2 (emplacement 4) la partie 1 */
             actor_link_slot(3, 2, 1, 1, 0, 0, 0, 256, 256); actor_link_slot(4, 3, 2, 1, 0, 0, 0, 256, 256); g_slot_depth = 2;
             printf("grp_occupe %d %d %d %d\n", spool_slot_free(2), spool_slot_free(3), spool_slot_free(4), spool_slot_free(5));
@@ -437,7 +437,7 @@ int main(void) {
             printf("grp_bits_partie %u\n", g_alive_bits[0]);     /* les parties détruites n'ont plus leur bit, la racine le garde */
             actor_destroy_internal(&g_actors[2]);        /* la racine : tout le groupe est rendu */
             printf("grp_racine %d %d %d %d %d\n", spool_slot_free(2), spool_slot_free(3), spool_slot_free(4),
-                   g_actors[4].alive, g_actors[4].model);
+                   g_actors[4].alive, g_actors[4].type_id);
             printf("grp_curseur %d\n", g_spool_free);
             printf("grp_bits_racine %u\n", g_alive_bits[0]);     /* le groupe entier est rendu : plus aucun bit */
             g_spool_part = 0; g_slot_depth = 0;
@@ -451,8 +451,8 @@ int main(void) {
     {
         enum { SLOTS = 64 };
         g_spool_part = 0;
-        g_spool_start = 0; g_spool_end = SLOTS; g_spool_hw = SLOTS; g_spool_free = 0;
-        for (int i = 0; i < SLOTS; i++) { g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
+        g_spool_start = 0; g_spool_end = SLOTS; g_actor_slot_end = SLOTS; g_spool_free = 0;
+        for (int i = 0; i < SLOTS; i++) { g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; }
         g_alive_bits[0] = 0; g_alive_bits[1] = 0;
         unsigned seed = 12345u;
         #define RND() (seed = seed * 1103515245u + 12345u, (seed >> 16) & 0x7fff)
@@ -462,7 +462,7 @@ int main(void) {
             if (op == 0 || op == 1) {                                  /* naissance dans un emplacement libre */
                 int k = RND() % SLOTS;
                 if (!g_actors[k].alive) {
-                    g_actors[k].alive = 1; g_actors[k].active = 1; g_actors[k].model = 1 + RND() % 3; g_actors[k].inst = k;
+                    g_actors[k].alive = 1; g_actors[k].active = 1; g_actors[k].type_id = 1 + RND() % 3; g_actors[k].slot_index = k;
                     alive_bit_set(k);
                 }
             } else if (op == 2) {                                      /* mort d'un vivant */
@@ -470,16 +470,16 @@ int main(void) {
                 if (g_actors[k].alive) actor_destroy_internal(&g_actors[k]);
             } else if (op == 3) {                                      /* un rang quelconque */
                 int m = 1 + RND() % 3, i = RND() % 12, want = -1, r = i;
-                for (int k = 0; k < SLOTS; k++) if (g_actors[k].alive && g_actors[k].model == m && r-- == 0) { want = k; break; }
+                for (int k = 0; k < SLOTS; k++) if (g_actors[k].alive && g_actors[k].type_id == m && r-- == 0) { want = k; break; }
                 Actor* got = actor_model_nth(0, 0, m, i);
                 checks++; bad += (want < 0) ? (got != 0) : (got != &g_actors[want]);
             } else if (op == 4) {                                      /* une boucle de 0 au compte, un modèle */
                 int m = 1 + RND() % 3, cnt = 0;
-                for (int k = 0; k < SLOTS; k++) cnt += g_actors[k].alive && g_actors[k].model == m;
+                for (int k = 0; k < SLOTS; k++) cnt += g_actors[k].alive && g_actors[k].type_id == m;
                 checks++; bad += (actor_model_count(0, 0, m) != cnt);
                 for (int i = 0; i < cnt; i++) {
                     int want = -1, r = i;
-                    for (int k = 0; k < SLOTS; k++) if (g_actors[k].alive && g_actors[k].model == m && r-- == 0) { want = k; break; }
+                    for (int k = 0; k < SLOTS; k++) if (g_actors[k].alive && g_actors[k].type_id == m && r-- == 0) { want = k; break; }
                     long before = g_nth.rank;
                     Actor* got = actor_model_nth(0, 0, m, i);
                     checks++; bad += (got != &g_actors[want]);
@@ -487,10 +487,10 @@ int main(void) {
                 }
             } else {                                                   /* une boucle qui détruit l'élément qu'elle vient de lire */
                 int m = 1 + RND() % 3, cnt = 0;
-                for (int k = 0; k < SLOTS; k++) cnt += g_actors[k].alive && g_actors[k].model == m;
+                for (int k = 0; k < SLOTS; k++) cnt += g_actors[k].alive && g_actors[k].type_id == m;
                 for (int i = 0; i < cnt && i < actor_model_count(0, 0, m); i++) {
                     int want = -1, r = i;
-                    for (int k = 0; k < SLOTS; k++) if (g_actors[k].alive && g_actors[k].model == m && r-- == 0) { want = k; break; }
+                    for (int k = 0; k < SLOTS; k++) if (g_actors[k].alive && g_actors[k].type_id == m && r-- == 0) { want = k; break; }
                     Actor* got = actor_model_nth(0, 0, m, i);
                     checks++; bad += (want < 0) ? (got != 0) : (got != &g_actors[want]);
                     if (got && (RND() & 1)) actor_destroy_internal(got);
@@ -504,8 +504,8 @@ int main(void) {
 
     /* La hiérarchie des acteurs POSÉS : 0 est le sommet, 1 son enfant, 2 l'enfant de 1 ; 3 est un autre sommet, 4 son enfant. */
     {
-        g_spool_part = 0; g_scene_placed = 5; g_spool_start = g_spool_end = g_spool_free = 0; g_spool_hw = 5;
-        for (int i = 0; i < 5; i++) { g_actors[i] = (Actor){0}; g_actors[i].inst = i; g_actors[i].alive = 1; g_actors[i].active = 1; }
+        g_spool_part = 0; g_scene_placed = 5; g_spool_start = g_spool_end = g_spool_free = 0; g_actor_slot_end = 5;
+        for (int i = 0; i < 5; i++) { g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; g_actors[i].alive = 1; g_actors[i].active = 1; }
         actor_link_slot(1, 0, 1, 1, 0, 0, 0, 256, 256); actor_link_slot(2, 1, 2, 1, 0, 0, 0, 256, 256);
         actor_link_slot(4, 3, 1, 1, 0, 0, 0, 256, 256); g_slot_depth = 2;
         printf("pose_parent %d %d %d %d %d\n", actor_parent(&g_actors[1]) == &g_actors[0], actor_parent(&g_actors[2]) == &g_actors[1],
@@ -532,7 +532,7 @@ int main(void) {
         static u16 sol[64]; static u8 chute[64];
         g_actor_floor = sol; g_drop_through = chute;
         for (int i = 0; i < 3; i++) {
-            g_actors[i] = (Actor){0}; g_actors[i].inst = i; g_actors[i].alive = 1; g_actors[i].active = 1;
+            g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; g_actors[i].alive = 1; g_actors[i].active = 1;
             sol[i] = 7; chute[i] = 9; g_rigid_rest[i][0] = 100 + i; g_rigid_rest[i][1] = 200 + i;
         }
         actor_destroy_internal(&g_actors[1]);
@@ -547,7 +547,7 @@ int main(void) {
        éloignée ou qu'un côté est inactif. Les tags arrivent du bon côté (my_box d'abord). */
     {
         for (int i = 0; i < 2; i++) {
-            g_actors[i] = (Actor){0}; g_actors[i].active = 1; g_actors[i].alive = 1; g_actors[i].model = i + 1;
+            g_actors[i] = (Actor){0}; g_actors[i].active = 1; g_actors[i].alive = 1; g_actors[i].type_id = i + 1;
             g_actors[i].collision.box_count = 1;
         }
         g_actors[0].collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_HIT };
@@ -556,7 +556,7 @@ int main(void) {
         s_desc[2].on_contact[0] = b_enter; s_desc[2].on_contact[2] = b_exit;
         /* La scène du cas : deux posés (0 et 1), pas de pool ; les cas précédents ne doivent pas être parcourus. */
         for (int w = 0; w < 16; w++) g_alive_bits[w] = 0;
-        g_spool_start = 0; g_spool_hw = 2; g_scene_placed = 2; alive_bit_set(0); alive_bit_set(1);
+        g_spool_start = 0; g_actor_slot_end = 2; g_scene_placed = 2; alive_bit_set(0); alive_bit_set(1);
         s_prev_n = 0;
         contact_frame("contact_1");            /* superposés : enter */
         contact_frame("contact_2");            /* ça dure : collide */

@@ -263,7 +263,7 @@ def character_solver_lines(one_way_tiles=frozenset()) -> list[str]:
         "static void __attribute__((unused)) resolve_actor_tiles(Actor*a,u8 body_mask,TileCollideCb cb){",
         "    if(!g_active_cmap) return;",
         "    if(!body_mask) return;",
-        *(["    int drop=g_drop_through&&g_drop_through[a->inst];"] if dirs else []),
+        *(["    int drop=g_drop_through&&g_drop_through[a->slot_index];"] if dirs else []),
         "    if(a->vx==0&&a->vy==0){",
         "        a->collision.last_x=a->x>>8; a->collision.slope_acc=0;",
         "        return;",
@@ -440,8 +440,8 @@ def physics_tile_lines(scene, scene_actors, pi: list[dict], *, kinematic: bool,
     pool = any(concerned(m["prefab"]) for m in shared_models(pi))
     if not (placed or pool):
         return []
-    c = "_kin_d[_a->inst]" if carry and not kinematic else "0"
-    step = f"body_tile_step(_a,&{model_desc_sym(scene)}[_a->model],{int(kinematic)},{c});"
+    c = "_kin_d[_a->slot_index]" if carry and not kinematic else "0"
+    step = f"body_tile_step(_a,&{model_desc_sym(scene)}[_a->type_id],{int(kinematic)},{c});"
     what = "Kinematic : carte avant le transport" if kinematic else "carte de collision"
     return [f"    /* {what}, un seul pas pour les posés et les nés */",
             *each_slot(step)]

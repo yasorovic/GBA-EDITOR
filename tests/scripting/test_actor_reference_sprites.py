@@ -372,7 +372,7 @@ def test_un_prefab_poole_definit_le_getter_d_un_composite():
 
 # ── Les instances d'un modèle : actor:count("Bullet"), actor:get("Bullet", i) ────────
 
-_POOL = "g_model_Sc_Bullet, MODEL_SC_BULLET_COUNT, MODELID_SC_BULLET"
+_POOL = "g_model_Sc_Bullet, MODEL_SC_BULLET_COUNT, ROOT_TYPE_ID_SC_BULLET"
 
 
 def test_le_nombre_d_instances_vivantes_d_un_modele():

@@ -1,6 +1,6 @@
 """Contact au sol final d'un CharacterBody ou d'un RigidBody sur les corps sous lui, posés ou nés.
 
-Tout se lit par TYPE d'emplacement (`Actor.model`) : pour un type de corps et un type d'appui, la suite des couples de
+Tout se lit par TYPE d'emplacement (`Actor.type_id`) : pour un type de corps et un type d'appui, la suite des couples de
 boîtes qui peuvent porter, filtrée au build (matrice des tags, modes des deux corps, faces à sens unique). Le runtime
 ne demande jamais si un emplacement est posé ou né (règle « posé = spawné »)."""
 from __future__ import annotations
@@ -51,7 +51,7 @@ def floor_helper_lines() -> list[str]:
         "   4 gauche. Le corps ne doit pas s'éloigner de son appui (vitesse de sens contraire). Le premier appui qui porte",
         "   l'emporte. */",
         "static inline __attribute__((always_inline, unused)) void actor_floor_test_n(Actor* a,u8 ab,const Actor* s,u8 sb,u8 n){",
-        "    if(g_actor_floor[a->inst]||!s->active) return;",
+        "    if(g_actor_floor[a->slot_index]||!s->active) return;",
         "    if(ab>=a->collision.box_count||sb>=s->collision.box_count) return;",
         "    const CollisionShape* b=&a->collision.boxes[ab]; const CollisionShape* p=&s->collision.boxes[sb];",
         "    if(!b->active||!p->active) return;",
@@ -62,7 +62,7 @@ def floor_helper_lines() -> list[str]:
         "    else if(n==2) hit=a->vy<=0&&at==pb&&al<pr&&ar>pl;",
         "    else if(n==3) hit=a->vx>=0&&ar==pl&&at<pb&&abt>pt;",
         "    else hit=a->vx<=0&&al==pr&&at<pb&&abt>pt;",
-        "    if(hit) g_actor_floor[a->inst]=(u16)(s->inst+1);",
+        "    if(hit) g_actor_floor[a->slot_index]=(u16)(s->slot_index+1);",
         "}",
         "/* Un couple de boîtes (corps, appui) d'un couple de types. `guard` : la face à sens unique de direction fixe ne",
         "   porte que tant que le côté d'appui lu à l'exécution est le sien (0 : toujours) ; `one_way` : elle ne porte plus",
@@ -73,7 +73,7 @@ def floor_helper_lines() -> list[str]:
         "    for(int k=0;k<n;k++){",
         "        if(p[k].body_box!=cb||(p[k].guard&&g_support_normal!=p[k].guard)||(p[k].one_way&&drop)) continue;",
         "        actor_floor_test_n(a,cb,t,p[k].support_box,side);",
-        "        if(g_actor_floor[a->inst]) return 1;",
+        "        if(g_actor_floor[a->slot_index]) return 1;",
         "    }",
         "    return 0;",
         "}",
@@ -83,7 +83,7 @@ def floor_helper_lines() -> list[str]:
         "   les appuis qu'ils ne touchent pas. */",
         "typedef struct { u16 slot; u8 kind; u8 pad; s16 l, t, r, b; } FloorSupport;",
         "static inline __attribute__((always_inline)) void floor_support_add(int s,const u8* si,FloorSupport* out,int* n){",
-        "    const Actor* t=&g_actors[s]; u8 j=si[t->model];",
+        "    const Actor* t=&g_actors[s]; u8 j=si[t->type_id];",
         "    if(j==255||!t->active) return;",
         "    int l=32767,top=32767,r=-32768,b=-32768,x=t->x>>8,y=t->y>>8;",
         "    for(int k=0;k<t->collision.box_count;k++){",
@@ -109,10 +109,10 @@ def floor_helper_lines() -> list[str]:
         "static void __attribute__((unused)) actors_floor(Actor* a,u8 mask,const PairRun* runs,const FloorSupport* list,",
         "        int count,const FloorPair* pairs,u8 normal){",
         "    if(!g_actor_floor) return;",
-        "    g_actor_floor[a->inst]=0;",
+        "    g_actor_floor[a->slot_index]=0;",
         "    if(!a->active) return;",
         "    u8 side=normal?normal:g_support_normal;",
-        "    int drop=g_drop_through&&g_drop_through[a->inst];",
+        "    int drop=g_drop_through&&g_drop_through[a->slot_index];",
         "    int x=a->x>>8,y=a->y>>8;",
         "    for(int cb=0;cb<a->collision.box_count;cb++){",
         "        const CollisionShape* m=&a->collision.boxes[cb];",
@@ -131,13 +131,13 @@ def floor_helper_lines() -> list[str]:
     ]
 
 
-def floor_tick_lines(p, scene_actors, scene=None, pi=(), shown=None) -> list[str]:
+def floor_tick_lines(p, scene_actors, scene=None, pi=(), resolve_initial_appearance=None) -> list[str]:
     """Actualise le contact au sol après toutes les corrections de position de la frame.
 
     Un CharacterBody repose sur un StaticBody ou un KinematicBody. Un RigidBody repose aussi sur un Character ou un
     autre Rigid : le solveur d'impulsions le laisse exactement au contact, sans produire lui-même de contact au sol.
 
-    Corps et appuis sont posés ou nés dans le pool partagé (`pi`, `shown`) : leurs couples se lisent par type. Les
+    Corps et appuis sont posés ou nés dans le pool partagé (`pi`, `resolve_initial_appearance`) : leurs couples se lisent par type. Les
     appuis se parcourent dans l'ordre des emplacements ; le premier qui porte l'emporte."""
     n = support_normal(scene, p.settings) if scene is not None else ONEWAY_UP
     # Un script écrit `scene.gravity` : le côté d'appui se lit à l'exécution (`g_support_normal`). Une face à sens
@@ -145,12 +145,12 @@ def floor_tick_lines(p, scene_actors, scene=None, pi=(), shown=None) -> list[str
     # garde la direction cuite au départ de la scène (ses blocages le sont aussi), donc reste un sol.
     dynamic = project_sets_gravity(p)
     lay = scene_oam_layout(p, scene)
-    shared = shared_models(pi) if shown else []
+    shared = shared_models(pi) if resolve_initial_appearance else []
     owners: dict[int, tuple] = {}       # type -> (porteur, sprite) ; les copies d'un type ont les mêmes rôles de boîtes
-    for (actor, sprite), kind in zip(scene_actors, lay.placed_model):
+    for (actor, sprite), kind in zip(scene_actors, lay.placed_type_ids):
         owners.setdefault(kind, (actor, sprite))
     for m in shared:
-        owners.setdefault(m["model_id"], (m["prefab"], shown(p, m["prefab"])[1]))
+        owners.setdefault(m["root_type_id"], (m["prefab"], resolve_initial_appearance(p, m["prefab"])[1]))
 
     def supports(owner, sprite) -> list[tuple[int, object, int, bool]]:
         """(rang de boîte, boîte, garde, sens unique) de chaque face qui peut porter, ou rien."""
@@ -208,23 +208,23 @@ def floor_tick_lines(p, scene_actors, scene=None, pi=(), shown=None) -> list[str
         run_rows.append("{" + ",".join(row) + "}")
     body_index = {kind: i for i, (kind, *_rest) in enumerate(bodies)}
     support_index = {kind: i for i, kind in enumerate(support_kinds)}
-    pool = any(m["model_id"] in floors for m in shared)
+    pool = any(m["root_type_id"] in floors for m in shared)
     # La taille de l'instantané : les posés d'un type d'appui, puis tout le pool partagé s'il en fait naître. Petit, il
     # reste en IWRAM (.bss) ; au-delà, en EWRAM.
-    capacity = sum(1 for kind in lay.placed_model if kind in floors) + (
+    capacity = sum(1 for kind in lay.placed_type_ids if kind in floors) + (
         shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if pool else 0)
     where = "" if capacity <= _SNAPSHOT_IWRAM else " EWRAM_BSS"
-    step = (f"{{ u8 _fi=_fl_bi[_a->model]; if(_fi!=255) actors_floor(_a,_fl_mask[_fi],_fl_run[_fi],_fl_list,_fl_n,"
+    step = (f"{{ u8 _fi=_fl_bi[_a->type_id]; if(_fi!=255) actors_floor(_a,_fl_mask[_fi],_fl_run[_fi],_fl_list,_fl_n,"
             f"_fl_pair,{0 if dynamic else n}); }}")
 
     def by_kind(index: dict) -> str:
-        return ",".join(str(index.get(k, 255)) for k in range(lay.kinds))
+        return ",".join(str(index.get(k, 255)) for k in range(lay.type_table_size))
 
     return [
         "    /* Contact au sol final des CharacterBody et RigidBody, par couple de types (corps, appui) */",
         "    {",
-        f"        static u8 _fl_bi[{lay.kinds}]{_IW}={{{by_kind(body_index)}}};",
-        f"        static u8 _fl_si[{lay.kinds}]{_IW}={{{by_kind(support_index)}}};",
+        f"        static u8 _fl_bi[{lay.type_table_size}]{_IW}={{{by_kind(body_index)}}};",
+        f"        static u8 _fl_si[{lay.type_table_size}]{_IW}={{{by_kind(support_index)}}};",
         f"        static u8 _fl_mask[{len(bodies)}]{_IW}={{{','.join(str(m) for _k, m, _r in bodies)}}};",
         f"        static PairRun _fl_run[{len(bodies)}][{len(support_kinds)}]{_IW}={{{','.join(run_rows)}}};",
         f"        static FloorPair _fl_pair[{len(table)}]{_IW}={{{','.join(table)}}};",

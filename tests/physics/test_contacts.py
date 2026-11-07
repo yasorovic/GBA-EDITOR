@@ -35,7 +35,7 @@ def test_un_couple_n_entre_que_si_un_des_deux_types_reagit(tmp_path):
     code = _lignes(tmp_path, [_acteur("A"), _acteur("B"), _acteur("C")], ["A", None, None], {"A"})
     allowed = re.search(r"_ct_allowed\[3\]\[3\][^=]*=\{(.*)\};", code)[1]
     assert allowed == "{1,1,1},{1,0,0},{1,0,0}"
-    assert "_ct_ki[4]" in code and "={255,0,1,2};" in code
+    assert "_ct_type_to_index[4]" in code and "={255,0,1,2};" in code
 
 
 def test_la_liste_des_contacts_est_bornee_par_les_paires_possibles(tmp_path):

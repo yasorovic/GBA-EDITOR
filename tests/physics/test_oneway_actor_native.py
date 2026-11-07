@@ -27,7 +27,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 #define EWRAM_BSS                                 /* hors GBA : mémoire ordinaire */
 Actor g_actors[8];
-int g_spool_start = 0, g_spool_hw = 0, g_scene_placed = 0;
+int g_spool_start = 0, g_actor_slot_end = 0, g_scene_placed = 0;
 u32 g_alive_bits[1];
 u32 g_alive_epoch;
 PoolCursor g_nth;
@@ -39,7 +39,7 @@ u8 g_support_normal = 1;
 static void mk(int i, int x, int y, int vx, int vy, int w, int h){
     Actor* a = &g_actors[i];
     *a = (Actor){0};
-    a->active = 1; a->inst = i; a->x = x << 8; a->y = y << 8; a->vx = vx; a->vy = vy;
+    a->active = 1; a->slot_index = i; a->x = x << 8; a->y = y << 8; a->vx = vx; a->vy = vy;
     a->collision.box_count = 1;
     CollisionShape* b = &a->collision.boxes[0];
     b->w = w; b->h = h; b->solid = 1; b->active = 1;
@@ -47,8 +47,8 @@ static void mk(int i, int x, int y, int vx, int vy, int w, int h){
 /* Le bloqueur (emplacement 1) est du type 1, rang compact 0 ; sa boîte 0 porte la face `dir`. */
 static void run(const char* nom, int dir){
     const u8 bi[] = {255, 0}; const PairRun runs[] = {{0, 1}}; const u8 box[] = {0}; const u8 ow[] = {dir};
-    g_actors[1].model = 1;
-    g_scene_placed = 2; g_spool_hw = 2; alive_bit_set(1); BlockTarget list[2]; int n = block_targets(bi, list);
+    g_actors[1].type_id = 1;
+    g_scene_placed = 2; g_actor_slot_end = 2; alive_bit_set(1); BlockTarget list[2]; int n = block_targets(bi, list);
     actors_resolve_blocks_ow(&g_actors[0], 1, runs, list, n, box, ow);
     printf("%%s %%d %%d %%d %%d\n", nom, g_actors[0].x >> 8, g_actors[0].y >> 8, g_actors[0].vx, g_actors[0].vy);
 }

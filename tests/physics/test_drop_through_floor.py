@@ -29,7 +29,7 @@ u16 floor_store[2];
 u16 *g_actor_floor = floor_store;
 u8 drop_store[2];
 u8 *g_drop_through = drop_store;
-int g_spool_start, g_spool_hw, g_scene_placed;
+int g_spool_start, g_actor_slot_end, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 %(helpers)s
 
@@ -42,10 +42,10 @@ static Actor boite(int x, int y, int w, int h){
     return a;
 }
 static void essai(const char* nom, int drop){
-    g_actors[0] = boite(48, 42, 8, 8); g_actors[0].inst = 0; g_actors[0].model = %(type_corps)s;   /* le corps : bas = 50 */
-    g_actors[1] = boite(40, 50, 24, 8); g_actors[1].inst = 1; g_actors[1].model = %(type_appui)s;  /* l'appui : haut = 50 */
+    g_actors[0] = boite(48, 42, 8, 8); g_actors[0].slot_index = 0; g_actors[0].type_id = %(type_corps)s;   /* le corps : bas = 50 */
+    g_actors[1] = boite(40, 50, 24, 8); g_actors[1].slot_index = 1; g_actors[1].type_id = %(type_appui)s;  /* l'appui : haut = 50 */
     floor_store[0] = floor_store[1] = 0; drop_store[0] = drop; drop_store[1] = 0;
-    g_scene_placed = 2; g_spool_hw = 2; g_alive_bits[0] = 0; alive_bit_set(0); alive_bit_set(1);   /* deux posés */
+    g_scene_placed = 2; g_actor_slot_end = 2; g_alive_bits[0] = 0; alive_bit_set(0); alive_bit_set(1);   /* deux posés */
 %(lines)s
     printf("%%s %%d\n", nom, floor_store[0] == 2);
 }
@@ -57,7 +57,7 @@ def _resultats(tmp_path, one_way: str) -> dict[str, int]:
     compilateur = compilateur_hote()
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; le contact au sol est vérifié en CI")
-    from codegen.runtime_codegen.gen_sprite import shown
+    from codegen.runtime_codegen.gen_sprite import resolve_initial_appearance
     from codegen.runtime_codegen.physics.floor import floor_helper_lines, floor_tick_lines
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
     from codegen.oam_alloc import scene_oam_layout
@@ -71,9 +71,9 @@ def _resultats(tmp_path, one_way: str) -> dict[str, int]:
     scene = Scene(name="S", actors=[corps, appui], physics_enabled=True)
     project = Project(tmp_path / f"Drop_{one_way}")
     project.scenes.items = [scene]
-    lignes = floor_tick_lines(project, [(corps, None), (appui, None)], scene, [], shown)
+    lignes = floor_tick_lines(project, [(corps, None), (appui, None)], scene, [], resolve_initial_appearance)
     assert any("actors_floor" in ligne for ligne in lignes)
-    type_corps, type_appui = scene_oam_layout(project, scene).placed_model
+    type_corps, type_appui = scene_oam_layout(project, scene).placed_type_ids
     source = SONDE % {"helpers": "\n".join(floor_helper_lines()), "lines": "\n".join(lignes),
                       "type_corps": type_corps, "type_appui": type_appui}
     dossier = tmp_path / one_way

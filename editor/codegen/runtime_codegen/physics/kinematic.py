@@ -1,6 +1,6 @@
 """Transport des corps posés sur un KinematicBody, et écrasement d'un Character transporté contre un StaticBody.
 
-Plateformes, passagers et murs sont posés ou nés : leurs couples se lisent par TYPE d'emplacement (`Actor.model`). Le
+Plateformes, passagers et murs sont posés ou nés : leurs couples se lisent par TYPE d'emplacement (`Actor.type_id`). Le
 runtime ne demande jamais si un emplacement est posé ou né (règle « posé = spawné »)."""
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def kinematic_helper_lines() -> list[str]:
         "/* L'instantané des plateformes, relevé AVANT le mouvement : emplacement, rang compact de son type, position. */",
         "typedef struct { u16 slot; u8 kind; u8 pad; int x, y; } CarryPlatform;",
         "static inline __attribute__((always_inline)) void kinematic_platform_add(int s,const u8* pi,CarryPlatform* out,int* n){",
-        "    const Actor* k=&g_actors[s]; u8 j=pi[k->model];",
+        "    const Actor* k=&g_actors[s]; u8 j=pi[k->type_id];",
         "    if(j==255||!k->active) return;",
         "    CarryPlatform* c=&out[(*n)++]; c->slot=s; c->kind=j; c->x=k->x; c->y=k->y;",
         "}",
@@ -72,7 +72,7 @@ def kinematic_helper_lines() -> list[str]:
         "   passager porté par une plateforme bouge avant que la suivante le teste). */",
         "typedef struct { u16 slot; u8 kind; u8 pad; } CarryRider;",
         "static inline __attribute__((always_inline)) void kinematic_rider_add(int s,const u8* ri,CarryRider* out,int* n){",
-        "    const Actor* a=&g_actors[s]; u8 j=ri[a->model];",
+        "    const Actor* a=&g_actors[s]; u8 j=ri[a->type_id];",
         "    if(j==255||!a->active) return;",
         "    CarryRider* r=&out[(*n)++]; r->slot=s; r->kind=j;",
         "}",
@@ -107,7 +107,7 @@ def kinematic_helper_lines() -> list[str]:
         "   murs : tous les emplacements vivants (`SLOT_EACH`), rang compact de leur type dans `wi`. */",
         "static inline __attribute__((always_inline)) int kinematic_crush_one(Actor* a,u8 cb,int s,const PairRun* row,",
         "        const u8* wi,const BoxPair* pairs){",
-        "    const Actor* w=&g_actors[s]; u8 j=wi[w->model];",
+        "    const Actor* w=&g_actors[s]; u8 j=wi[w->type_id];",
         "    if(j==255||!w->active||!row[j].n) return 0;",
         "    const BoxPair* p=pairs+row[j].first;",
         "    for(int q=0;q<row[j].n;q++){",
@@ -185,7 +185,7 @@ def _pair_table(owners: dict, pairs_of, prefix: str) -> tuple[dict, dict, list[s
 
 
 def kinematic_tick_parts(
-        p, scene_actors, scene=None, pi=(), shown=None,
+        p, scene_actors, scene=None, pi=(), resolve_initial_appearance=None,
 ) -> tuple[list[str], list[str], list[str]]:
     """L'instantané des plateformes avant le mouvement, le transport après la résolution, puis l'écrasement contre un
     StaticBody.
@@ -200,12 +200,12 @@ def kinematic_tick_parts(
     # Un script écrit `scene.gravity` : le côté d'appui se lit à l'exécution, quel que soit celui du départ.
     dynamic = project_sets_gravity(p)
     lay = scene_oam_layout(p, scene)
-    shared = shared_models(pi) if shown else []
+    shared = shared_models(pi) if resolve_initial_appearance else []
     owners: dict[int, tuple] = {}       # type -> (porteur, sprite) ; les copies d'un type ont les mêmes rôles de boîtes
-    for (actor, sprite), kind in zip(scene_actors, lay.placed_model):
+    for (actor, sprite), kind in zip(scene_actors, lay.placed_type_ids):
         owners.setdefault(kind, (actor, sprite))
     for m in shared:
-        owners.setdefault(m["model_id"], (m["prefab"], shown(p, m["prefab"])[1]))
+        owners.setdefault(m["root_type_id"], (m["prefab"], resolve_initial_appearance(p, m["prefab"])[1]))
 
     carry = _pair_table(owners, lambda a, b: _carry_pairs(p, a[0], a[1], b[0], b[1])
                         if physics_body_mode(a[0]) == PHYSICS_BODY_KINEMATIC else [], "_kin")
@@ -216,17 +216,17 @@ def kinematic_tick_parts(
 
     def capacity_of(kinds: dict) -> int:
         """La taille d'une liste d'instantané : les posés de ces types, puis tout le pool s'il en fait naître."""
-        return (sum(1 for kind in lay.placed_model if kind in kinds)
-                + (spool if any(m["model_id"] in kinds for m in shared) else 0))
+        return (sum(1 for kind in lay.placed_type_ids if kind in kinds)
+                + (spool if any(m["root_type_id"] in kinds for m in shared) else 0))
 
     def by_kind(index: dict) -> str:
-        return ",".join(str(index.get(k, 255)) for k in range(lay.kinds))
+        return ",".join(str(index.get(k, 255)) for k in range(lay.type_table_size))
 
     capacity = capacity_of(platform_index)
     where = "" if capacity <= _SNAPSHOT_IWRAM else " EWRAM_BSS"
     before = ["    /* Transport : les plateformes et leur position d'avant mouvement, par couple de types */",
-              f"    static u8 _kin_pi[{lay.kinds}]{_IW}={{{by_kind(platform_index)}}};",
-              f"    static u8 _kin_ri[{lay.kinds}]{_IW}={{{by_kind(rider_index)}}};",
+              f"    static u8 _kin_pi[{lay.type_table_size}]{_IW}={{{by_kind(platform_index)}}};",
+              f"    static u8 _kin_ri[{lay.type_table_size}]{_IW}={{{by_kind(rider_index)}}};",
               *carry_lines,
               f"    static CarryPlatform _kin_list[{capacity}]{where};",
               "    int _kin_n=kinematic_platforms(_kin_pi,_kin_list);"]
@@ -245,14 +245,14 @@ def kinematic_tick_parts(
     if crush is not None:
         body_index, wall_index, table, _width = crush
         masks = {kind: sum(1 << cb for cb, _box in _body_boxes(*owners[kind])) for kind in body_index}
-        step = (f"{{ u8 _ci=_kc_ci[_a->model]; if(_ci!=255) kinematic_crush(_a,&{model_desc_sym(scene)}[_a->model],"
-                "_kc_mask[_ci],_kc_run[_ci],_kc_wi,_kc_pair,_kin_d[_a->inst]); }")
+        step = (f"{{ u8 _ci=_kc_ci[_a->type_id]; if(_ci!=255) kinematic_crush(_a,&{model_desc_sym(scene)}[_a->type_id],"
+                "_kc_mask[_ci],_kc_run[_ci],_kc_wi,_kc_pair,_kin_d[_a->slot_index]); }")
         crush_lines = [
             "    /* L'écrasement d'un Character transporté contre un StaticBody (la carte, elle, écrase par",
             "       `body_tile_step`) : `_kin_d[i][2]` retient qu'il est signalé, pour ne pas le refaire à la carte. */",
             "    {",
-            f"        static u8 _kc_ci[{lay.kinds}]{_IW}={{{by_kind(body_index)}}};",
-            f"        static u8 _kc_wi[{lay.kinds}]{_IW}={{{by_kind(wall_index)}}};",
+            f"        static u8 _kc_ci[{lay.type_table_size}]{_IW}={{{by_kind(body_index)}}};",
+            f"        static u8 _kc_wi[{lay.type_table_size}]{_IW}={{{by_kind(wall_index)}}};",
             f"        static u8 _kc_mask[{len(body_index)}]{_IW}={{{','.join(str(masks[k]) for k in body_index)}}};",
             *("    " + line for line in table),
             *("    " + line for line in each_slot(step)),

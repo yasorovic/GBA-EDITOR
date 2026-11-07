@@ -10,11 +10,12 @@ from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen import shared_pool_gen
 from codegen.runtime_codegen.physics.blocks import block_tick_lines
 from codegen.runtime_codegen.gen_camera import camera_follow_lines
-from codegen.runtime_codegen.gen_pool import dispatch_sym, link_depth
+from codegen.runtime_codegen.gen_actor_hierarchy import link_depth
+from codegen.runtime_codegen.gen_pool import dispatch_sym
 from codegen.runtime_codegen.gen_scene_query import (
     scene_anim_descriptors, scene_has_cmap,
 )
-from codegen.runtime_codegen.gen_sprite import anim_oam_pass_lines, shown
+from codegen.runtime_codegen.gen_sprite import anim_oam_pass_lines, resolve_initial_appearance
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.model_desc import hook_pass_lines, model_desc_lines, sfx_input_pass_lines
 from codegen.runtime_codegen.physics.contacts import contact_tick_lines
@@ -88,7 +89,7 @@ def gen_scene_tick(
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
     kinematic_before, kinematic_after, kinematic_crush = kinematic_tick_parts(
-        p, scene_actors, scene, pi, shown)
+        p, scene_actors, scene, pi, resolve_initial_appearance)
     L += kinematic_before
     L += physics_motion_lines(scene, p.settings, scene_actors, pi, project_sets_gravity(p))
     if link_depth(scene_actors, pi):
@@ -96,7 +97,7 @@ def gen_scene_tick(
 
     # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).
-    L += block_tick_lines(p, scene, scene_actors, pi, shown)
+    L += block_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance)
 
     # Le trajet final de la plateforme doit être connu avant de transporter ce qui repose dessus.
     # La carte et les Static peuvent avoir raccourci le mouvement demandé.
@@ -106,7 +107,7 @@ def gen_scene_tick(
 
     L += kinematic_after
     L += kinematic_crush
-    L += impulse_tick_lines(p, scene, scene_actors, pi, shown)
+    L += impulse_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
     # plus seulement pour les acteurs qui définissent `on_tile_collide` : la
@@ -116,7 +117,7 @@ def gen_scene_tick(
     if has_cmap:
         L += physics_tile_lines(scene, scene_actors, pi, kinematic=False, carry=bool(kinematic_after))
 
-    L += floor_tick_lines(p, scene_actors, scene, pi, shown)
+    L += floor_tick_lines(p, scene_actors, scene, pi, resolve_initial_appearance)
 
     # `physics_body:drop_through(n)` : un compteur par emplacement, lu par les faces à sens unique de cette phase
     # puis décompté ici, après elles : appelé pendant `on_update`, il compte donc cette frame-ci.
@@ -127,13 +128,13 @@ def gen_scene_tick(
     L += physics_sleep_lines(scene, p.settings, scene_actors, pi)
 
     # Contacts entre acteurs, posés ou nés : les crochets se lisent au descripteur de modèle.
-    L += contact_tick_lines(p, scene, scene_actors, pi, shown, placed_scripts, _def)
+    L += contact_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance, placed_scripts, _def)
 
     # Déclencheurs SoundFx par nom d'input : un SoundFxComponent répond à un bouton sans script (cf. `model_desc`).
     L += sfx_input_pass_lines(p, scene, scene_actors, pi, input_layout)
 
     # Interactive : le geste sur l'entrée `interact`, puis l'interacteur atteint le plus proche
-    L += interact_tick_lines(p, scene, scene_actors, pi, placed_scripts, _def, input_layout, shown)
+    L += interact_tick_lines(p, scene, scene_actors, pi, placed_scripts, _def, input_layout, resolve_initial_appearance)
 
     # on_late_update des acteurs, posés puis nés
     L = phases["late"]

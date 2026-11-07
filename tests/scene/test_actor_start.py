@@ -24,7 +24,7 @@ Actor g_actors[3];
 OamEntry g_oam_entries[1];
 SlotLink g_slot_link[3];
 int g_slot_depth, g_scene_placed = 2;
-int g_spool_start = 2, g_spool_end = 3, g_spool_hw = 2, g_spool_free = 2, g_spool_entry = -1;
+int g_spool_start = 2, g_spool_end = 3, g_actor_slot_end = 2, g_spool_free = 2, g_spool_entry = -1;
 u16 *g_actor_floor;
 u8 *g_drop_through;
 int g_rigid_rest[3][2];
@@ -43,8 +43,8 @@ void window_show(int id, int on);
 
 static int step, mode, hp[3];
 
-void S_Bell_pool_init(Actor* a) { hp[a->inst] = 5; }
-void S_Bell_set_hp(Actor* a, int value) { hp[a->inst] = value; }
+void S_Bell_init_script_state(Actor* a) { hp[a->slot_index] = 5; }
+void S_Bell_set_hp(Actor* a, int value) { hp[a->slot_index] = value; }
 
 void S_First_on_start(Actor* first) {
     Actor* bell = &g_actors[1];
@@ -70,7 +70,7 @@ void S_Bell_on_start(Actor* bell) {
     assert(step == 1);
     assert(bell == &g_actors[1]);
     assert(bell->x == (mode >= 2 ? 20 : 10) * 256);
-    assert(hp[bell->inst] == (mode == 2 ? 5 : 12));
+    assert(hp[bell->slot_index] == (mode == 2 ? 5 : 12));
     step = 2;
 }
 
