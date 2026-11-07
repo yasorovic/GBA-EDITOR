@@ -105,32 +105,25 @@ def interact_helper_lines() -> list[str]:
         "    *dist=ddx*ddx+ddy*ddy;",
         "    return 1;",
         "}",
-        "/* Parmi les emplacements actifs `[first, first+n)` (les posés de la scène), puis ceux du pool partagé si",
-        "   `pool`, celui que `who` atteint, le plus proche de son centre ; -1 si aucun. Un emplacement compte si son",
+        "/* Parmi les emplacements actifs de la scène, posés ou nés (`SLOT_EACH`), celui que `who` atteint, le plus",
+        "   proche de son centre ; -1 si aucun. Un emplacement compte si son",
         "   type est un consommateur de ce geste : `tag[type]` est le tag de sa zone (255 : il n'en est pas un),",
         "   `aim[type]` la visée au lieu du recouvrement.",
         "   hover  : la boîte de `who` recouvre la zone.",
         "   facing : la boîte de `who`, étendue de `reach` px dans son regard, touche la zone sans mur",
         "            entre les deux ; un regard nul n'atteint rien. */",
-        "static int __attribute__((unused)) interact_pick(const Actor* who,int first,int n,int pool,",
-        "                                                  const u8* tag,const u8* aim,int reach){",
+        "static int __attribute__((unused)) interact_pick(const Actor* who,const u8* tag,const u8* aim,int reach){",
         "    IaRect w; ia_who_rect(who,&w);",
         "    int fx=who->facing_x, fy=who->facing_y;",
         "    IaRect s=w;",
         "    if(fx>0) s.r+=reach; else if(fx<0) s.l-=reach;",
         "    if(fy>0) s.b+=reach; else if(fy<0) s.t-=reach;",
         "    int best=-1, bd=0x7fffffff, d=0;",
-        "    for(int k=first;k<first+n;k++){",
+        "    SLOT_EACH(k){",
         "        const Actor* t=&g_actors[k];",
         "        if(!t->active||t==who||tag[t->model]==255) continue;",
         "        if(ia_reach(&w,&s,fx,fy,t,tag[t->model],aim[t->model],&d)&&d<bd){ bd=d; best=k; }",
         "    }",
-        "    if(pool)",
-        "        POOL_EACH(sl){",
-        "            const Actor* t=&g_actors[sl];",
-        "            if(!t->active||t==who||tag[t->model]==255) continue;",
-        "            if(ia_reach(&w,&s,fx,fy,t,tag[t->model],aim[t->model],&d)&&d<bd){ bd=d; best=sl; }",
-        "        }",
         "    return best;",
         "}",
         "",
@@ -173,7 +166,7 @@ def _consumers(p, scene_actors, pi, placed_scripts, _def, shown, layout) -> dict
     return out
 
 
-def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, placed_scripts, _def, input_layout,
+def interact_tick_lines(p, scene, scene_actors, pi, placed_scripts, _def, input_layout,
                         shown) -> list[str]:
     """Le bloc de la boucle de scène : le regard des interacteurs sans sprite, puis un test de geste par (mode, durée)
     et, sur la frame du geste, pour chaque interacteur la recherche du consommateur atteint. Posés et nés passent par
@@ -188,10 +181,8 @@ def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, placed_scripts
     if not (players or pool_players) or not consumers:
         return []
     desc = model_desc_sym(scene)
-    n_players = len(scene_actors) if players else 0
     mask = input_layout.masks["interact"]
     reach = int(getattr(p.settings, "interact_reach", 4))
-    placed_kinds = set(layout.placed_model)
     gestures: dict = {}
     for kind, item in consumers.items():
         comp = item[0]
@@ -206,23 +197,20 @@ def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, placed_scripts
     if placed_blind or pool_blind:
         body = " ".join(line.strip() for line in follow_facing_lines("(*_a)"))
         L.append("    /* Interactive : un interacteur sans sprite suit son regard ici (pas de tick d'animation) */")
-        L += each_slot(f"if({desc}[_a->model].interactor==2){{ {body} }}",
-                       len(scene_actors) if placed_blind else 0, actor_offset, pool_blind)
+        L += each_slot(f"if({desc}[_a->model].interactor==2){{ {body} }}")
     L.append("    /* Interactive : trois tables par geste, indexées par type ; la recherche quand le geste a lieu */")
     for (mode, frames), items in gestures.items():
         kinds = layout.kinds
         tag = ",".join(str(items[k][1]) if k in items else "255" for k in range(kinds))
         aim = ",".join("1" if k in items and items[k][0].interaction == "facing" else "0" for k in range(kinds))
         action = ",".join(items[k][2] if k in items else "{0,-1,0}" for k in range(kinds))
-        n = len(scene_actors) if placed_kinds & items.keys() else 0
-        pool = int(any(m["model_id"] in items for m in shared))
         step = (f"if({desc}[_a->model].interactor){{ "
-                f"int _t=interact_pick(_a,{actor_offset},{n},{pool},_ia_tag,_ia_aim,{reach}); "
+                f"int _t=interact_pick(_a,_ia_tag,_ia_aim,{reach}); "
                 "if(_t>=0) interact_run(&g_actors[_t],_a,&_ia_action[g_actors[_t].model]); }")
         L += [f"    if({_gesture_test(mode, frames, mask)}){{",
               f"        static const u8 _ia_tag[{kinds}]={{{tag}}};",
               f"        static const u8 _ia_aim[{kinds}]={{{aim}}};",
               f"        static const IaAction _ia_action[{kinds}]={{{action}}};",
-              *("    " + line for line in each_slot(step, n_players, actor_offset, bool(pool_players))),
+              *("    " + line for line in each_slot(step)),
               "    }"]
     return L

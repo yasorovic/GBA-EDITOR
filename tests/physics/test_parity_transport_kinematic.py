@@ -47,7 +47,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 u8 g_support_normal = 1;
 #define G_ACTOR_COUNT 4
 Actor g_actors[4];
-int g_spool_start, g_spool_hw;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 @HELPERS@
 
@@ -65,12 +65,12 @@ static void rapporte(const char* topo, const char* nom, int f, const Actor* k, c
 /* Les emplacements 0 et 1 sont posés, 2 et 3 sont le pool partagé (g_spool_start = 2). */
 static void reinit(void){
     for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
-    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0;
+    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
 }
 static void pose_en_pool(int slot, Actor a, int model){
     a.inst = slot; a.model = model; g_actors[slot] = a;
     if(slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
-    pool_bit_set(slot);
+    alive_bit_set(slot);
 }
 @TOPOLOGIES@
 
@@ -107,7 +107,7 @@ def _emissions(tmp_path) -> dict:
     faire_naitre(tmp_path, scene, "Plateforme", "Passager")
     pi = scene_pi(project, scene)
     ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
-    before, after, _crush = kinematic_tick_parts(project, [(a, None) for a in scene.actors], 0, scene, pi, shown)
+    before, after, _crush = kinematic_tick_parts(project, [(a, None) for a in scene.actors], scene, pi, shown)
     return {"before": before, "after": after, "k": ids["Plateforme"], "a": ids["Passager"]}
 
 
@@ -119,7 +119,7 @@ def _topologie_c(nom: str, plateforme_pose: bool, passager_pose: bool, e: dict) 
     placement = []
     for k, pose in (("k", plateforme_pose), ("a", passager_pose)):
         if pose:
-            placement.append(f"    g_actors[{slot[k]}] = {corps[k]}; g_actors[{slot[k]}].inst = {slot[k]};"
+            placement.append(f"    g_actors[{slot[k]}] = {corps[k]}; g_actors[{slot[k]}].inst = {slot[k]}; alive_bit_set({slot[k]});"
                              f" g_actors[{slot[k]}].model = {e[k]};")
         else:
             placement.append(f"    pose_en_pool({slot[k]}, {corps[k]}, {e[k]});")

@@ -104,16 +104,7 @@ def test_le_spawn_prend_le_premier_emplacement_libre_du_pool(tmp_path):
     # La recherche part du curseur, pas du début du pool : un spawn ne parcourt pas les emplacements pleins.
     assert "int _k=g_spool_free;" in code and "while(_k<g_spool_end && g_actors[_k].alive) _k++;" in code
     assert "if(_k+1>g_spool_hw) g_spool_hw=_k+1;" in code and "g_spool_free=_k+1;" in code
-    assert "g_actors[_i].model    = 1;" in code and "g_actors[_i].inst = _i;" in code
-
-
-def test_une_naissance_pose_son_bit_de_vie(tmp_path):
-    """Les boucles du tick sautent les blocs de 32 emplacements sans vivant (`POOL_EACH`) : une naissance doit poser
-    le bit de l'emplacement, sinon l'instance vivrait sans jamais être parcourue."""
-    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
-    p, scene = _scene_qui_spawne(tmp_path)
-    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
-    assert code.index("g_actors[_i].alive = 1;") < code.index("pool_bit_set(_i);")
+    assert "actor_init_slot(_i, _e," in code and ".model = 1" in code
 
 
 def test_le_crochet_d_image_d_un_modele_se_lit_dans_son_descripteur(tmp_path):
@@ -171,7 +162,7 @@ def test_chaque_type_anime_son_sprite_par_son_code(tmp_path, monkeypatch):
     variants = {"Bullet": [dict(sym="sprite_Bullet")]}               # les autres : un sprite fixe
     code = _passe_rendu(p, scene, monkeypatch, variants=lambda nom: variants.get(nom, [None]), apps=lambda nom: [])
     # Une boucle sur les posés puis le pool, qui les suit dans `g_actors`.
-    assert "for(int _pk=0; _pk<g_spool_hw; _pk++){" in code
+    assert "SLOT_EACH(_pk){" in code
     assert "case 1: {" in code and "case 2:" not in code                  # seul le type animé a un cas
     assert "g_oam_entries[_pe].timer++;" in code and "g_actors[_pk].facing_y" in code
     assert "sprite_Bullet_state_start" in code
@@ -187,7 +178,7 @@ def test_l_animation_et_l_ecriture_oam_tiennent_dans_une_seule_boucle(tmp_path, 
     variants = {"Bullet": [dict(sym="sprite_Bullet")]}
     code = _passe_rendu(p, scene, monkeypatch, variants=lambda nom: variants.get(nom, [None]),
                         apps=lambda nom: [Appearance(SpriteAsset(name=nom, asset="a.png"), 0)])
-    assert code.count("for(int _pk=") == 1 and "POOL_EACH(" not in code
+    assert code.count("SLOT_EACH(_pk){") == 1 and "POOL_EACH(" not in code
     assert "if(!_a->active) continue;" in code
     bullet = code[code.index("case 1: {"):code.index("case 2: {")]
     assert bullet.index("g_oam_entries[_pe].timer++;") < bullet.index("shadow_oam[_o].attr0")   # animer, puis écrire
@@ -247,7 +238,7 @@ def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path
     p, scene = _scene_blocage(tmp_path)
     pi = scene_pi(p, scene)
     ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
-    code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, shown))
+    code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], pi, shown))
     import re
     table = lambda nom: [int(v) for v in re.search(rf"{nom}\[\d+\][^=]*=\{{([^}}]*)\}};", code)[1].split(",")]
     rock = scene_oam_layout(p, scene).placed_model[0]
@@ -256,8 +247,8 @@ def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path
     assert [k for k, i in enumerate(mobiles) if i != 255] == [ids["Hero"]]
     assert {k for k, i in enumerate(bloqueurs) if i != 255} == {ids["Wall"], rock}
     # Posés puis pool, pour le mobile comme pour ses bloqueurs.
-    assert f"actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,{len(scene.actors)},1);" in code
-    assert "POOL_EACH(_pm){" in code
+    assert "_bk_n=block_targets(_bk_bi,_bk_list);" in code and "actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,_bk_box);" in code
+    assert "SLOT_EACH(_k){" in code
 
 
 def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
@@ -269,10 +260,10 @@ def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
     (tmp_path / "assets" / "s.lua").write_text('function on_update()\n    actor:spawn("Hero", vec2(0, 0))\nend\n',
                                                encoding="utf-8")
     pi = scene_pi(p, scene)
-    code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, shown))
-    # Le héros né reste un mobile (POOL_EACH), mais le pool n'est pas parcouru comme bloqueur (dernier argument 0).
-    assert f"actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,{len(scene.actors)},0);" in code
-    assert "POOL_EACH(_pm){" in code
+    code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], pi, shown))
+    # Le héros né reste un mobile ; seul le rocher posé est un bloqueur : la liste n'a de place que pour lui.
+    assert "static BlockTarget _bk_list[1]" in code and "_bk_n=block_targets(_bk_bi,_bk_list);" in code
+    assert "SLOT_EACH(_k){" in code
 
 
 def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteurs_nes(tmp_path):
@@ -298,7 +289,7 @@ def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteu
     pi = scene_pi(p, scene)
     ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
     code = "\n".join(interact_tick_lines(
-        p, scene, [(a, None) for a in scene.actors], 0, pi, [None], lambda sym, ev: True,
+        p, scene, [(a, None) for a in scene.actors], pi, [None], lambda sym, ev: True,
         SimpleNamespace(masks={"interact": "KEY_A"}), shown))
     kinds = scene_oam_layout(p, scene).kinds
     tags = list(p.collision_tags())
@@ -307,9 +298,9 @@ def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteu
     row[ids["Chest"]] = str(tags.index("zone"))
     assert f"static const u8 _ia_tag[{kinds}]={{{','.join(row)}}};" in code
     assert f"static const IaAction _ia_action[{kinds}]=" in code and "S_Chest_on_interact" in code
-    # L'interacteur né est reconnu au descripteur ; aucun posé n'est consommateur, la recherche ne parcourt que le pool.
-    assert "if(g_model_desc_S[_a->model].interactor){ int _t=interact_pick(_a,0,0,1,_ia_tag,_ia_aim," in code
-    assert "for(int _k=" not in code                                       # aucun posé n'est interacteur
+    # L'interacteur né est reconnu au descripteur ; la recherche parcourt tous les emplacements, posés ou nés.
+    assert "if(g_model_desc_S[_a->model].interactor){ int _t=interact_pick(_a,_ia_tag,_ia_aim," in code
+    assert "SLOT_EACH(_k){" in code
 
 
 # ── Les modèles à parties dans le pool ─────────────────────────────────
@@ -353,11 +344,9 @@ def test_le_spawn_d_un_groupe_cherche_une_serie_libre_et_type_chaque_partie(tmp_
     assert "while(_k<g_spool_end && !spool_slot_free(_k)) _k++;" in boss          # une partie détruite garde sa place
     assert "if(_k+3>g_spool_end) { _k=g_spool_end; break; }" in boss
     assert "while(_j<3 && spool_slot_free(_k+_j)) _j++;" in boss and "if(_k+3>g_spool_hw) g_spool_hw=_k+3;" in boss
-    assert "g_actors[_i].model    = 2;" in boss
-    assert "int _s1 = group_slot(_i, 1);" in boss and "int _s2 = group_slot(_i, 2);" in boss
-    assert "g_actors[_s1].model    = 3;" in boss and "g_actors[_s2].model    = 4;" in boss
-    assert "g_oam_entries[group_entry(_e, 1)] = (OamEntry){0};" in boss    # la partie k : l'entrée de son emplacement
-    assert "pool_bit_set(_s1);" in boss and "pool_bit_set(_s2);" in boss    # chaque partie naît vivante pour POOL_EACH
+    assert "actor_init_slot(_i, _e," in boss and ".model = 2" in boss
+    assert "actor_init_slot(group_slot(_i, 1), group_entry(_e, 1)," in boss and ".model = 3" in boss
+    assert "actor_init_slot(group_slot(_i, 2), -1," in boss and ".model = 4" in boss
     # L'hypothèse de contiguïté d'un groupe ne s'écrit qu'à un endroit (`group_slot`, `group_entry`) : plus de `_i+k`.
     assert "_i+1" not in boss and "_i+2" not in boss and "_e+1" not in boss
     plat = code[code.index("Actor* spawn_S_Bullet"):code.index("Actor* spawn_S_Boss")]

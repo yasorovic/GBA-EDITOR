@@ -49,7 +49,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 u8 *g_drop_through = 0;
 u8 g_support_normal = 1;
 Actor g_actors[2];
-int g_spool_start = 1, g_spool_hw = 1;
+int g_spool_start = 1, g_spool_hw = 1, g_scene_placed = 0;
 u32 g_alive_bits[1], g_alive_epoch;
 static int _kin_d[2][3];
 static int appels_carte[2], appels_ecrase[2];
@@ -66,7 +66,7 @@ static void tick(void){
    le posé (0, son type de posé) ou le né (1, le `model_id` du prefab). */
 static void joue(const char* chemin, const char* nom, int x, int y, int vx, int vy, int cx, int cy){
     for(int k = 0; k < 2; k++){ g_actors[k] = (Actor){0}; g_actors[k].inst = k; appels_carte[k] = appels_ecrase[k] = 0; }
-    g_alive_bits[0] = 0; g_spool_hw = 1;
+    g_alive_bits[0] = 0; g_spool_hw = 1; g_scene_placed = 1;   /* 0 : le posé */
     int s = chemin[1] == 'o' && chemin[2] == 's' ? 0 : 1;   /* "pose" ou "pool" */
     Actor* a = &g_actors[s];
     a->x = x << 8; a->y = y << 8; a->vx = vx; a->vy = vy;
@@ -74,8 +74,8 @@ static void joue(const char* chemin, const char* nom, int x, int y, int vx, int 
     a->collision.box_count = 1;
     a->collision.boxes[0] = (CollisionShape){-7, 11, 17, 4, 1, 1, 0, 0};
     a->active = 1; a->alive = 1;
-    if(s == 0) a->model = @TYPE_POSE@;
-    else { a->model = @TYPE_NE@; pool_bit_set(1); g_spool_hw = 2; }
+    if(s == 0){ a->model = @TYPE_POSE@; alive_bit_set(0); }
+    else { a->model = @TYPE_NE@; alive_bit_set(1); g_spool_hw = 2; }
     for(int f = 0; f < @FRAMES@; f++){
         /* `apply_velocity()`, puis le transport de la plateforme : il déplace le corps et retient ce qu'il a porté. */
         a->x += a->vx + cx; a->y += a->vy + cy;
@@ -125,7 +125,7 @@ def _emissions(tmp_path):
         "table": model_desc_lines(p, scene, actors, pi, [model["sym"]],
                                   lambda _s, ev: ev in ("on_tile_collide", "on_crushed")),
         "helpers": character_solver_lines(),
-        "tiles": physics_tile_lines(scene, actors, 0, pi, kinematic=False, carry=True),
+        "tiles": physics_tile_lines(scene, actors, pi, kinematic=False, carry=True),
         "type_pose": scene_oam_layout(p, scene).placed_model[0],
         "type_ne": model["model_id"],
     }

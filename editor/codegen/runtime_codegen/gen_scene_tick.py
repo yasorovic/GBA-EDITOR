@@ -81,32 +81,32 @@ def gen_scene_tick(
         L += [f"    {sym}_scene_on_update();"]
 
     # on_update des acteurs, posés puis nés : le crochet se lit au descripteur de modèle.
-    L += hook_pass_lines(scene, scene_actors, actor_offset, pi, placed_scripts, _def, "on_update")
+    L += hook_pass_lines(scene, pi, placed_scripts, _def, "on_update")
 
     # Hiérarchie : APRÈS les scripts — un `on_update` peut avoir déplacé le
     # parent, et l'enfant doit suivre DANS la même frame — et AVANT la
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
     kinematic_before, kinematic_after, kinematic_crush = kinematic_tick_parts(
-        p, scene_actors, actor_offset, scene, pi, shown)
+        p, scene_actors, scene, pi, shown)
     L += kinematic_before
-    L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi, project_sets_gravity(p))
+    L += physics_motion_lines(scene, p.settings, scene_actors, pi, project_sets_gravity(p))
     L += parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
     L += pool_compose_lines(pi)
 
     # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).
-    L += block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
+    L += block_tick_lines(p, scene, scene_actors, pi, shown)
 
     # Le trajet final de la plateforme doit être connu avant de transporter ce qui repose dessus.
     # La carte et les Static peuvent avoir raccourci le mouvement demandé.
     has_cmap = scene_has_cmap(scene)
     if has_cmap:
-        L += physics_tile_lines(scene, scene_actors, actor_offset, pi, kinematic=True)
+        L += physics_tile_lines(scene, scene_actors, pi, kinematic=True)
 
     L += kinematic_after
     L += kinematic_crush
-    L += impulse_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
+    L += impulse_tick_lines(p, scene, scene_actors, pi, shown)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
     # plus seulement pour les acteurs qui définissent `on_tile_collide` : la
@@ -114,9 +114,9 @@ def gen_scene_tick(
     # que le modèle promet depuis toujours (« solid=True → résolution physique »).
     # Rien n'est émis si la scène n'a pas de carte : il n'y aurait rien à heurter.
     if has_cmap:
-        L += physics_tile_lines(scene, scene_actors, actor_offset, pi, kinematic=False, carry=bool(kinematic_after))
+        L += physics_tile_lines(scene, scene_actors, pi, kinematic=False, carry=bool(kinematic_after))
 
-    L += floor_tick_lines(p, scene_actors, actor_offset, scene, pi, shown)
+    L += floor_tick_lines(p, scene_actors, scene, pi, shown)
 
     # `physics_body:drop_through(n)` : un compteur par emplacement, lu par les faces à sens unique de cette phase
     # puis décompté ici, après elles : appelé pendant `on_update`, il compte donc cette frame-ci.
@@ -124,20 +124,20 @@ def gen_scene_tick(
         L.append("    if(g_drop_live){ g_drop_live=0; for(int _d=0;_d<G_ACTOR_COUNT;_d++) "
                  "if(g_drop_through[_d]&&--g_drop_through[_d]) g_drop_live=1; }")
 
-    L += physics_sleep_lines(scene, p.settings, scene_actors, actor_offset, pi)
+    L += physics_sleep_lines(scene, p.settings, scene_actors, pi)
 
     # Contacts entre acteurs, posés ou nés : les crochets se lisent au descripteur de modèle.
-    L += contact_tick_lines(p, scene, scene_actors, actor_offset, pi, shown, placed_scripts, _def)
+    L += contact_tick_lines(p, scene, scene_actors, pi, shown, placed_scripts, _def)
 
     # Déclencheurs SoundFx par nom d'input : un SoundFxComponent répond à un bouton sans script (cf. `model_desc`).
-    L += sfx_input_pass_lines(p, scene, scene_actors, actor_offset, pi, input_layout)
+    L += sfx_input_pass_lines(p, scene, scene_actors, pi, input_layout)
 
     # Interactive : le geste sur l'entrée `interact`, puis l'interacteur atteint le plus proche
-    L += interact_tick_lines(p, scene, scene_actors, actor_offset, pi, placed_scripts, _def, input_layout, shown)
+    L += interact_tick_lines(p, scene, scene_actors, pi, placed_scripts, _def, input_layout, shown)
 
     # on_late_update des acteurs, posés puis nés
     L = phases["late"]
-    L += hook_pass_lines(scene, scene_actors, actor_offset, pi, placed_scripts, _def, "on_late_update")
+    L += hook_pass_lines(scene, pi, placed_scripts, _def, "on_late_update")
 
     # on_late_update scène
     if getattr(scene, "script", ""):

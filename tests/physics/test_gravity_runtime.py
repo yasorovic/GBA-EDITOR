@@ -47,11 +47,11 @@ def test_le_rigid_lit_la_gravite_du_runtime_selon_son_gravity_scale():
     actors = [(plain, None), (flipped, None)]
 
     # La gravité de la scène est passée au pas ; la part de chaque corps vient de son descripteur.
-    dynamic = "\n".join(physics_motion_lines(scene, settings, actors, 0, [], dynamic_gravity=True))
+    dynamic = "\n".join(physics_motion_lines(scene, settings, actors, [], dynamic_gravity=True))
     assert "body_motion_step(_a,&g_model_desc_S[_a->model],g_gravity_x,g_gravity_y," in dynamic
     assert body_desc(plain)[2] == 256 and body_desc(flipped)[2] == -512
 
-    static = "\n".join(physics_motion_lines(scene, settings, actors, 0, []))
+    static = "\n".join(physics_motion_lines(scene, settings, actors, []))
     assert "g_gravity_x" not in static
     assert "body_motion_step(_a,&g_model_desc_S[_a->model],64,128," in static
 
@@ -68,7 +68,7 @@ def test_le_transport_kinematic_lit_le_cote_d_appui_du_runtime(tmp_path):
         if script is not None:
             project.user_library_dir.mkdir(parents=True, exist_ok=True)
             (project.user_library_dir / "Hero.lua").write_text(script, encoding="utf-8")
-        _before, after, _crush = kinematic_tick_parts(project, [(platform, None), (rider, None)], 0, scene)
+        _before, after, _crush = kinematic_tick_parts(project, [(platform, None), (rider, None)], scene)
         return "\n".join(after)
 
     # Le dernier argument est le côté d'appui : 0 = lu dans `g_support_normal`, sinon cuit (1 : le bas).
@@ -90,7 +90,7 @@ def test_le_sol_lit_le_cote_d_appui_du_runtime_et_garde_les_faces_a_sens_unique_
         if script is not None:
             project.user_library_dir.mkdir(parents=True, exist_ok=True)
             (project.user_library_dir / "Hero.lua").write_text(script, encoding="utf-8")
-        return "\n".join(floor_tick_lines(project, [(a, None) for a in scene.actors], 0, scene))
+        return "\n".join(floor_tick_lines(project, [(a, None) for a in scene.actors], scene))
 
     # Le Hero (type 1) repose sur le sol (type 2) et sur l'étagère à sens unique (type 3).
     code = emet(tmp_path / "write", "scene.gravity = vec2(0, 1)\n")

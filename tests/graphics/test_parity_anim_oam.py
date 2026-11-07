@@ -1,7 +1,7 @@
 """Parité posé / spawné de l'animation et de l'écriture OAM, matrices affines comprises.
 
 Une copie de la démo Platformer (le vrai sprite `Player`, ses états et ses tables) : le prefab `Hero` affiche `Player`
-en affine, il est posé une fois ET spawné par le script de scène. Les lignes C sont celles de `anim_oam_pass_lines`
+en affine. La sonde le construit avec les deux vrais chemins générés, puis exécute `anim_oam_pass_lines`
 (une boucle sur les emplacements, le cas du type de chacun), avec les vraies tables d'animation et la vraie
 trigonométrie du moteur. Un seul emplacement vit à la fois ; la sonde compare, image par image, la frame d'animation,
 les trois attributs OAM, la matrice écrite et le nombre de matrices prises. Puis les deux vivent ensemble : une
@@ -25,6 +25,7 @@ FRAMES = 12
 MOVING = 1          # l'état « Moving » du sprite Player
 
 SONDE = r"""
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 typedef unsigned char u8; typedef signed char s8;
@@ -34,11 +35,24 @@ typedef struct { u16 attr0, attr1, attr2, dummy; } OBJATTR;
 OBJATTR shadow_oam[128];
 int cam_x = 0, cam_y = 0, g_oam_dropped = 0, g_affine_dropped = 0;
 Actor g_actors[2]; OamEntry g_oam_entries[2];
-int g_spool_start = 1, g_spool_hw = 1;
+int g_spool_start = 1, g_spool_end = 2, g_spool_hw = 1, g_spool_free = 1, g_spool_entry = 1, g_scene_placed = 0;
+const u8 *g_spool_grp = 0, *g_spool_part = 0, *g_spool_parent = 0;
+u16 *g_actor_floor;
+u8 *g_drop_through;
+int g_rigid_rest[2][2];
+#define EASE_IN 0
+#define EASE_OUT 1
+#define EASE_IN_OUT 2
+void window_set(int id,int x,int y,int w,int h);
+void window_show(int id,int on);
+#include "runtime_api_inline.h"
+#define ACTOR_S_HEROPOSE 0
+#define ACTOR_S_HERO 1
+#define BOXTAG_BODY 1
 u32 g_alive_bits[1], g_alive_epoch;
 s16 g_sound_box_action[256]; u8 g_sound_box_action_vol[256];
 static void sfx_play(int id, int volume, int unused){ (void)id; (void)volume; (void)unused; }
-@TRIG@
+@SPAWN@
 AffCache g_aff_cache[2];
 @TABLES@
 
@@ -48,18 +62,23 @@ static int rendre(void){
 @PASS@
     return _affn;
 }
-static void place(int s, int type, int x){
-    Actor* a = &g_actors[s]; OamEntry* e = &g_oam_entries[s];
-    *a = (Actor){0}; *e = (OamEntry){0};
-    a->active = 1; a->alive = 1; a->inst = s; a->model = type; a->oam_entry = s;
-    a->x = x << 8; a->y = 60 << 8; a->vx = 256; a->scale_x = a->scale_y = 256;
-    e->visible = 1; e->affine_slot = 0; e->scale_x = e->scale_y = 256; e->anim_state = @MOVING@; e->facing_auto = 1;
-    if(s >= g_spool_start){ pool_bit_set(s); g_spool_hw = s + 1; }
+static void place(void){
+@PLACED@
 }
-static void seul(const char* chemin, int s, int type){
-    g_alive_bits[0] = 0; g_spool_hw = 1; g_actors[0] = g_actors[1] = (Actor){0};
+static void seul(const char* chemin, int s){
+    g_alive_bits[0] = 0;
+    g_spool_hw = g_spool_free = 1;
+    g_actors[1].alive = g_actors[1].active = 0;
     memset(g_aff_cache, 0, sizeof g_aff_cache);
-    place(s, type, 40);
+    place();
+    if(s){
+        assert(spawn_S_Hero(40, 60) == &g_actors[1]);
+        g_actors[0].active = 0;
+    }
+    assert(g_actors[s].x == 40 * 256 && g_actors[s].y == 60 * 256);
+    assert(g_actors[s].collision.box_count == 1 && g_actors[s].collision.boxes[0].w == 10);
+    assert(g_oam_entries[s].anim_state == @MOVING@ && g_oam_entries[s].affine_slot == 0);
+    g_actors[s].vx = 256;
     for(int f = 0; f < @FRAMES@; f++){
         g_actors[s].rotation = f * 7; g_actors[s].x += g_actors[s].vx;
         int n = rendre();
@@ -70,25 +89,32 @@ static void seul(const char* chemin, int s, int type){
 }
 int main(void){
     memset(g_sound_box_action, 0xff, sizeof g_sound_box_action);
-    seul("pose", 0, @TYPE@);
-    seul("pool", 1, @TYPE@);
+    seul("pose", 0);
+    seul("pool", 1);
     /* les deux ensemble : même rotation, puis rotations différentes */
-    g_alive_bits[0] = 0; g_spool_hw = 1; memset(g_aff_cache, 0, sizeof g_aff_cache);
-    place(0, @TYPE@, 40); place(1, @TYPE@, 120);
+    memset(g_aff_cache, 0, sizeof g_aff_cache);
+    place();
+    g_actors[1].x = 120 * 256;
     g_actors[0].rotation = g_actors[1].rotation = 30;
     int n = rendre();
     printf("ensemble_egal %d %d %d\n", n, g_oam_entries[0].affine_slot, g_oam_entries[1].affine_slot);
     g_actors[1].rotation = 45;
     n = rendre();
     printf("ensemble_different %d %d %d\n", n, g_oam_entries[0].affine_slot, g_oam_entries[1].affine_slot);
+
+    actor_destroy_internal(&g_actors[0]);
+    u16 generation = g_actors[0].gen;
+    g_actors[0].vx = 1024;
+    g_oam_entries[0].timer = 7;
+    g_rigid_rest[0][0] = 123;
+    Actor* reused = spawn_S_Hero(-5, 60);
+    assert(reused == &g_actors[0] && reused->name == ACTOR_S_HEROPOSE);
+    assert(reused->gen != generation && reused->x == -5 * 256 && reused->vx == 0);
+    assert(g_oam_entries[0].timer == 0 && g_rigid_rest[0][0] == 0);
+    assert((g_alive_bits[0] & 1) && (g_alive_bits[0] & 2));   /* posés comme nés : le bit de vivant de chaque emplacement */
     return 0;
 }
 """
-
-
-def _trigonometrie() -> str:
-    texte = (INCLUDE / "runtime_api_inline.h").read_text(encoding="utf-8")
-    return texte[texte.index("static const s16 SIN_LUT"):texte.index("/* fin de la trigonométrie du moteur */")]
 
 
 @pytest.fixture(scope="module")
@@ -101,9 +127,12 @@ def sortie(tmp_path_factory):
     import copy
     from codegen.oam_alloc import scene_oam_layout
     from codegen.runtime_codegen.gen_affine import compute_affine_info
-    from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.palette_alloc import scene_bank_layout
+    from codegen.runtime_codegen.gen_appearance import appearance_layout
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
+    from codegen.runtime_codegen.gen_scene_init import _placed_actor_lines
     from codegen.runtime_codegen.gen_sprite import anim_oam_pass_lines, anim_tables_for
-    from core.models.components import SpriteComponent
+    from core.models.components import CollisionShapeComponent, SpriteComponent
     from core.models.scene import Actor, Prefab, Scene
     from core.project import Project
     from oam_fixtures import faire_naitre
@@ -113,8 +142,11 @@ def sortie(tmp_path_factory):
     shutil.copytree(DEMO, copie, ignore=shutil.ignore_patterns("build"))
     p = Project.open(copie)
     hero = Prefab(name="Hero")
-    hero.actor.components.append(SpriteComponent(sprite_name="Player", affine_transform=True))
-    scene = Scene(name="S", actors=[Actor(name="HeroPose", prefab_name="Hero",
+    hero.actor.components = [
+        SpriteComponent(sprite_name="Player", affine_transform=True, initial_state="Moving"),
+        CollisionShapeComponent(w=10, h=12, solid=True),
+    ]
+    scene = Scene(name="S", actors=[Actor(name="HeroPose", prefab_name="Hero", x=40, y=60,
                                           components=copy.deepcopy(hero.actor.components))])
     p.scenes.items = [scene]
     p.prefabs.items = [hero]
@@ -126,13 +158,18 @@ def sortie(tmp_path_factory):
     actors = [(a, None) for a in scene.actors]
     passe = anim_oam_pass_lines(p, actors, 0, pi, lay, [ne["sym"]], set(compute_affine_info(0, actors)), {})
     assert passe, "rien d'émis : la sonde ne comparerait rien"
-    source = (SONDE.replace("@TRIG@", _trigonometrie())
+    layout = scene_bank_layout(p, scene, "obj")
+    placed = _placed_actor_lines(p, scene, actors, 0, layout, appearance_layout(p, actors, pi, layout),
+                                 compute_affine_info(0, actors))
+    source = (SONDE.replace("@SPAWN@", "\n".join(section_spawn(pi, p, layout, actor_defined_events={})))
+              .replace("@PLACED@", "\n".join(placed))
               .replace("@TABLES@", "\n".join(anim_tables_for(p, p.get_sprite("Player"))))
-              .replace("@PASS@", "\n".join(passe)).replace("@TYPE@", str(ne["model_id"]))
+              .replace("@PASS@", "\n".join(passe))
               .replace("@MOVING@", str(MOVING)).replace("@FRAMES@", str(FRAMES)))
     (dossier / "probe.c").write_text(source, encoding="utf-8")
     binaire = dossier / "probe"
-    construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),
+    shim = INCLUDE.parents[1] / "tests" / "native" / "libgba_shim"
+    construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE), "-I", str(shim),
                                 "-o", str(binaire), str(dossier / "probe.c")],
                                capture_output=True, text=True, env=environnement(compilateur))
     assert construit.returncode == 0, construit.stderr

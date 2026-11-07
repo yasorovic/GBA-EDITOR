@@ -59,16 +59,9 @@ def scene_has_moving_bodies(scene_actors, pi) -> bool:
     return any(physics_body_mode(o) in _BODY_MODE for o in scene_owners(scene_actors, pi))
 
 
-def each_slot(step: str, placed: int, actor_offset: int, pool: bool) -> list[str]:
-    """`step` (qui lit `_a`) pour chaque emplacement actif : les `placed` posés, puis les nés du pool partagé si `pool`.
-    Le niveau 2 du chantier « posé et spawné » fera des deux boucles une seule."""
-    lines = []
-    if placed:
-        lines += [f"    for(int _k={actor_offset}; _k<{actor_offset + placed}; _k++){{",
-                  "        Actor* _a=&g_actors[_k];", f"        if(_a->active) {step}", "    }"]
-    if pool:
-        lines += ["    POOL_EACH(_pm){", "        Actor* _a=&g_actors[_pm];", f"        if(_a->active) {step}", "    }"]
-    return lines
+def each_slot(step: str) -> list[str]:
+    """`step` (qui lit `_a`) pour chaque emplacement actif de la scène, posé ou né : un seul parcours (`SLOT_EACH`)."""
+    return ["    SLOT_EACH(_k){", "        Actor* _a=&g_actors[_k];", f"        if(_a->active) {step}", "    }"]
 
 
 def sfx_input_desc(p, owner, input_layout) -> tuple[str, int, str] | None:
@@ -81,16 +74,16 @@ def sfx_input_desc(p, owner, input_layout) -> tuple[str, int, str] | None:
     return sfx_sym, sfx_vol, input_layout.masks.get(trigger, key_constant(trigger))
 
 
-def hook_pass_lines(scene, scene_actors, actor_offset: int, pi, placed_scripts, has_event, event: str) -> list[str]:
+def hook_pass_lines(scene, pi, placed_scripts, has_event, event: str) -> list[str]:
     """`event` (`on_update` ou `on_late_update`) de chaque emplacement actif dont le type le définit, posé ou né : le
     crochet se lit dans la ligne du type. Rien si aucun script de la scène ne le définit."""
-    placed = any(s and has_event(s, event) for s in placed_scripts)
-    pool = any(has_event(m["sym"], event) for m in shared_models(pi))
-    step = f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->model]; if(_d->{event}) _d->{event}(_a); }}"
-    return each_slot(step, len(scene_actors) if placed else 0, actor_offset, pool)
+    if not (any(s and has_event(s, event) for s in placed_scripts)
+            or any(has_event(m["sym"], event) for m in shared_models(pi))):
+        return []
+    return each_slot(f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->model]; if(_d->{event}) _d->{event}(_a); }}")
 
 
-def sfx_input_pass_lines(p, scene, scene_actors, actor_offset: int, pi, input_layout) -> list[str]:
+def sfx_input_pass_lines(p, scene, scene_actors, pi, input_layout) -> list[str]:
     """Le SoundFx déclenché par un bouton ou une action, pour TOUS les acteurs, scriptés ou non (c'est ce qui permet à
     un item de menu de répondre à un bouton sans une ligne de Lua). Un test par masque distinct ; sur la frame de
     l'appui seulement, chaque emplacement actif dont le type a ce masque joue son effet, une fois par instance.
@@ -102,9 +95,7 @@ def sfx_input_pass_lines(p, scene, scene_actors, actor_offset: int, pi, input_la
     for mask in dict.fromkeys(d[2] for d in placed + pool if d):
         step = (f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->model]; "
                 f"if(_d->sfx_input==({mask})) sfx_play(_d->sfx,_d->sfx_vol,0); }}")
-        loops = each_slot(step, len(scene_actors) if any(d and d[2] == mask for d in placed) else 0, actor_offset,
-                          any(d and d[2] == mask for d in pool))
-        out += [f"    if(input_pressed({mask})){{", *("    " + line for line in loops), "    }"]
+        out += [f"    if(input_pressed({mask})){{", *("    " + line for line in each_slot(step)), "    }"]
     return out
 
 

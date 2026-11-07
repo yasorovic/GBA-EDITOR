@@ -48,7 +48,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32; typedef
 #define N @N@
 Actor g_actors[2 * N];
 s32 g_rigid_rest[2 * N][2];
-int g_spool_start = N, g_spool_hw = N;
+int g_spool_start = N, g_spool_hw = N, g_scene_placed = 0;
 u32 g_alive_bits[1], g_alive_epoch;
 static inline void actor_apply_velocity(Actor* s) { s->x+=s->vx; s->y+=s->vy; }
 @HELPERS@
@@ -66,12 +66,12 @@ static void rapporte(const char* chemin, int c, const char* nom, int f, const Ac
 /* Un seul emplacement vivant : le posé `c` (emplacement c), ou le né du même corps (emplacement N + c). */
 static void joue(const char* chemin, int c, const char* nom, int vx, int vy){
     for(int k = 0; k < 2 * N; k++){ g_actors[k] = (Actor){0}; g_actors[k].inst = k; g_rigid_rest[k][0] = g_rigid_rest[k][1] = 0; }
-    g_alive_bits[0] = 0; g_spool_hw = N;
+    g_alive_bits[0] = 0; g_spool_hw = N; g_scene_placed = N;   /* [0, N) : les posés */
     int s = chemin[1] == 'o' && chemin[2] == 's' ? c : N + c;   /* "pose" ou "pool" */
     Actor* a = &g_actors[s];
     a->x = 10 << 8; a->y = 10 << 8; a->vx = vx; a->vy = vy; a->active = 1; a->alive = 1;
-    if(s < N) a->model = type_pose[c];
-    else { a->model = type_ne[c]; pool_bit_set(s); g_spool_hw = s + 1; }
+    if(s < N){ a->model = type_pose[c]; alive_bit_set(s); }
+    else { a->model = type_ne[c]; alive_bit_set(s); g_spool_hw = s + 1; }
     for(int f = 0; f < @FRAMES@; f++){ tick(); rapporte(chemin, c, nom, f, a); }
 }
 
@@ -120,8 +120,8 @@ def _emissions(tmp_path):
     return {
         "table": model_desc_lines(p, scene, actors, pi),
         "helpers": motion_helper_lines(),
-        "motion": physics_motion_lines(scene, p.settings, actors, 0, pi),
-        "sleep": physics_sleep_lines(scene, p.settings, actors, 0, pi),
+        "motion": physics_motion_lines(scene, p.settings, actors, pi),
+        "sleep": physics_sleep_lines(scene, p.settings, actors, pi),
         "types_poses": lay.placed_model,
         "types_nes": [ids[nom] for nom, _m, _r in CORPS],
     }

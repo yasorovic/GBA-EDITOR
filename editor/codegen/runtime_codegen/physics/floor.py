@@ -78,7 +78,7 @@ def floor_helper_lines() -> list[str]:
         "    return 0;",
         "}",
         "/* L'instantané des appuis de l'image : chaque emplacement vivant dont le type porte (`si[model]` != 255),",
-        "   posés `[lo,hi)` puis nés du pool si `pool`, dans l'ordre des emplacements, avec le rectangle monde de ses boîtes",
+        "   posé ou né, dans l'ordre des emplacements (`SLOT_EACH`), avec le rectangle monde de ses boîtes",
         "   actives. Relevé une fois après toutes les corrections de position : les corps ne relisent plus `g_actors` pour",
         "   les appuis qu'ils ne touchent pas. */",
         "typedef struct { u16 slot; u8 kind; u8 pad; s16 l, t, r, b; } FloorSupport;",
@@ -96,10 +96,9 @@ def floor_helper_lines() -> list[str]:
         "    FloorSupport* f=&out[(*n)++]; f->slot=s; f->kind=j; f->l=l; f->t=top; f->r=r; f->b=b;",
         "}",
         "BS_ATTR_IWRAM",
-        "static int __attribute__((unused)) floor_supports(const u8* si,int lo,int hi,int pool,FloorSupport* out){",
+        "static int __attribute__((unused)) floor_supports(const u8* si,FloorSupport* out){",
         "    int n=0;",
-        "    for(int s=lo;s<hi;s++) floor_support_add(s,si,out,&n);",
-        "    if(pool){ POOL_EACH(s) floor_support_add(s,si,out,&n); }",
+        "    SLOT_EACH(s) floor_support_add(s,si,out,&n);",
         "    return n;",
         "}",
         "/* Le contact au sol d'un corps contre les appuis de l'instantané, chaque boîte de corps (`mask`) à son tour : un",
@@ -132,14 +131,14 @@ def floor_helper_lines() -> list[str]:
     ]
 
 
-def floor_tick_lines(p, scene_actors, actor_offset: int, scene=None, pi=(), shown=None) -> list[str]:
+def floor_tick_lines(p, scene_actors, scene=None, pi=(), shown=None) -> list[str]:
     """Actualise le contact au sol après toutes les corrections de position de la frame.
 
     Un CharacterBody repose sur un StaticBody ou un KinematicBody. Un RigidBody repose aussi sur un Character ou un
     autre Rigid : le solveur d'impulsions le laisse exactement au contact, sans produire lui-même de contact au sol.
 
     Corps et appuis sont posés ou nés dans le pool partagé (`pi`, `shown`) : leurs couples se lisent par type. Les
-    appuis posés passent avant ceux du pool, dans l'ordre des emplacements ; le premier qui porte l'emporte."""
+    appuis se parcourent dans l'ordre des emplacements ; le premier qui porte l'emporte."""
     n = support_normal(scene, p.settings) if scene is not None else ONEWAY_UP
     # Un script écrit `scene.gravity` : le côté d'appui se lit à l'exécution (`g_support_normal`). Une face à sens
     # unique de direction fixe ne compte alors que tant que le côté d'appui est le sien ; une face en mode `gravity`
@@ -209,10 +208,7 @@ def floor_tick_lines(p, scene_actors, actor_offset: int, scene=None, pi=(), show
         run_rows.append("{" + ",".join(row) + "}")
     body_index = {kind: i for i, (kind, *_rest) in enumerate(bodies)}
     support_index = {kind: i for i, kind in enumerate(support_kinds)}
-    placed_kinds = set(lay.placed_model)
-    pool_kinds = {m["model_id"] for m in shared}
-    hi = actor_offset + len(scene_actors) if placed_kinds & set(floors) else actor_offset
-    pool = 1 if pool_kinds & set(floors) else 0
+    pool = any(m["model_id"] in floors for m in shared)
     # La taille de l'instantané : les posés d'un type d'appui, puis tout le pool partagé s'il en fait naître. Petit, il
     # reste en IWRAM (.bss) ; au-delà, en EWRAM.
     capacity = sum(1 for kind in lay.placed_model if kind in floors) + (
@@ -233,9 +229,7 @@ def floor_tick_lines(p, scene_actors, actor_offset: int, scene=None, pi=(), show
         f"        static PairRun _fl_run[{len(bodies)}][{len(support_kinds)}]{_IW}={{{','.join(run_rows)}}};",
         f"        static FloorPair _fl_pair[{len(table)}]{_IW}={{{','.join(table)}}};",
         f"        static FloorSupport _fl_list[{capacity}]{where};",
-        f"        int _fl_n=floor_supports(_fl_si,{actor_offset},{hi},{pool},_fl_list);",
-        *("    " + line for line in each_slot(
-            step, len(scene_actors) if placed_kinds & set(body_index) else 0, actor_offset,
-            bool(pool_kinds & set(body_index)))),
+        "        int _fl_n=floor_supports(_fl_si,_fl_list);",
+        *("    " + line for line in each_slot(step)),
         "    }",
     ]

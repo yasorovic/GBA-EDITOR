@@ -304,16 +304,14 @@ def pool_affine(p, root, owner):
     return affine_entry(owner, sc, force=True, names=_var_names(p))
 
 
-def affine_init_lines(entry: dict, e: str, indent: str) -> list[str]:
-    """L'état d'affichage affine d'un sprite, posé ou né : « il est affine » (`affine_slot` >= 0 ; le numéro est celui
-    de la frame, posé à l'affichage), puis sa rotation, son échelle, son décalage et son pivot locaux."""
-    return [
-        f"{indent}g_oam_entries[{e}].affine_slot = 0;",
-        f"{indent}g_oam_entries[{e}].rotation   = {entry['sprite_rotation']};",
-        f"{indent}g_oam_entries[{e}].scale_x = {entry['sprite_scale_x']};",
-        f"{indent}g_oam_entries[{e}].scale_y = {entry['sprite_scale_y']};",
-        f"{indent}g_oam_entries[{e}].offset_x     = {entry['offset_x']};",
-        f"{indent}g_oam_entries[{e}].offset_y     = {entry['offset_y']};",
-        f"{indent}g_oam_entries[{e}].pivot_x      = {entry['pivot_x']};",
-        f"{indent}g_oam_entries[{e}].pivot_y      = {entry['pivot_y']};",
-    ]
+def affine_init_fields(entry: dict | None) -> dict:
+    """Transform local du sprite. Le numéro de matrice est attribué au rendu."""
+    if entry is None:
+        return {"affine_slot": -1}
+    return {
+        "affine_slot": 0,
+        "rotation": entry["sprite_rotation"],
+        "scale_x": entry["sprite_scale_x"],
+        "scale_y": entry["sprite_scale_y"],
+        **{field: entry[field] for field in ("offset_x", "offset_y", "pivot_x", "pivot_y")},
+    }

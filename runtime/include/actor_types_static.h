@@ -301,14 +301,24 @@ typedef struct Actor {
     } collision;
 } Actor;
 
-/* ── Parcours du pool partagé ─────────────────────────────────────────────────────────────────────────
-   `g_alive_bits` : un bit par emplacement de `g_actors`, à 1 tant que son occupant est VIVANT. Posé par
-   le spawn (`pool_bit_set`), effacé par `actor_destroy_internal` (`pool_bit_clear`), remis à zéro par
-   `scene_init`. Seuls les emplacements du pool partagé (au-delà de `g_spool_start`) y figurent.
+/* ── Parcours des emplacements ────────────────────────────────────────────────────────────────────────
+   `g_alive_bits` : un bit par emplacement de `g_actors`, à 1 tant que son occupant est VIVANT, posé ou né.
+   Posé par le constructeur (`actor_init_slot` : `alive_bit_set`), effacé par `actor_destroy_internal`
+   (`alive_bit_clear`), remis à zéro par `scene_init`.
 
-   `POOL_EACH(v)` remplace `for(int v = g_spool_start; v < g_spool_hw; v++)` : même ordre, même borne relue
-   à chaque tour, mais un bloc de 32 emplacements dont aucun n'est vivant est sauté d'un seul test. Dans un
-   bloc occupé le parcours reste linéaire et les corps de boucle gardent leurs tests `alive` / `active`.
+   `g_spool_hw` est le plus haut emplacement utilisé de la scène + 1 : le pool partagé commence juste après les
+   posés (`g_spool_start` = leur nombre), et une scène sans pool le pose au nombre de posés (`scene_init`).
+
+   `SLOT_EACH(v)` parcourt tous les emplacements de la scène `[0, g_spool_hw)`, posés puis nés : c'est le
+   parcours des passes du tick, qui ne demandent jamais si un emplacement est posé ou né. Une boucle simple :
+   `g_spool_hw` est rabattu sur le dernier vivant à chaque image, les corps de boucle testent `active`, et une
+   boucle plus grosse (le saut des blocs vides par `g_alive_bits`) chassait une phase du tick hors de l'IWRAM
+   (mesuré le 2026-11-07 : Platformer +5 %). La borne est relue à chaque tour : un acteur né pendant la
+   boucle est vu.
+
+   `POOL_EACH(v)` ne parcourt que le pool partagé `[g_spool_start, g_spool_hw)` : `actor:count`,
+   `actor:get(nom, i)` et `actor:clear` y comptent les nés après avoir lu la table des posés d'un modèle. Il saute
+   d'un seul test un bloc de 32 emplacements sans vivant ; dans un bloc occupé le parcours reste linéaire.
    `continue` marche ; un `break` hors d'un `switch` ne sort que du bloc courant. */
 extern int g_spool_start, g_spool_hw;
 extern u32 g_alive_bits[];
@@ -330,8 +340,9 @@ extern u32 g_alive_epoch;
         if(g_alive_bits[_pw_]) \
             for(int v = ((_pw_ << 5) < g_spool_start ? g_spool_start : (_pw_ << 5)), _pe_ = (_pw_ << 5) + 32; \
                 v < _pe_ && v < g_spool_hw; v++)
-static inline void pool_bit_set(int k)   { g_alive_epoch++; if (k >= g_spool_start) g_alive_bits[k >> 5] |= (1u << (k & 31)); }
-static inline void pool_bit_clear(int k) { g_alive_epoch++; g_alive_bits[k >> 5] &= ~(1u << (k & 31)); }
+#define SLOT_EACH(v) for(int v = 0; v < g_spool_hw; v++)
+static inline void alive_bit_set(int k)   { g_alive_epoch++; g_alive_bits[k >> 5] |= (1u << (k & 31)); }
+static inline void alive_bit_clear(int k) { g_alive_epoch++; g_alive_bits[k >> 5] &= ~(1u << (k & 31)); }
 
 /* Masques boutons */
 #define BTN_A      0x0001

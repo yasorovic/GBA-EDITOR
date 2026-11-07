@@ -40,7 +40,7 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 Actor g_actors[8];
-int g_spool_start, g_spool_hw;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 #define EASE_IN 0
 #define EASE_OUT 1
@@ -74,7 +74,7 @@ static void joue_pool(const char* nom, int x, int y, int rot, int echelle, int r
     membre(5, 0, 0, 0, 256, 256, bras_actif); g_actors[5].model = 2;
     membre(6, 0, 0, 0, 256, 256, 1); g_actors[6].model = 3;
     g_spool_start = 4; g_spool_hw = 7;
-    pool_bit_set(4); pool_bit_set(5); pool_bit_set(6);
+    alive_bit_set(4); alive_bit_set(5); alive_bit_set(6);
 @POOL@
     rapporte("pool", nom, 4);
 }

@@ -21,9 +21,10 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
 #define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
+#define EWRAM_BSS                                 /* hors GBA : mémoire ordinaire */
 u8 g_support_normal = 1;
 Actor g_actors[8];
-int g_spool_start = 0, g_spool_hw = 0;
+int g_spool_start = 0, g_spool_hw = 0, g_scene_placed = 0;
 u32 g_alive_bits[1];
 u32 g_alive_epoch;
 PoolCursor g_nth;
@@ -51,8 +52,11 @@ static void report_motion(const char* nom, int i){
 static const u8 bi[10] = {255, 255, 0, 255, 255, 255, 255, 1, 255, 255};
 static const PairRun run[1][2] = {{{0, 1}, {0, 1}}};
 static const u8 box[1] = {0};
+/* La scène du cas : `hi` posés, et le pool (emplacements 3 et plus, jusqu'à `g_spool_hw`) si `pool` ; sans pool, le
+   parcours s'arrête au dernier posé, comme dans une scène sans pool (`scene_init`). */
 static void bloque(int i, u8 mask, int hi, int pool){
-    actors_resolve_blocks(&g_actors[i], mask, run[0], bi, box, 0, hi, pool);
+    g_scene_placed = hi; if(!pool) g_spool_hw = hi; BlockTarget list[8]; int n = block_targets(bi, list);
+    actors_resolve_blocks(&g_actors[i], mask, run[0], list, n, box);
 }
 
 int main(void){
@@ -95,11 +99,12 @@ int main(void){
     bloque(0, 1, 1, 0);  report("soi_meme", 0);
 
     {   /* Le pool PARTAGÉ : un bloqueur né à l'emplacement 3 (type 7, boîte 0), un autre type à l'emplacement 4. Les
-           posés ne sont pas parcourus (hi = 0) : seul le pool bloque. */
+           bloqueurs posés sont désactivés : seul le pool bloque (un parcours voit tous les emplacements actifs). */
+        g_actors[1].active = 0; g_actors[2].active = 0;
         mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].model = 7;
         mk(4, 50, 50, 0, 0, 16, 16, 0); g_actors[4].model = 9;     /* un autre type : traversé */
         g_spool_start = 3; g_spool_hw = 5;
-        pool_bit_set(3); pool_bit_set(4);
+        alive_bit_set(3); alive_bit_set(4);
         mk(0, 40, 52, 256, 0, 16, 16, 1);
         bloque(0, 1, 0, 1);   report("pool_gauche", 0);
         mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[3].model = 9;
@@ -114,7 +119,7 @@ int main(void){
         mk(3, 40, 52, 0, 0, 16, 16, 1); g_actors[3].model = 7; g_actors[3].vx = 256;   /* un bloqueur ne se bloque pas lui-même */
         bloque(3, 1, 0, 1);   report("pool_soi_meme", 3);
         /* posés et pool à la fois : le posé de type 2 en (50, 50) arrête le mobile avant le pool */
-        g_actors[4].active = 0;
+        g_actors[4].active = 0; g_actors[1].active = 1;
         mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].model = 7;
         mk(0, 40, 52, 256, 0, 16, 16, 1);
         bloque(0, 1, 3, 1);   report("pose_puis_pool", 0);
@@ -292,7 +297,7 @@ def lignes(tmp_path):
         p = Project(tmp_path)
         p.scenes.items = [scene]
         p.settings.collision_disabled_pairs = list(paires_desactivees)
-        return block_tick_lines(p, scene, _scene(*acteurs), 0, [], lambda _p, _o: (None, None))
+        return block_tick_lines(p, scene, _scene(*acteurs), [], lambda _p, _o: (None, None))
     return emet
 
 
@@ -326,7 +331,8 @@ def test_le_mobile_recoit_la_table_des_boites_bloquantes(lignes):
     emis = lignes([hero, coffre])
     # Types 1 (Hero) et 2 (Chest) : le coffre n'a pas de boîte solide, il n'est pas un mobile.
     assert _rencontres(emis) == {1: (1, {2: [0]})}
-    assert any("actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,2,0);" in l for l in emis)
+    assert any("actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,_bk_box);" in l for l in emis)
+    assert any("_bk_n=block_targets(_bk_bi,_bk_list);" in l for l in emis)
 
 
 def test_un_static_body_bloque_sans_devenir_un_mobile(lignes):
@@ -350,7 +356,7 @@ def impulsions(tmp_path):
         scene = Scene(name="Physics", actors=list(acteurs), physics_enabled=True, **scene_kw)
         p = Project(tmp_path)
         p.scenes.items = [scene]
-        code = "\n".join(impulse_tick_lines(p, scene, _scene(*acteurs), 0, [], None))
+        code = "\n".join(impulse_tick_lines(p, scene, _scene(*acteurs), [], None))
         table = lambda nom: [int(v) for v in re.findall(r"\d+", re.search(rf"{nom}(?:\[\d+\])+[^=]*=\{{(.*)\}};", code)[1])]
         ki, masses, runs, pairs = table("_ri_ki"), table("_ri_mass"), table("_ri_run"), table("_ri_pair")
         corps = {k: i for k, i in enumerate(ki) if i != 255}
@@ -378,10 +384,10 @@ def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_histori
     # caisses du même type ; 4 passes, sommeil après 30 images.
     assert emis["couples"] == {(1, 1): [(0, 0, 0, 0)], (1, 2): [(0, 0, 0, 0)], (2, 1): [(0, 0, 0, 0)]}
     assert emis["masses"] == {1: 256, 2: 0}
-    assert ",0,2,0,4,30);" in emis["code"]
+    assert "_ri_live,1,4,30);" in emis["code"]
 
     six_passes = impulsions([rigid, sol], physics_gravity_override=True, physics_solver_iterations=6)
-    assert ",0,2,0,6," in six_passes["code"]
+    assert "_ri_live,1,6," in six_passes["code"]
 
 
 def test_beaucoup_de_paires_rigid_passent_par_l_instantane_et_la_liste_des_paires_retenues(impulsions):

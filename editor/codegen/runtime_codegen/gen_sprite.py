@@ -554,9 +554,8 @@ def anim_oam_pass_lines(p, scene_actors, actor_offset: int, pi, layout, placed_s
             cases += [f"        case {kind}: {{", *body, "        } break;"]
     if not cases:
         return []
-    end = "g_spool_hw" if shared else str(actor_offset + len(scene_actors))
     return [*(["    int _affn = 0;"] if any(t[2] for t in types.values()) else []),
-            f"    for(int _pk={actor_offset}; _pk<{end}; _pk++){{",
+            "    SLOT_EACH(_pk){",
             "        Actor* _a=&g_actors[_pk];",
             "        if(!_a->active) continue;",
             "        int _pe=_a->oam_entry;",

@@ -58,7 +58,7 @@ def motion_helper_lines() -> list[str]:
     ]
 
 
-def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: int, pi: list[dict],
+def physics_motion_lines(scene, project_settings, scene_actors, pi: list[dict],
                          dynamic_gravity: bool = False) -> list[str]:
     """Le pas automatique, après les scripts et avant toute résolution de collision : `body_motion_step` pour chaque
     emplacement actif, posé ou né, avec la ligne de son type dans le descripteur de modèle (`model_desc`). Le build ne
@@ -78,10 +78,10 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
     step = (f"body_motion_step(_a,&{model_desc_sym(scene)}[_a->model],{gx},{gy},"
             f"{round((1.0 - damping) * 256)},{round(max_fall_speed * 256)},{sleep_delay if sleep_enabled else 0});")
     return ["    /* Kinematic/Rigid : mouvement avant les collisions, un seul pas pour les posés et les nés */",
-            *each_slot(step, len(scene_actors), actor_offset, bool(shared_models(pi)))]
+            *each_slot(step)]
 
 
-def physics_sleep_lines(scene, project_settings, scene_actors, actor_offset: int, pi: list[dict]) -> list[str]:
+def physics_sleep_lines(scene, project_settings, scene_actors, pi: list[dict]) -> list[str]:
     """Endort les Rigid qui sont restés dans un rayon de `seuil x délai` autour d'une position d'ancrage :
     `body_sleep_step` pour chaque emplacement actif, posé ou né, avec la ligne de son type dans le descripteur de modèle
     (seuls les types Rigid qui peuvent dormir sont concernés).
@@ -97,4 +97,4 @@ def physics_sleep_lines(scene, project_settings, scene_actors, actor_offset: int
     radius = round(sleep_threshold * 256) * frames
     step = f"body_sleep_step(_a,&{model_desc_sym(scene)}[_a->model],{radius},{frames});"
     return ["    /* Sommeil Rigid : mesure apres toutes les resolutions, un seul pas pour les posés et les nés */",
-            *each_slot(step, len(scene_actors), actor_offset, bool(shared_models(pi)))]
+            *each_slot(step)]

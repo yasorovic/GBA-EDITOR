@@ -25,8 +25,9 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
 #define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
+#define EWRAM_BSS                                 /* hors GBA : mémoire ordinaire */
 Actor g_actors[8];
-int g_spool_start = 0, g_spool_hw = 0;
+int g_spool_start = 0, g_spool_hw = 0, g_scene_placed = 0;
 u32 g_alive_bits[1];
 u32 g_alive_epoch;
 PoolCursor g_nth;
@@ -47,7 +48,8 @@ static void mk(int i, int x, int y, int vx, int vy, int w, int h){
 static void run(const char* nom, int dir){
     const u8 bi[] = {255, 0}; const PairRun runs[] = {{0, 1}}; const u8 box[] = {0}; const u8 ow[] = {dir};
     g_actors[1].model = 1;
-    actors_resolve_blocks_ow(&g_actors[0], 1, runs, bi, box, ow, 0, 2, 0);
+    g_scene_placed = 2; g_spool_hw = 2; alive_bit_set(1); BlockTarget list[2]; int n = block_targets(bi, list);
+    actors_resolve_blocks_ow(&g_actors[0], 1, runs, list, n, box, ow);
     printf("%%s %%d %%d %%d %%d\n", nom, g_actors[0].x >> 8, g_actors[0].y >> 8, g_actors[0].vx, g_actors[0].vy);
 }
 
@@ -166,7 +168,7 @@ def lignes(tmp_path):
                       physics_gravity_x=gravite[0], physics_gravity_y=gravite[1])
         p = Project(tmp_path)
         p.scenes.items = [scene]
-        return "\n".join(block_tick_lines(p, scene, [(a, None) for a in acteurs], 0, [], lambda _p, _o: (None, None)))
+        return "\n".join(block_tick_lines(p, scene, [(a, None) for a in acteurs], [], lambda _p, _o: (None, None)))
     return emet
 
 
@@ -175,7 +177,7 @@ def test_le_build_cuit_le_sens_de_la_face_dans_la_table_du_mobile(lignes):
     plateforme = _acteur("Plateforme", tag="body", response="block", solid=False, one_way="gravity")
     emis = lignes(hero, plateforme)
     assert re.search(r"static u8 _bk_ow\[1\][^=]*=\{1\};", emis)
-    assert "actors_resolve_blocks_ow(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,_bk_ow,0,2,0);" in emis
+    assert "actors_resolve_blocks_ow(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,_bk_box,_bk_ow);" in emis
     assert re.search(r"static u8 _bk_ow\[1\][^=]*=\{2\};", lignes(hero, plateforme, gravite=(0, -0.25)))
 
 
@@ -183,7 +185,7 @@ def test_sans_face_a_sens_unique_le_build_emet_l_appel_historique(lignes):
     hero = _acteur("Hero", tag="Player")
     coffre = _acteur("Chest", tag="body", response="block", solid=False)
     emis = lignes(hero, coffre)
-    assert "actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,2,0);" in emis
+    assert "actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,_bk_box);" in emis and "_bk_n=block_targets(_bk_bi,_bk_list);" in emis
     assert "_ow" not in emis
 
 

@@ -117,7 +117,7 @@ def impulse_helper_lines() -> list[str]:
         "    for(int q=0;q<run->n;q++)",
         "        rigid_contact(a,b,p[q].box_a,p[q].box_b,mass[A->kind],mass[B->kind],p[q].restitution,p[q].friction);",
         "}",
-        "/* La passe de l'image. Instantané des corps (posés `[lo,hi)` puis nés du pool si `pool`) ; première passe sur",
+        "/* La passe de l'image. Instantané des corps (tous les emplacements vivants, `SLOT_EACH`) ; première passe sur",
         "   toutes les paires, écartées au repos des deux côtés ou à plus de la marge, les autres résolues et gardées dans",
         "   `live` ; puis `iterations - 1` passes sur `live` (ou, si elle a débordé, sur toutes les paires de l'instantané :",
         "   le même ensemble). `runs` : `width` entrées par type, indexées par le rang compact du type du partenaire.",
@@ -125,11 +125,9 @@ def impulse_helper_lines() -> list[str]:
         "   est reprise à l'image suivante. En IWRAM, ARM : elle parcourt toutes les paires de corps. */",
         "BS_ATTR_IWRAM",
         "static void __attribute__((unused)) rigid_solve(const u8* ki,const u16* mass,const u8* side,const PairRun* runs,",
-        "        int width,const RigidBox* pairs,RigidBody* list,u32* live,int live_cap,int lo,int hi,int pool,",
-        "        int iterations,u16 sleep_frames){",
+        "        int width,const RigidBox* pairs,RigidBody* list,u32* live,int live_cap,int iterations,u16 sleep_frames){",
         "    int n=0;",
-        "    for(int s=lo;s<hi;s++) rigid_body_add(s,ki,side,sleep_frames,list,&n);",
-        "    if(pool){ POOL_EACH(s) rigid_body_add(s,ki,side,sleep_frames,list,&n); }",
+        "    SLOT_EACH(s) rigid_body_add(s,ki,side,sleep_frames,list,&n);",
         "    int live_n=0, full=0;",
         "    for(int i=0;i<n;i++){",
         "        const RigidBody* A=&list[i]; const PairRun* row=runs+A->kind*width;",
@@ -218,7 +216,7 @@ def _pair_contacts(p, scene, actor_a, sprite_a, actor_b, sprite_b) -> list[tuple
     return rows
 
 
-def impulse_tick_lines(p, scene, scene_actors, actor_offset: int, pi, shown) -> list[str]:
+def impulse_tick_lines(p, scene, scene_actors, pi, shown) -> list[str]:
     """La passe d'impulsions de la scène : chaque paire de corps, posés ou nés, dont un au moins est Rigid. Les couples
     de boîtes se lisent par couple ordonné de types (le corps de plus petit rang dans l'instantané est le côté « a »)."""
     lay = scene_oam_layout(p, scene)
@@ -246,10 +244,7 @@ def impulse_tick_lines(p, scene, scene_actors, actor_offset: int, pi, shown) -> 
             flat += [f"{{{ra},{rb},{re},{fr}}}" for ra, rb, re, fr in run]
         run_rows.append("{" + ",".join(row) + "}")
     index = {k: i for i, k in enumerate(bodies)}
-    placed_kinds = set(lay.placed_model)
-    pool_kinds = {m["model_id"] for m in shared}
-    hi = actor_offset + len(scene_actors) if placed_kinds & set(bodies) else actor_offset
-    pool = 1 if pool_kinds & set(bodies) else 0
+    pool = any(m["model_id"] in index for m in shared)
     spool = shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if pool else 0
     capacity = sum(1 for kind in lay.placed_model if kind in index) + spool
     live = min(_LIVE_CAPACITY, capacity * (capacity - 1) // 2) or 1
@@ -267,6 +262,6 @@ def impulse_tick_lines(p, scene, scene_actors, actor_offset: int, pi, shown) -> 
         f"        static RigidBody _ri_list[{capacity}]{where};",
         f"        static u32 _ri_live[{live}] EWRAM_BSS;",
         f"        rigid_solve(_ri_ki,_ri_mass,_ri_side,&_ri_run[0][0],{len(bodies)},_ri_pair,_ri_list,_ri_live,{live},"
-        f"{actor_offset},{hi},{pool},{iterations},{sleep_frames});",
+        f"{iterations},{sleep_frames});",
         "    }",
     ]

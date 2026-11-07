@@ -21,7 +21,7 @@ u16 floor_store[3];
 u16 *g_actor_floor=floor_store;
 u8 *g_drop_through=0;
 u8 g_support_normal=1;
-int g_spool_start, g_spool_hw;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 %(helper)s
 /* Le corps est du type 1, les deux appuis du type 2 (rang compact 0) : un seul couple de boîtes (0, 0). */
@@ -40,7 +40,8 @@ int main(void){
     g_actors[1].x=0; g_actors[1].y=16<<8;
     g_actors[2].x=0; g_actors[2].y=16<<8;
     g_actors[0].model=1; g_actors[1].model=2; g_actors[2].model=2;
-    FloorSupport list[3]; int n=floor_supports(si,0,3,0,list);   /* le corps n'est pas un appui : deux entrées */
+    g_scene_placed=3; g_spool_hw=3; for(int i=0;i<3;i++) alive_bit_set(i);
+    FloorSupport list[3]; int n=floor_supports(si,list);   /* le corps n'est pas un appui : deux entrées */
     actors_floor(&g_actors[0],1,runs,list,n,pairs,1);
     printf("%%u ",floor_store[0]);
     g_actors[0].x=20<<8;                      /* hors des appuis : la passe remet le sol à zéro */

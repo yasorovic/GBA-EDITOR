@@ -33,9 +33,10 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
 #define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
+#define EWRAM_BSS                                 /* hors GBA : mémoire ordinaire */
 u8 *g_drop_through = 0;
 Actor g_actors[4];
-int g_spool_start, g_spool_hw;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 @HELPERS@
 
@@ -49,12 +50,12 @@ static Actor boite(int x, int y, int vx, int w, int h, int ox, int oy){
 }
 static void reinit(void){
     for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
-    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0;
+    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
 }
 static void pose_en_pool(int slot, Actor a, int model){
     a.inst = slot; a.model = model; g_actors[slot] = a;
     if(slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
-    pool_bit_set(slot);
+    alive_bit_set(slot);
 }
 @TOPOLOGIES@
 
@@ -91,18 +92,18 @@ def _lignes(tmp_path, mode: str) -> dict:
     faire_naitre(dossier, scene, "Joueur", "Bloqueur")
     pi = scene_pi(project, scene)
     ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
-    return {"lines": block_tick_lines(project, scene, [(a, None) for a in scene.actors], 0, pi, shown),
+    return {"lines": block_tick_lines(project, scene, [(a, None) for a in scene.actors], pi, shown),
             "joueur": ids["Joueur"], "bloqueur": ids["Bloqueur"]}
 
 
 def _topologie_c(nom: str, bloqueur_pose: bool, e: dict) -> str:
     """Le joueur est posé (emplacement 0) ; le bloqueur est posé (1) ou né dans le pool (2)."""
     slot = 1 if bloqueur_pose else 2
-    placement = (f"    g_actors[{slot}] = boite(bx, 160, bvx, 32, 32, 0, 0); g_actors[{slot}].inst = {slot};"
+    placement = (f"    g_actors[{slot}] = boite(bx, 160, bvx, 32, 32, 0, 0); g_actors[{slot}].inst = {slot}; alive_bit_set({slot});"
                  f" g_actors[{slot}].model = {e['bloqueur']};"
                  if bloqueur_pose else f"    pose_en_pool({slot}, boite(bx, 160, bvx, 32, 32, 0, 0), {e['bloqueur']});")
     return (f"static void topo_{nom}(const char* cas, int bvx, int mvx){{\n    int bx = 90;\n    reinit();\n"
-            "    g_actors[0] = boite(60, 177, mvx, 17, 4, -7, 11); g_actors[0].inst = 0;"
+            "    g_actors[0] = boite(60, 177, mvx, 17, 4, -7, 11); g_actors[0].inst = 0; alive_bit_set(0);"
             f" g_actors[0].model = {e['joueur']};\n"
             f"{placement}\n"
             f"    for(int f = 0; f < {FRAMES}; f++){{\n"

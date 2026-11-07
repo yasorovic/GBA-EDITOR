@@ -9,27 +9,20 @@ from codegen.actor_appearance import owner_appearances
 from codegen.c_names import scene_actor_sym, sym as c_sym
 from codegen.oam_alloc import scene_oam_layout
 from codegen.palette_alloc import scene_bank_layout
-from codegen.runtime_codegen.gen_appearance import (
-    appearance_init_lines, appearance_layout, appearance_table_lines,
-)
-from codegen.runtime_codegen.gen_affine import affine_init_lines
+from codegen.runtime_codegen.gen_actor_init import actor_init_lines
+from codegen.runtime_codegen.gen_appearance import appearance_layout, appearance_table_lines
 from codegen.runtime_codegen.gen_camera import scene_camera_index
 from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
 from codegen.runtime_codegen.gen_pool import dispatch_sym, placed_parent_table
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
 from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
 from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scene_has_cmap, scene_world_size
-from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
-from codegen.runtime_codegen.gen_sprite import initial_state_rank, shown
+from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_spawn_lines
 from codegen.runtime_codegen.gen_ui_scene import scene_ui_lines
 from codegen.runtime_codegen.physics.body import support_normal
 from codegen.runtime_codegen.gen_vram_layout import layer_base_bank
-from codegen.runtime_codegen.interact_gen import owner_boxes
 from codegen.runtime_codegen.sound_emit import scene_music_lines
-from core.models.field_value import (
-    FieldValue as _FV, number_c as _number_c, var_names_from_project as _var_names,
-)
-from core.models.palette import OWN_PAL_BANK
+from core.models.field_value import FieldValue, var_names_from_project
 from core.models.scene import Scene
 from core.project import Project
 
@@ -77,8 +70,8 @@ def gen_scene_init(
     L += _background_lines(p, scene, sym, bgi, scene_actors, sprite_offsets, obj_layout, bg_layout, anims, tanims)
     L += scene_ui_lines(p, scene, sym, sprite_offsets, obj_text_oam, obj_text_tile, emit)
     L += scene_display_lines(p, scene, dispcnt, cam_idx, emit)
-    L += _placed_actor_lines(p, scene, scene_actors, actor_offset, obj_layout, alay, affine_info)
     L += _shared_pool_lines(pi, scene_oam_layout(p, scene).kinds)
+    L += _placed_actor_lines(p, scene, scene_actors, actor_offset, obj_layout, alay, affine_info)
     L += _start_lines(p, scene, sym, scene_actors, actor_offset, lua_idx, pi, has_sound, sound_assets,
                       actor_defined_events)
     L.append("}")
@@ -302,92 +295,25 @@ def _background_lines(p, scene, sym: str, bgi: list[dict], scene_actors: list, s
 
 def _placed_actor_lines(p, scene, scene_actors: list, actor_offset: int, obj_layout, alay,
                         affine_info: dict | None) -> list[str]:
-    """L'état de départ de chaque acteur posé, puis ses déclencheurs Sfx `on_spawn`."""
+    """Construit les acteurs de la scène dans leurs emplacements réservés."""
     L: list[str] = []
-    _lay = scene_oam_layout(p, scene)
-    # Init actors
-    # Les acteurs posés qui sont des instances d'un modèle : leur rang dans le modèle (l'indice de leur
-    # état de script). Les membres sont les premières instances ; la réserve du spawn suit.
-    for j, (actor, sprite) in enumerate(scene_actors):
-        idx = actor_offset + j
-        _e = _lay.placed_entry[j]   # son entrée OAM, -1 = sans sprite : rien à afficher
-        s = scene_actor_sym(scene.name, actor.name)
-        boxes = owner_boxes(actor, sprite)
-        own = list(sprite.own_palette) if (sprite and getattr(sprite, "own_palette", None)) else []
-        pal = obj_layout.bank_index(getattr(actor, "pal_bank", OWN_PAL_BANK), own)
-        _lines = [
-            # x/y en Q8 en interne, l'auteur place l'acteur en pixels.
-            f"    g_actors[{idx}].x       = ({_FV.parse(actor.x, _var_names(p)).c_expr()})<<8;",
-            f"    g_actors[{idx}].y       = ({_FV.parse(actor.y, _var_names(p)).c_expr()})<<8;",
-            f"    g_actors[{idx}].active  = {1 if actor.visible else 0};",
-            f"    g_actors[{idx}].alive   = 1;",
-            f"    g_oam_entries[{_e}].visible = {1 if actor.visible else 0};",
-            f"    g_oam_entries[{_e}].flip_h  = {1 if actor.flip_h else 0};",
-            f"    g_oam_entries[{_e}].flip_v  = {1 if actor.flip_v else 0};",
-            f"    g_actors[{idx}].dir_x   = {getattr(actor,'dir_x',0)};",
-            f"    g_actors[{idx}].dir_y   = {getattr(actor,'dir_y',0)};",
-            f"    g_oam_entries[{_e}].pal_bank= {pal if pal is not None else 0};",
-            f"    g_oam_entries[{_e}].obj_mode= {int(getattr(actor, 'obj_mode', 0)) & 3};",
-            f"    g_oam_entries[{_e}].priority= {_number_c(getattr(actor, 'priority', 0), _var_names(p), mask=3)};",
-            f"    g_oam_entries[{_e}].facing_auto= {1 if getattr(shown(p, actor)[0], 'facing_auto', True) else 0};",
-            # Le regard de départ est la direction posée dans l'inspecteur.
-            f"    g_actors[{idx}].facing_x= {getattr(actor,'dir_x',0)};",
-            f"    g_actors[{idx}].facing_y= {getattr(actor,'dir_y',0)};",
-            # L'état de départ choisi dans l'inspecteur (`initial_state`) : rang dans
-            # les états du sprite AFFICHÉ, 0 si le nom n'existe plus.
-            f"    g_oam_entries[{_e}].anim_state={initial_state_rank(*shown(p, actor))};",
-            # self.frame_w/frame_h : posées une fois ici depuis le sprite,
-            # jamais recalculées — un acteur sans sprite (rare, cf. `sprite`
-            # potentiellement None plus haut) rend 0 des deux côtés.
-            f"    g_oam_entries[{_e}].frame_w = {sprite.frame_w if sprite else 0};",
-            f"    g_oam_entries[{_e}].frame_h = {sprite.frame_h if sprite else 0};",
-            f"    g_actors[{idx}].name     = ACTOR_{s.upper()};",
-            # Son type d'emplacement : la ligne du descripteur de modèle que le runtime lit pour lui, comme pour un né.
-            f"    g_actors[{idx}].model    = {_lay.placed_model[j]};",
-            # Transform MONDE : émise pour TOUT acteur, affine ou non. Un acteur
-            # non-affine ne l'AFFICHE pas (aucun slot de matrice), mais un enfant
-            # en HÉRITE par la composition parent→enfant — un enfant hérite des
-            # propriétés de son parent direct, puis les override. Sans ça, un
-            # parent non-affine restait à scale 0 (le zéro-init) et écrasait la
-            # position ET l'échelle affine de ses enfants (matrice dégénérée).
-            # Défaut 256 = ×1 ; la branche affine ci-dessous ne rajoute que le
-            # slot et la transform LOCALE du sprite.
-            f"    g_actors[{idx}].rotation     = {_number_c(getattr(actor, 'rotation', 0), _var_names(p))};",
-            f"    g_actors[{idx}].scale_x      = {_number_c(getattr(actor, 'scale_x', 1.0), _var_names(p), q8=True)};",
-            f"    g_actors[{idx}].scale_y      = {_number_c(getattr(actor, 'scale_y', 1.0), _var_names(p), q8=True)};",
-            f"    g_oam_entries[{_e}].screen_space = {1 if getattr(actor, 'screen_space', False) else 0};",
-            f"    g_actors[{idx}].collision.box_count = {len(boxes)};",
-        ]
-        # Les lignes d'AFFICHAGE portent `g_oam_entries[-1]` quand l'acteur n'a pas
-        # de sprite : on les écarte, et le lien reste à -1 (posé par le reset).
-        L += [l for l in _lines if _e >= 0 or "g_oam_entries[-1]" not in l]
-        if _e >= 0:
-            L.append(f"    g_actors[{idx}].oam_entry = {_e};")
-            L += appearance_init_lines(p, actor, str(_e), "    ", alay.actor_base.get(j))
-        _aff_i = (affine_info or {}).get(idx)
-        if _aff_i and _e >= 0:
-            # Affine comme un né (`gen_pool`) : le drapeau et les valeurs locales ; la matrice se prend à la frame.
-            L += affine_init_lines(_aff_i, str(_e), "    ")
-        elif _e >= 0:
-            L.append(f"    g_oam_entries[{_e}].affine_slot = -1;")
-        for bi2, cb in enumerate(boxes):
-            tag_s = "BOXTAG_" + c_sym(cb.tag or "body").upper()
-            _vn = _var_names(p)
-            bx, by = _FV.parse(cb.x, _vn).c_expr(), _FV.parse(cb.y, _vn).c_expr()
-            bw, bh = _FV.parse(cb.w, _vn).c_expr(), _FV.parse(cb.h, _vn).c_expr()
-            L += [
-                f"    g_actors[{idx}].collision.boxes[{bi2}].x=(s8){bx}; g_actors[{idx}].collision.boxes[{bi2}].y=(s8){by};",
-                f"    g_actors[{idx}].collision.boxes[{bi2}].w=(u8){bw};  g_actors[{idx}].collision.boxes[{bi2}].h=(u8){bh};",
-                f"    g_actors[{idx}].collision.boxes[{bi2}].solid={1 if cb.solid else 0}; g_actors[{idx}].collision.boxes[{bi2}].active={1 if cb.active else 0}; g_actors[{idx}].collision.boxes[{bi2}].tag={tag_s};",
-            ]
+    layout = scene_oam_layout(p, scene)
+    names = var_names_from_project(p)
+    for j, (actor, _sprite) in enumerate(scene_actors):
+        slot = actor_offset + j
+        sym = scene_actor_sym(scene.name, actor.name)
+        position = (FieldValue.parse(actor.x, names).c_expr(), FieldValue.parse(actor.y, names).c_expr())
+        L += actor_init_lines(
+            p, actor, obj_layout, slot=slot, entry=layout.placed_entry[j],
+            name=f"ACTOR_{sym.upper()}", model=layout.placed_model[j], position=position,
+            active=actor.visible, appearance_base=alay.actor_base.get(j),
+            affine=(affine_info or {}).get(slot), indent="    ",
+        )
     # SoundFxComponent en trigger="on_spawn" — TOUS les actors de la scène,
     # scriptés ou non : c'est une donnée du component, pas du script. Émis ici plutôt que dans le on_start généré (ancien
     # comportement) pour qu'un actor sans ScriptComponent en bénéficie aussi.
-    for j, (actor, _sprite) in enumerate(scene_actors):
-        sfx_sym, sfx_vol, sfx_trig = sfx_trigger_info(p, actor)
-        if sfx_sym and sfx_trig == "on_spawn":
-            L.append(f"    sfx_play({sfx_sym}, {sfx_vol}, 0);"
-                     f"   /* SoundFxComponent : {actor.name} */")
+    for actor, _sprite in scene_actors:
+        L += sfx_on_spawn_lines(p, actor, "    ")
     return L
 
 
@@ -429,7 +355,8 @@ def _shared_pool_lines(pi: list[dict], kinds: int) -> list[str]:
             L.append("        g_actors[_k].oam_entry = _e; g_oam_entries[_e].affine_slot = -1;")
             L.append("    }")
     else:
-        L.append("    g_spool_start = g_spool_end = g_spool_hw = g_spool_free = 0; g_spool_entry = -1;")
+        # Sans pool, le plus haut emplacement utilisé est le dernier posé : `SLOT_EACH` s'y arrête.
+        L.append("    g_spool_start = g_spool_end = g_spool_free = 0; g_spool_hw = g_scene_placed; g_spool_entry = -1;")
         L.append("    g_spool_grp = g_spool_part = g_spool_parent = 0;")
     return L
 

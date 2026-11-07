@@ -63,10 +63,9 @@ def kinematic_helper_lines() -> list[str]:
         "    if(j==255||!k->active) return;",
         "    CarryPlatform* c=&out[(*n)++]; c->slot=s; c->kind=j; c->x=k->x; c->y=k->y;",
         "}",
-        "static int __attribute__((unused)) kinematic_platforms(const u8* pi,int lo,int hi,int pool,CarryPlatform* out){",
+        "static int __attribute__((unused)) kinematic_platforms(const u8* pi,CarryPlatform* out){",
         "    int n=0;",
-        "    for(int s=lo;s<hi;s++) kinematic_platform_add(s,pi,out,&n);",
-        "    if(pool){ POOL_EACH(s) kinematic_platform_add(s,pi,out,&n); }",
+        "    SLOT_EACH(s) kinematic_platform_add(s,pi,out,&n);",
         "    return n;",
         "}",
         "/* La liste des passagers possibles de l'image : emplacement et rang compact de son type, sans position (un",
@@ -77,14 +76,13 @@ def kinematic_helper_lines() -> list[str]:
         "    if(j==255||!a->active) return;",
         "    CarryRider* r=&out[(*n)++]; r->slot=s; r->kind=j;",
         "}",
-        "static int __attribute__((unused)) kinematic_riders(const u8* ri,int lo,int hi,int pool,CarryRider* out){",
+        "static int __attribute__((unused)) kinematic_riders(const u8* ri,CarryRider* out){",
         "    int n=0;",
-        "    for(int s=lo;s<hi;s++) kinematic_rider_add(s,ri,out,&n);",
-        "    if(pool){ POOL_EACH(s) kinematic_rider_add(s,ri,out,&n); }",
+        "    SLOT_EACH(s) kinematic_rider_add(s,ri,out,&n);",
         "    return n;",
         "}",
-        "/* Le transport de l'image : chaque plateforme qui a bougé, puis chaque passager de la liste (posés puis nés,",
-        "   ordre des emplacements). `runs` : `width` entrées par type de plateforme, indexées par le rang compact du type",
+        "/* Le transport de l'image : chaque plateforme qui a bougé, puis chaque passager de la liste (ordre des",
+        "   emplacements). `runs` : `width` entrées par type de plateforme, indexées par le rang compact du type",
         "   du passager. `kin_d` reçoit le déplacement porté de chaque emplacement. `normal` : le côté d'appui de la",
         "   scène, 0 = lu dans `g_support_normal`. En IWRAM, ARM. */",
         "BS_ATTR_IWRAM",
@@ -106,7 +104,7 @@ def kinematic_helper_lines() -> list[str]:
         "}",
         "/* L'écrasement : un Character transporté (déplacement porté non nul, pas encore signalé) dont une boîte de corps",
         "   recouvre un mur d'un StaticBody appelle le `on_crushed` de son type (descripteur), une fois par image. Les",
-        "   murs : posés `[lo,hi)` puis nés du pool si `pool`, rang compact de leur type dans `wi`. */",
+        "   murs : tous les emplacements vivants (`SLOT_EACH`), rang compact de leur type dans `wi`. */",
         "static inline __attribute__((always_inline)) int kinematic_crush_one(Actor* a,u8 cb,int s,const PairRun* row,",
         "        const u8* wi,const BoxPair* pairs){",
         "    const Actor* w=&g_actors[s]; u8 j=wi[w->model];",
@@ -122,14 +120,11 @@ def kinematic_helper_lines() -> list[str]:
         "    return 0;",
         "}",
         "static void __attribute__((unused)) kinematic_crush(Actor* a,const ModelDesc* d,u8 mask,const PairRun* row,",
-        "        const u8* wi,const BoxPair* pairs,int* kin_d,int lo,int hi,int pool){",
+        "        const u8* wi,const BoxPair* pairs,int* kin_d){",
         "    if(!d->on_crushed||kin_d[2]||(!kin_d[0]&&!kin_d[1])) return;",
         "    for(int cb=0;cb<a->collision.box_count;cb++){",
         "        if(!(mask&(1u<<cb))||!a->collision.boxes[cb].active) continue;",
-        "        for(int s=lo;s<hi;s++)",
-        "            if(kinematic_crush_one(a,cb,s,row,wi,pairs)){ d->on_crushed(a,&g_actors[s]); kin_d[2]=1; return; }",
-        "        if(!pool) continue;",
-        "        POOL_EACH(s)",
+        "        SLOT_EACH(s)",
         "            if(kinematic_crush_one(a,cb,s,row,wi,pairs)){ d->on_crushed(a,&g_actors[s]); kin_d[2]=1; return; }",
         "    }",
         "}",
@@ -190,7 +185,7 @@ def _pair_table(owners: dict, pairs_of, prefix: str) -> tuple[dict, dict, list[s
 
 
 def kinematic_tick_parts(
-        p, scene_actors, actor_offset: int, scene=None, pi=(), shown=None,
+        p, scene_actors, scene=None, pi=(), shown=None,
 ) -> tuple[list[str], list[str], list[str]]:
     """L'instantané des plateformes avant le mouvement, le transport après la résolution, puis l'écrasement contre un
     StaticBody.
@@ -199,7 +194,7 @@ def kinematic_tick_parts(
     sous la gravité habituelle, le dessous sous une gravité vers le haut, un côté sous une gravité latérale.
 
     Le déplacement porté vit dans `_kin_d`, une ligne par emplacement de `g_actors` (x, y, puis l'écrasement déjà
-    signalé), remise à zéro à chaque image pour les posés et les emplacements utilisés du pool : la résolution contre la
+    signalé), remise à zéro à chaque image pour tous les emplacements vivants : la résolution contre la
     carte l'ajoute à la vitesse de l'emplacement, quel qu'il soit (`physics.character.body_tile_step`)."""
     normal = support_normal(scene, p.settings) if scene is not None else ONEWAY_UP
     # Un script écrit `scene.gravity` : le côté d'appui se lit à l'exécution, quel que soit celui du départ.
@@ -217,39 +212,31 @@ def kinematic_tick_parts(
     if carry is None:
         return [], [], []
     platform_index, rider_index, carry_lines, width = carry
-    placed_kinds = set(lay.placed_model)
-    pool_kinds = {m["model_id"] for m in shared}
     spool = shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if shared else 0
 
-    def span(kinds: set) -> tuple[int, int]:
-        """(fin des posés à parcourir, pool parcouru ?) pour les emplacements de ces types."""
-        return (actor_offset + len(scene_actors) if placed_kinds & kinds else actor_offset,
-                1 if pool_kinds & kinds else 0)
+    def capacity_of(kinds: dict) -> int:
+        """La taille d'une liste d'instantané : les posés de ces types, puis tout le pool s'il en fait naître."""
+        return (sum(1 for kind in lay.placed_model if kind in kinds)
+                + (spool if any(m["model_id"] in kinds for m in shared) else 0))
 
     def by_kind(index: dict) -> str:
         return ",".join(str(index.get(k, 255)) for k in range(lay.kinds))
 
-    hi_p, pool_p = span(set(platform_index))
-    capacity = sum(1 for kind in lay.placed_model if kind in platform_index) + (spool if pool_p else 0)
+    capacity = capacity_of(platform_index)
     where = "" if capacity <= _SNAPSHOT_IWRAM else " EWRAM_BSS"
     before = ["    /* Transport : les plateformes et leur position d'avant mouvement, par couple de types */",
               f"    static u8 _kin_pi[{lay.kinds}]{_IW}={{{by_kind(platform_index)}}};",
               f"    static u8 _kin_ri[{lay.kinds}]{_IW}={{{by_kind(rider_index)}}};",
               *carry_lines,
               f"    static CarryPlatform _kin_list[{capacity}]{where};",
-              f"    int _kin_n=kinematic_platforms(_kin_pi,{actor_offset},{hi_p},{pool_p},_kin_list);"]
+              "    int _kin_n=kinematic_platforms(_kin_pi,_kin_list);"]
 
     after = ["    static int _kin_d[G_ACTOR_COUNT][3] EWRAM_BSS;   /* déplacement porté et écrasement, par emplacement */"]
-    if scene_actors:
-        after.append(f"    for(int _kz={actor_offset};_kz<{actor_offset + len(scene_actors)};_kz++) "
-                     "_kin_d[_kz][0]=_kin_d[_kz][1]=_kin_d[_kz][2]=0;")
-    if shared:
-        after.append("    for(int _kz=g_spool_start;_kz<g_spool_hw;_kz++) _kin_d[_kz][0]=_kin_d[_kz][1]=_kin_d[_kz][2]=0;")
-    hi_r, pool_r = span(set(rider_index))
-    riders = sum(1 for kind in lay.placed_model if kind in rider_index) + (spool if pool_r else 0)
+    after.append("    SLOT_EACH(_kz) _kin_d[_kz][0]=_kin_d[_kz][1]=_kin_d[_kz][2]=0;")
+    riders = capacity_of(rider_index)
     where_r = "" if riders <= _SNAPSHOT_IWRAM else " EWRAM_BSS"
     after += [f"    static CarryRider _kin_riders[{riders}]{where_r};",
-              f"    int _kin_nr=kinematic_riders(_kin_ri,{actor_offset},{hi_r},{pool_r},_kin_riders);",
+              "    int _kin_nr=kinematic_riders(_kin_ri,_kin_riders);",
               f"    kinematic_carry_all(_kin_list,_kin_n,&_kin_run[0][0],{width},_kin_riders,_kin_nr,_kin_pair,_kin_d,"
               f"{0 if dynamic else normal});"]
 
@@ -258,9 +245,8 @@ def kinematic_tick_parts(
     if crush is not None:
         body_index, wall_index, table, _width = crush
         masks = {kind: sum(1 << cb for cb, _box in _body_boxes(*owners[kind])) for kind in body_index}
-        hi_w, pool_w = span(set(wall_index))
         step = (f"{{ u8 _ci=_kc_ci[_a->model]; if(_ci!=255) kinematic_crush(_a,&{model_desc_sym(scene)}[_a->model],"
-                f"_kc_mask[_ci],_kc_run[_ci],_kc_wi,_kc_pair,_kin_d[_a->inst],{actor_offset},{hi_w},{pool_w}); }}")
+                "_kc_mask[_ci],_kc_run[_ci],_kc_wi,_kc_pair,_kin_d[_a->inst]); }")
         crush_lines = [
             "    /* L'écrasement d'un Character transporté contre un StaticBody (la carte, elle, écrase par",
             "       `body_tile_step`) : `_kin_d[i][2]` retient qu'il est signalé, pour ne pas le refaire à la carte. */",
@@ -269,9 +255,7 @@ def kinematic_tick_parts(
             f"        static u8 _kc_wi[{lay.kinds}]{_IW}={{{by_kind(wall_index)}}};",
             f"        static u8 _kc_mask[{len(body_index)}]{_IW}={{{','.join(str(masks[k]) for k in body_index)}}};",
             *("    " + line for line in table),
-            *("    " + line for line in each_slot(
-                step, len(scene_actors) if placed_kinds & set(body_index) else 0, actor_offset,
-                bool(pool_kinds & set(body_index)))),
+            *("    " + line for line in each_slot(step)),
             "    }",
         ]
     return before, after, crush_lines

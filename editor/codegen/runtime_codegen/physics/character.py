@@ -427,7 +427,7 @@ def character_solver_lines(one_way_tiles=frozenset()) -> list[str]:
     return L
 
 
-def physics_tile_lines(scene, scene_actors, actor_offset: int, pi: list[dict], *, kinematic: bool,
+def physics_tile_lines(scene, scene_actors, pi: list[dict], *, kinematic: bool,
                        carry: bool = False) -> list[str]:
     """Une passe de résolution contre la carte : `body_tile_step` pour chaque emplacement actif, posé ou né, avec la
     ligne de son type dans le descripteur de modèle. `kinematic` : la passe des plateformes, avant le transport ; sinon
@@ -444,4 +444,4 @@ def physics_tile_lines(scene, scene_actors, actor_offset: int, pi: list[dict], *
     step = f"body_tile_step(_a,&{model_desc_sym(scene)}[_a->model],{int(kinematic)},{c});"
     what = "Kinematic : carte avant le transport" if kinematic else "carte de collision"
     return [f"    /* {what}, un seul pas pour les posés et les nés */",
-            *each_slot(step, len(scene_actors) if placed else 0, actor_offset, pool)]
+            *each_slot(step)]

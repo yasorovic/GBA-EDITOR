@@ -28,7 +28,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32; typedef
 #include "actor_types_static.h"
 #define SFX_DING 5
 Actor g_actors[4];
-int g_spool_start = 2, g_spool_hw = 2;
+int g_spool_start = 2, g_spool_hw = 2, g_scene_placed = 0;
 u32 g_alive_bits[1], g_alive_epoch;
 static int pressed, sfx_calls, last_sfx, last_volume, updates, lates, seen_x;
 static int input_pressed(int mask){ return pressed && mask == BTN_A; }
@@ -44,10 +44,11 @@ static void tick(void){
 /* Un seul emplacement vivant : le posé (0) ou le né (2). */
 static void joue(const char* chemin, int s, int type){
     for(int k = 0; k < 4; k++){ g_actors[k] = (Actor){0}; g_actors[k].inst = k; }
-    g_alive_bits[0] = 0; g_spool_hw = 2;
+    g_alive_bits[0] = 0; g_spool_hw = 2; g_scene_placed = 2;   /* 0 et 1 : les posés */
     Actor* a = &g_actors[s];
     a->active = 1; a->alive = 1; a->model = type;
-    if(s >= 2){ pool_bit_set(s); g_spool_hw = s + 1; }
+    alive_bit_set(s);
+    if(s >= 2) g_spool_hw = s + 1;
     updates = lates = 0;
     for(int f = 0; f < @FRAMES@; f++){
         pressed = @PRESSED@;
@@ -93,9 +94,9 @@ def _emissions(tmp_path):
     return {
         "sym": model["sym"],
         "table": model_desc_lines(p, scene, actors, pi, scripts, has, layout),
-        "update": hook_pass_lines(scene, actors, 0, pi, scripts, has, "on_update"),
-        "late": hook_pass_lines(scene, actors, 0, pi, scripts, has, "on_late_update"),
-        "sfx": sfx_input_pass_lines(p, scene, actors, 0, pi, layout),
+        "update": hook_pass_lines(scene, pi, scripts, has, "on_update"),
+        "late": hook_pass_lines(scene, pi, scripts, has, "on_late_update"),
+        "sfx": sfx_input_pass_lines(p, scene, actors, pi, layout),
         "type_pose": scene_oam_layout(p, scene).placed_model[0],
         "type_ne": model["model_id"],
     }

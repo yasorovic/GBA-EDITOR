@@ -104,7 +104,7 @@ static ContactBody s_list[2];
 static Contact s_prev[1], s_cur[1];
 static int s_prev_n;
 static void contact_frame(const char *nom) {
-    contacts_run(s_desc, s_ki, &s_allowed[0][0], 2, s_list, s_prev, &s_prev_n, s_cur, 1, 0, 2, 0);
+    contacts_run(s_desc, s_ki, &s_allowed[0][0], 2, s_list, s_prev, &s_prev_n, s_cur, 1);
     printf("%s %d %d %d %d %d\n", nom, s_ev_a[0], s_ev_a[1], s_ev_a[2], s_ev_b[0], s_ev_b[2]);
 }
 
@@ -395,7 +395,7 @@ int main(void) {
         /* Le pool PARTAGÉ : les instances d'un modèle se retrouvent à `Actor.model`, pas par la table. */
         g_spool_start = 0; g_spool_end = 2; g_spool_hw = 2;
         x->alive = 1; x->model = 3; y->alive = 1; y->model = 4;
-        pool_bit_set(0); pool_bit_set(1);
+        alive_bit_set(0); alive_bit_set(1);
         printf("pool_modele %d %d %d\n", actor_model_count(0, 0, 3), actor_model_count(0, 0, 4), actor_model_count(0, 0, 9));
         printf("pool_nth %d %d\n", actor_model_nth(0, 0, 4, 0) == y, actor_model_nth(0, 0, 3, 1) == 0);
         /* Une table de posés ET le pool partagé : les posés d'abord. */
@@ -416,7 +416,7 @@ int main(void) {
             g_spool_start = 2; g_spool_end = 8; g_spool_hw = 5; g_spool_free = 5;
             for (int i = 0; i < 8; i++) { g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
             g_alive_bits[0] = 0;
-            for (int i = 2; i < 5; i++) { g_actors[i].alive = 1; g_actors[i].active = 1; g_actors[i].model = i; pool_bit_set(i); }
+            for (int i = 2; i < 5; i++) { g_actors[i].alive = 1; g_actors[i].active = 1; g_actors[i].model = i; alive_bit_set(i); }
             printf("grp_occupe %d %d %d %d\n", spool_slot_free(2), spool_slot_free(3), spool_slot_free(4), spool_slot_free(5));
             /* Les accès de groupe : la racine d'une partie, d'une racine et d'un modèle plat ; la partie k d'une racine. */
             printf("grp_acces %d %d %d %d %d %d\n", group_root_slot(3), group_root_slot(4), group_root_slot(2), group_root_slot(5),
@@ -460,7 +460,7 @@ int main(void) {
                 int k = RND() % SLOTS;
                 if (!g_actors[k].alive) {
                     g_actors[k].alive = 1; g_actors[k].active = 1; g_actors[k].model = 1 + RND() % 3; g_actors[k].inst = k;
-                    pool_bit_set(k);
+                    alive_bit_set(k);
                 }
             } else if (op == 2) {                                      /* mort d'un vivant */
                 int k = RND() % SLOTS;
@@ -550,6 +550,9 @@ int main(void) {
         g_actors[1].collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_BODY };
         s_desc[1].on_contact[0] = a_enter; s_desc[1].on_contact[1] = a_collide; s_desc[1].on_contact[2] = a_exit;
         s_desc[2].on_contact[0] = b_enter; s_desc[2].on_contact[2] = b_exit;
+        /* La scène du cas : deux posés (0 et 1), pas de pool ; les cas précédents ne doivent pas être parcourus. */
+        for (int w = 0; w < 16; w++) g_alive_bits[w] = 0;
+        g_spool_start = 0; g_spool_hw = 2; g_scene_placed = 2; alive_bit_set(0); alive_bit_set(1);
         s_prev_n = 0;
         contact_frame("contact_1");            /* superposés : enter */
         contact_frame("contact_2");            /* ça dure : collide */

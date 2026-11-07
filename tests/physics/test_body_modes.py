@@ -34,8 +34,8 @@ def test_static_body_n_emet_ni_mouvement_ni_sommeil():
     settings = SimpleNamespace(physics_gravity_x=0.0, physics_gravity_y=0.5)
     actors = [(static, None)]
 
-    assert physics_motion_lines(scene, settings, actors, 0, []) == []
-    assert physics_sleep_lines(scene, settings, actors, 0, []) == []
+    assert physics_motion_lines(scene, settings, actors, []) == []
+    assert physics_sleep_lines(scene, settings, actors, []) == []
 
 
 def test_le_descripteur_ne_donne_un_masque_de_carte_qu_aux_corps_mobiles():
@@ -173,10 +173,10 @@ def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
     scene = Scene(name="Platform")
     settings = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
     lines = "\n".join(physics_motion_lines(
-        scene, settings, [(character, None), (kinematic, None), (rigid, None)], 3, []))
+        scene, settings, [(character, None), (kinematic, None), (rigid, None)], []))
 
     # Un seul pas pour tous les emplacements posés, avec la gravité de la scène en Q8 ; le mode vient du descripteur.
-    assert "for(int _k=3; _k<6; _k++)" in lines
+    assert "SLOT_EACH(_k){" in lines                             # un seul parcours, posés et nés
     assert "body_motion_step(_a,&g_model_desc_Platform[_a->model],64,128," in lines
     assert "POOL_EACH" not in lines                               # aucun modèle ne naît dans cette scène
     assert body_desc(character) == (1, 1, 256)                    # Character : gravité seule, son script l'applique
@@ -214,13 +214,13 @@ def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
         physics_sleep_enabled=True, physics_sleep_threshold=0.05,
         physics_sleep_frames=20, physics_solver_iterations=4,
     )
-    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], 2, []))
-    sleep = "\n".join(physics_sleep_lines(scene, settings, [(rigid, None)], 2, []))
+    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], []))
+    sleep = "\n".join(physics_sleep_lines(scene, settings, [(rigid, None)], []))
 
     # gravité (0, 128), part de vitesse gardée 192 / 256, chute max 768, sommeil après 20 images.
     assert "body_motion_step(_a,&g_model_desc_Inherited[_a->model],0,128,192,768,20);" in motion
     # Le repos se lit sur la position : rayon = seuil (13 en Q8) x délai (20 frames), autour d'une ancre par emplacement.
-    assert "for(int _k=2; _k<3; _k++)" in sleep
+    assert "SLOT_EACH(_k){" in sleep
     assert "body_sleep_step(_a,&g_model_desc_Inherited[_a->model],260,20);" in sleep
     helpers = "\n".join(motion_helper_lines())
     assert "int* r=g_rigid_rest[a->inst];" in helpers and "a->physics_sleep=0;" in helpers
@@ -244,8 +244,8 @@ def test_un_rigid_module_sa_gravite_et_peut_refuser_le_sommeil():
         physics_sleep_frames=30, physics_solver_iterations=4,
     )
 
-    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], 0, []))
-    sleep = physics_sleep_lines(scene, settings, [(rigid, None)], 0, [])
+    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], []))
+    sleep = physics_sleep_lines(scene, settings, [(rigid, None)], [])
 
     assert "body_motion_step(_a,&g_model_desc_Air[_a->model],64,128,256,2048,30);" in motion
     assert body_desc(rigid) == (3, 0, -128)                       # gravité x -0,5, ne dort pas
@@ -260,7 +260,7 @@ def _kinematic_parts(tmp_path, actors):
     scene = Scene(name="S", actors=list(actors), physics_enabled=True)
     project = Project(tmp_path)
     project.scenes.items = [scene]
-    return kinematic_tick_parts(project, [(a, None) for a in actors], 0, scene)
+    return kinematic_tick_parts(project, [(a, None) for a in actors], scene)
 
 
 def test_le_transport_kinematic_est_prepare_sans_etat_runtime(tmp_path):
@@ -273,10 +273,10 @@ def test_le_transport_kinematic_est_prepare_sans_etat_runtime(tmp_path):
 
     # Types 1 (Platform) et 2 (Rider) : la plateforme est relevée avant le mouvement, le passager porté après.
     assert "_kin_pi[3]" in code and "={255,0,255};" in code
-    assert "int _kin_n=kinematic_platforms(_kin_pi,0,2,0,_kin_list);" in code
+    assert "int _kin_n=kinematic_platforms(_kin_pi,_kin_list);" in code
     assert "kinematic_carry_all(_kin_list,_kin_n,&_kin_run[0][0],1,_kin_riders,_kin_nr,_kin_pair,_kin_d,1);" in code
-    assert "int _kin_nr=kinematic_riders(_kin_ri,0,2,0,_kin_riders);" in code
-    assert "for(int _kz=0;_kz<2;_kz++)" in code          # le déplacement porté, remis à zéro à chaque image
+    assert "int _kin_nr=kinematic_riders(_kin_ri,_kin_riders);" in code
+    assert "SLOT_EACH(_kz) _kin_d[_kz][0]=" in code      # le déplacement porté, remis à zéro à chaque image
     assert crush == []                                   # aucun StaticBody : rien à écraser
 
 
@@ -357,7 +357,7 @@ def _floor_supports(tmp_path, actors) -> dict[int, dict[int, list[tuple[int, int
     scene = Scene(name="S", actors=list(actors), physics_enabled=True)
     project = Project(tmp_path)
     project.scenes.items = [scene]
-    code = "\n".join(floor_tick_lines(project, [(a, None) for a in actors], 0, scene))
+    code = "\n".join(floor_tick_lines(project, [(a, None) for a in actors], scene))
     table = lambda nom: [int(v) for v in re.findall(r"\d+", re.search(rf"{nom}(?:\[\d+\])+[^=]*=\{{(.*)\}};", code)[1])]
     bodies, supports, runs, pairs = table("_fl_bi"), table("_fl_si"), table("_fl_run"), table("_fl_pair")
     ns = sum(1 for j in supports if j != 255)

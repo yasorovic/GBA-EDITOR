@@ -21,7 +21,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 Actor g_actors[8];
 OamEntry g_oam_entries[8];
-int g_spool_start = 0, g_spool_hw = 0;
+int g_spool_start = 0, g_spool_hw = 0, g_scene_placed = 0;
 u32 g_alive_bits[1];
 u32 g_alive_epoch;
 PoolCursor g_nth;
@@ -41,6 +41,14 @@ static void mk(int i, int x, int y, int bx, int by, int w, int h, int solid){
     b->x = bx; b->y = by; b->w = w; b->h = h; b->solid = solid; b->active = 1;
 }
 
+/* La scène du cas : les posés jusqu'à `first + n`, puis le pool jusqu'à `g_spool_hw` s'il y en a un (`pool`).
+   `interact_pick` parcourt tous les emplacements de la scène (`SLOT_EACH`), posés ou nés ; le joueur (0) s'ignore. */
+static int pick(int first, int n, int pool, const u8* tag, const u8* aim, int reach){
+    g_scene_placed = first + n;
+    if(!pool || g_spool_hw < first + n) g_spool_hw = first + n;
+    return interact_pick(&g_actors[0], tag, aim, reach);
+}
+
 int main(void){
     /* Par type : 1 et 3 consomment (zone de tag 0), 2 non. */
     const u8 tag[] = {255, 0, 255, 0};
@@ -48,57 +56,57 @@ int main(void){
     int r;
     /* 0 = le joueur (16x16 en 0,0), 1 = une zone 16x16 en x=10 (recouvre le joueur) ; les posés sont 1 et 2 */
     mk(0, 0, 0, 0, 0, 16, 16, 1); mk(1, 10, 0, 0, 0, 16, 16, 0); mk(2, 100, 100, 0, 0, 16, 16, 0);
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, hover, 4);  printf("hover_recouvre %%d\n", r);
+    r = pick(1, 2, 0, tag, hover, 4);  printf("hover_recouvre %%d\n", r);
     mk(1, 30, 0, 0, 0, 16, 16, 0);
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, hover, 4);  printf("hover_loin %%d\n", r);
+    r = pick(1, 2, 0, tag, hover, 4);  printf("hover_loin %%d\n", r);
 
     /* facing : zone collée à droite (x=16..32), le joueur regarde à droite, portée 4 */
     mk(1, 16, 0, 0, 0, 16, 16, 0);
     g_actors[0].facing_x = 1;
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("facing_colle %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("facing_colle %%d\n", r);
     mk(1, 19, 0, 0, 0, 16, 16, 0);
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("facing_a_portee %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("facing_a_portee %%d\n", r);
     mk(1, 20, 0, 0, 0, 16, 16, 0);
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("facing_trop_loin %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("facing_trop_loin %%d\n", r);
     mk(1, 20, 0, 0, 0, 16, 16, 0);
     g_actors[0].facing_x = -1;
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("facing_dos_tourne %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("facing_dos_tourne %%d\n", r);
     g_actors[0].facing_x = 0;
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("facing_nul %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("facing_nul %%d\n", r);
 
     /* facing vers le bas */
     mk(1, 0, 18, 0, 0, 16, 16, 0);
     g_actors[0].facing_x = 0; g_actors[0].facing_y = 1;
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("facing_bas %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("facing_bas %%d\n", r);
 
     /* un mur entre les deux */
     mk(1, 20, 0, 0, 0, 16, 16, 0); g_actors[0].facing_x = 1; g_actors[0].facing_y = 0;
     mk(1, 19, 0, 0, 0, 16, 16, 0);
     g_wall_x0 = 17; g_wall_x1 = 18;
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("facing_mur %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("facing_mur %%d\n", r);
     mk(1, 10, 0, 0, 0, 16, 16, 0);
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, hover, 4);  printf("hover_ignore_le_mur %%d\n", r);
+    r = pick(1, 2, 0, tag, hover, 4);  printf("hover_ignore_le_mur %%d\n", r);
     /* une zone posee SUR un mur (x=19..35) : seul un mur entre les deux arrete la visee */
     mk(1, 19, 0, 0, 0, 16, 16, 0);
     g_wall_x0 = 19; g_wall_x1 = 35;
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("zone_sur_mur %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("zone_sur_mur %%d\n", r);
     g_wall_x0 = 0; g_wall_x1 = -1;
 
     /* le plus proche l'emporte */
     mk(1, 19, 0, 0, 0, 16, 16, 0); mk(2, 17, 0, 0, 0, 16, 16, 0);
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("plus_proche %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("plus_proche %%d\n", r);
     mk(2, 17, 0, 0, 0, 16, 16, 0); g_actors[2].active = 0;
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("inactif_ignore %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("inactif_ignore %%d\n", r);
     g_actors[2].active = 1;
     /* le type 3 cherche une zone de tag 3, que l'emplacement 2 n'a pas : il est écarté */
     const u8 hors[] = {255, 0, 255, 3};
     g_actors[2].model = 3;
-    r = interact_pick(&g_actors[0], 1, 2, 0, hors, aim, 4);   printf("zone_absente %%d\n", r);
+    r = pick(1, 2, 0, hors, aim, 4);   printf("zone_absente %%d\n", r);
 
     /* sans boite de collision : la boite du joueur est le cadre du sprite (16x16 par defaut) */
     mk(0, 0, 0, 0, 0, 16, 16, 1); g_actors[0].collision.box_count = 0; g_actors[0].facing_x = 1;
     mk(1, 18, 0, 0, 0, 16, 16, 0); mk(2, 100, 100, 0, 0, 16, 16, 0);
-    r = interact_pick(&g_actors[0], 1, 2, 0, tag, aim, 4);    printf("sans_boite %%d\n", r);
+    r = pick(1, 2, 0, tag, aim, 4);    printf("sans_boite %%d\n", r);
 
     /* Le pool PARTAGÉ : les emplacements 3 (type 2, pas un consommateur) et 4 (type 3, en visée). Les posés
        (type 1) consomment au recouvrement : `mix`. */
@@ -108,22 +116,21 @@ int main(void){
         mk(3, 10, 0, 0, 0, 16, 16, 0); g_actors[3].model = 2;     /* recouvre le joueur, mais n'est pas un consommateur */
         mk(4, 30, 0, 0, 0, 16, 16, 0); g_actors[4].model = 3;     /* un consommateur en visée, trop loin */
         g_spool_start = 3; g_spool_hw = 5;
-        pool_bit_set(3); pool_bit_set(4);
+        alive_bit_set(3); alive_bit_set(4);
         g_actors[0].facing_x = 1;
-        r = interact_pick(&g_actors[0], 1, 2, 1, tag, mix, 4);  printf("pool_hors_portee %%d\n", r);
+        r = pick(1, 2, 1, tag, mix, 4);  printf("pool_hors_portee %%d\n", r);
         mk(4, 19, 0, 0, 0, 16, 16, 0); g_actors[4].model = 3;
-        r = interact_pick(&g_actors[0], 1, 2, 1, tag, mix, 4);  printf("pool_atteint %%d\n", r);
+        r = pick(1, 2, 1, tag, mix, 4);  printf("pool_atteint %%d\n", r);
         g_actors[4].active = 0;
-        r = interact_pick(&g_actors[0], 1, 2, 1, tag, mix, 4);  printf("pool_inactif %%d\n", r);
+        r = pick(1, 2, 1, tag, mix, 4);  printf("pool_inactif %%d\n", r);
         g_actors[4].active = 1; g_spool_hw = 4;
-        r = interact_pick(&g_actors[0], 1, 2, 1, tag, mix, 4);  printf("pool_hors_hw %%d\n", r);
+        r = pick(1, 2, 1, tag, mix, 4);  printf("pool_hors_hw %%d\n", r);
         g_spool_hw = 5;
-        r = interact_pick(&g_actors[0], 1, 2, 0, tag, mix, 4);  printf("pool_ignore %%d\n", r);
         /* le plus proche l'emporte, qu'il soit posé ou né : un posé à 1 px plus près que l'instance née */
         mk(1, 18, 0, 0, 0, 16, 16, 0);
-        r = interact_pick(&g_actors[0], 1, 2, 1, tag, aim, 4);   printf("pool_contre_pose %%d\n", r);
+        r = pick(1, 2, 1, tag, aim, 4);   printf("pool_contre_pose %%d\n", r);
         mk(1, 19, 0, 0, 0, 16, 16, 0); mk(4, 17, 0, 0, 0, 16, 16, 0); g_actors[4].model = 3;
-        r = interact_pick(&g_actors[0], 1, 2, 1, tag, aim, 4);   printf("pool_plus_proche %%d\n", r);
+        r = pick(1, 2, 1, tag, aim, 4);   printf("pool_plus_proche %%d\n", r);
     }
     return 0;
 }
@@ -190,7 +197,6 @@ def test_une_instance_du_pool_est_un_consommateur_par_son_type(resultats):
     assert resultats["pool_atteint"] == 4            # l'emplacement né
     assert resultats["pool_inactif"] == -1
     assert resultats["pool_hors_hw"] == -1           # au-delà du plus haut emplacement utilisé : ignoré
-    assert resultats["pool_ignore"] == -1            # `pool` nul : le pool n'est pas parcouru
 
 
 def test_le_plus_proche_l_emporte_entre_pose_et_ne(resultats):
@@ -235,7 +241,7 @@ def _scene_coffre(dossier: Path, pooled: bool, handler: bool):
     has = lambda sym, event: handler and event == "on_interact"
     layout = SimpleNamespace(masks={"interact": "1"})
     lines = (model_desc_lines(project, scene, actors, pi, scripts, has, layout)
-             + interact_tick_lines(project, scene, actors, 0, pi, scripts, has, layout, shown))
+             + interact_tick_lines(project, scene, actors, pi, scripts, has, layout, shown))
     lay = scene_oam_layout(project, scene)
     chest_type = next(m["model_id"] for m in pi if m["shared"]) if pooled else lay.placed_model[1]
     return lines, lay.placed_model[0], chest_type, project.collision_tags().index("zone")
@@ -276,7 +282,7 @@ int main(void){
             g_actors[target].model=chest_type[pooled];
             g_actors[target].collision.boxes[0].tag=@ZONE@;
             g_spool_start=pooled?1:2; g_spool_hw=pooled?4:2;
-            if(pooled) pool_bit_set(target);
+            g_scene_placed=pooled?1:2; alive_bit_set(0); alive_bit_set(target);
             if(frame==3) g_actors[target].active=0;
             if(frame==4) g_actors[target].collision.boxes[0].active=0;
             pressed=(frame!=0);

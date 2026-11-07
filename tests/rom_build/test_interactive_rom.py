@@ -101,7 +101,7 @@ def test_un_prefab_joueur_poole_interagit_par_une_boucle(tmp_path):
 
     assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
-    assert "POOL_EACH(_w)" in main_c and "interact_pick(&g_actors[_w]" in main_c
+    assert "SLOT_EACH(_k){" in main_c and "interact_pick(_a,_ia_tag,_ia_aim," in main_c
     # Sans sprite, pas de tick d'animation : le regard de l'interacteur se suit dans le bloc Interactive.
     assert "(*_a).facing_x=(*_a).dir_x" in main_c
 
@@ -164,5 +164,5 @@ def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
     # La passe est par type : le héros est un mobile, le coffre un bloqueur, posés tous deux.
     assert "static PairRun _bk_run[" in main_c
-    assert f"actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,0,{len(scene.actors)},0);" in main_c
+    assert "_bk_n=block_targets(_bk_bi,_bk_list);" in main_c and "actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,_bk_box);" in main_c
     assert "static void __attribute__((unused)) actors_resolve_blocks(" in main_c

@@ -64,17 +64,16 @@ def contact_helper_lines() -> list[str]:
         "        if(fb&&(event!=2||b->active)) fb(b,a,tb,ta);",
         "    }",
         "}",
-        "/* La passe de l'image. Instantané des acteurs concernés (posés `[lo,hi)` puis nés du pool si `pool`, ordre des",
-        "   emplacements) ; pour chaque paire dont les types ont un couple de tags autorisé (`allowed`, `width` entrées par",
+        "/* La passe de l'image. Instantané des acteurs concernés (tous les emplacements vivants, dans leur ordre :",
+        "   `SLOT_EACH`) ; pour chaque paire dont les types ont un couple de tags autorisé (`allowed`, `width` entrées par",
         "   type) et dont les rectangles se recouvrent, les couples de tags en contact (`actors_overlap_mask`). La liste de",
         "   l'image (`cur`, `cap` au plus) est comparée à celle de l'image précédente (`prev`, `*prev_n`), triées toutes",
         "   deux par paire d'emplacements ; `cur` devient `prev`. En IWRAM, ARM : elle parcourt toutes les paires. */",
         "BS_ATTR_IWRAM",
         "static void __attribute__((unused)) contacts_run(const ModelDesc* desc,const u8* ki,const u16* allowed,int width,",
-        "        ContactBody* list,Contact* prev,int* prev_n,Contact* cur,int cap,int lo,int hi,int pool){",
+        "        ContactBody* list,Contact* prev,int* prev_n,Contact* cur,int cap){",
         "    int n=0;",
-        "    for(int s=lo;s<hi;s++) contact_body_add(s,ki,list,&n);",
-        "    if(pool){ POOL_EACH(s) contact_body_add(s,ki,list,&n); }",
+        "    SLOT_EACH(s) contact_body_add(s,ki,list,&n);",
         "    int cn=0;",
         "    for(int i=0;i<n&&cn<cap;i++){",
         "        const ContactBody* A=&list[i]; const u16* row=allowed+A->kind*width;",
@@ -107,7 +106,7 @@ def contact_helper_lines() -> list[str]:
     ]
 
 
-def contact_tick_lines(p, scene, scene_actors, actor_offset: int, pi, shown, placed_scripts, has_event) -> list[str]:
+def contact_tick_lines(p, scene, scene_actors, pi, shown, placed_scripts, has_event) -> list[str]:
     """La passe de contacts de la scène, ou rien si aucun couple de types n'a de contact qui prévient un script.
 
     `placed_scripts` : le symbole du code Lua de chaque posé (None sans script), aligné sur `scene_actors` ; un modèle
@@ -131,10 +130,7 @@ def contact_tick_lines(p, scene, scene_actors, actor_offset: int, pi, shown, pla
     if not bodies:
         return []
     index = {k: i for i, k in enumerate(bodies)}
-    placed_kinds = set(lay.placed_model)
-    pool_kinds = {m["model_id"] for m in shared}
-    hi = actor_offset + len(scene_actors) if placed_kinds & set(bodies) else actor_offset
-    pool = 1 if pool_kinds & set(bodies) else 0
+    pool = any(m["model_id"] in index for m in shared)
     spool = shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if pool else 0
     capacity = sum(1 for kind in lay.placed_model if kind in index) + spool
     cap = max(1, min(CONTACT_CAPACITY, capacity * (capacity - 1) // 2))
@@ -150,6 +146,6 @@ def contact_tick_lines(p, scene, scene_actors, actor_offset: int, pi, shown, pla
         f"        static Contact _ct_prev[{cap}] EWRAM_BSS, _ct_cur[{cap}] EWRAM_BSS;",
         "        static int _ct_prev_n;",
         f"        contacts_run({model_desc_sym(scene)},_ct_ki,&_ct_allowed[0][0],{len(bodies)},_ct_list,_ct_prev,"
-        f"&_ct_prev_n,_ct_cur,{cap},{actor_offset},{hi},{pool});",
+        f"&_ct_prev_n,_ct_cur,{cap});",
         "    }",
     ]

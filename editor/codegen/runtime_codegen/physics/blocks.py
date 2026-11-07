@@ -15,7 +15,7 @@ traverse). Rien n'est émis sans mobile ni bloqueur ; les aides C ne le sont que
 bloquante.
 
 Posés et nés passent par le même chemin : les tables sont indexées par TYPE d'emplacement (`Actor.model`), et l'aide
-C parcourt les posés puis les emplacements utilisés du pool partagé.
+C parcourt les emplacements vivants de la scène (`SLOT_EACH`).
 """
 from __future__ import annotations
 
@@ -42,6 +42,8 @@ BLOCKER_MOVING = 0x80
 # Les tables de la passe sont lues à chaque couple testé : rangées en IWRAM, comme le descripteur de modèle (la ROM coûte
 # des états d'attente à chaque lecture ; sans section, GCC remet en ROM une table jamais écrite).
 _IW = ' __attribute__((section(".data.model_desc")))'
+# Au-delà de ce nombre de bloqueurs possibles (4 octets chacun), la liste de l'image passe de l'IWRAM à l'EWRAM.
+_LIST_IWRAM = 128
 
 
 def project_has_blockers(p) -> bool:
@@ -107,24 +109,37 @@ def _block_lines() -> list[str]:
         "/* Les boîtes qui peuvent arrêter un mobile se lisent par COUPLE DE TYPES (`Actor.model`), que le mobile et le",
         "   bloqueur soient posés ou nés : un `PairRun` (actor_types_static.h) désigne, dans `box` (rang, bit haut",
         "   BLOCKER_MOVING), la suite des boîtes bloquantes du type du bloqueur que ce type de mobile rencontre. */",
+        "/* La liste des bloqueurs de l'image, relevée avant la passe : emplacement et rang compact de son type, dans",
+        "   l'ordre des emplacements. Sans position : un mobile qui est aussi un bloqueur bouge pendant la passe, ses",
+        "   boîtes se relisent en direct. Elle évite de relire le type de chaque emplacement pour chaque mobile. */",
+        "typedef struct { u16 slot; u8 kind; u8 pad; } BlockTarget;",
+        "static inline __attribute__((always_inline)) void block_target_add(int s,const u8* bi,BlockTarget* out,int* n){",
+        "    const Actor* t=&g_actors[s]; u8 j=bi[t->model];",
+        "    if(j==255||!t->active) return;",
+        "    BlockTarget* e=&out[(*n)++]; e->slot=s; e->kind=j;",
+        "}",
+        "static int __attribute__((unused)) block_targets(const u8* bi,BlockTarget* out){",
+        "    int n=0;",
+        "    SLOT_EACH(s) block_target_add(s,bi,out,&n);",
+        "    return n;",
+        "}",
         *_typed_lines(one_way=False),
     ]
 
 
 def _typed_lines(one_way: bool) -> list[str]:
-    """Le blocage d'un mobile contre tous les emplacements, posés `[lo,hi)` puis nés du pool si `pool`. `runs` est la
-    ligne du type du mobile, indexée par le rang compact du type du bloqueur (`bi[model]`, 255 = pas un bloqueur). Les
-    posés passent avant le pool, chaque boîte du mobile à son tour : l'ordre des poussées de l'ancien chemin posé."""
+    """Le blocage d'un mobile contre les bloqueurs de la liste de l'image (`list`, `n`), chaque boîte du mobile à son
+    tour. `runs` est la ligne du type du mobile, indexée par le rang compact du type du bloqueur."""
     sfx = "_ow" if one_way else ""
     ow_param = ",const u8* ow" if one_way else ""
-    ow_arg = ",ow+runs[j].first" if one_way else ""
+    ow_arg = ",ow+run->first" if one_way else ""
     push = (["            if(!ow[k]) block_push(a,m,t,b);",
              "            else if(!drop) block_push_one_way(a,m,t,b,ow[k]);"]
             if one_way else ["            block_push(a,m,t,b);"])
     target = [
-        "            const Actor* t=&g_actors[s]; u8 j=bi[t->model];",
-        "            if(j==255||t==a||!t->active||!runs[j].n) continue;",
-        f"            block_run{sfx}(a,m,t,box+runs[j].first{ow_arg},runs[j].n,idle"
+        "            const Actor* t=&g_actors[list[k].slot]; const PairRun* run=&runs[list[k].kind];",
+        "            if(t==a||!run->n) continue;",
+        f"            block_run{sfx}(a,m,t,box+run->first{ow_arg},run->n,idle"
         f"{',drop' if one_way else ''});",
     ]
     return [
@@ -139,25 +154,17 @@ def _typed_lines(one_way: bool) -> list[str]:
         *[line[4:] for line in push],
         "    }",
         "}",
-        "/* Parcourt tous les emplacements pour chaque mobile : en IWRAM, ARM, sans temps d'attente. */",
+        "/* Parcourt tous les bloqueurs pour chaque mobile : en IWRAM, ARM, sans temps d'attente. */",
         "BS_ATTR_IWRAM",
         f"static void __attribute__((unused)) actors_resolve_blocks{sfx}(Actor* a,u8 body_mask,const PairRun* runs,"
-        f"const u8* bi,const u8* box{ow_param},int lo,int hi,int pool){{",
+        f"const BlockTarget* list,int n,const u8* box{ow_param}){{",
         "    if(!a->active) return;",
         "    int idle=!a->vx&&!a->vy;",
         *(["    int drop=g_drop_through&&g_drop_through[a->inst];"] if one_way else []),
         "    for(int i=0;i<a->collision.box_count;i++){",
         "        const CollisionShape* m=&a->collision.boxes[i];",
         "        if(!(body_mask&(1u<<i))||!m->active) continue;",
-        "        for(int s=lo;s<hi;s++){",
-        *target,
-        "        }",
-        "    }",
-        "    if(!pool) return;",
-        "    for(int i=0;i<a->collision.box_count;i++){",
-        "        const CollisionShape* m=&a->collision.boxes[i];",
-        "        if(!(body_mask&(1u<<i))||!m->active) continue;",
-        "        POOL_EACH(s){",
+        "        for(int k=0;k<n;k++){",
         *target,
         "        }",
         "    }",
@@ -166,7 +173,7 @@ def _typed_lines(one_way: bool) -> list[str]:
     ]
 
 
-def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[str]:
+def block_tick_lines(p, scene, scene_actors, pi, shown) -> list[str]:
     """La passe de blocage de la scène : chaque mobile, posé ou né, contre chaque bloqueur, posé ou né.
 
     Tout se décide par TYPE d'emplacement (`Actor.model`, `OamLayout.placed_model` pour les posés, `model_id` pour le
@@ -242,12 +249,13 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
     one_way = any(ow)
     walls = any(wall for _k, _m, wall, _r in movers)
 
-    placed_kinds = set(lay.placed_model)
-    pool_kinds = {m["model_id"] for m in shared}
-    hi = actor_offset + len(scene_actors) if placed_kinds & set(blocking) else actor_offset
-    pool = 1 if pool_kinds & set(blocking) else 0
-    call = (f"actors_resolve_blocks{'_ow' if one_way else ''}(_a,_bk_mask[_mi],_bk_run[_mi],_bk_bi,_bk_box,"
-            f"{'_bk_ow,' if one_way else ''}{actor_offset},{hi},{pool});")
+    call = (f"actors_resolve_blocks{'_ow' if one_way else ''}(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,"
+            f"_bk_box{',_bk_ow' if one_way else ''});")
+    # La taille de la liste des bloqueurs : les posés d'un type bloqueur, puis tout le pool partagé s'il en fait naître.
+    pool = any(m["model_id"] in blocking for m in shared)
+    spool = shared[0]["spool"]["end"] - shared[0]["spool"]["start"] if pool else 0
+    capacity = sum(1 for kind in lay.placed_model if kind in blocking) + spool
+    where = "" if capacity <= _LIST_IWRAM else " EWRAM_BSS"
     if walls:
         step = ("{ u8 _mi=_bk_mi[_a->model]; if(_mi!=255){ int _bx=_a->x,_by=_a->y; " + call
                 + " if(_bk_wall[_mi]&&(_a->x!=_bx||_a->y!=_by)&&mover_in_wall(_a,_bk_wall[_mi])){ _a->x=_bx; _a->y=_by; } } }")
@@ -268,8 +276,8 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
         f"        static PairRun _bk_run[{len(movers)}][{len(blocker_kinds)}]{_IW}={{{','.join(run_rows)}}};",
         f"        static u8 _bk_box[{len(box)}]{_IW}={{{','.join(map(str, box))}}};",
         *([f"        static u8 _bk_ow[{len(ow)}]{_IW}={{{','.join(map(str, ow))}}};"] if one_way else []),
-        *("    " + line for line in each_slot(
-            step, len(scene_actors) if placed_kinds & set(mover_index) else 0, actor_offset,
-            bool(pool_kinds & set(mover_index)))),
+        f"        static BlockTarget _bk_list[{capacity}]{where};",
+        "        int _bk_n=block_targets(_bk_bi,_bk_list);",
+        *("    " + line for line in each_slot(step)),
         "    }",
     ]

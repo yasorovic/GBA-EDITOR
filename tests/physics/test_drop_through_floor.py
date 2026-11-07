@@ -29,7 +29,7 @@ u16 floor_store[2];
 u16 *g_actor_floor = floor_store;
 u8 drop_store[2];
 u8 *g_drop_through = drop_store;
-int g_spool_start, g_spool_hw;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 %(helpers)s
 
@@ -45,6 +45,7 @@ static void essai(const char* nom, int drop){
     g_actors[0] = boite(48, 42, 8, 8); g_actors[0].inst = 0; g_actors[0].model = %(type_corps)s;   /* le corps : bas = 50 */
     g_actors[1] = boite(40, 50, 24, 8); g_actors[1].inst = 1; g_actors[1].model = %(type_appui)s;  /* l'appui : haut = 50 */
     floor_store[0] = floor_store[1] = 0; drop_store[0] = drop; drop_store[1] = 0;
+    g_scene_placed = 2; g_spool_hw = 2; g_alive_bits[0] = 0; alive_bit_set(0); alive_bit_set(1);   /* deux posés */
 %(lines)s
     printf("%%s %%d\n", nom, floor_store[0] == 2);
 }
@@ -70,7 +71,7 @@ def _resultats(tmp_path, one_way: str) -> dict[str, int]:
     scene = Scene(name="S", actors=[corps, appui], physics_enabled=True)
     project = Project(tmp_path / f"Drop_{one_way}")
     project.scenes.items = [scene]
-    lignes = floor_tick_lines(project, [(corps, None), (appui, None)], 0, scene, [], shown)
+    lignes = floor_tick_lines(project, [(corps, None), (appui, None)], scene, [], shown)
     assert any("actors_floor" in ligne for ligne in lignes)
     type_corps, type_appui = scene_oam_layout(project, scene).placed_model
     source = SONDE % {"helpers": "\n".join(floor_helper_lines()), "lines": "\n".join(lignes),

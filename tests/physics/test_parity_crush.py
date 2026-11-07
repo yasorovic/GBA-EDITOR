@@ -38,7 +38,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #define G_ACTOR_COUNT 6
 Actor g_actors[6];
 u8 g_support_normal = 1;
-int g_spool_start = 3, g_spool_hw = 3;
+int g_spool_start = 3, g_spool_hw = 3, g_scene_placed = 0;
 u32 g_alive_bits[1], g_alive_epoch;
 static int appels[6], obstacle[6];
 void @SYM@_on_crushed(Actor* a, Actor* o){ appels[a->inst]++; obstacle[a->inst] = o->inst; }
@@ -56,11 +56,12 @@ static Actor corps(int x, int y, int vx, int w, int h){
 /* Posés : plateforme 0, passager 1, mur 2. Pool partagé : 3, 4, 5. */
 static void place(int slot, Actor a, int model){
     a.inst = slot; a.model = model; g_actors[slot] = a;
-    if(slot >= g_spool_start){ if(slot + 1 > g_spool_hw) g_spool_hw = slot + 1; pool_bit_set(slot); }
+    if(slot >= g_spool_start && slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
+    alive_bit_set(slot);
 }
 static void joue(const char* topo, int kp, int ap, int wp){
     for(int i = 0; i < 6; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; appels[i] = 0; obstacle[i] = -1; }
-    g_spool_hw = 3; g_alive_bits[0] = 0;
+    g_spool_hw = 3; g_alive_bits[0] = 0; g_scene_placed = 3;   /* 0, 1 et 2 : les posés */
     int k = kp ? 0 : 3, a = ap ? 1 : 4, w = wp ? 2 : 5;
     place(k, corps(40, 50, 512, 24, 8), @TYPE_K@);       /* la plateforme avance de 2 px par image */
     place(a, corps(48, 42, 0, 8, 8), @TYPE_A@);          /* le passager posé dessus (bas = 50) */
@@ -113,7 +114,7 @@ def _emissions(tmp_path) -> dict:
     actors = [(a, None) for a in scene.actors]
     # Le passager posé et le né appellent le même code : son script définit `on_crushed`.
     table = model_desc_lines(project, scene, actors, pi, [None, sym, None], lambda s, ev: s == sym and ev == "on_crushed")
-    before, after, crush = kinematic_tick_parts(project, actors, 0, scene, pi, shown)
+    before, after, crush = kinematic_tick_parts(project, actors, scene, pi, shown)
     return {"sym": sym, "table": table, "before": before, "after": after, "crush": crush,
             "types": [models[pf.name]["model_id"] for pf in prefabs]}
 

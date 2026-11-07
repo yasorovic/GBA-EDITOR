@@ -808,16 +808,32 @@ static inline void actor_slot_tables_clear(int k) {
     g_rigid_rest[k][0] = 0; g_rigid_rest[k][1] = 0;
 }
 
+/* Le modèle fournit les valeurs initiales. L'emplacement fournit son identité
+   de stockage et sa génération, y compris quand un spawn reprend un posé. */
+static inline void __attribute__((unused, noinline)) actor_init_slot(
+        int slot, int entry, const Actor* initial, const OamEntry* display) {
+    Actor* actor = &g_actors[slot];
+    u16 generation = actor->gen + 1;
+    *actor = *initial;
+    actor->gen = generation;
+    actor->inst = slot;
+    actor->oam_entry = entry;
+    actor_slot_tables_clear(slot);
+    if (entry >= 0) g_oam_entries[entry] = *display;
+    actor->alive = 1;
+    alive_bit_set(slot);
+}
+
 /* Activation / destruction */
 static inline void actor_destroy_internal(Actor* s)  {
-    s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; pool_bit_clear(s->inst);
+    s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; alive_bit_clear(s->inst);
     actor_slot_tables_clear(s->inst);
     if (g_spool_grp) {
         /* Détruire la racine d'un modèle à parties détruit le sous-arbre : le groupe entier est rendu au pool. */
         int g = g_spool_grp[s->model];
         for (int k = 1; k < g; k++) {
             Actor* c = group_part(s, k);
-            c->active = 0; c->alive = 0; c->gen++; c->model = 0; actor_oam_entry(c)->visible = 0; pool_bit_clear(c->inst);
+            c->active = 0; c->alive = 0; c->gen++; c->model = 0; actor_oam_entry(c)->visible = 0; alive_bit_clear(c->inst);
             actor_slot_tables_clear(c->inst);
         }
     }

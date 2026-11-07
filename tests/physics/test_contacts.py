@@ -17,7 +17,7 @@ def _lignes(tmp_path, acteurs, scripts, reagit):
     scene = Scene(name="S", actors=list(acteurs))
     p = Project(tmp_path)
     p.scenes.items = [scene]
-    return "\n".join(contact_tick_lines(p, scene, [(a, None) for a in acteurs], 0, [], None, scripts,
+    return "\n".join(contact_tick_lines(p, scene, [(a, None) for a in acteurs], [], None, scripts,
                                         lambda s, ev: s in reagit and ev == "on_collision_enter"))
 
 
@@ -57,7 +57,7 @@ def test_la_matrice_des_tags_retire_un_couple(tmp_path):
     p = Project(tmp_path)
     p.scenes.items = [scene]
     p.settings.collision_disabled_pairs = [pair_key("hero", "ghost")]
-    code = "\n".join(contact_tick_lines(p, scene, [(a, None), (b, None)], 0, [], None, ["A", None],
+    code = "\n".join(contact_tick_lines(p, scene, [(a, None), (b, None)], [], None, ["A", None],
                                        lambda s, ev: s == "A"))
     # A (hero) rencontre ses copies ; le couple hero / ghost est retiré par la matrice.
     assert re.search(r"_ct_allowed\[1\]\[1\][^=]*=\{\{1\}\};", code)

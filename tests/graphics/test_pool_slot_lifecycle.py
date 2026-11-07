@@ -40,4 +40,4 @@ def test_le_spawn_ne_reprend_qu_un_emplacement_libre(tmp_path):
     from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene = _boss_project(tmp_path)
     code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
-    assert "spool_slot_free(_k+_j)" in code and "g_actors[_i].active   = 1; g_actors[_i].alive = 1;" in code
+    assert "spool_slot_free(_k+_j)" in code and "actor_init_slot(_i," in code

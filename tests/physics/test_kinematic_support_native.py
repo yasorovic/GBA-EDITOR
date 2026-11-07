@@ -18,7 +18,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 Actor g_actors[4];
 u8 g_support_normal = 1;
-int g_spool_start, g_spool_hw;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 %(helpers)s
 
@@ -113,7 +113,7 @@ def test_le_build_emet_le_transport_du_cote_d_appui_de_la_scene(tmp_path, gravit
                   physics_gravity_x=gravite[0], physics_gravity_y=gravite[1])
     p = Project(tmp_path)
     p.scenes.items = [scene]
-    _before, after, _crush = kinematic_tick_parts(p, [(plateforme, None), (joueur, None)], 0, scene)
+    _before, after, _crush = kinematic_tick_parts(p, [(plateforme, None), (joueur, None)], scene)
     # Le côté d'appui de la scène est cuit dans l'appel, le dernier argument.
     appel = "\n".join(after)
     assert f"kinematic_carry_all(_kin_list,_kin_n,&_kin_run[0][0],1,_kin_riders,_kin_nr,_kin_pair,_kin_d,{normale});" in appel

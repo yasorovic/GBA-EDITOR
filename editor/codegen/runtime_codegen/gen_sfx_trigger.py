@@ -28,6 +28,13 @@ def sfx_trigger_info(p: Project, owner) -> tuple[Optional[str], int, str]:
     return f"SFX_{c_ident(comp.sfx_name)}", volume_to_effect(sfx.volume), comp.trigger
 
 
+def sfx_on_spawn_lines(p: Project, owner, indent: str) -> list[str]:
+    effect, volume, trigger = sfx_trigger_info(p, owner)
+    if effect and trigger == "on_spawn":
+        return [f"{indent}sfx_play({effect}, {volume}, 0);   /* SoundFxComponent : {owner.name} */"]
+    return []
+
+
 def sfx_on_destroy_table(p: Project, all_scene_data: list[dict],
                            scene_pis: list[list[dict]]) -> list[str]:
     """Le SFX à jouer juste avant qu'un actor de tel TAG soit désactivé, indexé
