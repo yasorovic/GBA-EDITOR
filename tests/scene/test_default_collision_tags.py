@@ -52,6 +52,7 @@ def test_collision_enter_is_dispatched_to_scene_actor_script(tmp_path):
     worker.run()
 
     main_c = (Path(project.root) / "build" / "src" / "main.c").read_text(encoding="utf-8")
-    # la paire (0, 1) est une ligne de la table des contacts : les handlers de A puis ceux de B
-    assert (f"{{0,1,1,{{{scene.name}_A_on_collision_enter,0,0}},"
-            f"{{{scene.name}_B_on_collision_enter,0,0}}}}") in main_c
+    # Le crochet de chacun est dans la ligne de son type du descripteur, que lit la passe de contacts.
+    assert f".on_contact={{{scene.name}_A_on_collision_enter,0,0}}" in main_c
+    assert f".on_contact={{{scene.name}_B_on_collision_enter,0,0}}" in main_c
+    assert "contacts_run(g_model_desc_" in main_c

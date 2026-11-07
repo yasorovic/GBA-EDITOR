@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_raster.py — rasterisation des fonds et aperçus.
+"""ui/scene_manager/canvas/canvas_raster.py : rasterisation des fonds et aperçus.
 
 Extrait de `scene_canvas` (A3), le bloc le plus bas : rendu PAR TUILE d'un layer
 BG dans le canvas (palette d'origine de l'asset + overrides de scène peints),

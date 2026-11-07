@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_ui_scene.py — l'interface d'une scène dans `scene_init` : images, routage de rendu par nœud.
+"""runtime_codegen/gen_ui_scene.py : l'interface d'une scène dans `scene_init` : images, routage de rendu par nœud.
 
 Colle `gen_ui` (tables projet) à `gen_text` (allocation OBJ) ; à part de `gen_ui`, que `gen_text` importe déjà."""
 from __future__ import annotations

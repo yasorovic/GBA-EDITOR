@@ -1,4 +1,4 @@
-"""ui/common/source_import.py — « importer » : choisir un fichier, le copier dans le dossier que l'onglet Disk affiche, créer l'asset qui le pointe.
+"""ui/common/source_import.py : « importer » : choisir un fichier, le copier dans le dossier que l'onglet Disk affiche, créer l'asset qui le pointe.
 
 C'est *Create from source* précédé d'un sélecteur de fichier et d'une copie. Une seule entrée d'historique : Ctrl+Z retire
 la copie ET l'asset. Les « + » des sprites et des sons y passent.

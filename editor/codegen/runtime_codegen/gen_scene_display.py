@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_scene_display.py — les registres d'affichage qu'une scène pose dans `scene_init` : DISPCNT,
+"""runtime_codegen/gen_scene_display.py : les registres d'affichage qu'une scène pose dans `scene_init` : DISPCNT,
 mélange de couleurs (BLDCNT, BLDALPHA, BLDY) et windows (WIN0, WIN1, fenêtre-objet).
 
 L'ordre est une contrainte du matériel : les windows se posent APRÈS DISPCNT (cf. `scene_display_lines`)."""

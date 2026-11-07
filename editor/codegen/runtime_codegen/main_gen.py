@@ -19,7 +19,9 @@ from codegen.runtime_codegen.physics.blocks import block_helper_lines, project_h
 from codegen.runtime_codegen.physics.body import project_has_one_way, project_one_way_tile_dirs
 from codegen.runtime_codegen.physics.budget import physics_budget_line
 from codegen.runtime_codegen.physics.impulses import impulse_helper_lines
+from codegen.runtime_codegen.physics.contacts import contact_helper_lines
 from codegen.runtime_codegen.physics.kinematic import kinematic_helper_lines, project_has_kinematic
+from codegen.runtime_codegen.physics.motion import motion_helper_lines
 from codegen.runtime_codegen.physics.floor import project_has_floors, floor_helper_lines
 from codegen.runtime_codegen.gen_affine import compute_affine_info
 from codegen.runtime_codegen.gen_camera import camera_table_lines
@@ -32,7 +34,7 @@ from codegen.runtime_codegen.gen_scene_data import scene_data_lines
 from codegen.runtime_codegen.gen_scene_display import scene_dispcnt
 from codegen.runtime_codegen.gen_scene_init import gen_scene_init
 from codegen.runtime_codegen.gen_scene_query import (
-    bg_info, collision_pairs, lua_actor_indices, obj_tiles_used, sprite_offsets_for, ui_image_sprites,
+    bg_info, lua_actor_indices, obj_tiles_used, sprite_offsets_for, ui_image_sprites,
 )
 from codegen.runtime_codegen.gen_scene_switch import (
     actor_lookup_lines, scene_enter_lines, scene_transitions, vtable_lines,
@@ -182,6 +184,8 @@ def generate_main(
 
     # ── Character solver (dispatch via pointeur) ──────────────────
     L += character_solver_lines(project_one_way_tile_dirs(p))
+    # Le pas du mouvement automatique, lu par le descripteur de modèle (cf. physics/motion.py).
+    L += motion_helper_lines()
     if project_has_kinematic(p):
         L += kinematic_helper_lines()
     if project_has_floors(p):
@@ -191,6 +195,8 @@ def generate_main(
     if project_has_blockers(p):
         L += block_helper_lines(project_has_one_way(p))
         L += impulse_helper_lines()
+    # Les contacts entre acteurs (`on_collision_*`), lus au descripteur de modèle (cf. physics/contacts.py).
+    L += contact_helper_lines()
 
     # ── Cartes de collision et palettes, par scène ────────────────
     L += scene_data_lines(p, all_scene_data)
@@ -244,7 +250,7 @@ def generate_main(
 
         L += gen_scene_tick(
             p, sc, act_off, scene_bgi[i], sa, scene_lua_idx[i], scene_pis[i],
-            sprite_offsets, sprite_nframes, collision_pairs(p, sa, act_off, scene_lua_idx[i]),
+            sprite_offsets, sprite_nframes,
             actor_defined_events=actor_defined_events,
             affine_info=compute_affine_info(act_off, sa, _var_names(p)),
             input_layout=_input_layout,

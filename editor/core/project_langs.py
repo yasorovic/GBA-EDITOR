@@ -1,4 +1,4 @@
-"""core/project_langs.py — les traductions : un fichier par langue, à côté du
+"""core/project_langs.py : les traductions : un fichier par langue, à côté du
 maître.
 
 ```

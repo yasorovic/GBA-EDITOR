@@ -1,7 +1,8 @@
 """Parité posé / spawné du contact au sol (`physics_body.floor`) : quatre topologies, un seul résultat.
 
 Le corps (Character ou Rigid) et son appui (Static, Kinematic ou Rigid) sont chacun posé ou né dans le pool : posé/posé,
-posé/pool, pool/posé, pool/pool. Les lignes C sont celles de `floor_tick_lines` pour chaque topologie, compilées avec les
+posé/pool, pool/posé, pool/pool. Les lignes C sont celles de `floor_tick_lines` pour une vraie scène où les deux prefabs
+sont posés ET spawnés (un seul chemin, chaque topologie ne choisit que ses emplacements vivants), compilées avec les
 aides C réelles ; la sonde rapporte QUEL acteur la table `g_actor_floor` désigne (le corps porté ou non, l'appui ou
 un autre). Les quatre topologies doivent donner le même verdict que posé/posé, qui sert de référence.
 
@@ -39,17 +40,19 @@ TOPOLOGIES = {
     "pool_pool": (False, False),
 }
 
-CORPS_MODEL, APPUI_MODEL = 1, 2
-
 SONDE = r"""
 #include <stdio.h>
 typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
+#define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
+#define EWRAM_BSS                                 /* hors GBA : mémoire ordinaire */
 Actor g_actors[4];
 u16 floor_store[4];
 u16 *g_actor_floor = floor_store;
-int g_spool_start, g_spool_hw;
+u8 *g_drop_through = 0;
+u8 g_support_normal = 1;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 @HELPERS@
 
@@ -64,12 +67,12 @@ static Actor boite(int x, int y, int vy, int w, int h){
 /* Les emplacements 0 et 1 sont posés, 2 et 3 sont le pool partagé (g_spool_start = 2). */
 static void reinit(void){
     for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; floor_store[i] = 0; }
-    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0;
+    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
 }
 static void pose_en_pool(int slot, Actor a, int model){
     a.inst = slot; a.model = model; g_actors[slot] = a;
     if(slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
-    pool_bit_set(slot);
+    alive_bit_set(slot);
 }
 @TOPOLOGIES@
 
@@ -80,38 +83,53 @@ int main(void){
 """
 
 
-def _lines(tmp_path, couple, corps_pose: bool, appui_pose: bool) -> list[str]:
+def _emissions(tmp_path, couple) -> dict:
+    """Les lignes émises pour une vraie scène où les prefabs `Corps` et `Appui` sont posés (emplacements 0 et 1) ET
+    spawnés : un seul chemin, chaque topologie ne choisit que les emplacements vivants. Rend aussi le type de chacun."""
+    import copy
+    from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     from codegen.runtime_codegen.physics.floor import floor_tick_lines
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
-    from core.models.scene import Actor
+    from core.models.scene import Actor, Prefab, Scene
     from core.project import Project
+    from oam_fixtures import faire_naitre
 
     mode_corps, mode_appui = couple
-    project = Project.create(tmp_path / f"Sol_{mode_corps}_{mode_appui}", "Sol")
-    scene = project.active_scene
-    corps = Actor(name="Corps", components=[CollisionShapeComponent(solid=True),
-                                            PhysicsBodyComponent(mode=mode_corps)])
-    appui = Actor(name="Appui", components=[CollisionShapeComponent(solid=False, response="block"),
-                                            PhysicsBodyComponent(mode=mode_appui)])
-    posés = [a for a, pose in ((corps, corps_pose), (appui, appui_pose)) if pose]
-    pool = [{"shared": True, "model_id": model, "sym": a.name.lower(), "prefab": a, "spool": {"start": 2, "end": 4}}
-            for a, pose, model in ((corps, corps_pose, CORPS_MODEL), (appui, appui_pose, APPUI_MODEL)) if not pose]
-    return floor_tick_lines(project, [(a, None) for a in posés], 0, scene, pool, shown)
+    dossier = tmp_path / f"Sol_{mode_corps}_{mode_appui}"
+    corps = Prefab(name="Corps")
+    corps.actor.components += [CollisionShapeComponent(solid=True), PhysicsBodyComponent(mode=mode_corps)]
+    appui = Prefab(name="Appui")
+    appui.actor.components += [CollisionShapeComponent(solid=False, response="block"),
+                               PhysicsBodyComponent(mode=mode_appui)]
+    scene = Scene(name="S", physics_enabled=True, actors=[
+        Actor(name=f"{pf.name}Pose", prefab_name=pf.name, components=copy.deepcopy(pf.actor.components))
+        for pf in (corps, appui)])
+    project = Project(dossier)
+    project.scenes.items = [scene]
+    project.prefabs.items = [corps, appui]
+    faire_naitre(dossier, scene, "Corps", "Appui")
+    pi = scene_pi(project, scene)
+    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
+    return {"lines": floor_tick_lines(project, [(a, None) for a in scene.actors], scene, pi, shown),
+            "c": ids["Corps"], "a": ids["Appui"]}
 
 
-def _topologie_c(nom: str, corps_pose: bool, appui_pose: bool, lines: list[str]) -> str:
-    cles = (("c", corps_pose), ("a", appui_pose))
-    poses = [k for k, pose in cles if pose]
-    pool = [k for k, pose in cles if not pose]
-    slot = {k: i for i, k in enumerate(poses)} | {k: 2 + i for i, k in enumerate(pool)}
+def _topologie_c(nom: str, corps_pose: bool, appui_pose: bool, e: dict) -> str:
+    """Le corps vit à l'emplacement 0 (posé) ou 2 (pool), l'appui à 1 ou 3 ; posé ou né, le type de son prefab."""
+    slot = {"c": 0 if corps_pose else 2, "a": 1 if appui_pose else 3}
     boites = {"c": "boite(x, y, vy, 8, 8)", "a": "boite(40, 50, 0, 24, 8)"}
-    placement = [f"    g_actors[{slot[k]}] = {boites[k]}; g_actors[{slot[k]}].inst = {slot[k]};" for k in poses]
-    placement += [f"    pose_en_pool({slot[k]}, {boites[k]}, {CORPS_MODEL if k == 'c' else APPUI_MODEL});" for k in pool]
+    placement = []
+    for k, pose in (("c", corps_pose), ("a", appui_pose)):
+        if pose:
+            placement.append(f"    g_actors[{slot[k]}] = {boites[k]}; g_actors[{slot[k]}].inst = {slot[k]}; alive_bit_set({slot[k]});"
+                             f" g_actors[{slot[k]}].model = {e[k]};")
+        else:
+            placement.append(f"    pose_en_pool({slot[k]}, {boites[k]}, {e[k]});")
     c, a = slot["c"], slot["a"]
     return (f"static void topo_{nom}(const char* nom, int x, int y, int vy){{\n    reinit();\n"
             + "\n".join(placement) + "\n"
-            + "\n".join(lines) + "\n"
+            + "\n".join(e["lines"]) + "\n"
             # 1 : le corps est porté par l'appui, 0 : aucun sol, 2 : porté par un autre acteur que l'appui
             f"    int ref = floor_store[{c}];\n"
             f"    printf(\"{nom} %s %d\\n\", nom, ref == 0 ? 0 : ref == {a} + 1 ? 1 : 2);\n"
@@ -128,12 +146,11 @@ def verdicts(tmp_path_factory):
     dossier = tmp_path_factory.mktemp("parite_sol")
     resultats: dict[tuple[str, str, str], int] = {}
     for couple in COUPLES:
-        topologies = []
-        for nom, (corps_pose, appui_pose) in TOPOLOGIES.items():
-            lignes = _lines(dossier, couple, corps_pose, appui_pose)
-            assert any("actor_floor_test" in ligne for ligne in lignes), (
-                f"{couple} / {nom} n'émet aucun test de sol : la sonde ne comparerait rien")
-            topologies.append(_topologie_c(nom, corps_pose, appui_pose, lignes))
+        emis = _emissions(dossier, couple)
+        assert any("actors_floor" in ligne for ligne in emis["lines"]), (
+            f"{couple} n'émet aucun test de sol : la sonde ne comparerait rien")
+        topologies = [_topologie_c(nom, corps_pose, appui_pose, emis)
+                      for nom, (corps_pose, appui_pose) in TOPOLOGIES.items()]
         runs = "\n".join(f'    topo_{nom}("{n}", {x}, {y}, {vy});' for n, x, y, vy in SCENARIOS for nom in TOPOLOGIES)
         source = (SONDE.replace("@HELPERS@", "\n".join(floor_helper_lines()))
                   .replace("@TOPOLOGIES@", "\n".join(topologies)).replace("@RUNS@", runs))

@@ -1,4 +1,4 @@
-"""ui/sprite_editor/sprite_center_panel.py — zone centre : sprite canvas | spritesheet, et dessous la timeline."""
+"""ui/sprite_editor/sprite_center_panel.py : zone centre : sprite canvas | spritesheet, et dessous la timeline."""
 from __future__ import annotations
 from pathlib import Path
 from typing import Optional

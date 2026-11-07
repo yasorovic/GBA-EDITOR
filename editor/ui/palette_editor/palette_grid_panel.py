@@ -1,4 +1,4 @@
-"""ui/palette_editor/palette_grid_panel.py — zone centre : grille de swatches de la banque active.
+"""ui/palette_editor/palette_grid_panel.py : zone centre : grille de swatches de la banque active.
 
 Propriétaire de l'ÉTAT d'édition (banque affichée, slot actif, sélection) et de
 toutes les écritures dans la palette (couleur unique, rampe, vider, supprimer),

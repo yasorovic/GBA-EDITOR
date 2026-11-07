@@ -1,4 +1,4 @@
-"""editor/codegen/window_alloc.py — allocation de WIN0/WIN1 par scène.
+"""editor/codegen/window_alloc.py : allocation de WIN0/WIN1 par scène.
 
 Source de vérité UNIQUE pour « quelle INTENTION (cadre de caméra, panneau UI
 nommé) reçoit quel rang matériel (`WINR_0`/`WINR_1`) ». Même famille que

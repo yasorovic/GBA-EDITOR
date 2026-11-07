@@ -1,4 +1,4 @@
-"""ui/sound_mixer/waveform_view.py — la forme d'onde d'une musique, telle que le deck la jouera.
+"""ui/sound_mixer/waveform_view.py : la forme d'onde d'une musique, telle que le deck la jouera.
 
 On dessine le PCM du `Track` (cf. box_playback.track_for), pas le fichier source : un WAV y paraît
 mono, au taux et à la quantification que la ROM portera, un module tel que le rend l'émulation. Ce

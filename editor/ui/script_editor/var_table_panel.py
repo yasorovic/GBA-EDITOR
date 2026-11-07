@@ -1,4 +1,4 @@
-"""ui/script_editor/var_table_panel.py — liste GLOBALS/CONSTANTS de la sidebar Script Editor."""
+"""ui/script_editor/var_table_panel.py : liste GLOBALS/CONSTANTS de la sidebar Script Editor."""
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox, QMenu,
     QSizePolicy, QLabel,

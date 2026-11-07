@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_palette.py — les palettes en RAM et le catalogue.
+"""codegen/runtime_codegen/gen_palette.py : les palettes en RAM et le catalogue.
 
 Extrait de `main_gen` (A3). Les mots PAL_OBJ_RAM/PAL_BG_RAM d'une scène (dérivés
 du layout de banques, cf. `palette_alloc`) et la table `g_palettes` du catalogue.

@@ -34,30 +34,18 @@ def test_static_body_n_emet_ni_mouvement_ni_sommeil():
     settings = SimpleNamespace(physics_gravity_x=0.0, physics_gravity_y=0.5)
     actors = [(static, None)]
 
-    assert physics_motion_lines(scene, settings, actors, 0, []) == []
-    assert physics_sleep_lines(scene, settings, actors, 0, []) == []
+    assert physics_motion_lines(scene, settings, actors, []) == []
+    assert physics_sleep_lines(scene, settings, actors, []) == []
 
 
-def test_le_tick_du_pool_n_emet_le_solveur_de_carte_que_pour_les_characters():
-    from codegen.runtime_codegen import shared_pool_gen
-    from codegen.runtime_codegen.physics.body import physics_collider_mask, uses_character_solver
+def test_le_descripteur_ne_donne_un_masque_de_carte_qu_aux_corps_mobiles():
+    """`ModelDesc.tile_mask` : la passe de carte unique lit ce masque, pour un posé comme pour un né."""
+    from codegen.runtime_codegen.model_desc import tile_mask
 
-    legacy = _actor("Legacy")
-    character = _actor("Hero", mode="CharacterBody")
-    static = _actor("Wall", mode="StaticBody")
-    models = [
-        {"shared": True, "model_id": 1, "sym": "legacy", "prefab": legacy},
-        {"shared": True, "model_id": 2, "sym": "hero", "prefab": character},
-        {"shared": True, "model_id": 3, "sym": "wall", "prefab": static},
-    ]
-    lines = "\n".join(shared_pool_gen.tile_lines(
-        models, lambda *_: False,
-        lambda owner: (physics_collider_mask(owner, map_only=True)
-                       if uses_character_solver(owner) else 0)))
-
-    assert "case 1: resolve_actor_tiles(_a, 1," in lines
-    assert "case 2: resolve_actor_tiles(_a, 1," in lines
-    assert "case 3: resolve_actor_tiles" not in lines
+    assert tile_mask(_actor("Legacy")) == 1                       # sans corps : Character par repli
+    assert tile_mask(_actor("Hero", mode="CharacterBody")) == 1
+    assert tile_mask(_actor("Wall", mode="StaticBody")) == 0
+    assert tile_mask(_actor("Sensor", solid=False)) == 0
 
 
 def test_une_valeur_inconnue_est_refusee_au_lieu_d_etre_remplacee():
@@ -175,6 +163,7 @@ def test_une_relation_de_collider_absente_est_refusee_par_la_validation():
 
 def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
     from types import SimpleNamespace
+    from codegen.runtime_codegen.model_desc import body_desc
     from codegen.runtime_codegen.physics.motion import physics_motion_lines
     from core.models.scene import Scene
 
@@ -184,21 +173,20 @@ def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
     scene = Scene(name="Platform")
     settings = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
     lines = "\n".join(physics_motion_lines(
-        scene, settings, [(character, None), (kinematic, None), (rigid, None)], 3, []))
+        scene, settings, [(character, None), (kinematic, None), (rigid, None)], []))
 
-    assert "(&g_actors[3])->vx+=64; (&g_actors[3])->vy+=128;" in lines   # Character : gravité seule, son script l'applique.
-    assert "actor_apply_velocity(&g_actors[3]);" not in lines
-    assert "(&g_actors[4])->vx+=64; (&g_actors[4])->vy+=128;" in lines
-    assert "actor_apply_velocity(&g_actors[4]);" in lines
-    assert "(&g_actors[5])->vx+=64; (&g_actors[5])->vy+=128;" in lines
-    assert "actor_apply_velocity(&g_actors[5]);" in lines
+    # Un seul pas pour tous les emplacements posés, avec la gravité de la scène en Q8 ; le mode vient du descripteur.
+    assert "SLOT_EACH(_k){" in lines                             # un seul parcours, posés et nés
+    assert "body_motion_step(_a,&g_model_desc_Platform[_a->model],64,128," in lines
+    assert "POOL_EACH" not in lines                               # aucun modèle ne naît dans cette scène
+    assert body_desc(character) == (1, 1, 256)                    # Character : gravité seule, son script l'applique
+    assert body_desc(kinematic) == (2, 1, 256)
+    assert body_desc(rigid) == (3, 1, 256)
 
 
 def test_character_et_kinematic_peuvent_ignorer_la_gravite_de_scene():
-    from types import SimpleNamespace
-    from codegen.runtime_codegen.physics.motion import physics_motion_lines
+    from codegen.runtime_codegen.model_desc import body_desc
     from core.models.components import components_from_list, components_to_list
-    from core.models.scene import Scene
 
     assert PhysicsBodyComponent(mode="CharacterBody").use_scene_gravity is True
     assert PhysicsBodyComponent(mode="KinematicBody").use_scene_gravity is True
@@ -209,17 +197,13 @@ def test_character_et_kinematic_peuvent_ignorer_la_gravite_de_scene():
     character.components[-1].use_scene_gravity = False
     kinematic = _actor("Lift", mode="KinematicBody")
     kinematic.components[-1].use_scene_gravity = False
-    settings = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
-    lines = "\n".join(physics_motion_lines(
-        Scene(name="Platform"), settings, [(character, None), (kinematic, None)], 0, []))
-    assert "g_actors[0]" not in lines
-    assert "vy+=" not in lines
-    assert "actor_apply_velocity(&g_actors[1]);" in lines
+    assert body_desc(character) == (1, 1, 0)                      # aucune part de gravité
+    assert body_desc(kinematic) == (2, 1, 0)                      # la vitesse s'intègre, sans gravité
 
 
 def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
     from types import SimpleNamespace
-    from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
+    from codegen.runtime_codegen.physics.motion import motion_helper_lines, physics_motion_lines, physics_sleep_lines
     from core.models.scene import Scene
 
     rigid = _actor("Crate", mode="RigidBody")
@@ -230,23 +214,21 @@ def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
         physics_sleep_enabled=True, physics_sleep_threshold=0.05,
         physics_sleep_frames=20, physics_solver_iterations=4,
     )
-    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], 2, []))
-    sleep = "\n".join(physics_sleep_lines(scene, settings, [(rigid, None)], 2, []))
+    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], []))
+    sleep = "\n".join(physics_sleep_lines(scene, settings, [(rigid, None)], []))
 
-    assert "physics_sleep<20" in motion
-    assert "->vy+=128" in motion
-    assert "->vy*192" in motion
-    assert "->vy>768" in motion
-    assert "physics_sleep++" in sleep
+    # gravité (0, 128), part de vitesse gardée 192 / 256, chute max 768, sommeil après 20 images.
+    assert "body_motion_step(_a,&g_model_desc_Inherited[_a->model],0,128,192,768,20);" in motion
     # Le repos se lit sur la position : rayon = seuil (13 en Q8) x délai (20 frames), autour d'une ancre par emplacement.
-    assert "_dy<= 260&&_dy>=-260" in sleep
-    assert "g_rigid_rest[(&g_actors[2])->inst]" in sleep
-    assert "_r[0]=(&g_actors[2])->x; _r[1]=(&g_actors[2])->y; (&g_actors[2])->physics_sleep=0;" in sleep
-    assert "->vy<= 13" not in sleep
+    assert "SLOT_EACH(_k){" in sleep
+    assert "body_sleep_step(_a,&g_model_desc_Inherited[_a->model],260,20);" in sleep
+    helpers = "\n".join(motion_helper_lines())
+    assert "int* r=g_rigid_rest[a->inst];" in helpers and "a->physics_sleep=0;" in helpers
 
 
 def test_un_rigid_module_sa_gravite_et_peut_refuser_le_sommeil():
     from types import SimpleNamespace
+    from codegen.runtime_codegen.model_desc import body_desc
     from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
     from core.models.scene import Scene
 
@@ -262,49 +244,56 @@ def test_un_rigid_module_sa_gravite_et_peut_refuser_le_sommeil():
         physics_sleep_frames=30, physics_solver_iterations=4,
     )
 
-    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], 0, []))
-    sleep = physics_sleep_lines(scene, settings, [(rigid, None)], 0, [])
+    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], []))
+    sleep = physics_sleep_lines(scene, settings, [(rigid, None)], [])
 
-    assert "->vx+=-32;" in motion and "->vy+=-64;" in motion
-    assert "physics_sleep" not in motion
+    assert "body_motion_step(_a,&g_model_desc_Air[_a->model],64,128,256,2048,30);" in motion
+    assert body_desc(rigid) == (3, 0, -128)                       # gravité x -0,5, ne dort pas
     assert sleep == []
 
 
-def test_le_transport_kinematic_est_prepare_sans_etat_runtime():
-    from types import SimpleNamespace
+def _kinematic_parts(tmp_path, actors):
+    """(avant, après, écrasement) émis pour une vraie scène de ces acteurs posés (types 1, 2, ... dans l'ordre)."""
     from codegen.runtime_codegen.physics.kinematic import kinematic_tick_parts
+    from core.models.scene import Scene
+    from core.project import Project
+    scene = Scene(name="S", actors=list(actors), physics_enabled=True)
+    project = Project(tmp_path)
+    project.scenes.items = [scene]
+    return kinematic_tick_parts(project, [(a, None) for a in actors], scene)
 
+
+def test_le_transport_kinematic_est_prepare_sans_etat_runtime(tmp_path):
     platform = _actor("Platform", mode="KinematicBody")
     platform.components[0].response = "block"
     rider = _actor("Rider", mode="CharacterBody")
-    project = SimpleNamespace(settings=SimpleNamespace(
-        collision_disabled_pairs=[], collision_tags=[]))
 
-    before, after, deltas = kinematic_tick_parts(
-        project, [(platform, None), (rider, None)], 4)
+    before, after, crush = _kinematic_parts(tmp_path, [platform, rider])
     code = "\n".join(before + after)
 
-    assert "_kin_old_x_4=g_actors[4].x" in code
-    assert "kinematic_carry(&g_actors[4],&g_actors[5]" in code
-    assert "_kin_ground" not in code
-    assert deltas == {5: ("_kin_dx_5", "_kin_dy_5")}
+    # Types 1 (Platform) et 2 (Rider) : la plateforme est relevée avant le mouvement, le passager porté après.
+    assert "_kin_pi[3]" in code and "={255,0,255};" in code
+    assert "int _kin_n=kinematic_platforms(_kin_pi,_kin_list);" in code
+    assert "kinematic_carry_all(_kin_list,_kin_n,&_kin_run[0][0],1,_kin_riders,_kin_nr,_kin_pair,_kin_d,1);" in code
+    assert "int _kin_nr=kinematic_riders(_kin_ri,_kin_riders);" in code
+    assert "SLOT_EACH(_kz) _kin_d[_kz][0]=" in code      # le déplacement porté, remis à zéro à chaque image
+    assert crush == []                                   # aucun StaticBody : rien à écraser
 
 
-def test_un_character_transporte_ne_declenche_l_ecrasement_que_sur_un_static():
-    from types import SimpleNamespace
-    from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs
-
+def test_un_character_transporte_ne_declenche_l_ecrasement_que_sur_un_static(tmp_path):
     platform = _actor("Platform", mode="KinematicBody")
     platform.components[0].response = "block"
     rider = _actor("Rider", mode="CharacterBody")
     wall = _actor("Wall", mode="StaticBody")
     wall.components[0].response = "block"
-    project = SimpleNamespace(settings=SimpleNamespace(
-        collision_disabled_pairs=[], collision_tags=[]))
 
-    assert kinematic_crush_pairs(project, [(platform, None), (rider, None), (wall, None)], 4) == {
-        5: [(0, 6, 0)],
-    }
+    _before, _after, crush = _kinematic_parts(tmp_path, [platform, rider, wall])
+    code = "\n".join(crush)
+
+    # Types 1 (Platform), 2 (Rider), 3 (Wall) : seul le Character est écrasé, seulement contre le Static.
+    assert "_kc_ci[4]" in code and "={255,255,0,255};" in code
+    assert "_kc_wi[4]" in code and "={255,255,255,0};" in code
+    assert "_kc_pair[1]" in code and "={{0,0}};" in code
 
 
 def test_le_tick_emet_on_crushed_pour_un_obstacle_static(tmp_path):
@@ -324,11 +313,13 @@ def test_le_tick_emet_on_crushed_pour_un_obstacle_static(tmp_path):
     symbol = scene_actor_sym(scene.name, rider.name)
 
     code = "\n".join(gen_scene_tick(
-        project, scene, 0, [], actors, {1}, [], {}, {}, [],
+        project, scene, 0, [], actors, {1}, [], {}, {},
         actor_defined_events={symbol: {"on_crushed"}},
     ))
 
-    assert f"{symbol}_on_crushed(&g_actors[1],&g_actors[2])" in code
+    # Le crochet est lu au descripteur, posé ou né : la ligne du Rider le cite, la passe d'écrasement le lit.
+    assert f".on_crushed={symbol}_on_crushed}},   /* " in code
+    assert "kinematic_crush(_a,&g_model_desc_Scene_01[_a->model],_kc_mask[_ci],_kc_run[_ci],_kc_wi,_kc_pair," in code
 
 
 def test_le_tick_emet_on_crushed_pour_la_carte_sans_static(tmp_path):
@@ -347,37 +338,51 @@ def test_le_tick_emet_on_crushed_pour_la_carte_sans_static(tmp_path):
     symbol = scene_actor_sym(scene.name, rider.name)
 
     code = "\n".join(gen_scene_tick(
-        project, scene, 0, [], actors, {1}, [], {}, {}, [],
+        project, scene, 0, [], actors, {1}, [], {}, {},
         actor_defined_events={symbol: {"on_crushed"}},
     ))
 
-    assert f"{symbol}_on_crushed(&g_actors[1],0)" in code
+    # L'écrasement par la carte passe par le descripteur (`body_tile_step`), la ligne du posé cite le crochet.
+    assert f".on_crushed={symbol}_on_crushed}},   /* " in code and "posé : Rider" in code
+    assert "body_tile_step(_a,&g_model_desc_Scene_01[_a->model],0,_kin_d[_a->inst]);" in code
 
 
-def test_le_floor_final_relit_static_et_kinematic():
-    from types import SimpleNamespace
+def _floor_supports(tmp_path, actors) -> dict[int, dict[int, list[tuple[int, int]]]]:
+    """Par type de corps : {type d'appui : couples (boîte de corps, boîte d'appui)}, lus dans les tables de la passe
+    de contact au sol émise pour une vraie scène de ces acteurs posés (types 1, 2, ... dans l'ordre)."""
+    import re
     from codegen.runtime_codegen.physics.floor import floor_tick_lines
+    from core.models.scene import Scene
+    from core.project import Project
+    scene = Scene(name="S", actors=list(actors), physics_enabled=True)
+    project = Project(tmp_path)
+    project.scenes.items = [scene]
+    code = "\n".join(floor_tick_lines(project, [(a, None) for a in actors], scene))
+    table = lambda nom: [int(v) for v in re.findall(r"\d+", re.search(rf"{nom}(?:\[\d+\])+[^=]*=\{{(.*)\}};", code)[1])]
+    bodies, supports, runs, pairs = table("_fl_bi"), table("_fl_si"), table("_fl_run"), table("_fl_pair")
+    ns = sum(1 for j in supports if j != 255)
+    out = {}
+    for kind, i in enumerate(bodies):
+        if i == 255:
+            continue
+        row = runs[2 * ns * i: 2 * ns * (i + 1)]
+        out[kind] = {s: [(pairs[4 * k], pairs[4 * k + 1]) for k in range(row[2 * j], row[2 * j] + row[2 * j + 1])]
+                     for s, j in enumerate(supports) if j != 255 and row[2 * j + 1]}
+    return out
 
+
+def test_le_floor_final_relit_static_et_kinematic(tmp_path):
     character = _actor("Hero", mode="CharacterBody")
     static = _actor("Floor", mode="StaticBody")
     static.components[0].response = "block"
     platform = _actor("Platform", mode="KinematicBody")
     platform.components[0].response = "block"
-    project = SimpleNamespace(settings=SimpleNamespace(
-        collision_disabled_pairs=[], collision_tags=[]))
 
-    code = "\n".join(floor_tick_lines(
-        project, [(character, None), (static, None), (platform, None)], 3))
-
-    assert "g_actor_floor[3]=0" in code
-    assert "actor_floor_test(&g_actors[3],0,&g_actors[4],0)" in code
-    assert "actor_floor_test(&g_actors[3],0,&g_actors[5],0)" in code
+    # Types 1 (Hero), 2 (Floor), 3 (Platform) : seul le Character est un corps, il repose sur les deux.
+    assert _floor_supports(tmp_path, [character, static, platform]) == {1: {2: [(0, 0)], 3: [(0, 0)]}}
 
 
-def test_le_floor_final_d_un_rigid_relit_static_character_et_rigid():
-    from types import SimpleNamespace
-    from codegen.runtime_codegen.physics.floor import floor_tick_lines
-
+def test_le_floor_final_d_un_rigid_relit_static_character_et_rigid(tmp_path):
     crate = _actor("Crate", mode="RigidBody")
     static = _actor("Floor", mode="StaticBody")
     static.components[0].response = "block"
@@ -385,19 +390,13 @@ def test_le_floor_final_d_un_rigid_relit_static_character_et_rigid():
     hero.components[0].response = "block"
     other = _actor("Other", mode="RigidBody")
     other.components[0].response = "block"
-    project = SimpleNamespace(settings=SimpleNamespace(
-        collision_disabled_pairs=[], collision_tags=[]))
 
-    code = "\n".join(floor_tick_lines(
-        project, [(crate, None), (static, None), (hero, None), (other, None)], 0))
+    supports = _floor_supports(tmp_path, [crate, static, hero, other])
 
-    assert "g_actor_floor[0]=0" in code
-    assert "actor_floor_test(&g_actors[0],0,&g_actors[1],0)" in code
-    assert "actor_floor_test(&g_actors[0],0,&g_actors[2],0)" in code
-    assert "actor_floor_test(&g_actors[0],0,&g_actors[3],0)" in code
-    # Le Character ne se pose toujours pas sur un Rigid ni sur un autre Character.
-    assert "actor_floor_test(&g_actors[2],0,&g_actors[0],0)" not in code
-    assert "actor_floor_test(&g_actors[2],0,&g_actors[3],0)" not in code
+    # Types 1 (Crate), 2 (Floor), 3 (Hero), 4 (Other). Le Rigid repose sur le Static, le Character et l'autre Rigid ;
+    # le Character ne se pose toujours que sur le Static, ni sur un Rigid ni sur un autre Character.
+    assert supports[1] == {2: [(0, 0)], 3: [(0, 0)], 4: [(0, 0)]}
+    assert supports[3] == {2: [(0, 0)]}
 
 
 def test_l_etat_de_floor_est_en_ewram_sans_grossir_actor(tmp_path):

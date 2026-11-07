@@ -1,4 +1,4 @@
-"""ui/common/reveal.py — REVEAL : ouvrir l'explorateur de fichiers du système sur un élément.
+"""ui/common/reveal.py : REVEAL : ouvrir l'explorateur de fichiers du système sur un élément.
 
 Deux gestes portent deux noms dans tout l'éditeur, et ne se mélangent pas :
 

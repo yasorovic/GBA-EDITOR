@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_alt_duplicate.py — le geste Alt+glisser.
+"""ui/scene_manager/canvas/canvas_alt_duplicate.py : le geste Alt+glisser.
 
 Trois temps, rien d'autre :
   1. Alt+clic sur un item  → le geste prend la main (la vue ne délègue RIEN à Qt :

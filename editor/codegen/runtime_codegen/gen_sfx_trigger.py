@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_sfx_trigger.py — les déclencheurs SoundFx d'un acteur ou d'un prefab (`on_spawn`, `on_destroy`)."""
+"""runtime_codegen/gen_sfx_trigger.py : les déclencheurs SoundFx d'un acteur ou d'un prefab (`on_spawn`, `on_destroy`)."""
 from __future__ import annotations
 
 from codegen.c_names import sym as c_sym
@@ -26,6 +26,13 @@ def sfx_trigger_info(p: Project, owner) -> tuple[Optional[str], int, str]:
     if sfx is None:
         return None, 0, comp.trigger
     return f"SFX_{c_ident(comp.sfx_name)}", volume_to_effect(sfx.volume), comp.trigger
+
+
+def sfx_on_spawn_lines(p: Project, owner, indent: str) -> list[str]:
+    effect, volume, trigger = sfx_trigger_info(p, owner)
+    if effect and trigger == "on_spawn":
+        return [f"{indent}sfx_play({effect}, {volume}, 0);   /* SoundFxComponent : {owner.name} */"]
+    return []
 
 
 def sfx_on_destroy_table(p: Project, all_scene_data: list[dict],

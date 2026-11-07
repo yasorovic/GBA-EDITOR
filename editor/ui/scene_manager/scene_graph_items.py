@@ -1,4 +1,4 @@
-"""ui/scene_manager/scene_graph_items.py — items peints du Graphe des scènes.
+"""ui/scene_manager/scene_graph_items.py : items peints du Graphe des scènes.
 
 Trois formes, une par chose que la projection peut produire :
 

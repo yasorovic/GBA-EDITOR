@@ -1,4 +1,4 @@
-"""ui/data_editor/data_commands.py — les écritures annulables de la grille.
+"""ui/data_editor/data_commands.py : les écritures annulables de la grille.
 
 Ce qui n'est PAS ici, et pourquoi : ajouter ou supprimer une TABLE
 (`AddResourceCmd` / `DeleteResourceCmd` de `core.history` le font déjà pour

@@ -1,4 +1,4 @@
-"""ui/common/shortcut_hints.py — table des raccourcis flottante d'un canvas.
+"""ui/common/shortcut_hints.py : table des raccourcis flottante d'un canvas.
 
 Un seul widget pour tous les canvas (Scene Manager, Graphe des scènes,
 Background Editor, Sprite Editor, Graphe sonore, Palette Editor) : un cartouche

@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_scene_data.py — les tableaux ROM propres à chaque scène : carte de collision à plat et
+"""runtime_codegen/gen_scene_data.py : les tableaux ROM propres à chaque scène : carte de collision à plat et
 palettes OBJ/BG actives (16 banques de 16 couleurs, résolues depuis le catalogue du projet)."""
 from __future__ import annotations
 

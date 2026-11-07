@@ -1,4 +1,4 @@
-"""codegen/bg_emit.py — émet un fond COMPRESSÉ (métadonnées BackgroundAsset) en C.
+"""codegen/bg_emit.py : émet un fond COMPRESSÉ (métadonnées BackgroundAsset) en C.
 
 Produit des tableaux compatibles grit ({sym}Tiles / {sym}TilesLen / {sym}Map)
 pour réutiliser tel quel le chargement de main_gen (copy16 + load_map). La

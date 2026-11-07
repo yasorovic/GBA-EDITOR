@@ -1,7 +1,8 @@
 """Parité posé / spawné du blocage entre acteurs : quatre topologies, un seul résultat.
 
 Le mobile (CharacterBody) et le bloqueur (StaticBody, réponse `block`) sont chacun posé ou né dans le pool :
-posé/posé, posé/pool, pool/posé, pool/pool. Les lignes C sont celles de `block_tick_lines` pour chaque topologie,
+posé/posé, posé/pool, pool/posé, pool/pool. Les lignes C sont celles de `block_tick_lines` pour une vraie scène où les
+deux prefabs sont posés ET spawnés (un seul chemin : chaque topologie ne choisit que ses emplacements vivants),
 compilées avec les aides C réelles ; le mobile fait un pas puis le blocage le repousse. Les quatre topologies
 doivent donner exactement le même état que posé/posé, qui sert de référence.
 
@@ -36,7 +37,6 @@ TOPOLOGIES = {
     "pool_pool": (False, False),
 }
 
-MOBILE_MODEL, BLOQUEUR_MODEL = 1, 2
 
 SONDE = r"""
 #include <stdio.h>
@@ -44,10 +44,12 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
+#define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
+#define EWRAM_BSS                                 /* hors GBA : mémoire ordinaire */
 u8 *g_drop_through = 0;
 u8 g_support_normal = 1;
 Actor g_actors[4];
-int g_spool_start, g_spool_hw;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 @HELPERS@
 
@@ -73,12 +75,12 @@ static void rapporte(const char* topo, const char* nom, const Actor* a){
 /* Les emplacements 0 et 1 sont posés, 2 et 3 sont le pool partagé (g_spool_start = 2). */
 static void reinit(void){
     for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
-    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0;
+    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
 }
 static void pose_en_pool(int slot, Actor a, int model){
     a.inst = slot; a.model = model; g_actors[slot] = a;
     if(slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
-    pool_bit_set(slot);
+    alive_bit_set(slot);
 }
 @TOPOLOGIES@
 
@@ -89,41 +91,53 @@ int main(void){
 """
 
 
-def _tick_lines(tmp_path, mobile_pose: bool, bloqueur_pose: bool) -> list[str]:
-    """Les lignes que le générateur émet pour cette topologie (mobile = acteur 0 ou modèle 1)."""
+def _emissions(tmp_path) -> dict:
+    """Les lignes que le générateur émet pour une vraie scène où les prefabs `Mobile` et `Bloqueur` sont chacun posé
+    (emplacements 0 et 1) ET spawnés (pool partagé). Une seule émission pour les quatre topologies : le chemin est
+    unique, chaque topologie ne choisit que les emplacements vivants."""
+    import copy
+    from codegen.oam_alloc import scene_oam_layout
+    from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     from codegen.runtime_codegen.physics.blocks import block_tick_lines
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
-    from core.models.scene import Actor
+    from core.models.scene import Actor, Prefab, Scene
     from core.project import Project
+    from oam_fixtures import faire_naitre
 
-    project = Project.create(tmp_path / "Blocage", "Blocage")
-    scene = project.active_scene
-    mobile = Actor(name="Mobile", components=[CollisionShapeComponent(solid=True),
-                                              PhysicsBodyComponent(mode="CharacterBody")])
-    bloqueur = Actor(name="Bloqueur", components=[CollisionShapeComponent(solid=False, response="block"),
-                                                  PhysicsBodyComponent(mode="StaticBody")])
-    posés = [a for a, pose in ((mobile, mobile_pose), (bloqueur, bloqueur_pose)) if pose]
-    pool = [{"shared": True, "model_id": model, "sym": a.name.lower(), "prefab": a}
-            for a, pose, model in ((mobile, mobile_pose, MOBILE_MODEL), (bloqueur, bloqueur_pose, BLOQUEUR_MODEL))
-            if not pose]
-    return block_tick_lines(project, scene, [(a, None) for a in posés], 0, pool, shown)
+    mobile = Prefab(name="Mobile")
+    mobile.actor.components += [CollisionShapeComponent(solid=True), PhysicsBodyComponent(mode="CharacterBody")]
+    bloqueur = Prefab(name="Bloqueur")
+    bloqueur.actor.components += [CollisionShapeComponent(solid=False, response="block"),
+                                  PhysicsBodyComponent(mode="StaticBody")]
+    scene = Scene(name="S", physics_enabled=True, actors=[
+        Actor(name=f"{pf.name}Pose", prefab_name=pf.name, components=copy.deepcopy(pf.actor.components))
+        for pf in (mobile, bloqueur)])
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    p.prefabs.items = [mobile, bloqueur]
+    faire_naitre(tmp_path, scene, "Mobile", "Bloqueur")
+    pi = scene_pi(p, scene)
+    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
+    return {"lines": block_tick_lines(p, scene, [(a, None) for a in scene.actors], pi, shown),
+            "placed": scene_oam_layout(p, scene).placed_model, "mobile": ids["Mobile"], "bloqueur": ids["Bloqueur"]}
 
 
-def _topologie_c(nom: str, mobile_pose: bool, bloqueur_pose: bool, lines: list[str]) -> str:
-    # Les posés prennent les emplacements 0, 1 dans l'ordre mobile, bloqueur; ceux du pool, 2 puis 3.
+def _topologie_c(nom: str, mobile_pose: bool, bloqueur_pose: bool, e: dict) -> str:
+    """Le mobile vit à l'emplacement 0 (posé) ou 2 (pool), le bloqueur à 1 ou 3 ; l'autre emplacement de chacun reste
+    vide. Posé ou né, un emplacement porte le type de son prefab."""
+    slot = {"m": 0 if mobile_pose else 2, "b": 1 if bloqueur_pose else 3}
     placement = []
-    poses = [k for k, pose in (("m", mobile_pose), ("b", bloqueur_pose)) if pose]
-    pool = [k for k, pose in (("m", mobile_pose), ("b", bloqueur_pose)) if not pose]
-    slot = {k: i for i, k in enumerate(poses)} | {k: 2 + i for i, k in enumerate(pool)}
-    for k in poses:
-        placement.append(f"    g_actors[{slot[k]}] = {'mobile(x, y, vx, vy)' if k == 'm' else 'bloqueur()'};"
-                         f" g_actors[{slot[k]}].inst = {slot[k]};")
-    for k in pool:
-        model = MOBILE_MODEL if k == "m" else BLOQUEUR_MODEL
-        placement.append(f"    pose_en_pool({slot[k]}, {'mobile(x, y, vx, vy)' if k == 'm' else 'bloqueur()'}, {model});")
+    for k, pose in (("m", mobile_pose), ("b", bloqueur_pose)):
+        model = e["mobile"] if k == "m" else e["bloqueur"]
+        acteur = "mobile(x, y, vx, vy)" if k == "m" else "bloqueur()"
+        if pose:
+            placement.append(f"    g_actors[{slot[k]}] = {acteur}; g_actors[{slot[k]}].inst = {slot[k]}; alive_bit_set({slot[k]});"
+                             f" g_actors[{slot[k]}].model = {model};")
+        else:
+            placement.append(f"    pose_en_pool({slot[k]}, {acteur}, {model});")
     m = slot["m"]
-    body = "\n".join(lines)
+    body = "\n".join(e["lines"])
     return (f"static void topo_{nom}(const char* nom, int x, int y, int vx, int vy){{\n    reinit();\n"
             + "\n".join(placement)
             + f"\n    g_actors[{m}].x += g_actors[{m}].vx; g_actors[{m}].y += g_actors[{m}].vy;\n{body}\n"
@@ -131,19 +145,22 @@ def _topologie_c(nom: str, mobile_pose: bool, bloqueur_pose: bool, lines: list[s
 
 
 @pytest.fixture(scope="module")
-def etats(tmp_path_factory):
+def emissions(tmp_path_factory):
+    return _emissions(tmp_path_factory.mktemp("parite_blocage_projet"))
+
+
+@pytest.fixture(scope="module")
+def etats(tmp_path_factory, emissions):
     compilateur = compilateur_hote()
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; la parité est vérifiée en CI")
     from codegen.runtime_codegen.physics.blocks import block_helper_lines
 
     dossier = tmp_path_factory.mktemp("parite_blocage")
-    topologies = []
-    for nom, (mobile_pose, bloqueur_pose) in TOPOLOGIES.items():
-        lignes = _tick_lines(dossier, mobile_pose, bloqueur_pose)
-        assert any("actors_resolve_blocks" in ligne for ligne in lignes), (
-            f"la topologie {nom} n'émet aucun blocage : la sonde ne comparerait rien")
-        topologies.append(_topologie_c(nom, mobile_pose, bloqueur_pose, lignes))
+    assert any("actors_resolve_blocks" in ligne for ligne in emissions["lines"]), (
+        "aucun blocage émis : la sonde ne comparerait rien")
+    topologies = [_topologie_c(nom, mobile_pose, bloqueur_pose, emissions)
+                  for nom, (mobile_pose, bloqueur_pose) in TOPOLOGIES.items()]
     runs = "\n".join(f'    topo_{nom}("{n}", {x}, {y}, {vx}, {vy});'
                      for n, x, y, vx, vy in SCENARIOS for nom in TOPOLOGIES)
     source = (SONDE.replace("@HELPERS@", "\n".join(block_helper_lines()))
@@ -161,6 +178,11 @@ def etats(tmp_path_factory):
         topologie, nom, *valeurs = ligne.split()
         etats[(topologie, nom)] = tuple(int(v) for v in valeurs)
     return etats
+
+
+def test_le_pose_et_le_ne_d_un_prefab_ont_le_meme_type(emissions):
+    """Les copies posées identiques au prefab prennent son `model_id` : posé ou né, la même ligne des tables."""
+    assert emissions["placed"] == [emissions["mobile"], emissions["bloqueur"]]
 
 
 @pytest.mark.parametrize("topologie", [t for t in TOPOLOGIES if t != "pose_pose"])

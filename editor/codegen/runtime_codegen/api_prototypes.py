@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/api_prototypes.py — les prototypes de l'API, GÉNÉRÉS.
+"""codegen/runtime_codegen/api_prototypes.py : les prototypes de l'API, GÉNÉRÉS.
 
 Le « 4e lecteur » : `checker`, `codegen` et `refactor` lisent `scripting/api.py`
 (source unique de ce qui est exposé), mais les PROTOTYPES C que les unités de

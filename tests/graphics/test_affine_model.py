@@ -18,7 +18,7 @@ from __future__ import annotations
 from core.models.components import SpriteComponent
 from core.models.scene import Actor
 from codegen.runtime_codegen.gen_affine import (
-    affine_entry, compute_affine_info, affine_oam_lines_dynamic,
+    affine_entry, compute_affine_info, affine_oam_lines,
 )
 
 
@@ -41,15 +41,14 @@ def _sc(**kw) -> SpriteComponent:
 def test_non_affine_ne_reserve_aucun_slot():
     a = _actor()
     sc = _sc()
-    assert affine_entry(a, sc, 3) is None
+    assert affine_entry(a, sc) is None
 
 
-def test_affine_reserve_un_slot_meme_a_identite():
-    """`affine_transform` coché réserve le slot même si scale/rotation valent
-    leur défaut — c'est ce qui laisse le rendu écrire une matrice."""
-    e = affine_entry(_actor(), _sc(affine_transform=True), 7)
-    assert e is not None
-    assert e["slot"] == 7
+def test_affine_est_affine_meme_a_identite():
+    """`affine_transform` coché rend le sprite affine même si scale/rotation valent
+    leur défaut : c'est ce qui laisse le rendu écrire une matrice (prise à la frame)."""
+    e = affine_entry(_actor(), _sc(affine_transform=True))
+    assert e is not None and "slot" not in e
     assert e["scale_x"] == 256 and e["scale_y"] == 256   # Q8, 100%
 
 
@@ -59,21 +58,21 @@ def test_la_case_sur_l_actor_ne_reserve_plus_rien():
     emplacements cohabiteraient et le C émis dépendrait de l'ordre de lecture."""
     a = _actor()
     a.affine_transform = True           # n'est plus un champ du modèle
-    assert affine_entry(a, _sc(), 0) is None
+    assert affine_entry(a, _sc()) is None
 
 
 def test_le_scale_rotation_sans_affine_sont_ignores():
     """Un scale/rotation sur le sprite SANS « Affine transform » ne crée pas de
     slot : sans réservation, aucune matrice n'est écrite."""
     sc = _sc(scale_x=2.0, rotation=45)
-    assert affine_entry(_actor(), sc, 0) is None
+    assert affine_entry(_actor(), sc) is None
 
 
 def test_monde_et_local_finissent_en_champs_actor():
     a = _actor(rotation=90, scale_x=2.0, scale_y=0.5)
     sc = _sc(affine_transform=True,
              rotation=45, scale_x=1.5, scale_y=0.25, offset_x=-8, offset_y=12)
-    e = affine_entry(a, sc, 2)
+    e = affine_entry(a, sc)
     assert e["rotation"] == 90            # monde
     assert e["scale_x"] == 512            # Q8 : 2.0×256
     assert e["scale_y"] == 128            # Q8 : 0.5×256
@@ -83,7 +82,7 @@ def test_monde_et_local_finissent_en_champs_actor():
     assert (e["offset_x"], e["offset_y"]) == (-8, 12)
 
 
-def test_compute_affine_info_compte_des_slots_distincts():
+def test_compute_affine_info_designe_les_poses_affines():
     a1 = _actor()
     a1.components.append(_sc(affine_transform=True))
     a2 = _actor()
@@ -92,9 +91,8 @@ def test_compute_affine_info_compte_des_slots_distincts():
     a3.components.append(_sc())
     scene_actors = [(a1, None), (a2, None), (a3, None)]
     info = compute_affine_info(offset := 10, scene_actors, [])
-    assert set(info) == {10, 11}          # a1 et a2, pas a3
-    assert info[10]["slot"] == 0
-    assert info[11]["slot"] == 1
+    assert set(info) == {10, 11}          # a1 et a2, pas a3 ; aucune matrice réservée
+    assert all("slot" not in e for e in info.values())
 
 
 # ── Le C émis reflète la composition ────────────────────────────────
@@ -109,8 +107,7 @@ def test_oam_dynamic_compose_monde_local_et_offset():
         oam_shape, oam_size = 1, 0     # 8×8 affine
         tiles_per_frame = 1
 
-    entry = affine_entry(a, sc, 0)
-    lines = "\n".join(affine_oam_lines_dynamic(7, entry, SpriteShape(), bt=0, priority_expr="0"))
+    lines = "\n".join(affine_oam_lines(7, SpriteShape(), bt=0, priority_expr="0"))
     # Lecture des champs, plus de globals par slot : le transform MONDE est sur
     # l'Actor, le transform LOCAL sur son entrée OAM.
     assert "g_actors[7].rotation" in lines
@@ -137,9 +134,9 @@ def test_oam_dynamic_compose_monde_local_et_offset():
 
 def test_le_pivot_est_seme_depuis_le_composant_sprite():
     sc = _sc(affine_transform=True, pivot_x=3, pivot_y={"unit": "t", "n": 1})
-    e = affine_entry(_actor(), sc, 0)
+    e = affine_entry(_actor(), sc)
     assert (e["pivot_x"], e["pivot_y"]) == (3, 8)
-    assert (affine_entry(_actor(), _sc(affine_transform=True), 0)["pivot_x"]) == 0
+    assert (affine_entry(_actor(), _sc(affine_transform=True))["pivot_x"]) == 0
 
 
 def test_centrer_sur_le_cadre_a_la_case_affine():
@@ -295,7 +292,7 @@ def test_offset_du_sprite_peut_etre_une_variable():
     names = {("global", "000000000003"): "shake"}
     sc = _sc(affine_transform=True, offset_x={"unit": "t", "n": 2},
              offset_y={"var": "000000000003", "src": "global"})
-    e = affine_entry(_actor(), sc, 0, names=names)
+    e = affine_entry(_actor(), sc, names=names)
     assert e["offset_x"] == 16
     assert e["offset_y"] == "g_shake"
 
@@ -308,7 +305,7 @@ def test_rotation_echelle_variables_dans_le_c():
     a.rotation = {"var": "000000000005", "src": "global"}
     a.scale_x = {"var": "000000000006", "src": "global"}
     sc = _sc(affine_transform=True, rotation=90, scale_y=2.0)
-    e = affine_entry(a, sc, 0, names=names)
+    e = affine_entry(a, sc, names=names)
     assert e["rotation"] == "g_spin"
     assert e["scale_x"] == "((g_zoom)*256/100)"
     assert e["sprite_rotation"] == 90

@@ -1,4 +1,4 @@
-"""ui/sound_mixer/order_range_bar.py — la barre qui coupe un jingle en MODULE : sa table d'ordres, deux poignées, le reste estompé.
+"""ui/sound_mixer/order_range_bar.py : la barre qui coupe un jingle en MODULE : sa table d'ordres, deux poignées, le reste estompé.
 
 Le pendant de `TrimBar` pour un module, dont la plus petite unité est l'ORDRE et non la milliseconde : une cellule par entrée de la
 table brute (marqueurs « +++ » / « --- » compris : ce sont les positions que `mmGetPosition()` rend), et des poignées qui ne se posent

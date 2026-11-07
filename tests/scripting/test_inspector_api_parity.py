@@ -236,13 +236,15 @@ def sortie_sonde(tmp_path_factory):
         pytest.skip(message + " ; il l'est en CI")
 
     from codegen.runtime_codegen.api_prototypes import build_enum_defines
+    from codegen.runtime_codegen.physics.contacts import contact_helper_lines
     dossier = tmp_path_factory.mktemp("box_probe")
     (dossier / "enums.h").write_text("\n".join(build_enum_defines()) + "\n")
+    (dossier / "contacts_gen.h").write_text("\n".join(contact_helper_lines()) + "\n", encoding="utf-8")
     binaire = dossier / "actor_box_probe"
     env = environnement(compilateur)
     r = subprocess.run(
         [compilateur, "-std=c11", "-w", "-O0", "-include", str(dossier / "enums.h"),
-         "-I", str(NATIVE_DIR / "libgba_shim"), "-I", str(MOTEUR_DIR),
+         "-I", str(NATIVE_DIR / "libgba_shim"), "-I", str(MOTEUR_DIR), "-I", str(dossier),
          str(NATIVE_DIR / "actor_box_probe.c"), "-o", str(binaire)],
         capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
@@ -525,31 +527,38 @@ def test_c_un_groupe_garde_sa_partie_detruite_et_rend_tout_avec_sa_racine(sortie
     assert sortie_sonde["pose_parent"] == [1, 1, 1, 1, 1]       # enfant, petit-enfant, sommet (aucun), autre chaîne, nil
     assert sortie_sonde["pose_racine"] == [1, 1, 1, 1, 1]
     assert sortie_sonde["pose_enfant"] == [1, 1]
-    assert sortie_sonde["pose_milieu_mort"] == [1, 1, 1]        # parent mort : nil ; mais le sommet reste la racine ; l'enfant mort se lit nil
-    assert sortie_sonde["pose_sommet_mort"] == [1, 1]
-    assert sortie_sonde["pose_sans_table"] == [1, 1]
+    assert sortie_sonde["pose_milieu_mort"] == [0, 1, 1, 1]     # l'enfant part avec son parent, le sommet reste ; l'enfant mort se lit nil
+    assert sortie_sonde["pose_sommet_mort"] == [0, 1]           # un sommet détruit emporte son enfant, l'autre chaîne ne bouge pas
+    assert sortie_sonde["pose_sans_lien"] == [1, 1]
     assert sortie_sonde["nth_fuzz"] == [0, 1]         # 0 écart avec un parcours complet, sur plus de 1000 vérifications
     assert sortie_sonde["nth_curseur"] == [1]         # et le curseur a bien suivi les boucles qui avancent de 1
     assert sortie_sonde["grp_racine_de"] == [1, 1, 1, 1]   # partie, partie de partie, racine (elle-même), nil
     assert sortie_sonde["grp_parent_de"] == [1, 1, 1, 1]   # la racine, la partie 1, aucun pour une racine, nil
-    assert sortie_sonde["grp_apres_perte"] == [1, 1, 1]    # parent détruit : nil ; la racine reste ; l'acteur détruit n'a pas de racine
+    assert sortie_sonde["grp_apres_perte"] == [0, 0, 1, 1]  # la partie 2 part avec la partie 1 et garde sa place ; la racine vit
     assert sortie_sonde["grp_curseur"] == [2]
     assert sortie_sonde["ref_signe"] == [1, 1]        # génération 0x8000 : handle négatif, résolu
     assert sortie_sonde["ref_300"] == [1]             # au-delà des 256 d'un octet, toujours périmée
     assert sortie_sonde["ref_boucle"] == [1, 1]       # le compteur boucle : la référence meurt, sans devenir nil
     assert sortie_sonde["ref_zero"] == [1, 1]         # génération 0, emplacement 0 : ce n'est pas « aucun acteur »
-    assert sortie_sonde["grp_bits_partie"] == [(1 << 2) | (1 << 4)]   # emplacements 2 et 4 vivants, 3 détruit
+    assert sortie_sonde["grp_bits_partie"] == [1 << 2]    # seule la racine vit : 3 et sa partie 4 sont détruits
     assert sortie_sonde["grp_bits_racine"] == [0]
 
 
 def test_c_une_paire_appelle_enter_collide_exit_dans_l_ordre_avec_les_bons_tags(sortie_sonde):
-    """`contact_pair_run` remplace le bloc de C recopié par paire : même vie d'un contact, une seule copie du code."""
-    assert sortie_sonde["contact_1"] == [1, 0, 0, 1]          # enter des deux côtés qui y répondent
-    assert sortie_sonde["contact_2"] == [1, 1, 0, 1]          # collide : seul le côté A y répond
+    """`contacts_run` : la vie d'un contact (enter, collide, exit), les crochets lus au descripteur de chaque côté.
+    Valeurs : enter, collide, exit de A, puis enter et exit de B."""
+    assert sortie_sonde["contact_1"] == [1, 0, 0, 1, 0]       # enter des deux côtés qui y répondent
+    assert sortie_sonde["contact_2"] == [1, 1, 0, 1, 0]       # collide : seul le côté A y répond
     assert sortie_sonde["contact_tags"] == [1, 0]             # my_box (A) puis other_box (B)
-    assert sortie_sonde["contact_3"] == [1, 1, 1, 1]          # exit
-    assert sortie_sonde["contact_4"] == [1, 1, 1, 1]          # rien de plus une fois éloignés
-    assert sortie_sonde["contact_5"] == [1, 1, 1, 1]          # un côté inactif ne touche pas
+    assert sortie_sonde["contact_3"] == [1, 1, 1, 1, 1]       # exit des deux côtés
+    assert sortie_sonde["contact_4"] == [1, 1, 1, 1, 1]       # rien de plus une fois éloignés
+    assert sortie_sonde["contact_5"] == [1, 1, 1, 1, 1]       # un côté inactif ne touche pas
+    assert sortie_sonde["contact_6"] == [2, 1, 1, 2, 1]       # enter
+    assert sortie_sonde["contact_7"] == [2, 1, 2, 2, 1]       # désactivé : seul A, resté actif, apprend exit
+    assert sortie_sonde["contact_8"] == [3, 1, 2, 3, 1]
+    assert sortie_sonde["contact_9"] == [3, 1, 2, 3, 1]       # détruit : personne n'apprend exit
+    assert sortie_sonde["contact_10"] == [4, 1, 2, 4, 1]
+    assert sortie_sonde["contact_11"] == [5, 1, 2, 5, 1]      # réoccupé : un nouveau enter, pas d'exit pour l'ancien
 
 
 def test_c_scene_gravity_choisit_le_cote_d_appui_et_reveille_les_rigid(sortie_sonde):

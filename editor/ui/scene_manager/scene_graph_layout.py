@@ -1,4 +1,4 @@
-"""ui/scene_manager/scene_graph_layout.py — disposition par couches, pure.
+"""ui/scene_manager/scene_graph_layout.py : disposition par couches, pure.
 
 Pose les nœuds du graphe de gauche à droite, par couches de dépendances : une
 scène est à droite de celles qui mènent à elle. C'est de la présentation, pas du

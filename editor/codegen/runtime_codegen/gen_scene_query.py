@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_scene_query.py — la couche de REQUÊTES du codegen.
+"""codegen/runtime_codegen/gen_scene_query.py : la couche de REQUÊTES du codegen.
 
 Extrait de `main_gen` (A3). Les émetteurs de domaine (`gen_sprite`, `gen_affine`,
 `gen_ui`…) et l'orchestrateur `generate_main` partagent des fonctions d'ANALYSE
@@ -90,20 +90,6 @@ def collision_pair_mask(a, b, settings) -> int:
             if tags_collide(settings, tag_a, tag_b):
                 mask |= 1 << (ci * 4 + cj)
     return mask
-
-
-def actors_can_collide(p, a, b) -> bool:
-    """Ces deux acteurs ont-ils UNE SEULE combinaison de tags qui se rencontre ?
-
-    Si non, la paire n'est pas émise du tout : ni bloc de C, ni
-    entrée dans `_col_prev`, ni test par frame. Le gain est donc en ROM autant
-    qu'en cycles — c'est la raison de filtrer au BUILD plutôt qu'au runtime.
-
-    Sans box d'un côté, il n'y a rien à filtrer : on laisse passer, et le reste
-    du build décide comme avant. Ne rien dire vaut mieux que deviner."""
-    if not actor_collision_shapes(a) or not actor_collision_shapes(b):
-        return True
-    return bool(collision_pair_mask(a, b, p.settings))
 
 
 def scene_has_cmap(scene) -> bool:
@@ -358,19 +344,3 @@ def lua_actor_indices(p, scene_actors: list, offset: int) -> set[int]:
         if abs_sp and abs_sp.suffix.lower() == ".lua":
             idx.add(offset + j)
     return idx
-
-
-def collision_pairs(p, scene_actors: list, offset: int, lua_idx: set[int]) -> list[tuple[int, int]]:
-    """Les paires d'acteurs qui PEUVENT se rencontrer, dont l'un au moins est scripté en Lua.
-
-    La matrice de collision retire ici les paires qui ne peuvent PAS se rencontrer — « les projectiles du
-    joueur ignorent ceux du boss ». Elles ne coûtent alors plus rien : c'était le seul poste qui grandissait
-    en CARRÉ, en taille de ROM comme en temps de frame, et précisément dans la salle la plus chargée."""
-    sa = scene_actors
-    return [
-        (offset + ii, offset + jj)
-        for ii in range(len(sa))
-        for jj in range(ii + 1, len(sa))
-        if ((offset + ii) in lua_idx or (offset + jj) in lua_idx)
-        and actors_can_collide(p, sa[ii][0], sa[jj][0])
-    ]

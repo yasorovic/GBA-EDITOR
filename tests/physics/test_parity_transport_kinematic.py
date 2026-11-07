@@ -1,8 +1,8 @@
 """Parité posé / spawné du transport par une plateforme Kinematic : quatre topologies, un seul résultat.
 
 La plateforme (KinematicBody) et son passager (CharacterBody) sont chacun posé ou né dans le pool : posé/posé, posé/pool,
-pool/posé, pool/pool. Les lignes C sont celles de `kinematic_tick_parts` pour chaque topologie, compilées avec l'aide C
-réelle (`kinematic_carry`) ; à chaque image la plateforme avance de sa vitesse, puis le passager est porté. Les quatre
+pool/posé, pool/pool. Les lignes C sont celles de `kinematic_tick_parts` pour une vraie scène où les deux prefabs sont
+posés ET spawnés (un seul chemin), compilées avec l'aide C réelle (`kinematic_carry_all`) ; à chaque image la plateforme avance de sa vitesse, puis le passager est porté. Les quatre
 topologies doivent donner exactement le même état, image par image, que posé/posé, qui sert de référence : position du
 passager et déplacement porté (celui que la résolution contre la carte ajoute à sa vitesse).
 
@@ -37,16 +37,17 @@ TOPOLOGIES = {
     "pool_pool": (False, False),
 }
 
-PLATEFORME_MODEL, PASSAGER_MODEL = 1, 2
-
 SONDE = r"""
 #include <stdio.h>
 typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #define EWRAM_BSS
+#define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
+u8 g_support_normal = 1;
+#define G_ACTOR_COUNT 4
 Actor g_actors[4];
-int g_spool_start, g_spool_hw;
+int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
 @HELPERS@
 
@@ -64,12 +65,12 @@ static void rapporte(const char* topo, const char* nom, int f, const Actor* k, c
 /* Les emplacements 0 et 1 sont posés, 2 et 3 sont le pool partagé (g_spool_start = 2). */
 static void reinit(void){
     for(int i = 0; i < 4; i++){ g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
-    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0;
+    g_spool_start = 2; g_spool_hw = 2; g_alive_bits[0] = 0; g_scene_placed = 2;   /* 0 et 1 : les posés */
 }
 static void pose_en_pool(int slot, Actor a, int model){
     a.inst = slot; a.model = model; g_actors[slot] = a;
     if(slot + 1 > g_spool_hw) g_spool_hw = slot + 1;
-    pool_bit_set(slot);
+    alive_bit_set(slot);
 }
 @TOPOLOGIES@
 
@@ -80,68 +81,77 @@ int main(void){
 """
 
 
-def _parts(tmp_path, plateforme_pose: bool, passager_pose: bool):
-    """(avant, après, deltas) que le générateur émet pour cette topologie (plateforme et passager)."""
+def _emissions(tmp_path) -> dict:
+    """(avant, après, types) que le générateur émet pour une vraie scène où les prefabs `Plateforme` et `Passager` sont
+    posés (emplacements 0 et 1) ET spawnés : un seul chemin, chaque topologie ne choisit que ses emplacements vivants."""
+    import copy
+    from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     from codegen.runtime_codegen.physics.kinematic import kinematic_tick_parts
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
-    from core.models.scene import Actor
+    from core.models.scene import Actor, Prefab, Scene
     from core.project import Project
+    from oam_fixtures import faire_naitre
 
-    project = Project.create(tmp_path / "Transport", "Transport")
-    scene = project.active_scene
-    plateforme = Actor(name="Plateforme", components=[CollisionShapeComponent(solid=False, response="block"),
-                                                      PhysicsBodyComponent(mode="KinematicBody")])
-    passager = Actor(name="Passager", components=[CollisionShapeComponent(solid=True),
-                                                  PhysicsBodyComponent(mode="CharacterBody")])
-    posés = [a for a, pose in ((plateforme, plateforme_pose), (passager, passager_pose)) if pose]
-    pool = [{"shared": True, "model_id": model, "sym": a.name.lower(), "prefab": a,
-             "spool": {"start": 2, "end": 4}}
-            for a, pose, model in ((plateforme, plateforme_pose, PLATEFORME_MODEL),
-                                   (passager, passager_pose, PASSAGER_MODEL)) if not pose]
-    return kinematic_tick_parts(project, [(a, None) for a in posés], 0, scene, pool, shown)
+    plateforme = Prefab(name="Plateforme")
+    plateforme.actor.components += [CollisionShapeComponent(solid=False, response="block"),
+                                    PhysicsBodyComponent(mode="KinematicBody")]
+    passager = Prefab(name="Passager")
+    passager.actor.components += [CollisionShapeComponent(solid=True), PhysicsBodyComponent(mode="CharacterBody")]
+    scene = Scene(name="S", physics_enabled=True, actors=[
+        Actor(name=f"{pf.name}Pose", prefab_name=pf.name, components=copy.deepcopy(pf.actor.components))
+        for pf in (plateforme, passager)])
+    project = Project(tmp_path)
+    project.scenes.items = [scene]
+    project.prefabs.items = [plateforme, passager]
+    faire_naitre(tmp_path, scene, "Plateforme", "Passager")
+    pi = scene_pi(project, scene)
+    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
+    before, after, _crush = kinematic_tick_parts(project, [(a, None) for a in scene.actors], scene, pi, shown)
+    return {"before": before, "after": after, "k": ids["Plateforme"], "a": ids["Passager"]}
 
 
-def _topologie_c(nom: str, plateforme_pose: bool, passager_pose: bool, before, after, deltas) -> str:
-    cles = (("k", plateforme_pose), ("a", passager_pose))
-    poses = [k for k, pose in cles if pose]
-    pool = [k for k, pose in cles if not pose]
-    slot = {k: i for i, k in enumerate(poses)} | {k: 2 + i for i, k in enumerate(pool)}
+def _topologie_c(nom: str, plateforme_pose: bool, passager_pose: bool, e: dict) -> str:
+    """La plateforme vit à l'emplacement 0 (posé) ou 2 (pool), le passager à 1 ou 3 ; posé ou né, le type de son
+    prefab."""
+    slot = {"k": 0 if plateforme_pose else 2, "a": 1 if passager_pose else 3}
     corps = {"k": "corps(40, 50, kvx, kvy, 24, 8)", "a": "corps(x, y, 0, vy, 8, 8)"}
     placement = []
-    for k in poses:
-        placement.append(f"    g_actors[{slot[k]}] = {corps[k]}; g_actors[{slot[k]}].inst = {slot[k]};")
-    for k in pool:
-        placement.append(f"    pose_en_pool({slot[k]}, {corps[k]}, {PLATEFORME_MODEL if k == 'k' else PASSAGER_MODEL});")
+    for k, pose in (("k", plateforme_pose), ("a", passager_pose)):
+        if pose:
+            placement.append(f"    g_actors[{slot[k]}] = {corps[k]}; g_actors[{slot[k]}].inst = {slot[k]}; alive_bit_set({slot[k]});"
+                             f" g_actors[{slot[k]}].model = {e[k]};")
+        else:
+            placement.append(f"    pose_en_pool({slot[k]}, {corps[k]}, {e[k]});")
     k, a = slot["k"], slot["a"]
-    if a in deltas:
-        dx, dy = deltas[a]
-    else:
-        dx, dy = f"_kin_pd[{a}-g_spool_start][0]", f"_kin_pd[{a}-g_spool_start][1]"
+    dx, dy = f"_kin_d[{a}][0]", f"_kin_d[{a}][1]"      # une ligne par emplacement, posé ou né
     return (f"static void topo_{nom}(const char* nom, int kvx, int kvy, int x, int y, int vy){{\n    reinit();\n"
             + "\n".join(placement) + "\n"
             f"    for(int f = 0; f < {FRAMES}; f++){{\n"
-            + "\n".join(before) + "\n"
+            + "\n".join(e["before"]) + "\n"
             f"        g_actors[{k}].x += g_actors[{k}].vx; g_actors[{k}].y += g_actors[{k}].vy;\n"
-            + "\n".join(after) + "\n"
+            + "\n".join(e["after"]) + "\n"
             f"        rapporte(\"{nom}\", nom, f, &g_actors[{k}], &g_actors[{a}], {dx}, {dy});\n"
             "    }\n}\n")
 
 
 @pytest.fixture(scope="module")
-def etats(tmp_path_factory):
+def emissions(tmp_path_factory):
+    return _emissions(tmp_path_factory.mktemp("parite_transport_projet"))
+
+
+@pytest.fixture(scope="module")
+def etats(tmp_path_factory, emissions):
     compilateur = compilateur_hote()
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; la parité est vérifiée en CI")
     from codegen.runtime_codegen.physics.kinematic import kinematic_helper_lines
 
     dossier = tmp_path_factory.mktemp("parite_transport")
-    topologies = []
-    for nom, (plateforme_pose, passager_pose) in TOPOLOGIES.items():
-        before, after, deltas = _parts(dossier, plateforme_pose, passager_pose)
-        assert any("kinematic_carry" in ligne for ligne in after), (
-            f"la topologie {nom} n'émet aucun transport : la sonde ne comparerait rien")
-        topologies.append(_topologie_c(nom, plateforme_pose, passager_pose, before, after, deltas))
+    assert any("kinematic_carry_all" in ligne for ligne in emissions["after"]), (
+        "aucun transport émis : la sonde ne comparerait rien")
+    topologies = [_topologie_c(nom, plateforme_pose, passager_pose, emissions)
+                  for nom, (plateforme_pose, passager_pose) in TOPOLOGIES.items()]
     runs = "\n".join(f'    topo_{nom}("{n}", {kvx}, {kvy}, {x}, {y}, {vy});'
                      for n, kvx, kvy, x, y, vy in SCENARIOS for nom in TOPOLOGIES)
     source = (SONDE.replace("@HELPERS@", "\n".join(kinematic_helper_lines()))

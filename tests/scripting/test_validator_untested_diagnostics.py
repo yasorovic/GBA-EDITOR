@@ -245,14 +245,14 @@ def test_un_script_attache_sans_aucune_fonction_avertit(project):
 def _oam_layout(monkeypatch, **fields):
     from types import SimpleNamespace
     from codegen import oam_alloc
-    layout = SimpleNamespace(over_budget=False, over_capacity=False, ui=0, placed=0, capacity=256, pools=[], **fields)
+    layout = SimpleNamespace(over_budget=False, over_capacity=False, ui=0, placed=0, capacity=256, pools=[], kinds=2, **fields)
     monkeypatch.setattr(oam_alloc, "scene_oam_layout", lambda _p, _scene: layout)
 
 
 def test_une_interface_qui_depasse_a_elle_seule_l_oam_est_une_erreur(project, monkeypatch):
     from types import SimpleNamespace
     from codegen import oam_alloc
-    layout = SimpleNamespace(over_budget=True, over_capacity=False, ui=140, placed=0, capacity=256, pools=[])
+    layout = SimpleNamespace(over_budget=True, over_capacity=False, ui=140, placed=0, capacity=256, pools=[], kinds=2)
     monkeypatch.setattr(oam_alloc, "scene_oam_layout", lambda _p, _scene: layout)
     found = run(project, validator._check_actor_budget)
     assert says(found, "error", "the interface alone needs 140 OAM entries")

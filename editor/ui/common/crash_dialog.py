@@ -1,4 +1,4 @@
-"""ui/common/crash_dialog.py — la fenêtre qu'on voit quand l'éditeur rencontre
+"""ui/common/crash_dialog.py : la fenêtre qu'on voit quand l'éditeur rencontre
 une erreur inattendue.
 
 Branchée sur `core.crash_log` au démarrage (cf. `main.py`) : le noyau écrit la

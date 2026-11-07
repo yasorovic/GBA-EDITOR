@@ -1,27 +1,23 @@
-"""runtime_codegen/gen_pool.py — le C des instances d'un modèle de prefab : le spawn, la composition de la hiérarchie
-(parent, enfant) et le nom du symbole qui répond d'un acteur.
+"""runtime_codegen/gen_pool.py : le C des instances d'un modèle de prefab : le spawn, les liens de la hiérarchie
+(parent, enfant, `actor_link_slot`) et le nom du symbole qui répond d'un acteur.
 
 `scene_pi` est la liste des pools d'une scène, lue de `oam_alloc.scene_oam_layout`."""
 from __future__ import annotations
 
 from codegen.c_names import scene_actor_sym, sym as c_sym
 from codegen.oam_alloc import scene_oam_layout
+from codegen.runtime_codegen.gen_actor_init import actor_init_lines
 from codegen.runtime_codegen.gen_appearance import appearance_layout
 from codegen.runtime_codegen.gen_scene_query import parent_depths
-from codegen.runtime_codegen.interact_gen import owner_boxes
 from codegen.runtime_codegen.physics.body import without_scene_physics
-from core.models.components import CollisionShapeComponent
 from core.models.field_value import (
-    FieldValue as _FV, number_value as _number_value, var_names_from_project as _var_names,
+    number_value as _number_value,
 )
-from core.models.palette import OWN_PAL_BANK
 from core.models.scene import Scene
 from core.project import Project
 import math
-from codegen.runtime_codegen.gen_affine import affine_init_lines, pool_affine
-from codegen.runtime_codegen.gen_appearance import appearance_init_lines
-from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
-from codegen.runtime_codegen.gen_sprite import initial_state_rank, shown
+from codegen.runtime_codegen.gen_affine import pool_affine
+from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_spawn_lines
 
 
 def scene_pi(p: Project, scene: Scene) -> list[dict]:
@@ -125,31 +121,17 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
     _alay = appearance_layout(p, [], pool_info, obj_layout)   # mêmes numéros que scene_init
     for pi in pool_info:
         s, pf = pi["sym"], pi["prefab"]
-        # L'entrée OAM du membre k de l'instance (0 = racine), ou None : un membre
-        # sans sprite — marqueur, point de tir — n'a ni entrée ni écriture d'affichage.
-        _ranks = pi["member_entries"]
-        # Dans le pool partagé, chaque emplacement a son entrée d'état : celle de la partie k est `_e + k`.
-        _E = lambda k: (("_e" if k == 0 else f"group_entry(_e, {k})") if _ranks[k] >= 0 else None)
-        _e0 = _E(0)
-        sp, sprite = shown(p, pf)      # l'apparence de départ fixe les constantes d'init
-        own = list(sprite.own_palette) if (sprite and getattr(sprite, "own_palette", None)) else []
-        pal = obj_layout.bank_index(getattr(pf, "pal_bank", OWN_PAL_BANK), own) if obj_layout else 0
-        if pal is None:
-            pal = 0
-        boxes = owner_boxes(pf, sprite)
-
         # `pool_init` sort du script Lua du prefab : sans script, il n'y a rien à initialiser ni à lier.
-        from codegen.runtime_codegen.lua_compiler import prefab_lua_script
+        from codegen.runtime_codegen.lua_compiler import prefab_lua_script, script_exports
         has_script = prefab_lua_script(p, pf) is not None
+        script = pf.get_component("script")
+        exports = script_exports(p, script.script) if script else {}
         if has_script:
             L.append(f"extern void {s}_pool_init(Actor* self);")
         # Les instances POSÉES du modèle reçoivent leurs valeurs d'export à l'entrée de scène, par les
         # setters du modèle (comme une instance née d'un spawn avec une table).
         if pi["members"]:
-            from codegen.runtime_codegen.lua_compiler import script_exports
-            from core.models.components import ScriptComponent
-            _sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
-            for _name, _meta in (script_exports(p, _sc.script) if _sc and _sc.script else {}).items():
+            for _name, _meta in exports.items():
                 from scripting.codegen import export_setter_c_type
                 L.append(f"extern void {s}_set_{_name}(Actor* self, {export_setter_c_type(_meta['type'])} v);")
         for ev, sig in [
@@ -161,6 +143,7 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
             ("on_collision_exit",  f"extern void {s}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box);"),
             ("on_tile_collide",    f"extern void {s}_on_tile_collide(Actor* self, int normal_x, int normal_y);"),
             ("on_interact",        f"extern void {s}_on_interact(Actor* self, Actor* who);"),
+            ("on_crushed",         f"extern void {s}_on_crushed(Actor* self, Actor* obstacle);"),
         ]:
             if _def(s, ev):
                 L.append(sig)
@@ -175,146 +158,40 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
         L.append("};")
         if not pi["shared"]:
             continue            # aucun script de la scène ne le fait naître : pas de spawn
+        init = f"actor_spawn_init_{s}" if exports else f"spawn_{s}"
         L += [
             # Rend un Actor* sur l'instance née : un handle
             # directement chaînable côté script, et NULL quand le pool est plein —
             # là où l'ancien -1, un entier, ressortait TOUJOURS vrai dans un test.
-            f"Actor* spawn_{s}(int x, int y) {{",
+            f"Actor* {init}(int x, int y) {{",
             *_shared_spawn_head(s, pi, any(m["shared"] and m["group"] > 1 for m in pool_info)),
         ]
 
-        # Transform affine : `(Actor){0}` remet TOUT à zéro, y compris le slot de
-        # matrice posé par scene_init et les échelles neutres (256 = ×1). Un
-        # prefab affine spawné repartait donc avec une échelle de ZÉRO — matrice
-        # dégénérée, sprite illisible — et avec le slot 0, celui d'un autre actor.
-        # Le slot appartient à la SCÈNE (il change d'une scène à l'autre) : on le
-        # préserve. L'échelle et la rotation appartiennent au PREFAB : on les
-        # repose comme au scene_init, c'est-à-dire à l'état neutre du template.
-        _sp_aff = pool_affine(p, pf, pf) if sp else None
-        _sp_aff = _sp_aff if _e0 else None    # sans entrée, aucun transform d'affichage
-        # L'acteur ET son entrée repartent de zéro ; le lien se repose (-1 : sans sprite).
-        # La génération survit à la remise à zéro et avance : une référence rangée sur l'occupant
-        # précédent de cet emplacement ne désigne plus la nouvelle instance.
-        L.append(f"            {{ u16 _g = g_actors[_i].gen; g_actors[_i] = (Actor){{0}}; "
-                 f"g_actors[_i].gen = _g + 1; }} g_actors[_i].oam_entry = {_e0 or -1};")
-        if _e0:
-            L.append(f"            g_oam_entries[{_e0}] = (OamEntry){{0}};")
-        # Échelle neutre par défaut, comme pour les PARTIES plus bas : `(Actor){0}`
-        # laisse scale à ZÉRO. Pour un prefab racine non-affine servant de parent,
-        # ce zéro écraserait ses enfants à la composition (même règle d'héritage
-        # que côté scène). La branche affine ci-dessous la remplace au besoin par
-        # l'échelle authorée du template.
-        L.append(f"            g_actors[_i].scale_x = 256; g_actors[_i].scale_y = 256;")
-        if _sp_aff:
-            L += [
-                f"            g_actors[_i].rotation     = {_sp_aff['rotation']};",
-                f"            g_actors[_i].scale_x      = {_sp_aff['scale_x']};",
-                f"            g_actors[_i].scale_y      = {_sp_aff['scale_y']};",
-                *affine_init_lines(_sp_aff, _e0, "            "),
-            ]
-        elif _e0:
-            L.append(f"            g_oam_entries[{_e0}].affine_slot = -1;")
-        L += [
-            # x/y en Q8 en interne. `x`/`y` ici sont les entiers
-            # pixels passés à actor:spawn() par le script — <<8 à l'entrée.
-            f"            g_actors[_i].x = x<<8; g_actors[_i].y = y<<8;",
-            f"            g_actors[_i].active   = 1; g_actors[_i].alive = 1; g_actors[_i].inst = _i;",
-            "            pool_bit_set(_i);",
-            f"            g_actors[_i].model    = {pi['model_id']};",
-            *([f"            g_oam_entries[{_e0}].visible = 1;",
-               f"            g_oam_entries[{_e0}].pal_bank = {pal};",
-               f"            g_oam_entries[{_e0}].frame_w  = {sprite.frame_w if sprite else 0};",
-               f"            g_oam_entries[{_e0}].frame_h  = {sprite.frame_h if sprite else 0};",
-               f"            g_oam_entries[{_e0}].anim_state = {initial_state_rank(*shown(p, pf))};",
-               # Le regard d'une instance suit son mouvement comme celui d'un acteur de scène
-               # (`facing_auto` du sprite affiché) : un prefab « Player » vise dans son regard.
-               f"            g_oam_entries[{_e0}].facing_auto = {1 if getattr(sp, 'facing_auto', True) else 0};",
-               *appearance_init_lines(p, pf, _e0, "            ",
-                                       _alay.member_base.get((pi["sym"], 0)))]
-              if _e0 else []),
-            # Une instance de la réserve porte l'identité du modèle (début de sa plage) ; l'emplacement
-            # d'un acteur posé, qu'un spawn reprend, garde l'identité de la scène (son indice).
-            (f"            g_actors[_i].name      = _n < {len(pi['members'])} ? _i : ACTOR_{s.upper()};"
-             if pi["members"] else f"            g_actors[_i].name      = ACTOR_{s.upper()};"),
-            f"            g_actors[_i].collision.box_count = {len(boxes)};",
-        ]
-        for bi, cb in enumerate(boxes):
-            tag_s = "BOXTAG_" + c_sym(cb.tag or "body").upper()
-            _vn = _var_names(p)
-            bx, by = _FV.parse(cb.x, _vn).c_expr(), _FV.parse(cb.y, _vn).c_expr()
-            bw, bh = _FV.parse(cb.w, _vn).c_expr(), _FV.parse(cb.h, _vn).c_expr()
-            L += [
-                f"            g_actors[_i].collision.boxes[{bi}].x=(s8){bx}; g_actors[_i].collision.boxes[{bi}].y=(s8){by};",
-                f"            g_actors[_i].collision.boxes[{bi}].w=(u8){bw};  g_actors[_i].collision.boxes[{bi}].h=(u8){bh};",
-                f"            g_actors[_i].collision.boxes[{bi}].solid={1 if cb.solid else 0}; g_actors[_i].collision.boxes[{bi}].active={1 if cb.active else 0}; g_actors[_i].collision.boxes[{bi}].tag={tag_s};",
-            ]
-        # ── Les ENFANTS de l'instance ─────────────────────────────
-        # Posées juste après la racine, dans l'ordre du template. Leur position
-        # n'est pas écrite ici : elle est recomposée depuis la racine dès la
-        # frame courante (cf. `pool_compose_lines`), et l'écrire deux fois
-        # laisserait croire qu'elle vient d'ici.
-        for k, part in enumerate(getattr(pf, "children", []) or [], start=1):
-            p_sc, p_spr = shown(p, part)
-            p_own = list(p_spr.own_palette) if (p_spr and getattr(p_spr, "own_palette", None)) else []
-            p_pal = (obj_layout.bank_index(getattr(part, "pal_bank", OWN_PAL_BANK), p_own)
-                     if obj_layout else 0) or 0
-            p_boxes = [c for c in part.components
-                       if isinstance(c, CollisionShapeComponent)][:4]
-            _ek = _E(k)      # None : la partie est un marqueur, sans entrée OAM
-            L += [
-                f"            int _s{k} = group_slot(_i, {k});",
-                # Le slot de matrice appartient à la SCÈNE (scene_init le
-                # pose) ; `(Actor){0}` l'effacerait, comme il effaçait celui de
-                # la racine avant que le même garde-fou soit écrit pour elle.
-                *(["            {"] if _ek else []),
-                f"            {{ u16 _g = g_actors[_s{k}].gen; g_actors[_s{k}] = (Actor){{0}}; "
-                f"g_actors[_s{k}].gen = _g + 1; }} g_actors[_s{k}].oam_entry = {_ek or -1};",
-                *([f"            g_oam_entries[{_ek}] = (OamEntry){{0}};",
-                   f"            g_oam_entries[{_ek}].affine_slot = -1; }}"] if _ek else []),
-                # Échelle neutre avant la première composition : `(Actor){0}`
-                # laisse un scale de ZÉRO, donc une matrice dégénérée si l'OAM
-                # sortait avant le tick qui recompose.
-                f"            g_actors[_s{k}].scale_x = 256; g_actors[_s{k}].scale_y = 256;",
-                f"            g_actors[_s{k}].active   = 1; g_actors[_s{k}].alive = 1; g_actors[_s{k}].inst = _s{k};",
-                f"            pool_bit_set(_s{k});",
-                f"            g_actors[_s{k}].model    = {pi['model_id'] + k};",
-                *([f"            g_oam_entries[{_ek}].visible = {1 if getattr(part, 'visible', True) else 0};",
-                   f"            g_oam_entries[{_ek}].pal_bank = {p_pal};",
-                   f"            g_oam_entries[{_ek}].frame_w  = {p_spr.frame_w if p_spr else 0};",
-                   f"            g_oam_entries[{_ek}].frame_h  = {p_spr.frame_h if p_spr else 0};",
-                   f"            g_oam_entries[{_ek}].anim_state = {initial_state_rank(p_sc, p_spr)};",
-                   *appearance_init_lines(p, part, _ek, "            ",
-                                           _alay.member_base.get((pi["sym"], k))),
-                   *(affine_init_lines(_pa, _ek, "            ") if (_pa := pool_affine(p, pf, part)) else [])]
-                  if _ek else []),
-                # La partie porte le tag de sa RACINE : un bras de boss touché,
-                # c'est le boss qui est touché. Elle n'est pas un autre type
-                # d'acteur, elle est un enfant de celui-là.
-                f"            g_actors[_s{k}].name      = ACTOR_{s.upper()};",
-                f"            g_actors[_s{k}].collision.box_count = {len(p_boxes)};",
-            ]
-            for bi, cb in enumerate(p_boxes):
-                tag_s = "BOXTAG_" + c_sym(cb.tag or "body").upper()
-                _vn = _var_names(p)
-                bx, by = _FV.parse(cb.x, _vn).c_expr(), _FV.parse(cb.y, _vn).c_expr()
-                bw, bh = _FV.parse(cb.w, _vn).c_expr(), _FV.parse(cb.h, _vn).c_expr()
-                L += [
-                    f"            g_actors[_s{k}].collision.boxes[{bi}].x=(s8){bx}; g_actors[_s{k}].collision.boxes[{bi}].y=(s8){by};",
-                    f"            g_actors[_s{k}].collision.boxes[{bi}].w=(u8){bw};  g_actors[_s{k}].collision.boxes[{bi}].h=(u8){bh};",
-                    f"            g_actors[_s{k}].collision.boxes[{bi}].solid={1 if cb.solid else 0}; "
-                    f"g_actors[_s{k}].collision.boxes[{bi}].active={1 if cb.active else 0}; "
-                    f"g_actors[_s{k}].collision.boxes[{bi}].tag={tag_s};",
-                ]
+        identity = f"ACTOR_{s.upper()}"
+        # Un spawn qui reprend un posé conserve son identité dans la scène.
+        root_name = f"_n < {len(pi['members'])} ? _i : {identity}" if pi["members"] else identity
+        L += actor_init_lines(
+            p, pf, obj_layout, slot="_i", entry="_e" if pi["member_entries"][0] >= 0 else -1,
+            name=root_name, model=pi["model_id"], position=("x", "y"), active=True,
+            appearance_base=_alay.member_base.get((s, 0)), affine=pool_affine(p, pf, pf),
+            indent="            ",
+        )
+        # Les parties prennent leur transform monde à la première composition, par leur lien.
+        for k, part in enumerate(pf.children, start=1):
+            entry = f"group_entry(_e, {k})" if pi["member_entries"][k] >= 0 else -1
+            L += actor_init_lines(
+                p, part, obj_layout, slot=f"group_slot(_i, {k})", entry=entry,
+                name=identity, model=pi["model_id"] + k, position=(0, 0), active=True,
+                appearance_base=_alay.member_base.get((s, k)), affine=pool_affine(p, pf, part),
+                indent="            ", composed=True,
+            )
+        L += part_link_lines(pf, "_i", "            ")
         if has_script:
             L.append(f"            {s}_pool_init(&g_actors[_i]);")
-        # SoundFxComponent en trigger="on_spawn" — comme pour les actors de
-        # scène ci-dessus, indépendant de tout script sur le prefab.
-        sfx_sym, sfx_vol, sfx_trig = sfx_trigger_info(p, pf)
-        if sfx_sym and sfx_trig == "on_spawn":
-            L.append(f"            sfx_play({sfx_sym}, {sfx_vol}, 0);"
-                     f"   /* SoundFxComponent : {pf.name} */")
-        if _def(s, "on_start"):
-            L.append(f"            {s}_on_start(&g_actors[_i]);")
+        if not exports:
+            L += sfx_on_spawn_lines(p, pf, "            ")
+            if _def(s, "on_start"):
+                L.append(f"            actor_start(actor_ref_make(&g_actors[_i]), {s}_on_start);")
         L += [
             f"            return &g_actors[_i];",
             f"        }}",
@@ -323,215 +200,96 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
             f"}}",
             "",
         ]
+        if exports:
+            # Avec une table Lua, le script pose les exports entre ces deux appels.
+            L += [f"void actor_spawn_start_{s}(Actor* actor) {{", "    if (!actor) return;"]
+            L += sfx_on_spawn_lines(p, pf, "    ")
+            if _def(s, "on_start"):
+                L.append(f"    actor_start(actor_ref_make(actor), {s}_on_start);")
+            L += ["}", f"Actor* spawn_{s}(int x, int y) {{",
+                  f"    Actor* actor = {init}(x, y);",
+                  f"    actor_spawn_start_{s}(actor);",
+                  "    return actor;", "}", ""]
     return L
 
 
-def _visible_line(indent: str, entry, parent_entry, own_visible) -> list[str]:
-    """`visible` d'un enfant = celui de son parent ET le sien. Une entrée OAM
-    n'existe que pour un porteur de sprite : un enfant sans sprite n'a rien à
-    montrer (aucune ligne), et un parent sans sprite ne masque personne — son
-    « visible » vaut vrai. `entry`/`parent_entry` : indices d'entrée, -1 si aucune."""
-    if entry == -1:
-        return []
-    own = 1 if own_visible else 0
-    if parent_entry == -1:
-        return [f"{indent}g_oam_entries[{entry}].visible = {own};"]
-    return [f"{indent}g_oam_entries[{entry}].visible = g_oam_entries[{parent_entry}].visible && {own};"]
+def _local_transform(child, ref, ref_x: int, ref_y: int) -> tuple[int, int, int, int, int]:
+    """Le transform LOCAL de `child` dans le repère de `ref` : (ox, oy Q8, rotation en degrés, sx, sy Q8).
+
+    L'auteur pose en coordonnées MONDE ; le build en tire le local, et la composition du runtime (`slot_compose`), appliquée
+    à la pose authorée du parent, redonne exactement la pose authorée de l'enfant : la scène de l'éditeur est la frame 0 du
+    jeu. C'est l'inverse de la composition : on défait la rotation du parent, puis son échelle. `ref_x`, `ref_y` : la
+    position du parent (0, 0 pour la racine d'un prefab, posée à l'origine du template). Tout reste en Q8 jusqu'à l'OAM :
+    un arrondi par niveau ferait dériver un bras d'un pixel par cran de profondeur."""
+    p_rot = float(_number_value(getattr(ref, "rotation", 0)) or 0)
+    p_sx = float(_number_value(getattr(ref, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
+    p_sy = float(_number_value(getattr(ref, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
+    dx, dy = float(int(child.x) - ref_x), float(int(child.y) - ref_y)
+    th = math.radians(-p_rot)
+    ux = dx * math.cos(th) - dy * math.sin(th)
+    uy = dx * math.sin(th) + dy * math.cos(th)
+    rot = int(_number_value(getattr(child, "rotation", 0)) or 0) - int(round(p_rot))
+    sx = int(round(float(_number_value(getattr(child, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
+    sy = int(round(float(_number_value(getattr(child, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
+    return int(round(ux / p_sx * 256)), int(round(uy / p_sy * 256)), rot, sx, sy
 
 
-def parent_compose_lines(scene_actors: list, actor_offset: int,
-                          placed_entry: list[int]) -> list[str]:
-    """Recompose, chaque frame, le transform monde des acteurs qui ont un parent.
+def _link_line(indent: str, slot, parent, depth: int, child, local) -> str:
+    vis = 1 if getattr(child, "visible", True) else 0
+    return f"{indent}actor_link_slot({slot}, {parent}, {depth}, {vis}, {', '.join(map(str, local))});"
 
-    La formule n'est PAS nouvelle : c'est celle que le modèle affine applique
-    déjà entre un acteur et son sprite,
-    d'un cran plus haut — l'`Actor` parent tenant la place que tenait l'acteur.
-        rotation = somme des degrés
-        scale    = produit Q8
-        position = parent + R(rotation_parent)·S(scale_parent)·offset_local
-    Aucune règle nouvelle à apprendre, et c'est ce qui rend le chantier petit.
 
-    Le transform LOCAL est une CONSTANTE du build : la parenté est authorée, et
-    la tranche A n'ouvre pas l'accès script aux parties. Un enfant ne porte donc
-    aucun champ de plus dans `g_actors` — le coût annoncé de 144 octets par
-    acteur ne bouge pas.
+def _part_parents(pf) -> list[tuple]:
+    """Les parties d'un prefab : (rang k, partie, rang de sa partie parente (0 = la racine), profondeur)."""
+    parts = list(getattr(pf, "children", []) or [])
+    rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
+    par_of = {k: rank.get(getattr(pt, "parent", None) or "", 0) for k, pt in enumerate(parts, start=1)}
+    out = []
+    for k, pt in enumerate(parts, start=1):
+        depth, cur = 0, k
+        while cur and depth <= len(parts):       # borne : une chaîne de parties ne revient pas sur elle-même
+            depth, cur = depth + 1, par_of[cur]
+        out.append((k, pt, par_of[k], depth))
+    return out
 
-    **L'auteur pose en coordonnées MONDE ; c'est le build qui en tire le
-    local.** x/y/rotation/scale gardent donc exactement le sens qu'ils avaient
-    au canvas, et un bras se place là où il doit apparaître à l'écran plutôt
-    qu'à un offset qu'il faudrait calculer de tête. La conséquence est que la
-    scène dessinée dans l'éditeur est EXACTEMENT la frame 0 du jeu : le local
-    dérivé ici, recomposé au runtime avec la pose authorée du parent, redonne
-    la position authorée de l'enfant.
 
-    La conversion faite ici est réversible, et le canvas s'en sert désormais :
-    déplacer un parent y recompose son sous-arbre, et les enfants suivent à
-    l'écran comme au runtime. L'auteur voit donc la même hiérarchie vivante des
-    deux côtés. (Le champ Position de l'inspecteur reflète aussi ce déplacement
-    depuis 2026-09-05 — cf. actor_inspector `_sync_transform_from_canvas`.)
+def part_link_lines(pf, root: str, indent: str) -> list[str]:
+    """Les liens des parties d'un modèle né à l'emplacement `root` (une expression C), après leur construction : le
+    parent est une autre partie, sinon la racine, et le local se tire de la pose authorée de la partie, dans le monde du
+    template posé à l'origine (la racine d'un prefab n'a pas de pose : `spawn(x, y)` décide où)."""
+    by_rank = {k: pt for k, pt in enumerate(pf.children, start=1)}
+    L = []
+    for k, part, p_off, depth in _part_parents(pf):
+        ref = by_rank.get(p_off, pf)
+        ref_xy = (int(ref.x), int(ref.y)) if p_off else (0, 0)
+        L.append(_link_line(indent, f"group_slot({root}, {k})", f"group_slot({root}, {p_off})" if p_off else root,
+                            depth, part, _local_transform(part, ref, *ref_xy)))
+    return L
 
-    Tout est en Q8 et l'arrondi reste à l'émission OAM : un
-    arrondi par niveau ferait dériver un bras d'un pixel par cran de
-    profondeur.
 
-    `visible` se propage ici aussi : cacher un boss cache ses bras, comme un
-    conteneur d'UI caché cache son sous-arbre (v0.15). Deux endroits du logiciel,
-    une seule règle."""
+def link_depth(scene_actors: list, pi: list[dict]) -> int:
+    """La profondeur maximale de la hiérarchie d'une scène, posés et parties des modèles qui y naissent : le nombre de
+    passes de `slot_compose_all` (`g_slot_depth`). 0 : aucune hiérarchie, ni composition ni cascade."""
+    depths, _errs = parent_depths(scene_actors)
+    d = max(depths.values(), default=0)
+    for m in pi:
+        if m["shared"]:
+            d = max([d] + [dep for *_, dep in _part_parents(m["prefab"])])
+    return d
+
+
+def placed_link_lines(scene_actors: list, actor_offset: int) -> list[str]:
+    """Les liens des acteurs POSÉS qui ont un parent de scène, après leur construction (`scene_init`) : le parent,
+    la profondeur et le local, tiré de la pose authorée (`_local_transform`). Un parent inconnu ou un cycle ont été
+    refusés avant (`parent_depths`)."""
     depths, _errs = parent_depths(scene_actors)
     idx_of = {a.name: actor_offset + j for j, (a, _) in enumerate(scene_actors)}
-    kids = [(a, j) for j, (a, _) in enumerate(scene_actors)
-            if getattr(a, "parent", None) and a.name in depths]
-    if not kids:
-        return []
-    kids.sort(key=lambda t: depths[t[0].name])   # parents avant enfants
-    L = ["    /* Actor hierarchy — parents before children, depth",
-         "       computed at build. Same composition as that of",
-         "       an actor and its sprite, one level up. */"]
     by_name = {a.name: a for a, _ in scene_actors}
-    for a, _j in kids:
-        c = idx_of[a.name]
-        p = idx_of[a.parent]
-        par = by_name[a.parent]
-        # ── Du MONDE authoré vers le LOCAL ────────────────────────
-        # L'inverse exact de la composition émise juste en dessous, appliqué
-        # à la POSE AUTHORÉE du parent : on défait sa rotation puis son
-        # échelle. Le résultat, recomposé au runtime avec cette même pose,
-        # redonne la position que l'auteur a vue au canvas.
-        p_rot = float(_number_value(getattr(par, "rotation", 0)) or 0)
-        p_sx = float(_number_value(getattr(par, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
-        p_sy = float(_number_value(getattr(par, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
-        dx = float(int(a.x) - int(par.x))
-        dy = float(int(a.y) - int(par.y))
-        th = math.radians(-p_rot)
-        ux = dx * math.cos(th) - dy * math.sin(th)
-        uy = dx * math.sin(th) + dy * math.cos(th)
-        ox = int(round((ux / p_sx) * 256))
-        oy = int(round((uy / p_sy) * 256))
-        rot = int(_number_value(getattr(a, "rotation", 0)) or 0) - int(round(p_rot))
-        sx = int(round(float(_number_value(getattr(a, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
-        sy = int(round(float(_number_value(getattr(a, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
-        L += [
-            f"    {{   /* {a.name} in the frame of {a.parent} */",
-            f"        int _pr = g_actors[{p}].rotation;",
-            f"        int _px = g_actors[{p}].scale_x, _py = g_actors[{p}].scale_y;",
-            f"        int _co, _si; gba_sincos(_pr, &_si, &_co);",
-            f"        int _lx = ({ox} * _px) >> 8, _ly = ({oy} * _py) >> 8;",
-            f"        g_actors[{c}].x = g_actors[{p}].x + ((_lx * _co - _ly * _si) >> 8);",
-            f"        g_actors[{c}].y = g_actors[{p}].y + ((_lx * _si + _ly * _co) >> 8);",
-            f"        g_actors[{c}].rotation = _pr + {rot};",
-            f"        g_actors[{c}].scale_x  = (_px * {sx}) >> 8;",
-            f"        g_actors[{c}].scale_y  = (_py * {sy}) >> 8;",
-            *_visible_line("        ", placed_entry[c - actor_offset], placed_entry[p - actor_offset],
-                           getattr(a, "visible", True)),
-            f"    }}",
-        ]
-    return L
-
-
-def placed_parent_table(scene_actors: list, actor_offset: int):
-    """La table `g_placed_parent` d'une scène : pour chaque emplacement de `g_actors[]`, l'emplacement du parent de scène de
-    l'acteur posé qui l'occupe, ou -1. Mêmes acteurs que `parent_compose_lines` (un parent inconnu ou un cycle ont été
-    refusés avant). None quand aucun acteur n'a de parent : la scène n'émet alors aucune table."""
-    depths, _errs = parent_depths(scene_actors)
-    idx_of = {a.name: actor_offset + j for j, (a, _) in enumerate(scene_actors)}
-    table = [-1] * (actor_offset + len(scene_actors))
+    L = []
     for j, (a, _) in enumerate(scene_actors):
-        if getattr(a, "parent", None) and a.name in depths and a.parent in idx_of:
-            table[actor_offset + j] = idx_of[a.parent]
-    return table if any(v >= 0 for v in table) else None
-
-
-def _pool_entry_expr(rank: int):
-    """Entrée OAM d'un membre de pool dans `pool_compose_lines` : `_eb` est la
-    1re entrée de l'instance, `rank` le rang du membre. -1 = aucune."""
-    if rank < 0:
-        return -1
-    return f"group_entry(_eb, {rank})" if rank else "_eb"
-
-
-def pool_compose_lines(pi: list[dict]) -> list[str]:
-    """La composition des enfants d'un prefab segmenté, chaque frame.
-
-    Même formule que pour les acteurs de scène (`parent_compose_lines`), mais
-    déroulée sur le POOL : une boucle par instance, et les enfants d'une
-    instance sont à un décalage constant de sa racine — le groupe est contigu
-    et sa taille est une constante du build.
-
-    Un enfant ÉTEINT ne se compose pas, et il n'est PAS rallumé par sa racine :
-    sa vie lui appartient. Un boss qui
-    perd un bras appelle `MonBras:destroy()`, et le bras disparaît pour de bon —
-    plus d'OAM, plus de collision. Écrire `enfant.active = racine.active` à
-    chaque frame, comme la première version le faisait, annulait cet appel dès
-    la frame suivante et sans un mot. La racine, elle, éteint tout en mourant :
-    c'est la branche du dessus, et les deux règles ne se marchent pas dessus.
-
-    Comme pour un acteur de scène, la pose authorée d'un enfant est du MONDE
-    (elle a été placée par rapport au template posé à l'origine) : le local en
-    est dérivé ici, une fois, au build."""
-    L: list[str] = []
-    for p2 in pi:
-        pf = p2["prefab"]
-        parts = list(getattr(pf, "children", []) or [])
-        if not parts or not p2["shared"]:
+        par = by_name.get(getattr(a, "parent", None) or "")
+        if par is None or a.name not in depths:
             continue
-        ranks = p2["member_entries"]      # rang d'entrée de chaque membre, -1 si aucun
-        by_name = {pt.name: pt for pt in parts}
-        rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
-        # La partie k est à l'entrée `_eb + k` (une par emplacement du pool), et un groupe mort est déjà rendu
-        # (`actor_destroy_internal`) : la boucle ne parcourt que les racines vivantes.
-        ranks = [k if r >= 0 else -1 for k, r in enumerate(ranks)]
-        L += [f"    /* {pf.name} — subtree of each instance */",
-              "    POOL_EACH(_b) {",
-              f"        if(g_actors[_b].model!={p2['model_id']}||!g_actors[_b].alive) continue;",
-              *(["        int _eb = g_spool_entry + (_b - g_spool_start);"] if p2["spool"]["entries"] else []),
-              # Les deux règles du sous-arbre : « détruire la racine détruit le sous-arbre » (le groupe est RENDU AU
-              # POOL par `actor_destroy_internal`), et « désactiver la racine désactive le sous-arbre » (il reste
-              # occupé, mais n'est ni dessiné ni en collision), ici. Sans cette branche, un boss désactivé
-              # laisserait ses bras actifs. Les parties ne suivent pas une RÉACTIVATION de la racine : une partie
-              # se réactive elle-même (`self.Bras:activate()`).
-              f"        if(!g_actors[_b].active) {{",
-              f"            for(int _k=1; _k<{p2['group']}; _k++) g_actors[group_slot(_b, _k)].active = 0;",
-              f"            continue;",
-              f"        }}",
-              "        int " + ", ".join(f"_s{k} = group_slot(_b, {k})" for k in range(1, len(parts) + 1)) + ";"]
-        for k, pt in enumerate(parts, start=1):
-            par = by_name.get(getattr(pt, "parent", None) or "")
-            # Parent = une autre partie, sinon la racine du groupe (décalage 0).
-            p_off = rank.get(par.name, 0) if par is not None else 0
-            ref = par if par is not None else pf
-            p_rot = float(_number_value(getattr(ref, "rotation", 0)) or 0)
-            p_sx = float(_number_value(getattr(ref, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
-            p_sy = float(_number_value(getattr(ref, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
-            # La racine d'un prefab n'a pas de pose authorée — le template est
-            # posé à l'origine, et c'est `spawn(x, y)` qui décide où. Le monde
-            # d'un enfant se lit donc directement comme un offset au template.
-            rx = int(getattr(ref, "x", 0) or 0) if par is not None else 0
-            ry = int(getattr(ref, "y", 0) or 0) if par is not None else 0
-            dx, dy = float(int(pt.x) - rx), float(int(pt.y) - ry)
-            th = math.radians(-p_rot)
-            ux = dx * math.cos(th) - dy * math.sin(th)
-            uy = dx * math.sin(th) + dy * math.cos(th)
-            ox, oy = int(round(ux / p_sx * 256)), int(round(uy / p_sy * 256))
-            rot = int(_number_value(getattr(pt, "rotation", 0)) or 0) - int(round(p_rot))
-            sx = int(round(float(_number_value(getattr(pt, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
-            sy = int(round(float(_number_value(getattr(pt, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
-            src = f"_s{p_off}" if p_off else "_b"
-            L += [
-                f"        if(g_actors[_s{k}].active) {{   /* {pt.name} in the frame of "
-                f"{par.name if par is not None else pf.name} */",
-                f"            int _pr = g_actors[{src}].rotation;",
-                f"            int _px = g_actors[{src}].scale_x, _py = g_actors[{src}].scale_y;",
-                f"            int _co, _si; gba_sincos(_pr, &_si, &_co);",
-                f"            int _lx = ({ox} * _px) >> 8, _ly = ({oy} * _py) >> 8;",
-                f"            g_actors[_s{k}].x = g_actors[{src}].x + ((_lx * _co - _ly * _si) >> 8);",
-                f"            g_actors[_s{k}].y = g_actors[{src}].y + ((_lx * _si + _ly * _co) >> 8);",
-                f"            g_actors[_s{k}].rotation = _pr + {rot};",
-                f"            g_actors[_s{k}].scale_x  = (_px * {sx}) >> 8;",
-                f"            g_actors[_s{k}].scale_y  = (_py * {sy}) >> 8;",
-                *_visible_line("            ",
-                               _pool_entry_expr(ranks[k]), _pool_entry_expr(ranks[p_off]),
-                               getattr(pt, "visible", True)),
-                f"        }}",
-            ]
-        L.append("    }")
+        L.append(_link_line("    ", actor_offset + j, idx_of[par.name], depths[a.name], a,
+                            _local_transform(a, par, int(par.x), int(par.y))))
     return L

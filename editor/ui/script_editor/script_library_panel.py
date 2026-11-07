@@ -1,4 +1,4 @@
-"""ui/script_editor/script_library_panel.py — colonne gauche du Script Editor.
+"""ui/script_editor/script_library_panel.py : colonne gauche du Script Editor.
 
 Trois sections empilées : l'arbre des scripts du projet, puis les constantes et
 les globales. Seule la première liste des ASSETS — elle est donc rendue par le

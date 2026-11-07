@@ -1,4 +1,4 @@
-"""ui/sound_mixer/polyphony_view.py — combien de canaux sonnent, à chaque instant du morceau.
+"""ui/sound_mixer/polyphony_view.py : combien de canaux sonnent, à chaque instant du morceau.
 
 Une courbe en escalier sous la forme d'onde, sur le MÊME axe de temps (les deux widgets prennent toute la largeur
 de la colonne et partent du même PCM). Une ligne en pointillé marque le nombre de canaux logiciels du projet

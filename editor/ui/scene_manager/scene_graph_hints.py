@@ -1,4 +1,4 @@
-"""ui/scene_manager/scene_graph_hints.py — contenu de la table des raccourcis du
+"""ui/scene_manager/scene_graph_hints.py : contenu de la table des raccourcis du
 Graphe des scènes. Pas d'outil ici : une seule table, celle de la vue."""
 from __future__ import annotations
 

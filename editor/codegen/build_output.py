@@ -1,4 +1,4 @@
-"""editor/codegen/build_output.py — ce que le build ÉCRIT, et quand.
+"""editor/codegen/build_output.py : ce que le build ÉCRIT, et quand.
 
 POINT DE VÉRITÉ UNIQUE de la règle « ne pas réécrire un fichier identique ». Tout ce que le build dépose dans `build/` passe par ici.
 

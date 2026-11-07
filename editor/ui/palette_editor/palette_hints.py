@@ -1,4 +1,4 @@
-"""ui/palette_editor/palette_hints.py — contenu de la table des raccourcis de la
+"""ui/palette_editor/palette_hints.py : contenu de la table des raccourcis de la
 grille de palette. Pas d'outil : une seule table (la grille de couleurs).
 Seuls les gestes propres à la grille s'affichent ; les raccourcis communs
 (copier, vider, ajuster, zoom) vivent dans Réglages → Shortcuts."""

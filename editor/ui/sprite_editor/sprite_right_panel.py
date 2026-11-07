@@ -1,4 +1,4 @@
-"""ui/sprite_editor/sprite_right_panel.py — panneau droit : propriétés, collision, anim settings."""
+"""ui/sprite_editor/sprite_right_panel.py : panneau droit : propriétés, collision, anim settings."""
 from __future__ import annotations
 
 from typing import Optional

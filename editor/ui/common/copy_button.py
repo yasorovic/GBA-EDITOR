@@ -1,4 +1,4 @@
-"""ui/common/copy_button.py — le bouton « copier dans le presse-papiers » : une icône qui copie, puis le confirme.
+"""ui/common/copy_button.py : le bouton « copier dans le presse-papiers » : une icône qui copie, puis le confirme.
 
 Un seul geste, un seul retour d'information partout où l'on copie une valeur : au clic le texte part dans le
 presse-papiers, l'icône devient une coche, le bouton s'allume, et l'infobulle dit « Copied » sous le curseur, le

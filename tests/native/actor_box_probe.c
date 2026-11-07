@@ -16,6 +16,7 @@
 #include "gba_engine.h"
 #include "actor_types_static.h"
 #include "runtime_api_inline.h"
+#include "contacts_gen.h"   /* les aides des contacts, émises par le générateur (cf. physics/contacts.py) */
 
 /* Symboles que main.c fournit d'ordinaire — aucun n'est appelé ici, mais le
    moteur est compilé en entier. */
@@ -49,10 +50,10 @@ u32 g_obj_state[16];
 int g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1, g_spool_free = 0;
 u32 g_alive_bits[16];
 int g_scene_placed = 0;
-const s16 *g_placed_parent = 0;
+SlotLink g_slot_link[64]; int g_slot_depth = 0;
 u32 g_alive_epoch;
 PoolCursor g_nth;
-const u8 *g_spool_grp = 0, *g_spool_part = 0, *g_spool_parent = 0;
+const u8 *g_spool_part = 0;
 const AppearanceInit* g_appearance_init;
 OamEntry g_oam_entries[2];   /* l'affichage des acteurs : Actor.oam_entry en est l'indice */
 
@@ -94,12 +95,21 @@ static void a_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; s_ev_a
 static void a_collide(Actor *s, Actor *o, u8 m, u8 t) { (void)s; (void)o; (void)m; (void)t; s_ev_a[1]++; }
 static void a_exit(Actor *s, Actor *o, u8 m, u8 t)    { (void)s; (void)o; (void)m; (void)t; s_ev_a[2]++; }
 static void b_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; (void)m; (void)t; s_ev_b[0]++; }
-static void contact_frame(const char *nom, const ContactPair *paire, u16 *prev) {
-    contact_pair_run(paire, prev);
-    printf("%s %d %d %d %d\n", nom, s_ev_a[0], s_ev_a[1], s_ev_a[2], s_ev_b[0]);
+static void b_exit(Actor *s, Actor *o, u8 m, u8 t)    { (void)s; (void)o; (void)m; (void)t; s_ev_b[2]++; }
+/* Le type 1 (emplacement 0) répond aux trois crochets, le type 2 (emplacement 1) à enter et exit. */
+static ModelDesc s_desc[3];
+static const u8 s_ki[3] = {255, 0, 1};
+static const u16 s_allowed[2][2] = {{0, 0xFFFF}, {0xFFFF, 0}};
+static ContactBody s_list[2];
+static Contact s_prev[1], s_cur[1];
+static int s_prev_n;
+static void contact_frame(const char *nom) {
+    contacts_run(s_desc, s_ki, &s_allowed[0][0], 2, s_list, s_prev, &s_prev_n, s_cur, 1);
+    printf("%s %d %d %d %d %d\n", nom, s_ev_a[0], s_ev_a[1], s_ev_a[2], s_ev_b[0], s_ev_b[2]);
 }
 
 int main(void) {
+    for (int i = 0; i < 64; i++) g_slot_link[i].parent = -1;   /* chaque emplacement est une racine */
     Actor *a = &g_actors[0];
     Actor *b = &g_actors[1];
     a->oam_entry = 0;
@@ -386,7 +396,7 @@ int main(void) {
         /* Le pool PARTAGÉ : les instances d'un modèle se retrouvent à `Actor.model`, pas par la table. */
         g_spool_start = 0; g_spool_end = 2; g_spool_hw = 2;
         x->alive = 1; x->model = 3; y->alive = 1; y->model = 4;
-        pool_bit_set(0); pool_bit_set(1);
+        alive_bit_set(0); alive_bit_set(1);
         printf("pool_modele %d %d %d\n", actor_model_count(0, 0, 3), actor_model_count(0, 0, 4), actor_model_count(0, 0, 9));
         printf("pool_nth %d %d\n", actor_model_nth(0, 0, 4, 0) == y, actor_model_nth(0, 0, 3, 1) == 0);
         /* Une table de posés ET le pool partagé : les posés d'abord. */
@@ -401,13 +411,14 @@ int main(void) {
         printf("pool_etat %d\n", (int)((char*)(g_obj_state + (int)y->inst * (OBJ_STATE_STRIDE / 4)) - (char*)g_obj_state) == OBJ_STATE_STRIDE);
         /* Un modèle à PARTIES : la racine (type 2) a un groupe de 3 aux emplacements 2..4, ses parties les types 3 et 4. */
         {
-            static const u8 grp[5] = {0, 0, 3, 0, 0}, part[5] = {0, 0, 0, 1, 2};
-            static const u8 par[5] = {0, 0, 0, 0, 1};      /* la partie 2 (type 4) a pour parent la partie 1 (type 3) */
-            g_spool_grp = grp; g_spool_part = part; g_spool_parent = par;
+            static const u8 part[5] = {0, 0, 0, 1, 2};
+            g_spool_part = part;
             g_spool_start = 2; g_spool_end = 8; g_spool_hw = 5; g_spool_free = 5;
             for (int i = 0; i < 8; i++) { g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
             g_alive_bits[0] = 0;
-            for (int i = 2; i < 5; i++) { g_actors[i].alive = 1; g_actors[i].active = 1; g_actors[i].model = i; pool_bit_set(i); }
+            for (int i = 2; i < 5; i++) { g_actors[i].alive = 1; g_actors[i].active = 1; g_actors[i].model = i; alive_bit_set(i); }
+            /* la partie 1 (emplacement 3) a pour parent la racine, la partie 2 (emplacement 4) la partie 1 */
+            actor_link_slot(3, 2, 1, 1, 0, 0, 0, 256, 256); actor_link_slot(4, 3, 2, 1, 0, 0, 0, 256, 256); g_slot_depth = 2;
             printf("grp_occupe %d %d %d %d\n", spool_slot_free(2), spool_slot_free(3), spool_slot_free(4), spool_slot_free(5));
             /* Les accès de groupe : la racine d'une partie, d'une racine et d'un modèle plat ; la partie k d'une racine. */
             printf("grp_acces %d %d %d %d %d %d\n", group_root_slot(3), group_root_slot(4), group_root_slot(2), group_root_slot(5),
@@ -418,18 +429,19 @@ int main(void) {
                    actor_root(&g_actors[2]) == &g_actors[2], actor_root(0) == 0);
             printf("grp_parent_de %d %d %d %d\n", actor_parent(&g_actors[3]) == &g_actors[2], actor_parent(&g_actors[4]) == &g_actors[3],
                    actor_parent(&g_actors[2]) == 0, actor_parent(0) == 0);
-            actor_destroy_internal(&g_actors[3]);        /* une partie détruite : le groupe la garde */
+            actor_destroy_internal(&g_actors[3]);        /* une partie détruite : le groupe la garde, avec sa descendance */
             printf("grp_partie %d %d %d\n", g_actors[3].alive, spool_slot_free(3), g_spool_free);
-            /* La partie 1 détruite : la partie 2 n'a plus de parent vivant, mais sa racine reste. */
-            printf("grp_apres_perte %d %d %d\n", actor_parent(&g_actors[4]) == 0, actor_root(&g_actors[4]) == &g_actors[2],
-                   actor_root(&g_actors[3]) == 0);
-            printf("grp_bits_partie %u\n", g_alive_bits[0]);     /* la partie détruite n'a plus son bit, les autres le gardent */
+            /* La partie 1 détruite emporte la partie 2 ; toutes deux gardent leur place, la racine vit. */
+            printf("grp_apres_perte %d %d %d %d\n", g_actors[4].alive, spool_slot_free(4), actor_root(&g_actors[3]) == 0,
+                   g_actors[2].alive);
+            printf("grp_bits_partie %u\n", g_alive_bits[0]);     /* les parties détruites n'ont plus leur bit, la racine le garde */
             actor_destroy_internal(&g_actors[2]);        /* la racine : tout le groupe est rendu */
             printf("grp_racine %d %d %d %d %d\n", spool_slot_free(2), spool_slot_free(3), spool_slot_free(4),
                    g_actors[4].alive, g_actors[4].model);
             printf("grp_curseur %d\n", g_spool_free);
             printf("grp_bits_racine %u\n", g_alive_bits[0]);     /* le groupe entier est rendu : plus aucun bit */
-            g_spool_grp = 0; g_spool_part = 0; g_spool_parent = 0;
+            g_spool_part = 0; g_slot_depth = 0;
+            for (int i = 2; i < 5; i++) g_slot_link[i].parent = -1;
             printf("grp_sans_table %d\n", group_root_slot(3));      /* sans table de parties, chaque emplacement est sa propre racine */
         }
     }
@@ -438,7 +450,7 @@ int main(void) {
        arrive entre deux appels (naissance, mort, boucle qui détruit au milieu). Suite pseudo-aléatoire, déterministe. */
     {
         enum { SLOTS = 64 };
-        g_spool_grp = 0; g_spool_part = 0; g_spool_parent = 0;
+        g_spool_part = 0;
         g_spool_start = 0; g_spool_end = SLOTS; g_spool_hw = SLOTS; g_spool_free = 0;
         for (int i = 0; i < SLOTS; i++) { g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
         g_alive_bits[0] = 0; g_alive_bits[1] = 0;
@@ -451,7 +463,7 @@ int main(void) {
                 int k = RND() % SLOTS;
                 if (!g_actors[k].alive) {
                     g_actors[k].alive = 1; g_actors[k].active = 1; g_actors[k].model = 1 + RND() % 3; g_actors[k].inst = k;
-                    pool_bit_set(k);
+                    alive_bit_set(k);
                 }
             } else if (op == 2) {                                      /* mort d'un vivant */
                 int k = RND() % SLOTS;
@@ -492,10 +504,10 @@ int main(void) {
 
     /* La hiérarchie des acteurs POSÉS : 0 est le sommet, 1 son enfant, 2 l'enfant de 1 ; 3 est un autre sommet, 4 son enfant. */
     {
-        static const s16 ppar[5] = {-1, 0, 1, -1, 3};
-        g_spool_part = 0; g_spool_parent = 0; g_spool_grp = 0;
-        g_scene_placed = 5; g_placed_parent = ppar;
+        g_spool_part = 0; g_scene_placed = 5; g_spool_start = g_spool_end = g_spool_free = 0; g_spool_hw = 5;
         for (int i = 0; i < 5; i++) { g_actors[i] = (Actor){0}; g_actors[i].inst = i; g_actors[i].alive = 1; g_actors[i].active = 1; }
+        actor_link_slot(1, 0, 1, 1, 0, 0, 0, 256, 256); actor_link_slot(2, 1, 2, 1, 0, 0, 0, 256, 256);
+        actor_link_slot(4, 3, 1, 1, 0, 0, 0, 256, 256); g_slot_depth = 2;
         printf("pose_parent %d %d %d %d %d\n", actor_parent(&g_actors[1]) == &g_actors[0], actor_parent(&g_actors[2]) == &g_actors[1],
                actor_parent(&g_actors[0]) == 0, actor_parent(&g_actors[4]) == &g_actors[3], actor_parent(0) == 0);
         printf("pose_racine %d %d %d %d %d\n", actor_root(&g_actors[2]) == &g_actors[0], actor_root(&g_actors[1]) == &g_actors[0],
@@ -503,13 +515,14 @@ int main(void) {
         /* le « Bras » de « Chef » : l'enfant posé se lit par la référence au parent, nil si elle est nil ou si l'enfant est mort */
         printf("pose_enfant %d %d\n", actor_placed_child(&g_actors[0], &g_actors[1]) == &g_actors[1],
                actor_placed_child(0, &g_actors[1]) == 0);
-        actor_destroy_internal(&g_actors[1]);                  /* le maillon du milieu : détruire un parent posé ne détruit pas ses enfants */
-        printf("pose_milieu_mort %d %d %d\n", actor_parent(&g_actors[2]) == 0, actor_root(&g_actors[2]) == &g_actors[0],
+        actor_destroy_internal(&g_actors[1]);                  /* le maillon du milieu : détruire un parent détruit ses enfants */
+        printf("pose_milieu_mort %d %d %d %d\n", g_actors[2].alive, actor_root(&g_actors[2]) == 0, g_actors[0].alive,
                actor_placed_child(&g_actors[0], &g_actors[1]) == 0);
-        actor_destroy_internal(&g_actors[0]);                  /* le sommet */
-        printf("pose_sommet_mort %d %d\n", actor_root(&g_actors[2]) == 0, actor_parent(&g_actors[2]) == 0);
-        g_placed_parent = 0;                                   /* sans table : chaque posé est sa propre racine */
-        printf("pose_sans_table %d %d\n", actor_parent(&g_actors[4]) == 0, actor_root(&g_actors[4]) == &g_actors[4]);
+        actor_destroy_internal(&g_actors[3]);                  /* l'autre sommet : son enfant part avec lui */
+        printf("pose_sommet_mort %d %d\n", g_actors[4].alive, g_actors[0].alive);
+        for (int i = 0; i < 5; i++) g_slot_link[i].parent = -1;
+        g_slot_depth = 0;
+        printf("pose_sans_lien %d %d\n", actor_parent(&g_actors[0]) == 0, actor_root(&g_actors[0]) == &g_actors[0]);
         g_scene_placed = 0;
     }
 
@@ -533,19 +546,38 @@ int main(void) {
     /* Une paire en contact : enter à la naissance, collide tant qu'elle dure, exit quand elle se défait, rien quand elle est
        éloignée ou qu'un côté est inactif. Les tags arrivent du bon côté (my_box d'abord). */
     {
-        for (int i = 0; i < 2; i++) { g_actors[i] = (Actor){0}; g_actors[i].active = 1; g_actors[i].collision.box_count = 1; }
+        for (int i = 0; i < 2; i++) {
+            g_actors[i] = (Actor){0}; g_actors[i].active = 1; g_actors[i].alive = 1; g_actors[i].model = i + 1;
+            g_actors[i].collision.box_count = 1;
+        }
         g_actors[0].collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_HIT };
         g_actors[1].collision.boxes[0] = (CollisionShape){ 0, 0, 16, 16, 1, 1, TAG_BODY };
-        static const ContactPair paire = { 0, 1, 0xFFFF, { a_enter, a_collide, a_exit }, { b_enter, 0, 0 } };
-        u16 prev = 0;
-        contact_frame("contact_1", &paire, &prev);            /* superposés : enter */
-        contact_frame("contact_2", &paire, &prev);            /* ça dure : collide */
+        s_desc[1].on_contact[0] = a_enter; s_desc[1].on_contact[1] = a_collide; s_desc[1].on_contact[2] = a_exit;
+        s_desc[2].on_contact[0] = b_enter; s_desc[2].on_contact[2] = b_exit;
+        /* La scène du cas : deux posés (0 et 1), pas de pool ; les cas précédents ne doivent pas être parcourus. */
+        for (int w = 0; w < 16; w++) g_alive_bits[w] = 0;
+        g_spool_start = 0; g_spool_hw = 2; g_scene_placed = 2; alive_bit_set(0); alive_bit_set(1);
+        s_prev_n = 0;
+        contact_frame("contact_1");            /* superposés : enter */
+        contact_frame("contact_2");            /* ça dure : collide */
         printf("contact_tags %d %d\n", s_tag_a, s_tag_b);
         g_actors[1].x = 100 << 8;
-        contact_frame("contact_3", &paire, &prev);            /* éloignés : exit */
-        contact_frame("contact_4", &paire, &prev);            /* rien de plus */
+        contact_frame("contact_3");            /* éloignés : exit des deux côtés */
+        contact_frame("contact_4");            /* rien de plus */
         g_actors[1].x = 0; g_actors[1].active = 0;
-        contact_frame("contact_5", &paire, &prev);            /* un côté inactif : pas de contact */
+        contact_frame("contact_5");            /* un côté inactif : pas de contact */
+        g_actors[1].active = 1;
+        contact_frame("contact_6");            /* de nouveau : enter */
+        g_actors[1].active = 0;
+        contact_frame("contact_7");            /* désactivé : seul le partenaire actif (A) apprend exit */
+        g_actors[1].active = 1;
+        contact_frame("contact_8");            /* enter */
+        g_actors[1].alive = 0; g_actors[1].active = 0;
+        contact_frame("contact_9");            /* détruit : personne n'apprend exit */
+        g_actors[1].alive = 1; g_actors[1].active = 1;
+        contact_frame("contact_10");           /* enter */
+        g_actors[1].gen++;
+        contact_frame("contact_11");           /* emplacement réoccupé : un nouveau contact, sans exit de l'ancien */
     }
     {   /* scene.gravity : le côté d'appui suit l'axe dominant (le bas sans gravité ou à égalité), et un Rigid endormi
            reprend sa chute seulement si la gravité change. */

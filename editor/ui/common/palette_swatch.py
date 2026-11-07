@@ -1,4 +1,4 @@
-"""editor/ui/common/palette_swatch.py — Icône QIcon générée depuis une PaletteBank.
+"""editor/ui/common/palette_swatch.py : Icône QIcon générée depuis une PaletteBank.
 
 Partagé entre l'écran Palette Editor et les widgets de sélection de palette
 (ScriptSlot/AssetPickerPopup réutilisés en picker de palette).

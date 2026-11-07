@@ -1,4 +1,4 @@
-"""ui/common/selection_grammar.py — la grammaire visuelle de sélection, une fois.
+"""ui/common/selection_grammar.py : la grammaire visuelle de sélection, une fois.
 
 Tous les arbres à sélection multiple de l'éditeur (libraries, arbre de contenu de
 scène) parlent le même langage à trois niveaux, distincts et cumulables :

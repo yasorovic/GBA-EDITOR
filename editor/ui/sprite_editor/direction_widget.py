@@ -1,4 +1,4 @@
-"""ui/sprite_editor/direction_widget.py — sélecteur de directions 3×3 pour une AnimState."""
+"""ui/sprite_editor/direction_widget.py : sélecteur de directions 3×3 pour une AnimState."""
 from __future__ import annotations
 
 from ui.common.labels import label

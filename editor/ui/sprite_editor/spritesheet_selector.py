@@ -1,4 +1,4 @@
-"""ui/sprite_editor/spritesheet_selector.py — le spritesheet : sélecteur de tuiles sur le PNG source."""
+"""ui/sprite_editor/spritesheet_selector.py : le spritesheet : sélecteur de tuiles sur le PNG source."""
 from __future__ import annotations
 from pathlib import Path
 from typing import Optional

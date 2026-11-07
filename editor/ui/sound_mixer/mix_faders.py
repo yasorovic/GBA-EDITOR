@@ -1,4 +1,4 @@
-"""ui/sound_mixer/mix_faders.py — volume, tempo et hauteur d'une musique, en trois curseurs verticaux,
+"""ui/sound_mixer/mix_faders.py : volume, tempo et hauteur d'une musique, en trois curseurs verticaux,
 et ses deux fondus (en frames) dessous.
 
 Comme sur une table de mixage : la valeur au-dessus (qu'on peut taper), le curseur, le nom dessous, le tout

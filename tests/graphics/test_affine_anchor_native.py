@@ -1,4 +1,4 @@
-"""L'ancrage d'un sprite affine, mesuré sur le VRAI C émis par `affine_oam_lines_dynamic`.
+"""L'ancrage d'un sprite affine, mesuré sur le VRAI C émis par `affine_oam_lines`.
 
 Le cadre du sprite est un corps rigide accroché à l'actor : son centre vaut
 `position + R(rotation)·S(scale)·(offset + demi-cadre)`. Avec l'offset posé au
@@ -21,7 +21,7 @@ from native_toolchain import compilateur_hote, environnement
 
 from core.models.components import SpriteComponent
 from core.models.scene import Actor
-from codegen.runtime_codegen.gen_affine import affine_entry, affine_oam_lines_dynamic
+from codegen.runtime_codegen.gen_affine import affine_oam_lines
 
 RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "include" / "runtime_api_inline.h"
 FRAME = 16
@@ -44,8 +44,7 @@ def _sinus_du_moteur() -> str:
 
 
 def _source_sonde() -> str:
-    entree = affine_entry(Actor(name="A"), _sc(), 0)
-    lignes = "\n".join(affine_oam_lines_dynamic(0, entree, _Forme(), bt=0, priority_expr="0"))
+    lignes = "\n".join(affine_oam_lines(0, _Forme(), bt=0, priority_expr="0"))
     return f"""
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,12 +52,12 @@ typedef short s16; typedef unsigned short u16; typedef signed char s8; typedef u
 {_sinus_du_moteur()}
 typedef struct {{ int x, y, rotation, scale_x, scale_y; }} A;
 typedef struct {{ int rotation, scale_x, scale_y, flip_h, flip_v, offset_x, offset_y,
-                  pivot_x, pivot_y, frame, obj_mode, priority, pal_bank; }} O;
+                  pivot_x, pivot_y, frame, obj_mode, priority, pal_bank, affine_slot; }} O;
 typedef struct {{ u16 attr0, attr1, attr2, dummy; }} S;
 A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0; AffCache g_aff_cache[1];
 int g_oam_dropped = 0;
 int main(int c, char** v) {{
-    int _oamn = 0;
+    int _oamn = 0, _affn = 0;
     g_actors[0].x = atoi(v[1]) << 8;  g_actors[0].y = atoi(v[2]) << 8;
     g_actors[0].rotation = atoi(v[3]); g_actors[0].scale_x = g_actors[0].scale_y = atoi(v[4]);
     g_oam_entries[0].offset_x = atoi(v[5]); g_oam_entries[0].offset_y = atoi(v[6]);

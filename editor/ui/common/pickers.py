@@ -1,4 +1,4 @@
-"""editor/ui/common/pickers.py — Slots de sélection réutilisables, construits
+"""editor/ui/common/pickers.py : Slots de sélection réutilisables, construits
 sur le même modèle que le "script selector" (ScriptSlot + AssetPickerPopup) :
 bouton "+ Choisir..." quand vide, nom + Changer + × quand assigné, popup
 recherche+liste au clic.

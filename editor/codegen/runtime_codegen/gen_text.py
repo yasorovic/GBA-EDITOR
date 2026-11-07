@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_text.py — l'émetteur du domaine texte/police.
+"""codegen/runtime_codegen/gen_text.py : l'émetteur du domaine texte/police.
 
 Extrait de `main_gen` (A3), au-dessus de la couche de requêtes. Trois familles :
   - l'ANALYSE des fonds de conteneur et zones (scene_color_fills/image_fills,

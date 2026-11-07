@@ -1,4 +1,4 @@
-"""ui/background_editor/bg_placement_overlay.py — l'image d'un fond posée dans son canvas, à la souris.
+"""ui/background_editor/bg_placement_overlay.py : l'image d'un fond posée dans son canvas, à la souris.
 
 Un seul item : il dessine le FICHIER (entier, même quand il déborde), grise ce qui sort du canvas, trace le cadre du
 canvas et les poignées de l'image. Il tient aussi le geste (déplacer, mettre à l'échelle) ; les règles de modificateurs
