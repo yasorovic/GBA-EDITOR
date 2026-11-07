@@ -115,31 +115,25 @@ def _carry_groups(p, scene_actors, actor_offset: int, pi, shown):
     return pp, pool_passenger, pool_platform_placed, pool_platform_pool
 
 
-def pool_carried_models(p, scene_actors, actor_offset: int, pi, shown) -> set[int]:
-    """Les modèles du pool dont une instance peut être portée par une plateforme : leur résolution contre la carte
-    reçoit alors le déplacement de la plateforme, comme celle d'un passager posé (cf. `shared_pool_gen.tile_lines`)."""
-    _pp, pool_passenger, _kp, kk = _carry_groups(p, scene_actors, actor_offset, pi, shown)
-    return {mid for _ki, mid in pool_passenger} | {mt for _mk, mt in kk}
-
-
 def kinematic_tick_parts(
         p, scene_actors, actor_offset: int, scene=None, pi=(), shown=None,
-) -> tuple[list[str], list[str], dict[int, tuple[str, str]]]:
-    """Instantanés avant mouvement, transport après résolution, puis deltas par passager posé.
+) -> tuple[list[str], list[str], list[int]]:
+    """Instantanés avant mouvement, transport après résolution, puis les passagers posés.
 
     Le passager repose sur la face de la plateforme qui regarde la gravité de la scène (`support_normal`) : le dessus
     sous la gravité habituelle, le dessous sous une gravité vers le haut, un côté sous une gravité latérale.
 
-    Plateformes et passagers peuvent être posés ou nés dans le pool partagé (`pi`, `shown`). Le delta d'un passager
-    posé est une paire de locales ; celui d'un passager du pool vit dans `_kin_pd`, une ligne par emplacement, que
-    `shared_pool_gen.tile_lines` ajoute à sa vitesse pour sa résolution contre la carte."""
+    Plateformes et passagers peuvent être posés ou nés dans le pool partagé (`pi`, `shown`). Le déplacement porté vit
+    dans `_kin_d`, une ligne par emplacement de `g_actors` (x, y, puis l'écrasement déjà signalé), remise à zéro à chaque
+    image pour les posés et les emplacements utilisés du pool : la résolution contre la carte l'ajoute à la vitesse de
+    l'emplacement, quel qu'il soit (`physics.character.body_tile_step`)."""
     normal = support_normal(scene, p.settings) if scene is not None else ONEWAY_UP
     # Un script écrit `scene.gravity` : le côté d'appui se lit à l'exécution, quel que soit celui du départ.
     dynamic = project_sets_gravity(p)
     groups, pool_passenger, pool_platform_placed, pool_platform_pool = _carry_groups(
         p, scene_actors, actor_offset, pi, shown)
     if not (groups or pool_passenger or pool_platform_placed or pool_platform_pool):
-        return [], [], {}
+        return [], [], []
 
     def carry(platform: str, passenger: str, kb: int, ab: int, old_x: str, old_y: str, carried: str,
               dx: str, dy: str) -> str:
@@ -166,22 +160,22 @@ def kinematic_tick_parts(
                    "        default: break;",
                    "        }",
                    "    }"]
-    after = [line for ti in target_indices for line in (
-        f"    int _kin_dx_{ti}=0,_kin_dy_{ti}=0;",
-    )]
-    if pool_passenger or pool_platform_pool:
-        after += [f"    static int _kin_pd[{size}][2] EWRAM_BSS;       /* déplacement porté, par emplacement du pool */",
-                  "    for(int _kz=0;_kz<g_spool_hw-g_spool_start;_kz++) _kin_pd[_kz][0]=_kin_pd[_kz][1]=0;"]
+    after = ["    static int _kin_d[G_ACTOR_COUNT][3] EWRAM_BSS;   /* déplacement porté et écrasement, par emplacement */"]
+    if scene_actors:
+        after.append(f"    for(int _kz={actor_offset};_kz<{actor_offset + len(scene_actors)};_kz++) "
+                     "_kin_d[_kz][0]=_kin_d[_kz][1]=_kin_d[_kz][2]=0;")
+    if spool:
+        after.append("    for(int _kz=g_spool_start;_kz<g_spool_hw;_kz++) _kin_d[_kz][0]=_kin_d[_kz][1]=_kin_d[_kz][2]=0;")
     for (ki, ti), pairs in groups.items():
         carried = f"_kin_carried_{ki}_{ti}"
         after.append(f"    u8 {carried}=0;")
         for kb, ab in pairs:
             after.append("    " + carry(f"&g_actors[{ki}]", f"&g_actors[{ti}]", kb, ab, f"_kin_old_x_{ki}",
-                                         f"_kin_old_y_{ki}", f"&{carried}", f"&_kin_dx_{ti}", f"&_kin_dy_{ti}"))
+                                         f"_kin_old_y_{ki}", f"&{carried}", f"&_kin_d[{ti}][0]", f"&_kin_d[{ti}][1]"))
     for (ki, mid), pairs in pool_passenger.items():
         after += ["    POOL_EACH(_ps){",
                   f"        if(g_actors[_ps].model!={mid}) continue;",
-                  "        u8 _pc=0; int* _pd=_kin_pd[_ps-g_spool_start];",
+                  "        u8 _pc=0; int* _pd=_kin_d[_ps];",
                   *["        " + carry(f"&g_actors[{ki}]", "&g_actors[_ps]", kb, ab, f"_kin_old_x_{ki}",
                                        f"_kin_old_y_{ki}", "&_pc", "&_pd[0]", "&_pd[1]") for kb, ab in pairs],
                   "    }"]
@@ -190,7 +184,7 @@ def kinematic_tick_parts(
                   f"        if(g_actors[_ks].model!={mk}) continue;",
                   "        u8 _kc=0; int* _po=_kin_po[_ks-g_spool_start];",
                   *["        " + carry("&g_actors[_ks]", f"&g_actors[{ti}]", kb, ab, "_po[0]", "_po[1]", "&_kc",
-                                       f"&_kin_dx_{ti}", f"&_kin_dy_{ti}") for kb, ab in pairs],
+                                       f"&_kin_d[{ti}][0]", f"&_kin_d[{ti}][1]") for kb, ab in pairs],
                   "    }"]
     for (mk, mt), pairs in pool_platform_pool.items():
         after += ["    POOL_EACH(_ks){",
@@ -198,14 +192,12 @@ def kinematic_tick_parts(
                   "        int* _po=_kin_po[_ks-g_spool_start];",
                   "        POOL_EACH(_ps){",
                   f"            if(g_actors[_ps].model!={mt}) continue;",
-                  "            u8 _kc=0; int* _pd=_kin_pd[_ps-g_spool_start];",
+                  "            u8 _kc=0; int* _pd=_kin_d[_ps];",
                   *["            " + carry("&g_actors[_ks]", "&g_actors[_ps]", kb, ab, "_po[0]", "_po[1]", "&_kc",
                                            "&_pd[0]", "&_pd[1]") for kb, ab in pairs],
                   "        }",
                   "    }"]
-    deltas = {ti: (f"_kin_dx_{ti}", f"_kin_dy_{ti}")
-              for ti in target_indices}
-    return before, after, deltas
+    return before, after, target_indices
 
 
 def kinematic_crush_pairs(p, scene_actors, actor_offset: int) -> dict[int, list[tuple[int, int, int]]]:

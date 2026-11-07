@@ -1,17 +1,16 @@
-"""Mouvement automatique : gravité de scène des Character et Kinematic qui la suivent, intégration des Kinematic et Rigid.
-
-Le sommeil Rigid (`physics_sleep_lines`) garde encore un chemin posé et un chemin par modèle du pool : il migre au
-descripteur de modèle dans un pas suivant du chantier « posé et spawné »."""
+"""Mouvement automatique : gravité de scène des Character et Kinematic qui la suivent, intégration des Kinematic et Rigid,
+puis sommeil des Rigid. Les deux passes lisent le descripteur de modèle (`model_desc`) : un seul code pour un acteur posé
+ou né."""
 from __future__ import annotations
 
-from codegen.runtime_codegen.model_desc import model_desc_sym, scene_has_moving_bodies
-from codegen.runtime_codegen.physics.body import physics_body, physics_body_mode
+from codegen.runtime_codegen.model_desc import (
+    BODY_MODE_RIGID, body_desc, each_slot, model_desc_sym, scene_has_moving_bodies, scene_owners,
+)
 from codegen.runtime_codegen.shared_pool_gen import shared_models
-from core.models.components import PHYSICS_BODY_RIGID
 
 
 def motion_helper_lines() -> list[str]:
-    """L'aide C du mouvement automatique, un seul code pour un acteur posé ou né : le descripteur `d` de son type dit
+    """Les aides C du mouvement automatique et du sommeil, un seul code pour un acteur posé ou né : le descripteur `d` de son type dit
     son mode et sa part de gravité, la scène donne le reste. Character et Kinematic reçoivent la gravité (un Character
     l'applique par son script) ; Kinematic et Rigid intègrent leur vitesse ; le Rigid est amorti et peut dormir.
 
@@ -45,6 +44,16 @@ def motion_helper_lines() -> list[str]:
         "    }",
         "    if(mode==BODY_MODE_KINEMATIC) actor_apply_velocity(a);",
         "}",
+        "/* Le sommeil d'un Rigid : `radius` (Q8) et `frames` viennent de la scène, cf. `physics_sleep_lines`. */",
+        "static inline __attribute__((always_inline, unused)) void body_sleep_step(Actor* a,const ModelDesc* d,",
+        "        int radius,int frames){",
+        "    if(d->body_mode!=BODY_MODE_RIGID||!d->can_sleep) return;",
+        "    int* r=g_rigid_rest[a->inst]; int dx=a->x-r[0], dy=a->y-r[1];",
+        "    if(dx<=radius&&dx>=-radius&&dy<=radius&&dy>=-radius){",
+        "        if(a->physics_sleep<frames) a->physics_sleep++;",
+        "        if(a->physics_sleep>=frames){ a->vx=0; a->vy=0; }",
+        "    } else { r[0]=a->x; r[1]=a->y; a->physics_sleep=0; }",
+        "}",
         "",
     ]
 
@@ -68,17 +77,14 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
         scene.effective_physics_simulation(project_settings))
     step = (f"body_motion_step(_a,&{model_desc_sym(scene)}[_a->model],{gx},{gy},"
             f"{round((1.0 - damping) * 256)},{round(max_fall_speed * 256)},{sleep_delay if sleep_enabled else 0});")
-    lines = ["    /* Kinematic/Rigid : mouvement avant les collisions, un seul pas pour les posés et les nés */"]
-    if scene_actors:
-        lines += [f"    for(int _k={actor_offset}; _k<{actor_offset + len(scene_actors)}; _k++){{",
-                  "        Actor* _a=&g_actors[_k];", f"        if(_a->active) {step}", "    }"]
-    if shared_models(pi):
-        lines += ["    POOL_EACH(_pm){", "        Actor* _a=&g_actors[_pm];", f"        if(_a->active) {step}", "    }"]
-    return lines
+    return ["    /* Kinematic/Rigid : mouvement avant les collisions, un seul pas pour les posés et les nés */",
+            *each_slot(step, len(scene_actors), actor_offset, bool(shared_models(pi)))]
 
 
 def physics_sleep_lines(scene, project_settings, scene_actors, actor_offset: int, pi: list[dict]) -> list[str]:
-    """Endort les Rigid qui sont restés dans un rayon de `seuil x délai` autour d'une position d'ancrage.
+    """Endort les Rigid qui sont restés dans un rayon de `seuil x délai` autour d'une position d'ancrage :
+    `body_sleep_step` pour chaque emplacement actif, posé ou né, avec la ligne de son type dans le descripteur de modèle
+    (seuls les types Rigid qui peuvent dormir sont concernés).
 
     Le repos se lit sur la position, pas sur la vitesse : une pile de corps garde une vitesse résiduelle (la gravité
     ajoutée à chaque frame) que la correction de position, en pixels entiers, annule par à-coups, et ni la vitesse ni le
@@ -86,37 +92,9 @@ def physics_sleep_lines(scene, project_settings, scene_actors, actor_offset: int
     elle est reprise à la position courante dès que le corps en sort, ce qui remet le compteur à zéro."""
     _iterations, _max_fall, _damping, enabled, sleep_threshold, frames = (
         scene.effective_physics_simulation(project_settings))
-    if not enabled:
+    if not enabled or not any(body_desc(o)[:2] == (BODY_MODE_RIGID, 1) for o in scene_owners(scene_actors, pi)):
         return []
     radius = round(sleep_threshold * 256) * frames
-
-    def update(target: str, indent: str) -> list[str]:
-        return [
-            f"{indent}{{ int* _r=g_rigid_rest[({target})->inst]; int _dx=({target})->x-_r[0], _dy=({target})->y-_r[1];",
-            f"{indent}  if(_dx<= {radius}&&_dx>=-{radius}&&_dy<= {radius}&&_dy>=-{radius}){{",
-            f"{indent}      if(({target})->physics_sleep<{frames}) ({target})->physics_sleep++;",
-            f"{indent}      if(({target})->physics_sleep>={frames}) "
-            f"{{ ({target})->vx=0; ({target})->vy=0; }}",
-            f"{indent}  }}else {{ _r[0]=({target})->x; _r[1]=({target})->y; ({target})->physics_sleep=0; }} }}",
-        ]
-
-    lines: list[str] = []
-    for index, (actor, _sprite) in enumerate(scene_actors):
-        body = physics_body(actor)
-        if physics_body_mode(actor) == PHYSICS_BODY_RIGID and (body is None or body.can_sleep):
-            target = f"&g_actors[{actor_offset + index}]"
-            lines += [f"    if(({target})->active){{", *update(target, "        "), "    }"]
-
-    cases = []
-    for model in shared_models(pi):
-        body = physics_body(model["prefab"])
-        if (physics_body_mode(model["prefab"]) == PHYSICS_BODY_RIGID
-                and (body is None or body.can_sleep)):
-            cases += [f"        case {model['model_id']}: {{", *update("_a", "            "), "        } break;"]
-    if cases:
-        lines += ["    POOL_EACH(_ps){", "        Actor* _a=&g_actors[_ps];",
-                  "        if(!_a->active) continue;", "        switch(_a->model){",
-                  *cases, "        default: break;", "        }", "    }"]
-    if lines:
-        lines.insert(0, "    /* Sommeil Rigid : mesure apres toutes les resolutions */")
-    return lines
+    step = f"body_sleep_step(_a,&{model_desc_sym(scene)}[_a->model],{radius},{frames});"
+    return ["    /* Sommeil Rigid : mesure apres toutes les resolutions, un seul pas pour les posés et les nés */",
+            *each_slot(step, len(scene_actors), actor_offset, bool(shared_models(pi)))]

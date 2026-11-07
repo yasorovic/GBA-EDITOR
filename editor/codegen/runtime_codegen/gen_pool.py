@@ -161,6 +161,7 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
             ("on_collision_exit",  f"extern void {s}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box);"),
             ("on_tile_collide",    f"extern void {s}_on_tile_collide(Actor* self, int normal_x, int normal_y);"),
             ("on_interact",        f"extern void {s}_on_interact(Actor* self, Actor* who);"),
+            ("on_crushed",         f"extern void {s}_on_crushed(Actor* self, Actor* obstacle);"),
         ]:
             if _def(s, ev):
                 L.append(sig)

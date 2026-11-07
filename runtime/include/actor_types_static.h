@@ -42,11 +42,27 @@ typedef struct ModelSlot { u16 slot; s16 entry; } ModelSlot;
 
 /* Le DESCRIPTEUR d'un type d'emplacement : ce que le runtime lit au modèle, pour un acteur posé comme pour un
    acteur né, par `Actor.model`. Une table par scène (`g_model_desc_<Scène>[]`), émise par le build et rangée en
-   IWRAM. Le type 0 ne décrit rien.
-     body_mode     : 0 aucun mouvement automatique (pas de corps, ou Static), 1 Character, 2 Kinematic, 3 Rigid ;
-     can_sleep     : un Rigid peut s'endormir ;
-     gravity_scale : facteur de la gravité de scène, Q8 (256 = x1) ; 0 pour un corps qui l'ignore. */
-typedef struct ModelDesc { u8 body_mode; u8 can_sleep; s16 gravity_scale; } ModelDesc;
+   IWRAM. Le type 0 ne décrit rien ; un champ nul veut dire « rien ».
+     body_mode      : 0 aucun mouvement automatique (pas de corps, ou Static), 1 Character, 2 Kinematic, 3 Rigid ;
+     can_sleep      : un Rigid peut s'endormir ;
+     tile_mask      : les rangs des boîtes résolues contre la carte de collision, 0 si le type ne la rencontre pas ;
+     interactor     : 1 le type porte le tag d'acteur Player (il interagit), 2 de même sans sprite (son regard suit
+                      sa vitesse hors du tick d'animation) ;
+     gravity_scale  : facteur de la gravité de scène, Q8 (256 = x1) ; 0 pour un corps qui l'ignore ;
+     sfx, sfx_vol   : l'effet du SoundFxComponent déclenché par un bouton ou une action, et son volume ;
+     sfx_input      : le masque de ce bouton ou de cette action, 0 sans déclencheur par l'input ;
+     on_tile        : le `on_tile_collide` du script du type ;
+     on_crushed     : le `on_crushed` d'un Character (appelé aussi quand la carte arrête un transport) ;
+     on_update, on_late_update : les crochets d'image du script du type. */
+struct Actor;   /* défini plus bas : sans cette déclaration, le nom ne vivrait que dans le prototype des crochets */
+typedef struct ModelDesc {
+    u8 body_mode; u8 can_sleep; u8 tile_mask; u8 interactor;
+    s16 gravity_scale; s16 sfx; u16 sfx_input; u8 sfx_vol;
+    void (*on_tile)(struct Actor*, int, int);
+    void (*on_crushed)(struct Actor*, struct Actor*);
+    void (*on_update)(struct Actor*);
+    void (*on_late_update)(struct Actor*);
+} ModelDesc;
 enum { BODY_MODE_NONE = 0, BODY_MODE_CHARACTER = 1, BODY_MODE_KINEMATIC = 2, BODY_MODE_RIGID = 3 };
 
 /* Deux tables, deux unités :

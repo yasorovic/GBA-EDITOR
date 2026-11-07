@@ -1,7 +1,11 @@
 """Émission du Character solver : carte de collision, murs et pentes."""
 from __future__ import annotations
 
+from codegen.runtime_codegen.model_desc import each_slot, model_desc_sym, tile_mask
+from codegen.runtime_codegen.physics.body import physics_body_mode
 from codegen.runtime_codegen.physics.oneway import oneway_common_lines
+from codegen.runtime_codegen.shared_pool_gen import shared_models
+from core.models.components import PHYSICS_BODY_KINEMATIC
 
 
 
@@ -403,6 +407,41 @@ def character_solver_lines(one_way_tiles=frozenset()) -> list[str]:
         "    a->collision.last_x=_px;",
         "    a->x=(_px<<8)|_fx; a->y=(_py<<8)|_fy;",
         "}",
+        "/* La résolution contre la carte d'un emplacement, posé ou né : le descripteur `d` de son type donne le masque et",
+        "   les crochets. `kinematic` choisit la passe (les plateformes avant le transport, les autres corps après).",
+        "   `c` est le déplacement porté par une plateforme cette image (x, y, puis 1 si l'écrasement est déjà signalé),",
+        "   ou 0 : il s'ajoute à la vitesse le temps de la résolution, puis la vitesse propre est rendue (annulée sur",
+        "   l'axe que la carte a arrêté). Un transport arrêté par la carte écrase un Character qui a `on_crushed`. */",
+        "static inline __attribute__((always_inline, unused)) void body_tile_step(Actor* a,const ModelDesc* d,",
+        "        int kinematic,int* c){",
+        "    if(!d->tile_mask||(d->body_mode==BODY_MODE_KINEMATIC)!=kinematic) return;",
+        "    if(!c||(!c[0]&&!c[1])){ resolve_actor_tiles(a,d->tile_mask,d->on_tile); return; }",
+        "    int ovx=a->vx,ovy=a->vy,ivx=ovx+c[0],ivy=ovy+c[1];",
+        "    a->vx=ivx; a->vy=ivy;",
+        "    resolve_actor_tiles(a,d->tile_mask,d->on_tile);",
+        "    if(d->on_crushed&&!c[2]&&((c[0]&&!a->vx)||(c[1]&&!a->vy))) d->on_crushed(a,0);",
+        "    a->vx=(ivx&&!a->vx)?0:ovx; a->vy=(ivy&&!a->vy)?0:ovy;",
+        "}",
         "",
     ]
     return L
+
+
+def physics_tile_lines(scene, scene_actors, actor_offset: int, pi: list[dict], *, kinematic: bool,
+                       carry: bool = False) -> list[str]:
+    """Une passe de résolution contre la carte : `body_tile_step` pour chaque emplacement actif, posé ou né, avec la
+    ligne de son type dans le descripteur de modèle. `kinematic` : la passe des plateformes, avant le transport ; sinon
+    celle des autres corps, après les impulsions. `carry` : le transport a émis `_kin_d`, le déplacement porté par
+    emplacement (cf. `physics.kinematic`). Rien si aucun porteur de la passe ne rencontre la carte."""
+    def concerned(owner) -> bool:
+        return bool(tile_mask(owner)) and (physics_body_mode(owner) == PHYSICS_BODY_KINEMATIC) == kinematic
+
+    placed = any(concerned(actor) for actor, _sprite in scene_actors)
+    pool = any(concerned(m["prefab"]) for m in shared_models(pi))
+    if not (placed or pool):
+        return []
+    c = "_kin_d[_a->inst]" if carry and not kinematic else "0"
+    step = f"body_tile_step(_a,&{model_desc_sym(scene)}[_a->model],{int(kinematic)},{c});"
+    what = "Kinematic : carte avant le transport" if kinematic else "carte de collision"
+    return [f"    /* {what}, un seul pas pour les posés et les nés */",
+            *each_slot(step, len(scene_actors) if placed else 0, actor_offset, pool)]

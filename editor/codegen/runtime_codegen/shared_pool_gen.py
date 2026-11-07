@@ -2,15 +2,15 @@
 
 Un emplacement du pool accueille n'importe quel modèle simple (`oam_alloc.is_plain_model`) : le build ne
 peut donc plus dérouler, modèle par modèle, des boucles sur des emplacements qu'il connaît. Chaque
-passe du tick (mise à jour, tuiles, collisions, écriture OAM) devient UNE boucle sur les emplacements
+passe qui lui reste propre (contacts avec les posés, animation et écriture OAM) devient UNE boucle sur les emplacements
 utilisés (`POOL_EACH` : de `g_spool_start` à `g_spool_hw`, le plus haut utilisé, en sautant les blocs de 32
 emplacements sans vivant), avec un `switch` sur `Actor.model` : le code du modèle est appelé, ou ses constantes
 de sprite sont écrites, par le cas qui le concerne.
 
 Un modèle à PARTIES occupe un groupe d'emplacements contigus : `Actor.model` y est un TYPE d'emplacement, la
-racine portant l'identité du modèle (`model_id`) et sa partie k cette identité + k. Les scripts, la résolution
-contre la carte et le Sfx ne concernent que la racine ; l'animation, l'affichage et les collisions ont un cas
-par type (une partie réagit avec le script de sa racine, comme dans une réserve à part).
+racine portant l'identité du modèle (`model_id`) et sa partie k cette identité + k. L'animation, l'affichage et
+les collisions ont un cas par type (une partie réagit avec le script de sa racine, comme dans une réserve à part).
+Les passes déjà communes aux posés et aux nés lisent le descripteur de modèle (`model_desc`) et ne vivent plus ici.
 
 `pi` est la liste des pools de la scène (`gen_pool.scene_pi`) ; seuls ceux qui portent `shared`
 comptent ici. Les fonctions reçoivent les générateurs de `main_gen` dont elles ont besoin plutôt que de
@@ -28,52 +28,12 @@ def owners(m: dict) -> list:
     return [m["prefab"], *(getattr(m["prefab"], "children", None) or [])]
 
 
-def _loop(body: list[str], *, active_only: bool = True) -> list[str]:
-    """Une boucle sur les emplacements utilisés du pool, `_a` étant l'acteur courant."""
-    head = ["    POOL_EACH(_pk){",
-            "        Actor* _a=&g_actors[_pk];"]
-    if active_only:
-        head.append("        if(!_a->active) continue;")
-    return head + ["        switch(_a->model){", *body, "        default: break;", "        }", "    }"]
-
-
 def trim_lines(pi: list[dict]) -> list[str]:
     """Rabat le plus haut emplacement utilisé sur le dernier occupé : après une pluie de balles, les boucles
     du tick ne parcourent plus des emplacements vides."""
     if not shared_models(pi):
         return []
     return ["    while(g_spool_hw>g_spool_start && !g_actors[g_spool_hw-1].alive) g_spool_hw--;"]
-
-
-def hook_lines(pi: list[dict], event: str, has_event) -> list[str]:
-    """`on_update` / `on_late_update` des modèles du pool partagé qui le définissent."""
-    cases = [f"        case {m['model_id']}: {m['sym']}_{event}(_a); break;"
-             for m in shared_models(pi) if has_event(m["sym"], event)]
-    return _loop(cases) if cases else []
-
-
-def tile_lines(pi: list[dict], has_event, map_collider_mask, carried=frozenset()) -> list[str]:
-    """La résolution contre la carte de collision, pour les seuls Character bodies.
-
-    `carried` : les modèles dont une instance peut être portée par une plateforme Kinematic. Comme pour un acteur posé
-    porté, le déplacement de la plateforme (`_kin_pd`, cf. `physics.kinematic`) s'ajoute à la vitesse le temps de la
-    résolution, puis la vitesse propre est restaurée."""
-    cases = []
-    for m in shared_models(pi):
-        mask = map_collider_mask(m["prefab"])
-        if not mask:
-            continue
-        cb = f"{m['sym']}_on_tile_collide" if has_event(m["sym"], "on_tile_collide") else "NULL"
-        if m["model_id"] in carried:
-            cases.append(
-                f"        case {m['model_id']}: {{ int _kin_i=_pk-g_spool_start; int _kin_ovx=_a->vx,_kin_ovy=_a->vy;\n"
-                "            int _kin_ivx=_kin_ovx+_kin_pd[_kin_i][0],_kin_ivy=_kin_ovy+_kin_pd[_kin_i][1];\n"
-                "            _a->vx=_kin_ivx; _a->vy=_kin_ivy;\n"
-                f"            resolve_actor_tiles(_a, {mask}, {cb});\n"
-                "            _a->vx=(_kin_ivx&&!_a->vx)?0:_kin_ovx; _a->vy=(_kin_ivy&&!_a->vy)?0:_kin_ovy; } break;")
-            continue
-        cases.append(f"        case {m['model_id']}: resolve_actor_tiles(_a, {mask}, {cb}); break;")
-    return _loop(cases) if cases else []
 
 
 def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has_event, has_col_event,
@@ -126,13 +86,6 @@ def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has
         "        }",
         "    }",
     ]
-
-
-def sfx_lines(model: dict, sfx_sym, sfx_vol) -> list[str]:
-    """Le Sfx d'un modèle du pool partagé, joué pour chacune de ses instances actives."""
-    return [f"        POOL_EACH(_pi)",
-            f"            if(g_actors[_pi].active && g_actors[_pi].model=={model['model_id']}) "
-            f"sfx_play({sfx_sym}, {sfx_vol}, 0);   /* SoundFxComponent : {model['prefab'].name} */"]
 
 
 def anim_oam_lines(pi: list[dict], anim_variants, anim_tick_variants, appearances, oam_write_lines,

@@ -45,6 +45,7 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #define EWRAM_BSS
+#define G_ACTOR_COUNT 4
 Actor g_actors[4];
 int g_spool_start, g_spool_hw;
 u32 g_alive_bits[1], g_alive_epoch;
@@ -81,7 +82,7 @@ int main(void){
 
 
 def _parts(tmp_path, plateforme_pose: bool, passager_pose: bool):
-    """(avant, après, deltas) que le générateur émet pour cette topologie (plateforme et passager)."""
+    """(avant, après, passagers posés) que le générateur émet pour cette topologie (plateforme et passager)."""
     from codegen.runtime_codegen.gen_sprite import shown
     from codegen.runtime_codegen.physics.kinematic import kinematic_tick_parts
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
@@ -102,7 +103,7 @@ def _parts(tmp_path, plateforme_pose: bool, passager_pose: bool):
     return kinematic_tick_parts(project, [(a, None) for a in posés], 0, scene, pool, shown)
 
 
-def _topologie_c(nom: str, plateforme_pose: bool, passager_pose: bool, before, after, deltas) -> str:
+def _topologie_c(nom: str, plateforme_pose: bool, passager_pose: bool, before, after) -> str:
     cles = (("k", plateforme_pose), ("a", passager_pose))
     poses = [k for k, pose in cles if pose]
     pool = [k for k, pose in cles if not pose]
@@ -114,10 +115,7 @@ def _topologie_c(nom: str, plateforme_pose: bool, passager_pose: bool, before, a
     for k in pool:
         placement.append(f"    pose_en_pool({slot[k]}, {corps[k]}, {PLATEFORME_MODEL if k == 'k' else PASSAGER_MODEL});")
     k, a = slot["k"], slot["a"]
-    if a in deltas:
-        dx, dy = deltas[a]
-    else:
-        dx, dy = f"_kin_pd[{a}-g_spool_start][0]", f"_kin_pd[{a}-g_spool_start][1]"
+    dx, dy = f"_kin_d[{a}][0]", f"_kin_d[{a}][1]"      # une ligne par emplacement, posé ou né
     return (f"static void topo_{nom}(const char* nom, int kvx, int kvy, int x, int y, int vy){{\n    reinit();\n"
             + "\n".join(placement) + "\n"
             f"    for(int f = 0; f < {FRAMES}; f++){{\n"
@@ -138,10 +136,10 @@ def etats(tmp_path_factory):
     dossier = tmp_path_factory.mktemp("parite_transport")
     topologies = []
     for nom, (plateforme_pose, passager_pose) in TOPOLOGIES.items():
-        before, after, deltas = _parts(dossier, plateforme_pose, passager_pose)
+        before, after, _carried = _parts(dossier, plateforme_pose, passager_pose)
         assert any("kinematic_carry" in ligne for ligne in after), (
             f"la topologie {nom} n'émet aucun transport : la sonde ne comparerait rien")
-        topologies.append(_topologie_c(nom, plateforme_pose, passager_pose, before, after, deltas))
+        topologies.append(_topologie_c(nom, plateforme_pose, passager_pose, before, after))
     runs = "\n".join(f'    topo_{nom}("{n}", {kvx}, {kvy}, {x}, {y}, {vy});'
                      for n, kvx, kvy, x, y, vy in SCENARIOS for nom in TOPOLOGIES)
     source = (SONDE.replace("@HELPERS@", "\n".join(kinematic_helper_lines()))

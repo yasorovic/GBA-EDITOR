@@ -15,22 +15,19 @@ from codegen.runtime_codegen.gen_pool import dispatch_sym, parent_compose_lines,
 from codegen.runtime_codegen.gen_scene_query import (
     actors_can_collide, collision_pair_mask, has_col_event, scene_anim_descriptors, scene_has_cmap,
 )
-from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
 from codegen.runtime_codegen.gen_sprite import (
     anim_tick_variants, anim_variants, appearances, oam_write_lines, shown,
 )
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
-from codegen.runtime_codegen.model_desc import model_desc_lines
-from core.models.components import SFX_AUTO_TRIGGERS
+from codegen.runtime_codegen.model_desc import hook_pass_lines, model_desc_lines, sfx_input_pass_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
-from codegen.runtime_codegen.physics.body import (
-    physics_body_mode, physics_collider_mask, project_has_one_way, project_sets_gravity, uses_character_solver,
-)
+from codegen.runtime_codegen.physics.body import physics_body_mode, project_has_one_way, project_sets_gravity
+from codegen.runtime_codegen.physics.character import physics_tile_lines
 from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
-from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts, pool_carried_models
+from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts
 from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
 from codegen.runtime_codegen.physics.floor import floor_tick_lines
-from core.models.components import PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, affine_sprite_component
+from core.models.components import PHYSICS_BODY_CHARACTER, affine_sprite_component
 from core.models.scene import Scene
 from core.project import Project
 from codegen.iwram_plan import iwram_macros
@@ -83,26 +80,22 @@ def gen_scene_tick(
             return True
         return ev in actor_defined_events.get(s, set())
 
+    # Le code Lua de chaque posé : celui de son modèle pour une instance liée (`_dsym`), None sans script.
+    placed_scripts = [_dsym(scene.name, actor.name) if actor_offset + j in lua_idx else None
+                      for j, (actor, _sprite) in enumerate(scene_actors)]
+
     # on_update scène
     if getattr(scene, "script", ""):
         L += [f"    {sym}_scene_on_update();"]
 
-    # on_update actors
-    if lua_idx:
-        for j in sorted(lua_idx):
-            actor, _ = scene_actors[j - actor_offset]
-            s = _dsym(scene.name, actor.name)
-            if _def(s, "on_update"):
-                L.append(f"    if(g_actors[{j}].active) {s}_on_update(&g_actors[{j}]);")
-
-    # Le pool partagé : une boucle sur les emplacements utilisés, le modèle de chacun choisit son code.
-    L += shared_pool_gen.hook_lines(pi, "on_update", _def)
+    # on_update des acteurs, posés puis nés : le crochet se lit au descripteur de modèle.
+    L += hook_pass_lines(scene, scene_actors, actor_offset, pi, placed_scripts, _def, "on_update")
 
     # Hiérarchie : APRÈS les scripts — un `on_update` peut avoir déplacé le
     # parent, et l'enfant doit suivre DANS la même frame — et AVANT la
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
-    kinematic_before, kinematic_after, kinematic_deltas = kinematic_tick_parts(
+    kinematic_before, kinematic_after, carried = kinematic_tick_parts(
         p, scene_actors, actor_offset, scene, pi, shown)
     L += kinematic_before
     L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi, project_sets_gravity(p))
@@ -115,39 +108,32 @@ def gen_scene_tick(
 
     # Le trajet final de la plateforme doit être connu avant de transporter ce qui repose dessus.
     # La carte et les Static peuvent avoir raccourci le mouvement demandé.
-    if scene_has_cmap(scene):
-        for j, (actor, _sprite) in enumerate(scene_actors):
-            if physics_body_mode(actor) != PHYSICS_BODY_KINEMATIC:
-                continue
-            idx = actor_offset + j
-            s = _dsym(scene.name, actor.name)
-            cb = f"{s}_on_tile_collide" if (idx in lua_idx and _def(s, "on_tile_collide")) else "NULL"
-            mask = physics_collider_mask(actor, _sprite, map_only=True)
-            if mask:
-                L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});")
+    has_cmap = scene_has_cmap(scene)
+    if has_cmap:
+        L += physics_tile_lines(scene, scene_actors, actor_offset, pi, kinematic=True)
 
     L += kinematic_after
+    # L'écrasement contre un StaticBody posé (la carte, elle, écrase par `body_tile_step`) : `_kin_d[idx][2]` retient
+    # qu'il est signalé, pour ne pas le refaire à la carte.
     crush_pairs = kinematic_crush_pairs(p, scene_actors, actor_offset)
     crush_handlers = {}
-    for idx in kinematic_deltas:
+    for idx in carried:
         actor, _sprite = scene_actors[idx - actor_offset]
         s = _dsym(scene.name, actor.name)
-        if (physics_body_mode(actor) != PHYSICS_BODY_CHARACTER
-                or not (idx in lua_idx and _def(s, "on_crushed"))):
-            continue
-        L.append(f"    u8 _kin_crushed_{idx}=0;")
-        crush_handlers[idx] = s
+        if (physics_body_mode(actor) == PHYSICS_BODY_CHARACTER
+                and idx in lua_idx and _def(s, "on_crushed")):
+            crush_handlers[idx] = s
     for idx, pairs in crush_pairs.items():
         if idx not in crush_handlers:
             continue
-        dx, dy = kinematic_deltas[idx]
+        dx, dy = f"_kin_d[{idx}][0]", f"_kin_d[{idx}][1]"
         s = crush_handlers[idx]
         for cb, si, sb in pairs:
-            L += [f"    if(!_kin_crushed_{idx}&&({dx}||{dy})&&g_actors[{idx}].active&&g_actors[{si}].active",
+            L += [f"    if(!_kin_d[{idx}][2]&&({dx}||{dy})&&g_actors[{idx}].active&&g_actors[{si}].active",
                   f"       &&g_actors[{idx}].collision.boxes[{cb}].active&&g_actors[{si}].collision.boxes[{sb}].active",
                   f"       &&box_overlap(g_actors[{idx}].x>>8,g_actors[{idx}].y>>8,&g_actors[{idx}].collision.boxes[{cb}],",
                   f"                      g_actors[{si}].x>>8,g_actors[{si}].y>>8,&g_actors[{si}].collision.boxes[{sb}])){{",
-                  f"        {s}_on_crushed(&g_actors[{idx}],&g_actors[{si}]); _kin_crushed_{idx}=1;",
+                  f"        {s}_on_crushed(&g_actors[{idx}],&g_actors[{si}]); _kin_d[{idx}][2]=1;",
                   "    }"]
     L += impulse_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
 
@@ -156,39 +142,8 @@ def gen_scene_tick(
     # résolution DÉPLACE l'acteur, le hook ne fait que prévenir. C'est aussi ce
     # que le modèle promet depuis toujours (« solid=True → résolution physique »).
     # Rien n'est émis si la scène n'a pas de carte : il n'y aurait rien à heurter.
-    if scene_has_cmap(scene):
-        for j in range(len(scene_actors)):
-            actor, sprite = scene_actors[j]
-            if not uses_character_solver(actor, sprite):
-                continue
-            mask = physics_collider_mask(actor, sprite, map_only=True)
-            if physics_body_mode(actor) == PHYSICS_BODY_KINEMATIC:
-                continue
-            idx = actor_offset + j
-            s = _dsym(scene.name, actor.name)
-            cb = f"{s}_on_tile_collide" if (idx in lua_idx and _def(s, "on_tile_collide")) else "NULL"
-            if idx not in kinematic_deltas:
-                L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});")
-                continue
-            dx, dy = kinematic_deltas[idx]
-            crushed = idx in crush_handlers
-            L += [
-                f"    if(g_actors[{idx}].active){{",
-                f"        int _kin_ovx=g_actors[{idx}].vx,_kin_ovy=g_actors[{idx}].vy;",
-                f"        int _kin_ivx=_kin_ovx+{dx},_kin_ivy=_kin_ovy+{dy};",
-                f"        g_actors[{idx}].vx=_kin_ivx; g_actors[{idx}].vy=_kin_ivy;",
-                f"        resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});",
-                *([f"        if(!_kin_crushed_{idx}&&(({dx}&&!g_actors[{idx}].vx)||({dy}&&!g_actors[{idx}].vy))) "
-                   f"{s}_on_crushed(&g_actors[{idx}],0);"] if crushed else []),
-                f"        g_actors[{idx}].vx=(_kin_ivx&&!g_actors[{idx}].vx)?0:_kin_ovx;",
-                f"        g_actors[{idx}].vy=(_kin_ivy&&!g_actors[{idx}].vy)?0:_kin_ovy;",
-                "    }",
-            ]
-
-        L += shared_pool_gen.tile_lines(
-            pi, _def, lambda owner: (physics_collider_mask(owner, map_only=True)
-                                     if uses_character_solver(owner) else 0),
-            pool_carried_models(p, scene_actors, actor_offset, pi, shown))
+    if has_cmap:
+        L += physics_tile_lines(scene, scene_actors, actor_offset, pi, kinematic=False, carry=bool(kinematic_after))
 
     L += floor_tick_lines(p, scene_actors, actor_offset, scene, pi, shown)
 
@@ -236,53 +191,15 @@ def gen_scene_tick(
             L += ["    };",
                   f"    for(u16 _k=0;_k<{len(rows)};_k++) contact_pair_run(&_col_pairs[_k],&_col_prev[_k]);"]
 
-    # Déclencheurs SoundFx par nom d'input (2026-09-27) : les events de script
-    # on_button_* ont disparu (un script écrit `if input:pressed(nom) then`
-    # dans on_update) ; seul le SoundFxComponent garde un déclenchement
-    # AUTOMATIQUE — TOUS les actors de la scène, scriptés ou non, c'est ce qui
-    # permet à un item de menu de répondre à un bouton sans une ligne de Lua.
-    # `trigger` porte un nom de bouton OU d'accord déclaré (même liste que
-    # `input:pressed(nom)`, jamais une séquence) : un nom, pas un bouton
-    # physique — deux composants sur le même bouton partagent le même `if`.
-    from scripting.api import key_constant as _key_constant
-    sfx_by_trigger: dict = {}
-    for j, (actor, _spr) in enumerate(scene_actors, start=actor_offset):
-        sfx_sym, sfx_vol, sfx_trig = sfx_trigger_info(p, actor)
-        if sfx_sym and sfx_trig != "manual" and sfx_trig not in SFX_AUTO_TRIGGERS:
-            sfx_by_trigger.setdefault(sfx_trig, []).append(("actor", j, sfx_sym, sfx_vol))
-    for p2 in pi:
-        sfx_sym, sfx_vol, sfx_trig = sfx_trigger_info(p, p2["prefab"])
-        if sfx_sym and sfx_trig != "manual" and sfx_trig not in SFX_AUTO_TRIGGERS:
-            if p2["shared"]:
-                sfx_by_trigger.setdefault(sfx_trig, []).append(("prefab", p2, sfx_sym, sfx_vol))
-
-    for trig_name, entries in sfx_by_trigger.items():
-        mask = input_layout.masks.get(trig_name, _key_constant(trig_name))
-        L.append(f"    if(input_pressed({mask})){{")
-        for kind, ref, sfx_sym, sfx_vol in entries:
-            if kind == "actor":
-                j = ref
-                L.append(f"        if(g_actors[{j}].active) sfx_play({sfx_sym}, {sfx_vol}, 0);"
-                         f"   /* SoundFxComponent : {scene_actors[j - actor_offset][0].name} */")
-            else:
-                L += shared_pool_gen.sfx_lines(ref, sfx_sym, sfx_vol)
-        L.append("    }")
+    # Déclencheurs SoundFx par nom d'input : un SoundFxComponent répond à un bouton sans script (cf. `model_desc`).
+    L += sfx_input_pass_lines(p, scene, scene_actors, actor_offset, pi, input_layout)
 
     # Interactive : le geste sur l'entrée `interact`, puis l'interacteur atteint le plus proche
-    L += interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
-                             _dsym, input_layout, shown,
-                             lambda j: _lay.placed_entry[j])
+    L += interact_tick_lines(p, scene, scene_actors, actor_offset, pi, placed_scripts, _def, input_layout, shown)
 
-    # on_late_update actors
+    # on_late_update des acteurs, posés puis nés
     L = phases["late"]
-    if lua_idx:
-        for j in sorted(lua_idx):
-            actor, _ = scene_actors[j - actor_offset]
-            s = _dsym(scene.name, actor.name)
-            if _def(s, "on_late_update"):
-                L.append(f"    if(g_actors[{j}].active) {s}_on_late_update(&g_actors[{j}]);")
-
-    L += shared_pool_gen.hook_lines(pi, "on_late_update", _def)
+    L += hook_pass_lines(scene, scene_actors, actor_offset, pi, placed_scripts, _def, "on_late_update")
 
     # on_late_update scène
     if getattr(scene, "script", ""):
@@ -374,8 +291,10 @@ def gen_scene_tick(
     # script a déjà tourné, l'index bouge dans la même frame que l'appui. Cette fin est la même pour toutes les
     # scènes : `scene_render_end` (cf. `gen_globals`) la porte en un seul exemplaire.
     L.append("    scene_render_end(_oamn);")
-    # Le descripteur de modèle, lu par les passes migrées (aujourd'hui le mouvement) : défini avant les phases.
-    out: list[str] = model_desc_lines(p, scene, scene_actors, pi) + iwram_macros(sym, phases)
+    # Le descripteur de modèle, lu par les passes migrées (mouvement, sommeil, carte, crochets, SoundFx, interaction) :
+    # défini avant les phases.
+    out: list[str] = (model_desc_lines(p, scene, scene_actors, pi, placed_scripts, _def, input_layout)
+                      + iwram_macros(sym, phases))
     for name in TICK_PHASES:
         out += [f"BS_ATTR_{sym}_{name} static void scene_tick_{sym}_{name}(void) {{", *phases[name], "}", ""]
     out += [f"static void scene_tick_{sym}(void) {{",

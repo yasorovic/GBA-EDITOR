@@ -116,17 +116,18 @@ def test_une_naissance_pose_son_bit_de_vie(tmp_path):
     assert code.index("g_actors[_i].alive = 1;") < code.index("pool_bit_set(_i);")
 
 
-def test_la_boucle_du_tick_choisit_le_code_par_le_modele(tmp_path):
-    from codegen.runtime_codegen import shared_pool_gen
+def test_le_crochet_d_image_d_un_modele_se_lit_dans_son_descripteur(tmp_path):
+    """Plus de `switch` par modèle pour `on_update` : la ligne du type porte le crochet, la boucle l'appelle."""
     from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.runtime_codegen.model_desc import model_desc_lines
     p, scene = _scene_qui_spawne(tmp_path, prefabs=("Bullet", "Coin"))
     pi = scene_pi(p, scene)
-    code = "\n".join(shared_pool_gen.hook_lines(pi, "on_update", lambda sym, ev: sym.endswith("Bullet")))
-    assert "POOL_EACH(_pk)" in code
-    assert "switch(_a->model)" in code
-    assert "case 1: S_Bullet_on_update(_a); break;" in code
-    assert "S_Coin_on_update" not in code                     # ce modèle n'a pas de on_update
-    assert shared_pool_gen.hook_lines(pi, "on_update", lambda sym, ev: False) == []
+    actors = [(a, None) for a in scene.actors]
+    table = model_desc_lines(p, scene, actors, pi, None, lambda sym, ev: sym.endswith("Bullet") and ev == "on_update")
+    bullet = next(line for line in table if "né : Bullet" in line)
+    coin = next(line for line in table if "né : Coin" in line)
+    assert ".on_update=S_Bullet_on_update" in bullet
+    assert "on_update" not in coin                            # ce modèle n'a pas de on_update
 
 
 def test_l_ecriture_oam_du_pool_garde_les_constantes_de_chaque_modele(tmp_path):
@@ -250,7 +251,6 @@ def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
 
 def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteurs_nes(tmp_path):
     from types import SimpleNamespace
-    from codegen.c_names import scene_actor_sym
     from codegen.runtime_codegen.interact_gen import interact_tick_lines
     from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
@@ -272,15 +272,18 @@ def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteu
     pi = scene_pi(p, scene)
     ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
     code = "\n".join(interact_tick_lines(
-        p, scene, [(a, None) for a in scene.actors], 0, pi, set(), lambda sym, ev: True, scene_actor_sym,
-        SimpleNamespace(masks={"interact": "KEY_A"}), shown, lambda j: 0))
-    top = max(ids.values()) + 1
-    assert f"static const u8 _ia_pbox[{top}]=" in code and f"static const u8 _ia_paim[{top}]=" in code
-    assert f"static const IaAction _ia_paction[{top}]=" in code and "S_Chest_on_interact" in code
-    assert f"g_actors[_w].model=={ids['Hero']}" in code                      # l'interacteur né est reconnu au modèle
-    assert "int _k=interact_pick(&g_actors[_w],_ia_idx,_ia_box,_ia_aim,0,_ia_pbox,_ia_paim," in code
-    assert "if(_k<-1){ Actor* _t=&g_actors[-2-_k]; interact_run(_t,&g_actors[_w],&_ia_paction[_t->model]); }" in code
-    assert "_ia_action[" not in code                                        # aucun consommateur d'emplacement connu
+        p, scene, [(a, None) for a in scene.actors], 0, pi, [None], lambda sym, ev: True,
+        SimpleNamespace(masks={"interact": "KEY_A"}), shown))
+    kinds = scene_oam_layout(p, scene).kinds
+    tags = list(p.collision_tags())
+    # Les tables sont indexées par type : seul le type du coffre né porte un tag de zone et son action.
+    row = ["255"] * kinds
+    row[ids["Chest"]] = str(tags.index("zone"))
+    assert f"static const u8 _ia_tag[{kinds}]={{{','.join(row)}}};" in code
+    assert f"static const IaAction _ia_action[{kinds}]=" in code and "S_Chest_on_interact" in code
+    # L'interacteur né est reconnu au descripteur ; aucun posé n'est consommateur, la recherche ne parcourt que le pool.
+    assert "if(g_model_desc_S[_a->model].interactor){ int _t=interact_pick(_a,0,0,1,_ia_tag,_ia_aim," in code
+    assert "for(int _k=" not in code                                       # aucun posé n'est interacteur
 
 
 # ── Les modèles à parties dans le pool ─────────────────────────────────
