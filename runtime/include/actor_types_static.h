@@ -191,14 +191,16 @@ typedef struct OamEntry {
     /* 1 = x/y de l'acteur sont des pixels d'ÉCRAN (UI en sprite), la caméra ne
        les touche pas. Posé au build depuis l'Actor de l'éditeur ; lecture seule
        côté script (self.screen_space) : le C de rendu émis diffère selon la
-       valeur, la changer en jeu n'aurait donc aucun effet. Reste 0 pour un
-       acteur poolé, dont le rendu ignore le drapeau. */
+       valeur, la changer en jeu n'aurait donc aucun effet. Posé de même au
+       spawn d'un acteur né, depuis son prefab. */
     u8 screen_space;
-    /* Slot de matrice affine OAM (0-31), ou -1. Réservé au build à tout
-       sprite dont « Affine transform » est coché (cf. main_gen.
-       _compute_affine_info) — c'est une capacité de RENDU. -1 = OAM normale :
-       le transform monde de l'acteur et le transform local ci-dessus gardent
-       leur valeur, mais aucune matrice n'est écrite et rien ne les affiche. */
+    /* >= 0 : le sprite est affine (« Affine transform » coché, ou enfant qui
+       tourne avec un parent affine, cf. gen_affine.compute_affine_info) ; posé à
+       l'init d'un posé comme au spawn d'un né. Aucune matrice n'est réservée :
+       le rendu en prend une à la frame et écrit ici son numéro (0-31). -1 = OAM
+       normale : le transform monde de l'acteur et le transform local ci-dessus
+       gardent leur valeur, mais aucune matrice n'est écrite et rien ne les
+       affiche. */
     s8 affine_slot;
     /* Point de pivot du sprite, pixels, depuis le CENTRE du cadre ((0,0) = le
        centre). Rotation, échelle et flip s'exercent autour de lui

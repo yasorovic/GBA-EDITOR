@@ -166,9 +166,9 @@ def etats(tmp_path_factory, emissions):
     return etats
 
 
-def test_un_pose_et_un_ne_ont_chacun_leur_type(emissions):
-    """Sans cela, la sonde lirait la même ligne de table pour les deux chemins et ne comparerait rien."""
-    assert emissions["type_pose"] != emissions["type_ne"]
+def test_un_pose_et_un_ne_du_meme_prefab_ont_le_meme_type(emissions):
+    """La copie posée identique au prefab prend le `model_id` du modèle né : les deux chemins lisent la même ligne."""
+    assert emissions["type_pose"] == emissions["type_ne"]
 
 
 @pytest.mark.parametrize("nom", [s[0] for s in SCENARIOS])

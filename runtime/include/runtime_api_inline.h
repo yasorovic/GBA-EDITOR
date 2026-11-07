@@ -718,9 +718,8 @@ typedef struct AffCache {
 } AffCache;
 /* fin de la trigonométrie du moteur */
 
-/* Un matrix slot est réservé au build quand « Affine transform » est coché sur
-   le OamEntry (cf. main_gen._compute_affine_info) ; sprite.affine_slot
-   est alors >= 0 et le rendu écrit une matrice.
+/* Un sprite dont « Affine transform » est coché a `affine_slot` >= 0 (cf.
+   gen_affine.compute_affine_info) ; le rendu lui prend alors une matrice à la frame.
 
    Ces accesseurs ne le CONSULTENT PAS. Ils l'ont fait — setter no-op et getter
    identité sans slot — et c'était un piège : `self.rotation = self.rotation + 1`
@@ -1341,8 +1340,8 @@ static inline int actor_on_ground(const Actor*a) {
    Lecture seule : ces deux drapeaux sont fixés au build (le C de rendu émis
    dépend d'eux), les écrire en jeu n'aurait aucun effet. */
 static inline int actor_get_screen_space(const Actor* s) { return actor_oam_entry(s)->screen_space; }
-/* « Affine transform » du OamEntry : vrai si un slot de matrice OAM a
-   été réservé à ce sprite (affine_slot vaut -1 sinon). Rien de plus à stocker. */
+/* « Affine transform » du OamEntry : vrai si le sprite est dessiné en affine
+   (affine_slot vaut -1 sinon). Rien de plus à stocker. */
 static inline int actor_get_affine(const Actor* s)       { return actor_oam_entry(s)->affine_slot >= 0; }
 static inline int actor_get_box_count(const Actor* s)    { return s->collision.box_count; }
 

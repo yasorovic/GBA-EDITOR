@@ -15,13 +15,13 @@ AFFINE_LIMIT = 32
 
 
 def scene_affine_requests(project, scene: Scene) -> int:
-    """Matrices affines que les acteurs POSÉS de la scène demandent — avant le plafond de `AFFINE_LIMIT`.
+    """Matrices affines que les acteurs POSÉS de la scène demandent au plus, contre le plafond de `AFFINE_LIMIT`.
 
-    Une matrice se réserve à la main (`SpriteComponent.affine_transform`), donc elle se compte : un acteur
-    actif qui la coche en réserve une. Un enfant sans transform propre PARTAGE celle de son parent et ne
-    coûte rien. `compute_affine_info` s'arrête en silence à 32 ; ce compte, lui, continue, pour que le
-    dépassement se voie. Les instances NÉES n'en réservent pas : elles prennent à la frame celles que les
-    posés laissent libres."""
+    Une matrice se demande à la main (`SpriteComponent.affine_transform`), donc elle se compte : un acteur
+    actif qui la coche en prend une à chaque frame où il est dessiné. Un enfant sans transform propre reprend
+    celle de son parent et ne coûte rien. Au-delà de 32 matrices dans une frame, les sprites suivants
+    s'affichent sans rotation ni échelle ; ce compte le dit avant. Les instances NÉES ne sont pas comptées :
+    leur nombre n'est connu qu'en jeu."""
     n = 0
     for a in scene.actors:
         if a.active:

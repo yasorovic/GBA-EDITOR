@@ -2,14 +2,14 @@
 
 Un emplacement du pool accueille n'importe quel modèle simple (`oam_alloc.is_plain_model`) : le build ne
 peut donc plus dérouler, modèle par modèle, des boucles sur des emplacements qu'il connaît. Chaque
-passe qui lui reste propre (contacts avec les posés, animation et écriture OAM) devient UNE boucle sur les emplacements
+passe qui lui reste propre (contacts avec les posés) devient UNE boucle sur les emplacements
 utilisés (`POOL_EACH` : de `g_spool_start` à `g_spool_hw`, le plus haut utilisé, en sautant les blocs de 32
 emplacements sans vivant), avec un `switch` sur `Actor.model` : le code du modèle est appelé, ou ses constantes
 de sprite sont écrites, par le cas qui le concerne.
 
 Un modèle à PARTIES occupe un groupe d'emplacements contigus : `Actor.model` y est un TYPE d'emplacement, la
-racine portant l'identité du modèle (`model_id`) et sa partie k cette identité + k. L'animation, l'affichage et
-les collisions ont un cas par type (une partie réagit avec le script de sa racine, comme dans une réserve à part).
+racine portant l'identité du modèle (`model_id`) et sa partie k cette identité + k. Les collisions ont un cas par
+type (une partie réagit avec le script de sa racine, comme dans une réserve à part).
 Les passes déjà communes aux posés et aux nés lisent le descripteur de modèle (`model_desc`) et ne vivent plus ici.
 
 `pi` est la liste des pools de la scène (`gen_pool.scene_pi`) ; seuls ceux qui portent `shared`
@@ -86,45 +86,3 @@ def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has
         "        }",
         "    }",
     ]
-
-
-def anim_oam_lines(pi: list[dict], anim_variants, anim_tick_variants, appearances, oam_write_lines,
-                   affine_of=None) -> list[str]:
-    """L'animation puis l'écriture OAM des instances du pool partagé : UNE boucle, et dans chaque cas d'un type
-    d'emplacement le tick d'animation de son porteur, puis ses constantes de sprite. `_pk` est l'acteur, `_pe` son
-    état d'affichage (un par emplacement). Un porteur dont aucune apparence n'a d'état à animer n'a pas de tick, un
-    porteur qui n'affiche rien n'écrit rien ; un type sans l'un ni l'autre n'a pas de cas.
-
-    Les deux passes tenaient dans deux boucles successives ; les fusionner ne change rien parce que chacune ne lit et
-    n'écrit que l'état de son propre emplacement (l'écriture OAM lit la frame que l'animation vient de poser, du même
-    emplacement) : l'ordre des entrées de `shadow_oam` reste celui des emplacements. L'écriture OAM est déjà gardée
-    par `active`, donc le `continue` d'un acteur inactif ne retire rien.
-
-    `anim_variants(porteur, symbole)` : les apparences à animer, ou `[None]` si aucune n'a d'état ; `appearances(porteur)`
-    : les apparences à écrire ; `affine_of(modèle, porteur)` : l'entrée affine DYNAMIQUE du porteur (une matrice prise à
-    la frame), ou None."""
-    cases: dict[int, list[str]] = {}
-    for m in shared_models(pi):
-        for k, owner in enumerate(owners(m)):
-            if m["member_entries"][k] < 0:
-                continue                # ce porteur n'a pas d'entrée : ni animation ni affichage
-            body: list[str] = []
-            variants = anim_variants(owner, m["sym"])
-            if any(v is not None for v in variants):
-                body += ["        {", *anim_tick_variants("_pk", "_pe", variants), "        }"]
-            apps = appearances(owner)
-            if apps:
-                aff = affine_of(m, owner) if affine_of else None
-                body += ["        {", *oam_write_lines("_pk", "_pe", apps, aff=aff), "        }"]
-            if body:
-                cases[m["model_id"] + k] = body
-    if not cases:
-        return []
-    lines: list[str] = []
-    for type_id in sorted(cases):
-        lines += [f"        case {type_id}: {{", *cases[type_id], "        } break;"]
-    return ["    POOL_EACH(_pk){",
-            "        Actor* _a=&g_actors[_pk];",
-            "        if(!_a->active) continue;",
-            "        int _pe=g_spool_entry+(_pk-g_spool_start);",
-            "        switch(_a->model){", *lines, "        default: break;", "        }", "    }"]

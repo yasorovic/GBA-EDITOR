@@ -12,6 +12,7 @@ from codegen.palette_alloc import scene_bank_layout
 from codegen.runtime_codegen.gen_appearance import (
     appearance_init_lines, appearance_layout, appearance_table_lines,
 )
+from codegen.runtime_codegen.gen_affine import affine_init_lines
 from codegen.runtime_codegen.gen_camera import scene_camera_index
 from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
 from codegen.runtime_codegen.gen_pool import dispatch_sym, placed_parent_table
@@ -365,17 +366,8 @@ def _placed_actor_lines(p, scene, scene_actors: list, actor_offset: int, obj_lay
             L += appearance_init_lines(p, actor, str(_e), "    ", alay.actor_base.get(j))
         _aff_i = (affine_info or {}).get(idx)
         if _aff_i and _e >= 0:
-            _aslot = _aff_i["slot"]
-            L += [
-                f"    g_oam_entries[{_e}].affine_slot = {_aslot};",
-                f"    g_oam_entries[{_e}].rotation   = {_aff_i['sprite_rotation']};",
-                f"    g_oam_entries[{_e}].scale_x = {_aff_i['sprite_scale_x']};",
-                f"    g_oam_entries[{_e}].scale_y = {_aff_i['sprite_scale_y']};",
-                f"    g_oam_entries[{_e}].offset_x     = {_aff_i['offset_x']};",
-                f"    g_oam_entries[{_e}].offset_y     = {_aff_i['offset_y']};",
-                f"    g_oam_entries[{_e}].pivot_x      = {_aff_i['pivot_x']};",
-                f"    g_oam_entries[{_e}].pivot_y      = {_aff_i['pivot_y']};",
-            ]
+            # Affine comme un né (`gen_pool`) : le drapeau et les valeurs locales ; la matrice se prend à la frame.
+            L += affine_init_lines(_aff_i, str(_e), "    ")
         elif _e >= 0:
             L.append(f"    g_oam_entries[{_e}].affine_slot = -1;")
         for bi2, cb in enumerate(boxes):

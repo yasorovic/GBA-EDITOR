@@ -1,42 +1,39 @@
-"""codegen/runtime_codegen/gen_affine.py : les slots de matrice affine OAM.
+"""codegen/runtime_codegen/gen_affine.py : les sprites affines et leurs matrices OAM.
 
 Extrait de `main_gen` (A3), au-dessus de la couche de requêtes : il consomme
 `parent_depths` de `gen_scene_query` (vers le bas, sans
 cycle). `affine_entry`/`compute_affine_info` rendent de la donnée ; seul
-`affine_oam_lines_dynamic` émet du C (la matrice recalculée chaque frame).
+`affine_oam_lines` émet du C (la matrice recalculée et prise à chaque frame).
 """
 from __future__ import annotations
 
-from codegen.oam_budget import AFFINE_LIMIT
 from codegen.runtime_codegen.gen_scene_query import parent_depths
 from core.models.components import affine_sprite_component
 from core.models.field_value import FieldValue, number_c, number_value, var_names_from_project as _var_names
 
 
-def affine_entry(actor, sc, slot: int, force: bool = False, names=None) -> dict | None:
+def affine_entry(actor, sc, force: bool = False, names=None) -> dict | None:
     """
     Calcule l'entrée affine d'un Actor + son SpriteComponent.
 
-    Retourne None si l'actor ne réserve pas de slot affine.
+    Retourne None si le sprite de l'actor n'est pas affine.
 
-    La décision est portée par `SpriteComponent.affine_transform` : coché → un des 32 slots hardware est
-    réservé, même si scale/rotation valent leur défaut. Sans lui, aucun slot
-    n'est alloué et le sprite est émis en OAM normale — les champs de transform
-    gardent leur valeur, mais rien ne les affiche.
+    La décision est portée par `SpriteComponent.affine_transform` : coché, le sprite est dessiné en affine (sa
+    matrice, une des 32 du matériel, est prise à la frame), même si scale/rotation valent leur défaut. Sans lui, il
+    est émis en OAM normale : les champs de transform gardent leur valeur, mais rien ne les affiche.
 
     Au runtime la matrice est TOUJOURS calculée à partir des champs transform de
     la struct Actor (monde + local composés, cf. actor_types_static.h) — il n'y a
     plus de chemin statique pré-calculé : le rendu lit rotation/scale/offset
-    chaque frame (cf. affine_oam_lines_dynamic).
+    chaque frame (cf. affine_oam_lines).
     """
-    # `force` : l'enfant d'un parent affine qui PARTAGE son slot. Il n'a pas coché `affine_transform` — il n'en réserve aucun — mais
-    # il lui faut la même entrée pour être émis en OAM affine sur le slot du
-    # parent, avec SES propres décalages de sprite.
+    # `force` : l'enfant d'un parent affine qui tourne avec lui sans avoir coché `affine_transform`, ou une partie
+    # d'un modèle né affine. Il est dessiné en affine avec SES propres décalages de sprite ; sa matrice, identique à
+    # celle de son parent, est reprise à la frame (cf. `affine_oam_lines`).
     if not force and not bool(getattr(sc, "affine_transform", False)):
         return None
 
     return {
-        "slot": slot,
         # Valeurs de départ des champs Actor, écrites au scene_init. Monde sur
         # l'actor, local sur le sprite ; le rendu compose rotation (somme) et
         # scale (produit), l'offset étant transformé par la matrice de l'actor.
@@ -73,40 +70,36 @@ def _offset_value(raw, names):
 
 def compute_affine_info(actor_offset: int, scene_actors: list, names=None) -> dict:
     """
-    Retourne {oam_idx: entry} pour tout actor POSÉ dont le SpriteComponent a
-    `affine_transform` coché.
-    Limité à 32 slots (contrainte hardware GBA OAM). Les instances nées dans le pool n'ont pas de
-    slot réservé ici : elles prennent les matrices que les posés laissent libres, à la frame.
+    Retourne {indice d'acteur: entry} pour tout actor POSÉ dessiné en affine : son SpriteComponent a
+    `affine_transform` coché, ou il tourne avec un parent affine (ci-dessous). L'entrée porte les valeurs de
+    départ écrites à l'init ; aucune matrice n'est réservée, le rendu la prend à la frame, comme pour un né.
     """
     result: dict = {}
-    slot = 0
 
     idx_of = {a.name: actor_offset + j for j, (a, _) in enumerate(scene_actors)}
     for j, (actor, _) in enumerate(scene_actors):
-        if slot >= AFFINE_LIMIT:
-            break
         sc = affine_sprite_component(actor)
         if not sc:
             continue
-        entry = affine_entry(actor, sc, slot, names=names)
+        entry = affine_entry(actor, sc, names=names)
         if entry:
             result[actor_offset + j] = entry
-            slot += 1
 
-    # ── Enfants sans transform propre : ils PARTAGENT le slot du parent ──
-    # Un slot ne contient que pa/pb/pc/pd — la position n'y est pour rien —
-    # donc deux OBJ de même rotation et de même échelle peuvent pointer le
+    # ── Enfants sans transform propre : ils tournent AVEC le parent ──
+    # Une matrice ne contient que pa/pb/pc/pd — la position n'y est pour rien —
+    # donc deux OBJ de même rotation et de même échelle peuvent pointer la
     # même. Un enfant qui n'a ni rotation ni échelle propres
-    # hérite EXACTEMENT du transform de son parent : sa matrice est la même.
-    # Un boss à six parties qui tourne d'un bloc coûte donc UN slot sur 32,
+    # hérite EXACTEMENT du transform de son parent : sa matrice est la même, et
+    # le rendu la reprend au lieu d'en prendre une autre (`affine_oam_lines`).
+    # Un boss à six parties qui tourne d'un bloc coûte donc UNE matrice sur 32,
     # pas sept.
     #
-    # Sans ce partage, ces enfants seraient émis en OAM normale et ne
+    # Sans cela, ces enfants seraient émis en OAM normale et ne
     # tourneraient pas avec leur parent — la composition serait calculée puis
     # ignorée à l'affichage.
     #
-    # Deuxième passe, après l'attribution : le parent doit déjà avoir le sien,
-    # et il peut être déclaré APRÈS l'enfant dans la scène.
+    # Deuxième passe : le parent doit déjà être affine, et il peut être déclaré
+    # APRÈS l'enfant dans la scène.
     depths, _errs = parent_depths(scene_actors)
     for _pass in range(max(depths.values(), default=0)):
         for j, (actor, _) in enumerate(scene_actors):
@@ -119,7 +112,7 @@ def compute_affine_info(actor_offset: int, scene_actors: list, names=None) -> di
             if not base or not sc:
                 continue
             if getattr(sc, "affine_transform", False):
-                continue          # il a demandé le sien, il l'a eu (ou pas : 32)
+                continue          # il est affine de lui-même
             if (_is_set(actor, "rotation", 0)
                     or _is_set(actor, "scale_x", 1.0)
                     or _is_set(actor, "scale_y", 1.0)):
@@ -128,14 +121,13 @@ def compute_affine_info(actor_offset: int, scene_actors: list, names=None) -> di
             # (`angle_eff = rotation + sprite_rot`, `scale_eff = scale ×
             # sprite_scale`) : un enfant dont le sprite a sa propre rotation
             # n'a pas la même matrice que son parent, malgré un transform
-            # d'acteur neutre. Il paie alors son slot comme les autres.
+            # d'acteur neutre.
             if (_is_set(sc, "rotation", 0)
                     or _is_set(sc, "scale_x", 1.0)
                     or _is_set(sc, "scale_y", 1.0)):
                 continue
-            # Ses PROPRES décalages de sprite, sur le slot du parent : la
-            # matrice est partagée, pas la pose.
-            entry = affine_entry(actor, sc, base["slot"], force=True, names=names)
+            # Ses PROPRES décalages de sprite : la matrice est partagée, pas la pose.
+            entry = affine_entry(actor, sc, force=True, names=names)
             if entry:
                 result[oam] = entry
 
@@ -173,9 +165,8 @@ def oam_window_close() -> list[str]:
     return ["          }", "        }"]
 
 
-def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr: str,
-                             screen_space: bool = False,
-                             entry: int | None = None) -> list[str]:
+def affine_oam_lines(idx, sprite, bt: int, priority_expr: str, screen_space: bool = False,
+                     entry=None) -> list[str]:
     """Lignes C (intérieur du if actif) pour un sprite affine : PA/PB/PC/PD et
     position recalculés CHAQUE FRAME depuis les champs transform de la struct
     Actor via gba_sin/gba_cos (cf. runtime_api_inline.h), même formule que la
@@ -199,13 +190,11 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
 
     `screen_space` retire la soustraction de caméra (cf. Actor.screen_space).
 
-    Une entrée `aff["dynamic"]` n'a pas de matrice réservée au build : le sprite prend la PROCHAINE matrice
-    libre de la frame (`_affn`, posé au début du tick après les matrices fixes des acteurs posés) quand il est
-    dessiné, comme il prend le prochain emplacement d'OAM. Ses matrices s'écrivent donc dans la fenêtre, et
-    `OamEntry.affine_slot` retient celle de cette frame. L'appelant a déjà vérifié qu'il en reste
-    (cf. `gen_sprite._oam_body_lines`)."""
-    dynamic = bool(aff.get("dynamic"))
-    aslot = None if dynamic else aff["slot"]
+    Aucune matrice n'est réservée au build, pour un acteur posé comme pour un né : le sprite prend sa matrice à la
+    frame, quand il est dessiné, comme il prend le prochain emplacement d'OAM. Une matrice IDENTIQUE déjà écrite dans
+    cette frame est reprise (un enfant sans transform propre tourne avec son parent : un boss à six parties coûte une
+    matrice, pas sept) ; sinon la suivante (`_affn`) est prise. `OamEntry.affine_slot` retient celle de cette frame.
+    L'appelant a déjà vérifié qu'il en reste (cf. `gen_sprite._oam_body_lines`)."""
     W, H   = sprite.frame_w, sprite.frame_h
     sh, sz = sprite.oam_shape, sprite.oam_size
     tpf    = sprite.tiles_per_frame
@@ -219,13 +208,17 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
     base_x = f"(g_actors[{idx}].x>>8)" + ("" if screen_space else "-cam_x")
     base_y = f"(g_actors[{idx}].y>>8)" + ("" if screen_space else "-cam_y")
 
-    pad = "            " if dynamic else "        "
-    base = "_as*4" if dynamic else None
+    same = "&&".join(f"shadow_oam[_as*4+{k}].dummy==_m{k}" for k in range(4))
     matrix = [
-        f"{pad}shadow_oam[{base + '+0' if dynamic else aslot * 4 + 0}].dummy=(u16)(s16)(_fh?-_pa:_pa);",
-        f"{pad}shadow_oam[{base + '+1' if dynamic else aslot * 4 + 1}].dummy=(u16)(s16)(_fh?-_pb:_pb);",
-        f"{pad}shadow_oam[{base + '+2' if dynamic else aslot * 4 + 2}].dummy=(u16)(s16)(_fv?-_pc:_pc);",
-        f"{pad}shadow_oam[{base + '+3' if dynamic else aslot * 4 + 3}].dummy=(u16)(s16)(_fv?-_pd:_pd);",
+        "            u16 _m0=(u16)(s16)(_fh?-_pa:_pa), _m1=(u16)(s16)(_fh?-_pb:_pb);",
+        "            u16 _m2=(u16)(s16)(_fv?-_pc:_pc), _m3=(u16)(s16)(_fv?-_pd:_pd);",
+        "            int _as=0;",
+        f"            while(_as<_affn&&!({same})) _as++;",
+        "            if(_as==_affn){",
+        "                _affn++;",
+        *[f"                shadow_oam[_as*4+{k}].dummy=_m{k};" for k in range(4)],
+        "            }",
+        f"            g_oam_entries[{e}].affine_slot=_as;",
     ]
     key = ["_ac->rot==_arot", "_ac->srot==_srot", "_ac->asx==_asx", "_ac->asy==_asy", "_ac->ssx==_ssx",
            "_ac->ssy==_ssy", "_ac->lx==_lx", "_ac->ly==_ly", "_ac->px==_px", "_ac->py==_py", "_ac->fl==_fl"]
@@ -286,14 +279,11 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         f"        int _ocx=({base_x})+_ofx; int _ocy=({base_y})+_ofy;",
         f"        int sx=_ocx-{W}-_u; int sy=_ocy-{H}-_v;",
         f"        u16 ti=(u16)({bt}+g_oam_entries[{e}].frame*{tpf});",
-        *([] if dynamic else matrix),
         # Boîte OAM en double taille : 2W x 2H.
         *oam_window_open(2 * W, 2 * H),
-        *([ "            int _as=_affn++;",
-            f"            g_oam_entries[{e}].affine_slot=_as;",
-            *matrix] if dynamic else []),
+        *matrix,
         f"            shadow_oam[_o].attr0=(sy&0xFF)|(1<<8)|(1<<9)|(g_oam_entries[{e}].obj_mode<<10)|({sh}<<14);",
-        f"            shadow_oam[_o].attr1=(sx&0x1FF)|({'_as' if dynamic else aslot}<<9)|({sz}<<14);",
+        f"            shadow_oam[_o].attr1=(sx&0x1FF)|(_as<<9)|({sz}<<14);",
         f"            shadow_oam[_o].attr2=(ti&0x3FF)|({priority_expr}<<10)|(g_oam_entries[{e}].pal_bank<<12);",
         *oam_window_close(),
     ]
@@ -302,25 +292,21 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
 def pool_affine(p, root, owner):
     """L'entrée affine d'un porteur (la racine ou une partie) d'un modèle NÉ, ou None.
 
-    Un modèle est affine quand sa racine l'est ; chaque porteur de son groupe qui affiche un sprite prend alors
-    une matrice, mais aucune n'est réservée au build : elle est attribuée à la frame, quand le sprite est
-    dessiné (`dynamic`, cf. `gen_affine.affine_oam_lines_dynamic`). Les valeurs de départ sont celles du sprite
-    PROPRE du porteur (décalages, pivot, rotation et échelle locales)."""
+    Un modèle est affine quand sa racine l'est ; chaque porteur de son groupe qui affiche un sprite est alors
+    dessiné en affine, sa matrice prise à la frame (cf. `affine_oam_lines`). Les valeurs de départ sont celles du
+    sprite PROPRE du porteur (décalages, pivot, rotation et échelle locales)."""
     sc_root = affine_sprite_component(root)
     if not (sc_root and sc_root.affine_transform):
         return None
     sc = affine_sprite_component(owner)
     if sc is None:
         return None
-    entry = affine_entry(owner, sc, 0, force=True, names=_var_names(p))
-    entry = dict(entry, dynamic=True)
-    del entry["slot"]
-    return entry
+    return affine_entry(owner, sc, force=True, names=_var_names(p))
 
 
 def affine_init_lines(entry: dict, e: str, indent: str) -> list[str]:
-    """L'état d'affichage affine d'un sprite né : « il a une matrice » (le numéro est celui de la frame, posé à
-    l'affichage), puis sa rotation, son échelle, son décalage et son pivot locaux."""
+    """L'état d'affichage affine d'un sprite, posé ou né : « il est affine » (`affine_slot` >= 0 ; le numéro est celui
+    de la frame, posé à l'affichage), puis sa rotation, son échelle, son décalage et son pivot locaux."""
     return [
         f"{indent}g_oam_entries[{e}].affine_slot = 0;",
         f"{indent}g_oam_entries[{e}].rotation   = {entry['sprite_rotation']};",

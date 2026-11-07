@@ -73,14 +73,22 @@ def _variant_key(prefab_name: str, actor) -> tuple:
             bool(getattr(actor, "is_player", False)))
 
 
-def placed_types(posed: list, members: dict, first: int) -> list[int]:
-    """Le type d'emplacement (`Actor.model`) de chaque acteur POSÉ, à partir de `first` (les types du pool partagé
-    occupent ceux d'avant). Un membre d'un modèle partage son type avec les autres membres du même prefab qui ont les
-    mêmes valeurs lues au modèle (une variante) ; un acteur qui n'est membre de rien est un modèle à lui seul."""
+def placed_types(posed: list, members: dict, first: int, spawned: dict | None = None) -> list[int]:
+    """Le type d'emplacement (`Actor.model`) de chaque acteur POSÉ.
+
+    Un membre dont les valeurs lues au modèle sont celles de son prefab, quand la scène fait aussi naître ce prefab
+    (`spawned` : nom -> (prefab, `model_id`)), prend le `model_id` du prefab : posé ou né, le même type, la même ligne de
+    descripteur. Les autres types commencent à `first` (après ceux du pool partagé) : un membre qui diffère de son
+    prefab partage le sien avec les membres de mêmes valeurs (une variante), un acteur qui n'est membre de rien est un
+    modèle à lui seul."""
     member_of = {i: name for name, idx in members.items() for i in idx}
-    ids: dict = {}
+    ids: dict = {_variant_key(name, prefab.actor): model_id for name, (prefab, model_id) in (spawned or {}).items()}
+    fresh = 0
     out = []
     for i, a in enumerate(posed):
         key = _variant_key(member_of[i], a) if i in member_of else ("singleton", i)
-        out.append(ids.setdefault(key, first + len(ids)))
+        if key not in ids:
+            ids[key] = first + fresh
+            fresh += 1
+        out.append(ids[key])
     return out

@@ -8,7 +8,7 @@ import subprocess
 
 import pytest
 
-from codegen.runtime_codegen.gen_affine import affine_entry, affine_oam_lines_dynamic
+from codegen.runtime_codegen.gen_affine import affine_oam_lines
 from core.models.components import SpriteComponent
 from core.models.scene import Actor
 from native_toolchain import compilateur_hote, environnement
@@ -18,8 +18,7 @@ from test_affine_anchor_native import _Forme, _sinus_du_moteur
 def _source() -> str:
     sc = SpriteComponent()
     sc.affine_transform = True
-    entree = affine_entry(Actor(name="A"), sc, 0)
-    lignes = "\n".join(affine_oam_lines_dynamic(0, entree, _Forme(), bt=0, priority_expr="0"))
+    lignes = "\n".join(affine_oam_lines(0, _Forme(), bt=0, priority_expr="0"))
     return f"""
 #include <stdio.h>
 #include <string.h>
@@ -27,7 +26,7 @@ typedef short s16; typedef unsigned short u16; typedef signed char s8; typedef u
 {_sinus_du_moteur()}
 typedef struct {{ int x, y, rotation, scale_x, scale_y; }} A;
 typedef struct {{ int rotation, scale_x, scale_y, flip_h, flip_v, offset_x, offset_y,
-                  pivot_x, pivot_y, frame, obj_mode, priority, pal_bank; }} O;
+                  pivot_x, pivot_y, frame, obj_mode, priority, pal_bank, affine_slot; }} O;
 typedef struct {{ u16 attr0, attr1, attr2, dummy; }} S;
 A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0; AffCache g_aff_cache[1];
 int g_oam_dropped = 0;
@@ -45,7 +44,7 @@ static void regler(const int p[12]) {{
 }}
 
 static void rendre(unsigned out[7]) {{
-    int _oamn = 0;
+    int _oamn = 0, _affn = 0;
     memset(shadow_oam, 0, sizeof shadow_oam);
     {{
 {lignes}

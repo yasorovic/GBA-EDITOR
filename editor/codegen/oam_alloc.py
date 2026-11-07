@@ -149,7 +149,8 @@ class OamLayout:
     pools: list[PoolSlot]
     shared: Optional[SharedPool] = None
     capacity: int = OBJECT_CAPACITY
-    # Par acteur posé : son type d'emplacement (`Actor.model`), après ceux du pool partagé (cf. `pool_model.placed_types`).
+    # Par acteur posé : son type d'emplacement (`Actor.model`) : celui du modèle né pour une copie identique au prefab,
+    # sinon un type après ceux du pool partagé (cf. `pool_model.placed_types`).
     placed_model: list[int] = field(default_factory=list)
 
     @property
@@ -292,4 +293,6 @@ def _compute_oam_layout(project, scene: Scene) -> OamLayout:
 
     return OamLayout(scene=scene, scene_sym=scene_sym, placed=placed,
                      placed_entry=placed_entry, ui=ui, pools=pools, shared=shared, capacity=capacity,
-                     placed_model=placed_types(posed, members, shared_kinds(shared) + 1))
+                     placed_model=placed_types(
+                         posed, members, shared_kinds(shared) + 1,
+                         {m.prefab.name: (m.prefab, m.model_id) for m in (shared.models if shared else [])}))

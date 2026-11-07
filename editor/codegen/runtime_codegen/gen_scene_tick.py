@@ -4,20 +4,17 @@ late, rendu) et le répartiteur qui les appelle.
 Les phases sont celles d'`iwram_plan.TICK_PHASES` ; chacune peut être placée en IWRAM par le build."""
 from __future__ import annotations
 
-from codegen.c_names import scene_actor_sym, sym as c_sym
+from codegen.c_names import sym as c_sym
 from codegen.iwram_plan import TICK_PHASES
 from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen import shared_pool_gen
 from codegen.runtime_codegen.physics.blocks import block_tick_lines
-from codegen.runtime_codegen.gen_affine import pool_affine
 from codegen.runtime_codegen.gen_camera import camera_follow_lines
 from codegen.runtime_codegen.gen_pool import dispatch_sym, parent_compose_lines, pool_compose_lines
 from codegen.runtime_codegen.gen_scene_query import (
     actors_can_collide, collision_pair_mask, has_col_event, scene_anim_descriptors, scene_has_cmap,
 )
-from codegen.runtime_codegen.gen_sprite import (
-    anim_tick_variants, anim_variants, appearances, oam_write_lines, shown,
-)
+from codegen.runtime_codegen.gen_sprite import anim_oam_pass_lines, shown
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.model_desc import hook_pass_lines, model_desc_lines, sfx_input_pass_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
@@ -27,7 +24,7 @@ from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
 from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts
 from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
 from codegen.runtime_codegen.physics.floor import floor_tick_lines
-from core.models.components import PHYSICS_BODY_CHARACTER, affine_sprite_component
+from core.models.components import PHYSICS_BODY_CHARACTER
 from core.models.scene import Scene
 from core.project import Project
 from codegen.iwram_plan import iwram_macros
@@ -70,11 +67,6 @@ def gen_scene_tick(
     phases: dict[str, list[str]] = {name: [] for name in TICK_PHASES}
     L = phases["hooks"]
     L += shared_pool_gen.trim_lines(pi)
-    # Les matrices affines : celles des acteurs posés sont fixes, au début ; les instances nées prennent les suivantes, à la
-    # frame, quand elles sont dessinées (cf. `gen_affine.affine_oam_lines_dynamic`).
-    _born_affine = any((lambda sc: bool(sc and sc.affine_transform))(affine_sprite_component(m["prefab"]))
-                       for m in pi if m["shared"])
-
     def _def(s, ev):
         if actor_defined_events is None:
             return True
@@ -83,6 +75,8 @@ def gen_scene_tick(
     # Le code Lua de chaque posé : celui de son modèle pour une instance liée (`_dsym`), None sans script.
     placed_scripts = [_dsym(scene.name, actor.name) if actor_offset + j in lua_idx else None
                       for j, (actor, _sprite) in enumerate(scene_actors)]
+    # Le symbole du code de chaque posé, script ou non : les événements de frame de son sprite l'appellent.
+    placed_syms = [_dsym(scene.name, actor.name) for actor, _sprite in scene_actors]
 
     # on_update scène
     if getattr(scene, "script", ""):
@@ -252,39 +246,9 @@ def gen_scene_tick(
     # Prochain emplacement OAM libre : après la bande d'interface. Les sprites d'acteurs le
     # consomment dans l'ordre d'écriture (posés, puis pools), seuls ceux à l'écran en prennent un.
     L.append(f"    int _oamn = {_lay.ui};")
-    if _born_affine:
-        L.append(f"    int _affn = {max((e['slot'] for e in (affine_info or {}).values()), default=-1) + 1};")
-    for j, (actor, _shown_sprite) in enumerate(scene_actors):
-        idx = actor_offset + j
-        variants = anim_variants(p, actor, scene_actor_sym(scene.name, actor.name))
-        if any(v is not None for v in variants):
-            L += anim_tick_variants(idx, _lay.placed_entry[j], variants)
-
-    _aff = affine_info or {}
-
-    # OAM actors scène
-    for j, (actor, sprite) in enumerate(scene_actors):
-        idx = actor_offset + j
-        _e = _lay.placed_entry[j]   # entrée OAM de l'acteur (>= 0 dès qu'il a un sprite)
-        if not actor.visible:
-            continue
-        apps = appearances(p, actor, sprite_offsets)
-        if apps:
-            # UI en sprite : x/y SONT déjà des pixels d'écran, la caméra ne les
-            # touche pas. Décidé ici, au build — un acteur de monde émet
-            # exactement le C qu'il émettait avant (cf. Actor.screen_space).
-            L += oam_write_lines(
-                idx, _e, apps, aff=_aff.get(idx),
-                screen_space=bool(getattr(actor, "screen_space", False)))
-
-    # Les instances NÉES du pool partagé animent leur sprite comme les posées (sans ce tick, un projectile spawné
-    # restait figé sur sa première frame), puis l'écrivent en OAM : une boucle, le tick et les constantes de sprite
-    # de chaque modèle dans son cas. APRÈS les posés, dont les entrées OAM précèdent celles du pool ; un emplacement
-    # mort n'est pas parcouru.
-    L += shared_pool_gen.anim_oam_lines(
-        pi, lambda owner, sym: anim_variants(p, owner, sym), anim_tick_variants,
-        lambda owner: appearances(p, owner, sprite_offsets), oam_write_lines,
-        lambda m, owner: pool_affine(p, m["prefab"], owner))
+    # L'animation et l'écriture OAM : une boucle sur les emplacements, posés puis nés, le code du type de chacun.
+    L += anim_oam_pass_lines(p, scene_actors, actor_offset, pi, _lay, placed_syms, set(affine_info or {}),
+                             sprite_offsets)
 
     # Après les scripts, avant le flush OAM : une lecture démarrée pendant le tick avance dès cette frame, et les
     # sprites des glyphes animés sont posés avant d'être copiés en OAM. La navigation vient AVANT le rendu d'UI : le

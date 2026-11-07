@@ -163,11 +163,10 @@ def etats(tmp_path_factory, emissions):
     return etats
 
 
-def test_un_pose_et_un_ne_ont_chacun_leur_type(emissions):
-    """Le posé lié et le né du même prefab ne partagent pas un type : le posé est une variante qui vient après le pool."""
+def test_un_pose_et_un_ne_du_meme_prefab_ont_le_meme_type(emissions):
+    """Une copie posée identique au prefab prend le `model_id` du modèle né : une seule ligne de descripteur."""
+    assert emissions["types_poses"] == emissions["types_nes"]
     assert len(set(emissions["types_poses"])) == len(CORPS)
-    assert not set(emissions["types_poses"]) & set(emissions["types_nes"])
-    assert min(emissions["types_poses"]) > max(emissions["types_nes"])
 
 
 @pytest.mark.parametrize("corps", [c[0] for c in CORPS])

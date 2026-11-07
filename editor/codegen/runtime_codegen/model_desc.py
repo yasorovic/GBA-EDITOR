@@ -140,12 +140,15 @@ def model_desc_lines(p, scene, scene_actors, pi, placed_scripts=None, has_event=
     for m in shared_models(pi):
         # Une partie suit sa racine : ni mouvement, ni résolution, ni script propres (sa ligne reste vide).
         rows[m["model_id"]] = (row(m["prefab"], m["sym"], m["member_entries"][0] >= 0), f"né : {m['prefab'].name}")
+    # Une copie posée identique au prefab porte le `model_id` du modèle né (`pool_model.placed_types`) : sa ligne est
+    # celle du modèle, au masque de carte près (union, `solid` est un champ d'emplacement).
     scripts = placed_scripts or [None] * len(scene_actors)
-    masks: dict[int, int] = {}
+    masks: dict[int, int] = {m["model_id"]: tile_mask(m["prefab"]) for m in shared_models(pi)}
     for (actor, _sprite), kind in zip(scene_actors, lay.placed_model):
         masks[kind] = masks.get(kind, 0) | tile_mask(actor)
     for (actor, _sprite), kind, script, entry in zip(scene_actors, lay.placed_model, scripts, lay.placed_entry):
-        rows[kind] = (dict(row(actor, script, entry >= 0), tile_mask=masks[kind]), f"posé : {actor.name}")
+        label = rows[kind][1] if rows[kind][0] else f"posé : {actor.name}"
+        rows[kind] = (dict(row(actor, script, entry >= 0), tile_mask=masks[kind]), label)
     body = [f"    {{{','.join(f'.{k}={v}' for k, v in values.items() if v not in (0, '0')) or '0'}}},   /* {kind} {label} */"
             for kind, (values, label) in enumerate(rows)]
     return [f"/* Descripteur de modèle de la scène {scene.name} : une ligne par type d'emplacement (`Actor.model`), "

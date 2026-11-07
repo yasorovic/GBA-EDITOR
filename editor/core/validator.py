@@ -1637,9 +1637,9 @@ def _check_actor_budget(ctx: ValidationContext):
 
 
 def _check_affine_budget(ctx: ValidationContext):
-    """Les 32 matrices affines d'une scène : celles des acteurs posés sont réservées au build
-    (`compute_affine_info`), les instances nées prennent à la frame celles qui restent. Au-delà de 32 posés, les
-    derniers s'affichent SANS rotation ni échelle — sans un mot au build avant cet avertissement."""
+    """Les 32 matrices affines d'une scène, prises à la frame par chaque sprite affine dessiné, posé ou né. Au-delà
+    de 32 posés affines, les derniers dessinés s'affichent SANS rotation ni échelle, sans un mot au build avant cet
+    avertissement."""
     from codegen.oam_budget import scene_affine_requests, AFFINE_LIMIT
     for scene in ctx.project.scenes:
         n = scene_affine_requests(ctx.project, scene)

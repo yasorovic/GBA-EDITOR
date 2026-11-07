@@ -21,8 +21,8 @@ from core.models.scene import Actor
 from core.project import Project
 from codegen.c_names import sym as c_sym
 from codegen.grit_conversion import sprite_unique_frames, seq_key
-from codegen.runtime_codegen.gen_affine import (
-    affine_oam_lines_dynamic, oam_window_open, oam_window_close)
+from codegen.runtime_codegen.gen_affine import affine_oam_lines, oam_window_open, oam_window_close, pool_affine
+from codegen.runtime_codegen.shared_pool_gen import owners, shared_models
 from codegen.actor_appearance import initial_appearance, owner_appearances
 
 
@@ -383,25 +383,21 @@ def _signed_offset(v: int) -> str:
     return (f"-{v}" if v > 0 else f"+{-v}") if v else ""
 
 
-def _oam_body_lines(idx: int, e: int, ap: Appearance, aff: Optional[dict],
-                    screen_space: bool) -> list[str]:
-    """Le corps d'écriture OAM d'UNE apparence (l'intérieur du `if` actif)."""
-    if aff and aff.get("dynamic"):
-        # Pas de matrice réservée : tant qu'il en reste, le sprite prend la prochaine ; sinon il s'affiche SANS
-        # rotation ni échelle (comme avant pour le 33e), et le tick le dit une fois par seconde.
-        return ["        if(_affn>=32) {",
-                "            g_affine_dropped++;",
-                f"            g_oam_entries[{e}].affine_slot=-1;",
-                *_oam_body_lines(idx, e, ap, None, screen_space),
+def _oam_body_lines(idx, e, ap: Appearance, affine: bool, screen_space: bool) -> list[str]:
+    """Le corps d'écriture OAM d'UNE apparence (l'intérieur du `if` actif).
+
+    `affine` : un acteur de ce type PEUT être affine. Le drapeau est par emplacement (`OamEntry.affine_slot` >= 0, posé
+    à l'init d'un posé comme au spawn d'un né), car `affine_transform` peut différer entre deux copies d'un même type.
+    Tant qu'il reste une matrice, le sprite affine en prend une à la frame ; sinon il s'affiche SANS rotation ni
+    échelle, et le tick le dit une fois par seconde."""
+    if affine:
+        return [f"        if(g_oam_entries[{e}].affine_slot>=0&&_affn<32) {{",
+                *affine_oam_lines(idx, ap.sprite, ap.base_tile, f"g_oam_entries[{e}].priority",
+                                  screen_space=screen_space, entry=e),
                 "        } else {",
-                *affine_oam_lines_dynamic(idx, aff, ap.sprite, ap.base_tile,
-                                          f"g_oam_entries[{e}].priority",
-                                          screen_space=screen_space, entry=e),
+                f"            if(g_oam_entries[{e}].affine_slot>=0) g_affine_dropped++;",
+                *_oam_body_lines(idx, e, ap, False, screen_space),
                 "        }"]
-    if aff:
-        return affine_oam_lines_dynamic(idx, aff, ap.sprite, ap.base_tile,
-                                        f"g_oam_entries[{e}].priority",
-                                        screen_space=screen_space, entry=e)
     cx = "" if screen_space else "-cam_x"
     cy = "" if screen_space else "-cam_y"
     ox_s, oy_s = _signed_offset(ap.origin_x), _signed_offset(ap.origin_y)
@@ -418,24 +414,23 @@ def _oam_body_lines(idx: int, e: int, ap: Appearance, aff: Optional[dict],
     ]
 
 
-def oam_write_lines(idx: int, e: int, appearances: list[Appearance],
-                    aff: Optional[dict] = None, screen_space: bool = False) -> list[str]:
+def oam_write_lines(idx, e, appearances: list[Appearance], affine: bool = False,
+                    screen_space: bool = False) -> list[str]:
     """L'écriture OAM de l'acteur `idx`, une apparence par cas.
 
     `idx` = l'acteur (`g_actors[idx]`, sa position), `e` = son ÉTAT d'affichage
     (`g_oam_entries[e]`). L'emplacement OAM n'est PAS `e` : le sprite prend le prochain libre de
     la frame (`_oamn`) s'il est actif, visible et à l'écran. Un acteur qui n'écrit rien ne laisse
     rien : `oam_hide_from` éteint en fin de frame ce que la précédente avait allumé. L'affine
-    appartient à l'ENTRÉE (le slot de matrice est réservé au build) : `aff` est commun à toutes
-    les apparences, chacune n'apportant que sa géométrie."""
+    appartient à l'ENTRÉE : `affine` vaut pour toutes les apparences, chacune n'apportant que sa géométrie."""
     head = f"    if(g_actors[{idx}].active && g_oam_entries[{e}].visible){{"
     tail = "    }"
     if len(appearances) == 1:
-        return [head, *_oam_body_lines(idx, e, appearances[0], aff, screen_space), tail]
+        return [head, *_oam_body_lines(idx, e, appearances[0], affine, screen_space), tail]
     cases: list[str] = [f"        switch(g_oam_entries[{e}].appearance){{"]
     for n, ap in enumerate(appearances):
         cases += [f"        case {n}: {{",
-                  *_oam_body_lines(idx, e, ap, aff, screen_space),
+                  *_oam_body_lines(idx, e, ap, affine, screen_space),
                   f"        }} break;"]
     # Une apparence inconnue ne dessine rien plutôt que n'importe quoi.
     cases += ["        default: break;", "        }"]
@@ -510,3 +505,59 @@ def initial_state_rank(comp, sprite) -> int:
         if st.name == name:
             return i
     return 0
+
+
+def anim_oam_pass_lines(p, scene_actors, actor_offset: int, pi, layout, placed_syms, placed_affine: set,
+                        sprite_offsets: dict) -> list[str]:
+    """L'animation puis l'écriture OAM de chaque emplacement actif de la scène, posé ou né : UNE boucle sur
+    `[actor_offset, fin)` (les posés, puis le pool partagé qui les suit dans `g_actors`), et dans le cas du TYPE de
+    l'emplacement (`Actor.model`) le tick d'animation de son porteur puis ses constantes de sprite. `_pk` est
+    l'acteur, `_pe` son état d'affichage (`Actor.oam_entry`). L'ordre des sprites dans `shadow_oam` est celui des
+    emplacements, posés d'abord.
+
+    Le code d'un type s'écrit une fois, d'après un de ses porteurs : une copie posée identique au prefab porte le
+    `model_id` du modèle né (`pool_model.placed_types`), les membres d'une variante ont le même sprite et le même
+    code. Ce qui peut différer d'une copie à l'autre se lit dans l'emplacement : la visibilité, l'état d'animation,
+    l'affine (`OamEntry.affine_slot` >= 0). Un type est émis avec la branche affine si l'un de ses porteurs l'est.
+
+    `placed_syms` : le symbole du code de chaque posé (celui de son modèle pour un membre), que les événements de
+    frame appellent ; `placed_affine` : les indices des posés affines (`compute_affine_info`)."""
+    types: dict = {}
+
+    def add(kind, owner, sym, affine):
+        if kind in types:
+            types[kind][2] |= affine
+            return
+        types[kind] = [anim_variants(p, owner, sym), appearances(p, owner, sprite_offsets), affine,
+                       bool(getattr(owner, "screen_space", False))]
+
+    shared = shared_models(pi)
+    for m in shared:
+        for k, owner in enumerate(owners(m)):
+            if m["member_entries"][k] >= 0:            # un porteur sans entrée n'anime ni n'affiche rien
+                add(m["model_id"] + k, owner, m["sym"], pool_affine(p, m["prefab"], owner) is not None)
+    for j, ((actor, _sprite), kind, entry, sym) in enumerate(
+            zip(scene_actors, layout.placed_model, layout.placed_entry, placed_syms)):
+        if entry >= 0:
+            add(kind, actor, sym, actor_offset + j in placed_affine)
+
+    cases: list[str] = []
+    for kind in sorted(types):
+        variants, apps, affine, screen_space = types[kind]
+        body: list[str] = []
+        if any(v is not None for v in variants):
+            body += ["        {", *anim_tick_variants("_pk", "_pe", variants), "        }"]
+        if apps:
+            body += ["        {", *oam_write_lines("_pk", "_pe", apps, affine=affine, screen_space=screen_space),
+                     "        }"]
+        if body:
+            cases += [f"        case {kind}: {{", *body, "        } break;"]
+    if not cases:
+        return []
+    end = "g_spool_hw" if shared else str(actor_offset + len(scene_actors))
+    return [*(["    int _affn = 0;"] if any(t[2] for t in types.values()) else []),
+            f"    for(int _pk={actor_offset}; _pk<{end}; _pk++){{",
+            "        Actor* _a=&g_actors[_pk];",
+            "        if(!_a->active) continue;",
+            "        int _pe=_a->oam_entry;",
+            "        switch(_a->model){", *cases, "        default: break;", "        }", "    }"]
