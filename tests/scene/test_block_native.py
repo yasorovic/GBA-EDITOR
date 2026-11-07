@@ -21,6 +21,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
 #define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
+u8 g_support_normal = 1;
 Actor g_actors[8];
 int g_spool_start = 0, g_spool_hw = 0;
 u32 g_alive_bits[1];
@@ -48,7 +49,7 @@ static void report_motion(const char* nom, int i){
 /* Le mobile est du type 1, les bloqueurs du type 2 (rang compact 0, boîte 0) ; le type 7 bloque aussi (rang compact 1),
    le type 9 ne bloque pas. Une seule ligne de mobile : `run[0]`. */
 static const u8 bi[10] = {255, 255, 0, 255, 255, 255, 255, 1, 255, 255};
-static const BlockRun run[1][2] = {{{0, 1}, {0, 1}}};
+static const PairRun run[1][2] = {{{0, 1}, {0, 1}}};
 static const u8 box[1] = {0};
 static void bloque(int i, u8 mask, int hi, int pool){
     actors_resolve_blocks(&g_actors[i], mask, run[0], bi, box, 0, hi, pool);
@@ -120,44 +121,39 @@ int main(void){
     }
 
     {   /* Rigid au-dessus d'un Static : toute la correction et l'impulsion vont au Rigid. */
-        const RigidPair pair = {0, 1, 256, 0, 0, 0};
         mk(0, 50, 40, 0, 256, 16, 16, 1);
         mk(1, 50, 50, 0, 0, 16, 16, 0);
-        rigid_pair_resolve(&pair);
+        rigid_contact(&g_actors[0], &g_actors[1], 0, 0, 256, 0, 0, 0);
         report_motion("rigid_static", 0);
     }
 
     {   /* Deux Rigid de même masse partagent correction et vitesse normale. */
-        const RigidPair pair = {0, 1, 256, 256, 0, 0};
         mk(0, 50, 40, 0, 256, 16, 16, 1);
         mk(1, 50, 50, 0, 0, 16, 16, 1);
-        rigid_pair_resolve(&pair);
+        rigid_contact(&g_actors[0], &g_actors[1], 0, 0, 256, 256, 0, 0);
         report_motion("rigid_rigid_a", 0);
         report_motion("rigid_rigid_b", 1);
     }
 
     {   /* Le corps deux fois plus lourd ne prend qu'un tiers de la correction. */
-        const RigidPair pair = {0, 1, 256, 128, 0, 0};
         mk(0, 50, 40, 0, 256, 16, 16, 1);
         mk(1, 50, 50, 0, 0, 16, 16, 1);
-        rigid_pair_resolve(&pair);
+        rigid_contact(&g_actors[0], &g_actors[1], 0, 0, 256, 128, 0, 0);
         report_motion("rigid_mass_light", 0);
         report_motion("rigid_mass_heavy", 1);
     }
 
     {   /* Une restitution maximale inverse la vitesse normale du Rigid. */
-        const RigidPair pair = {0, 1, 256, 0, 256, 0, 0, 0};
         mk(0, 50, 40, 0, 256, 16, 16, 1);
         mk(1, 50, 50, 0, 0, 16, 16, 0);
-        rigid_pair_resolve(&pair);
+        rigid_contact(&g_actors[0], &g_actors[1], 0, 0, 256, 0, 256, 0);
         report_motion("rigid_bounce", 0);
     }
 
     {   /* Une friction maximale arrête la vitesse tangentielle contre un Static. */
-        const RigidPair pair = {0, 1, 256, 0, 0, 256, 0, 0};
         mk(0, 50, 40, 256, 0, 16, 16, 1);
         mk(1, 50, 50, 0, 0, 16, 16, 0);
-        rigid_pair_resolve(&pair);
+        rigid_contact(&g_actors[0], &g_actors[1], 0, 0, 256, 0, 0, 256);
         report_motion("rigid_friction", 0);
     }
 
@@ -166,22 +162,22 @@ int main(void){
         int carry_x=0, carry_y=0; u8 carried=0;
         mk(0, 52, 50, 512, 0, 16, 16, 0);
         mk(1, 54, 34, 0, 0, 8, 16, 1);
-        kinematic_carry(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
-                        &carried, &carry_x, &carry_y);
+        kinematic_carry_n(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
+                        &carried, &carry_x, &carry_y, 1);
         report("kinematic_rider", 1);
         printf("kinematic_delta %%d %%d %%d\n", carry_x, carry_y, carried);
 
         carry_x=carry_y=0; carried=0;
         mk(1, 54, 34, 0, -256, 8, 16, 1);
-        kinematic_carry(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
-                        &carried, &carry_x, &carry_y);
+        kinematic_carry_n(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
+                        &carried, &carry_x, &carry_y, 1);
         report("kinematic_jump", 1);
 
         carry_x=carry_y=0; carried=0;
         mk(0, 50, 52, 0, 512, 16, 16, 0);
         mk(1, 54, 34, 0, 0, 8, 16, 1);
-        kinematic_carry(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
-                        &carried, &carry_x, &carry_y);
+        kinematic_carry_n(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
+                        &carried, &carry_x, &carry_y, 1);
         report("kinematic_rider_vertical", 1);
     }
     return 0;
@@ -324,12 +320,6 @@ def _rencontres(lignes) -> dict[int, tuple[int, dict[int, list[int]]]]:
     return out
 
 
-def _lignes_impulsions(p, acteurs):
-    from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
-    from core.models.scene import Scene
-    return impulse_tick_lines(p, Scene(name="Physics"), _scene(*acteurs), 0, [], None)
-
-
 def test_le_mobile_recoit_la_table_des_boites_bloquantes(lignes):
     hero = _acteur("Hero", tag="Player")
     coffre = _acteur("Chest", tag="body", response="block", solid=False)
@@ -347,92 +337,107 @@ def test_un_static_body_bloque_sans_devenir_un_mobile(lignes):
     assert _rencontres(lignes([hero, mur])) == {1: (1, {2: [0]})}
 
 
-def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_historique(lignes):
+@pytest.fixture
+def impulsions(tmp_path):
+    """`impulsions(acteurs, **scène)` : la passe d'impulsions émise pour une vraie scène de ces acteurs posés (types 1, 2,
+    ... dans l'ordre), lue dans ses tables : {"code", "masses" par type, "couples" par couple ordonné de types}."""
+    import re
+
+    def emet(acteurs, **scene_kw):
+        from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
+        from core.models.scene import Scene
+        from core.project import Project
+        scene = Scene(name="Physics", actors=list(acteurs), physics_enabled=True, **scene_kw)
+        p = Project(tmp_path)
+        p.scenes.items = [scene]
+        code = "\n".join(impulse_tick_lines(p, scene, _scene(*acteurs), 0, [], None))
+        table = lambda nom: [int(v) for v in re.findall(r"\d+", re.search(rf"{nom}(?:\[\d+\])+[^=]*=\{{(.*)\}};", code)[1])]
+        ki, masses, runs, pairs = table("_ri_ki"), table("_ri_mass"), table("_ri_run"), table("_ri_pair")
+        corps = {k: i for k, i in enumerate(ki) if i != 255}
+        n = len(corps)
+        couples = {}
+        for a, i in corps.items():
+            for b, j in corps.items():
+                first, count = runs[2 * (i * n + j)], runs[2 * (i * n + j) + 1]
+                if count:
+                    couples[(a, b)] = [tuple(pairs[4 * q: 4 * q + 4]) for q in range(first, first + count)]
+        return {"code": code, "masses": {k: masses[i] for k, i in corps.items()}, "couples": couples}
+    return emet
+
+
+def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_historique(lignes, impulsions):
     from core.models.components import PhysicsBodyComponent
-    from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
-    from core.models.scene import Scene
     rigid = _acteur("Crate", tag="body", response="block")
     rigid.components.append(PhysicsBodyComponent(mode="RigidBody"))
     sol = _acteur("Floor", tag="body", response="block", solid=False)
     sol.components.append(PhysicsBodyComponent(mode="StaticBody"))
 
     assert lignes([rigid, sol]) == []
-    lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, sol]))
-    assert "static const RigidPair _rigid_pairs[1]" in lignes
-    assert "{0,1,256,0,0,0,0,0}" in lignes
-    assert "_it<4" in lignes
+    emis = impulsions([rigid, sol])
+    # Types 1 (Crate) et 2 (Floor) : un couple de boîtes (0, 0), sans matériau, entre la caisse et le sol comme entre deux
+    # caisses du même type ; 4 passes, sommeil après 30 images.
+    assert emis["couples"] == {(1, 1): [(0, 0, 0, 0)], (1, 2): [(0, 0, 0, 0)], (2, 1): [(0, 0, 0, 0)]}
+    assert emis["masses"] == {1: 256, 2: 0}
+    assert ",0,2,0,4,30);" in emis["code"]
 
-    six_passes = "\n".join(impulse_tick_lines(
-        _projet(), Scene(name="Physics", physics_gravity_override=True,
-                         physics_solver_iterations=6), _scene(rigid, sol), 0, [], None))
-    assert "_it<6" in six_passes
+    six_passes = impulsions([rigid, sol], physics_gravity_override=True, physics_solver_iterations=6)
+    assert ",0,2,0,6," in six_passes["code"]
 
 
-def test_plus_de_255_paires_rigid_utilisent_des_compteurs_16_bits_et_le_rejet_par_rectangles():
+def test_beaucoup_de_paires_rigid_passent_par_l_instantane_et_la_liste_des_paires_retenues(impulsions):
     from core.models.components import PhysicsBodyComponent
     crates = []
-    for i in range(24):                 # 24 Rigid : 276 paires, au-delà de ce qu'un compteur u8 peut parcourir
+    for i in range(24):                 # 24 Rigid : 276 paires de corps, au-delà de ce qu'un compteur u8 peut parcourir
         crate = _acteur(f"Crate{i}", tag="body", response="block")
         crate.components.append(PhysicsBodyComponent(mode="RigidBody"))
         crates.append(crate)
-    lignes = "\n".join(_lignes_impulsions(_projet(), crates))
-    assert "static const RigidPair _rigid_pairs[276]" in lignes
-    assert "u8 _k" not in lignes
-    # Les rectangles sont relevés une fois, et seules les paires retenues par la première passe sont rejouées.
-    assert lignes.count("rigid_side_rect(") == 1
-    assert "static s16 _rigid_rect[24][5];" in lignes
-    assert "u16 _live_n=rigid_pairs_scan(_rigid_pairs,_rigid_pair_sides,_rigid_rect,276,_rigid_live,30);" in lignes
-    assert "for(u8 _it=1;_it<4;_it++)" in lignes
-    # Une paire dont les deux côtés sont au repos (StaticBody ou Rigid endormi) n'est pas rejouée.
-    assert "rigid_side_rect(_rigid_sides[_s][0],_rigid_sides[_s][1],_rigid_sides[_s][2],30,_rigid_rect[_s]);" in lignes
+    code = impulsions(crates)["code"]
+    # Un instantané d'un corps par emplacement, une liste des paires retenues par la première passe (indices 32 bits).
+    assert "static RigidBody _ri_list[24];" in code
+    assert "static u32 _ri_live[276] EWRAM_BSS;" in code
+    assert code.count("rigid_solve(") == 1
 
 
-def test_la_table_encode_la_masse_inverse_de_chaque_rigid():
+def test_la_table_encode_la_masse_inverse_de_chaque_rigid(impulsions):
     from core.models.components import PhysicsBodyComponent
     light = _acteur("Light", tag="body", response="block")
     light.components.append(PhysicsBodyComponent(mode="RigidBody", mass=0.5))
     heavy = _acteur("Heavy", tag="body", response="block")
     heavy.components.append(PhysicsBodyComponent(mode="RigidBody", mass=2.0))
 
-    lignes = "\n".join(_lignes_impulsions(_projet(), [light, heavy]))
-
-    assert "{0,1,512,128,0,0,0,0}" in lignes
+    assert impulsions([light, heavy])["masses"] == {1: 512, 2: 128}
 
 
-def test_la_table_cuit_les_materiaux_du_contact():
+def test_la_table_cuit_les_materiaux_du_contact(impulsions):
     from core.models.components import PhysicsBodyComponent
     rigid = _acteur("Ball", tag="body", response="block", restitution=0.25, friction=0.25)
     rigid.components.append(PhysicsBodyComponent(mode="RigidBody"))
     wall = _acteur("Wall", tag="body", response="block", restitution=0.75, friction=1.0)
     wall.components.append(PhysicsBodyComponent(mode="StaticBody"))
 
-    lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, wall]))
-
-    assert "{0,1,256,0,192,128,0,0}" in lignes
+    assert impulsions([rigid, wall])["couples"][(1, 2)] == [(0, 0, 192, 128)]
 
 
-def test_un_kinematic_est_une_masse_infinie_pour_un_rigid():
+def test_un_kinematic_est_une_masse_infinie_pour_un_rigid(impulsions):
     from core.models.components import PhysicsBodyComponent
     platform = _acteur("Platform", tag="body", response="block")
     platform.components.append(PhysicsBodyComponent(mode="KinematicBody"))
     rigid = _acteur("Crate", tag="body", response="block")
     rigid.components.append(PhysicsBodyComponent(mode="RigidBody", mass=2.0))
 
-    lignes = "\n".join(_lignes_impulsions(_projet(), [platform, rigid]))
+    emis = impulsions([platform, rigid])
+    assert emis["masses"] == {1: 0, 2: 128} and (1, 2) in emis["couples"]
 
-    assert "{0,1,0,128,0,0,0,0}" in lignes
 
-
-def test_un_character_est_une_masse_infinie_pour_un_rigid():
+def test_un_character_est_une_masse_infinie_pour_un_rigid(impulsions):
     from core.models.components import PhysicsBodyComponent
     character = _acteur("Hero", tag="body", response="block")
     character.components.append(PhysicsBodyComponent(mode="CharacterBody"))
     rigid = _acteur("Crate", tag="body", response="block")
     rigid.components.append(PhysicsBodyComponent(mode="RigidBody"))
 
-    lignes = "\n".join(_lignes_impulsions(_projet(), [character, rigid]))
-
-    assert "{0,1,0,256,0,0,0,0}" in lignes
+    emis = impulsions([character, rigid])
+    assert emis["masses"] == {1: 0, 2: 256} and (1, 2) in emis["couples"]
 
 
 def test_un_kinematic_n_est_repousse_que_par_un_static(lignes):
@@ -469,7 +474,7 @@ def test_la_relation_du_body_restreint_forme_mobile_et_bloqueur(lignes):
     assert _rencontres(lignes([hero, wall])) == {1: (2, {2: [1]})}
 
 
-def test_la_relation_du_body_restreint_les_paires_d_impulsion():
+def test_la_relation_du_body_restreint_les_paires_d_impulsion(impulsions):
     from core.models.components import PhysicsBodyComponent
     rigid = Actor(name="Crate", components=[
         CollisionShapeComponent(id="sensor", tag="Ignored", solid=True),
@@ -482,10 +487,7 @@ def test_la_relation_du_body_restreint_les_paires_d_impulsion():
         PhysicsBodyComponent(mode="StaticBody", collider_id="shape"),
     ])
 
-    lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, wall]))
-
-    assert "{0,1,256,0,0,0,1,1}" in lignes
-    assert "_rigid_pairs[1]" in lignes
+    assert impulsions([rigid, wall])["couples"][(1, 2)] == [(1, 1, 0, 0)]
 
 
 def test_sans_bloqueur_rien_n_est_emis(lignes):

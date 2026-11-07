@@ -18,13 +18,12 @@ from codegen.runtime_codegen.gen_sprite import anim_oam_pass_lines, shown
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.model_desc import hook_pass_lines, model_desc_lines, sfx_input_pass_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
-from codegen.runtime_codegen.physics.body import physics_body_mode, project_has_one_way, project_sets_gravity
+from codegen.runtime_codegen.physics.body import project_has_one_way, project_sets_gravity
 from codegen.runtime_codegen.physics.character import physics_tile_lines
 from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
-from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts
+from codegen.runtime_codegen.physics.kinematic import kinematic_tick_parts
 from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
 from codegen.runtime_codegen.physics.floor import floor_tick_lines
-from core.models.components import PHYSICS_BODY_CHARACTER
 from core.models.scene import Scene
 from core.project import Project
 from codegen.iwram_plan import iwram_macros
@@ -89,7 +88,7 @@ def gen_scene_tick(
     # parent, et l'enfant doit suivre DANS la même frame — et AVANT la
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
-    kinematic_before, kinematic_after, carried = kinematic_tick_parts(
+    kinematic_before, kinematic_after, kinematic_crush = kinematic_tick_parts(
         p, scene_actors, actor_offset, scene, pi, shown)
     L += kinematic_before
     L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi, project_sets_gravity(p))
@@ -107,28 +106,7 @@ def gen_scene_tick(
         L += physics_tile_lines(scene, scene_actors, actor_offset, pi, kinematic=True)
 
     L += kinematic_after
-    # L'écrasement contre un StaticBody posé (la carte, elle, écrase par `body_tile_step`) : `_kin_d[idx][2]` retient
-    # qu'il est signalé, pour ne pas le refaire à la carte.
-    crush_pairs = kinematic_crush_pairs(p, scene_actors, actor_offset)
-    crush_handlers = {}
-    for idx in carried:
-        actor, _sprite = scene_actors[idx - actor_offset]
-        s = _dsym(scene.name, actor.name)
-        if (physics_body_mode(actor) == PHYSICS_BODY_CHARACTER
-                and idx in lua_idx and _def(s, "on_crushed")):
-            crush_handlers[idx] = s
-    for idx, pairs in crush_pairs.items():
-        if idx not in crush_handlers:
-            continue
-        dx, dy = f"_kin_d[{idx}][0]", f"_kin_d[{idx}][1]"
-        s = crush_handlers[idx]
-        for cb, si, sb in pairs:
-            L += [f"    if(!_kin_d[{idx}][2]&&({dx}||{dy})&&g_actors[{idx}].active&&g_actors[{si}].active",
-                  f"       &&g_actors[{idx}].collision.boxes[{cb}].active&&g_actors[{si}].collision.boxes[{sb}].active",
-                  f"       &&box_overlap(g_actors[{idx}].x>>8,g_actors[{idx}].y>>8,&g_actors[{idx}].collision.boxes[{cb}],",
-                  f"                      g_actors[{si}].x>>8,g_actors[{si}].y>>8,&g_actors[{si}].collision.boxes[{sb}])){{",
-                  f"        {s}_on_crushed(&g_actors[{idx}],&g_actors[{si}]); _kin_d[{idx}][2]=1;",
-                  "    }"]
+    L += kinematic_crush
     L += impulse_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non

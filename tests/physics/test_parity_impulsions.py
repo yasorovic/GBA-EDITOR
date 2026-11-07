@@ -1,8 +1,8 @@
 """Parité posé / spawné du solveur d'impulsions : quatre topologies, un seul résultat.
 
 Un Rigid et son partenaire (StaticBody ou autre Rigid) sont chacun posé ou né dans le pool : posé/posé, posé/pool,
-pool/posé, pool/pool. Les lignes C sont celles d'`impulse_tick_lines` pour chaque topologie, compilées avec les aides C
-réelles ; à chaque image le Rigid reçoit la gravité puis avance, et le solveur résout le contact. Les quatre
+pool/posé, pool/pool. Les lignes C sont celles d'`impulse_tick_lines` pour une vraie scène où les deux prefabs sont
+posés ET spawnés (un seul chemin), compilées avec les aides C réelles ; à chaque image le Rigid reçoit la gravité puis avance, et le solveur résout le contact. Les quatre
 topologies doivent donner exactement le même état, image par image, que posé/posé, qui sert de référence.
 
 Voir `test_parity_posed_spawned.py` pour la règle.
@@ -37,8 +37,6 @@ TOPOLOGIES = {
     "pool_pool": (False, False),
 }
 
-MOBILE_MODEL, PARTENAIRE_MODEL = 1, 2
-
 SONDE = r"""
 #include <stdio.h>
 typedef unsigned char u8; typedef signed char s8;
@@ -46,6 +44,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
 #define BS_ATTR_IWRAM
+#define EWRAM_BSS
 Actor g_actors[4];
 int g_spool_start, g_spool_hw;
 u32 g_alive_bits[1], g_alive_epoch;
@@ -81,41 +80,51 @@ int main(void){
 """
 
 
-def _tick_lines(tmp_path, partenaire_mode: str, mobile_pose: bool, partenaire_pose: bool) -> list[str]:
-    """Les lignes que le générateur émet pour cette topologie (mobile = Rigid, partenaire = Static ou Rigid)."""
+def _emissions(tmp_path, partenaire_mode: str) -> dict:
+    """Les lignes émises pour une vraie scène où les prefabs `Mobile` (Rigid) et `Partenaire` (Static ou Rigid) sont
+    posés (emplacements 0 et 1) ET spawnés : un seul chemin, chaque topologie ne choisit que ses emplacements vivants."""
+    import copy
+    from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
     from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
-    from core.models.scene import Actor
+    from core.models.scene import Actor, Prefab, Scene
     from core.project import Project
+    from oam_fixtures import faire_naitre
 
-    project = Project.create(tmp_path / f"Impulsions_{partenaire_mode}", "Impulsions")
-    scene = project.active_scene
-    mobile = Actor(name="Mobile", components=[CollisionShapeComponent(solid=True, response="block"),
-                                              PhysicsBodyComponent(mode="RigidBody")])
-    partenaire = Actor(name="Partenaire", components=[CollisionShapeComponent(solid=True, response="block"),
-                                                      PhysicsBodyComponent(mode=partenaire_mode)])
-    posés = [a for a, pose in ((mobile, mobile_pose), (partenaire, partenaire_pose)) if pose]
-    pool = [{"shared": True, "model_id": model, "sym": a.name.lower(), "prefab": a}
-            for a, pose, model in ((mobile, mobile_pose, MOBILE_MODEL), (partenaire, partenaire_pose, PARTENAIRE_MODEL))
-            if not pose]
-    return impulse_tick_lines(project, scene, [(a, None) for a in posés], 0, pool, shown)
+    dossier = tmp_path / f"Impulsions_{partenaire_mode}"
+    mobile = Prefab(name="Mobile")
+    mobile.actor.components += [CollisionShapeComponent(solid=True, response="block"),
+                                PhysicsBodyComponent(mode="RigidBody")]
+    partenaire = Prefab(name="Partenaire")
+    partenaire.actor.components += [CollisionShapeComponent(solid=True, response="block"),
+                                    PhysicsBodyComponent(mode=partenaire_mode)]
+    scene = Scene(name="S", physics_enabled=True, actors=[
+        Actor(name=f"{pf.name}Pose", prefab_name=pf.name, components=copy.deepcopy(pf.actor.components))
+        for pf in (mobile, partenaire)])
+    project = Project(dossier)
+    project.scenes.items = [scene]
+    project.prefabs.items = [mobile, partenaire]
+    faire_naitre(dossier, scene, "Mobile", "Partenaire")
+    pi = scene_pi(project, scene)
+    ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
+    return {"lines": impulse_tick_lines(project, scene, [(a, None) for a in scene.actors], 0, pi, shown),
+            "m": ids["Mobile"], "p": ids["Partenaire"]}
 
 
-def _topologie_c(nom: str, mobile_pose: bool, partenaire_pose: bool, lines: list[str]) -> str:
-    # Les posés prennent les emplacements 0, 1 dans l'ordre mobile, partenaire; ceux du pool, 2 puis 3.
-    cles = (("m", mobile_pose), ("p", partenaire_pose))
-    poses = [k for k, pose in cles if pose]
-    pool = [k for k, pose in cles if not pose]
-    slot = {k: i for i, k in enumerate(poses)} | {k: 2 + i for i, k in enumerate(pool)}
+def _topologie_c(nom: str, mobile_pose: bool, partenaire_pose: bool, e: dict) -> str:
+    """Le mobile vit à l'emplacement 0 (posé) ou 2 (pool), le partenaire à 1 ou 3 ; posé ou né, le type de son prefab."""
+    slot = {"m": 0 if mobile_pose else 2, "p": 1 if partenaire_pose else 3}
     corps = {"m": "corps(x, y, vx, vy, 8, 8)", "p": "corps(px, py, 0, 0, pw, ph)"}
     placement = []
-    for k in poses:
-        placement.append(f"    g_actors[{slot[k]}] = {corps[k]}; g_actors[{slot[k]}].inst = {slot[k]};")
-    for k in pool:
-        placement.append(f"    pose_en_pool({slot[k]}, {corps[k]}, {MOBILE_MODEL if k == 'm' else PARTENAIRE_MODEL});")
+    for k, pose in (("m", mobile_pose), ("p", partenaire_pose)):
+        if pose:
+            placement.append(f"    g_actors[{slot[k]}] = {corps[k]}; g_actors[{slot[k]}].inst = {slot[k]};"
+                             f" g_actors[{slot[k]}].model = {e[k]};")
+        else:
+            placement.append(f"    pose_en_pool({slot[k]}, {corps[k]}, {e[k]});")
     m, p = slot["m"], slot["p"]
-    body = "\n".join(lines)
+    body = "\n".join(e["lines"])
     return (f"static void topo_{nom}(const char* nom, int x, int y, int vx, int vy, int px, int py, int pw, int ph, int partenaire_rigid){{\n"
             "    reinit();\n" + "\n".join(placement) + "\n"
             f"    for(int f = 0; f < {FRAMES}; f++){{\n"
@@ -136,12 +145,11 @@ def etats(tmp_path_factory):
     dossier = tmp_path_factory.mktemp("parite_impulsions")
     etats: dict[tuple[str, str], list[tuple[int, ...]]] = {}
     for mode in ("StaticBody", "RigidBody"):
-        topologies = []
-        for nom, (mobile_pose, partenaire_pose) in TOPOLOGIES.items():
-            lignes = _tick_lines(dossier, mode, mobile_pose, partenaire_pose)
-            assert any("rigid_pairs_scan" in ligne or "rigid_pool_pass" in ligne for ligne in lignes), (
-                f"la topologie {nom} n'émet aucune impulsion : la sonde ne comparerait rien")
-            topologies.append(_topologie_c(nom, mobile_pose, partenaire_pose, lignes))
+        emis = _emissions(dossier, mode)
+        assert any("rigid_solve" in ligne for ligne in emis["lines"]), (
+            f"{mode} n'émet aucune impulsion : la sonde ne comparerait rien")
+        topologies = [_topologie_c(nom, mobile_pose, partenaire_pose, emis)
+                      for nom, (mobile_pose, partenaire_pose) in TOPOLOGIES.items()]
         runs = "\n".join(
             f'    topo_{nom}("{n}", {x}, {y}, {vx}, {vy}, '
             f'{30 if mode == "StaticBody" else 36}, {30 if mode == "StaticBody" else 50}, {40 if mode == "StaticBody" else 8}, '

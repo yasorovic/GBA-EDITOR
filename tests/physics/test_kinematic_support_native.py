@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
 
 from native_toolchain import compilateur_hote, environnement
@@ -17,7 +15,11 @@ SONDE = r"""
 typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
+#define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 Actor g_actors[4];
+u8 g_support_normal = 1;
+int g_spool_start, g_spool_hw;
+u32 g_alive_bits[1], g_alive_epoch;
 %(helpers)s
 
 static void mk(int i, int x, int y, int vx, int vy, int w, int h){
@@ -96,21 +98,22 @@ def test_un_passager_du_mauvais_cote_n_est_pas_transporte(resultats):
 
 
 @pytest.mark.parametrize("gravite, normale", [((0, 0.25), 1), ((0, -0.25), 2), ((0.25, 0), 3), ((-0.25, 0), 4)])
-def test_le_build_emet_le_transport_du_cote_d_appui_de_la_scene(gravite, normale):
+def test_le_build_emet_le_transport_du_cote_d_appui_de_la_scene(tmp_path, gravite, normale):
     from codegen.runtime_codegen.physics.kinematic import kinematic_tick_parts
     from core.models.components import (CollisionShapeComponent, PhysicsBodyComponent, PHYSICS_BODY_CHARACTER,
                                         PHYSICS_BODY_KINEMATIC)
-    from core.models.scene import Actor
+    from core.models.scene import Actor, Scene
+    from core.project import Project
     plateforme, joueur = Actor(name="Plateforme"), Actor(name="Joueur")
     plateforme.components = [CollisionShapeComponent(id="b", response="block", solid=False),
                              PhysicsBodyComponent(mode=PHYSICS_BODY_KINEMATIC)]
     joueur.components = [CollisionShapeComponent(id="b", response="sensor", solid=True),
                          PhysicsBodyComponent(mode=PHYSICS_BODY_CHARACTER)]
-    p = SimpleNamespace(settings=SimpleNamespace(collision_disabled_pairs=[], collision_tags=[]))
-    scene = SimpleNamespace(effective_physics_gravity=lambda _settings: gravite)
-    _before, after, _deltas = kinematic_tick_parts(p, [(plateforme, None), (joueur, None)], 0, scene)
+    scene = Scene(name="S", actors=[plateforme, joueur], physics_enabled=True, physics_gravity_override=True,
+                  physics_gravity_x=gravite[0], physics_gravity_y=gravite[1])
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    _before, after, _crush = kinematic_tick_parts(p, [(plateforme, None), (joueur, None)], 0, scene)
+    # Le côté d'appui de la scène est cuit dans l'appel, le dernier argument.
     appel = "\n".join(after)
-    if normale == 1:
-        assert "kinematic_carry(&g_actors[0]" in appel and "kinematic_carry_n" not in appel
-    else:
-        assert f",{normale});" in appel and "kinematic_carry_n(&g_actors[0]" in appel
+    assert f"kinematic_carry_all(_kin_list,_kin_n,&_kin_run[0][0],1,_kin_riders,_kin_nr,_kin_pair,_kin_d,{normale});" in appel

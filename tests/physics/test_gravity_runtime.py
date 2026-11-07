@@ -58,33 +58,48 @@ def test_le_rigid_lit_la_gravite_du_runtime_selon_son_gravity_scale():
 
 def test_le_transport_kinematic_lit_le_cote_d_appui_du_runtime(tmp_path):
     from codegen.runtime_codegen.physics.kinematic import kinematic_tick_parts
-    platform, rider = _actor("Lift", "KinematicBody"), _actor("Rider", "CharacterBody")
-    actors = [(platform, None), (rider, None)]
+    from core.project import Project
 
-    _before, after, _deltas = kinematic_tick_parts(
-        _project(tmp_path / "write", "scene.gravity = vec2(0, 1)\n"), actors, 0)
-    assert "kinematic_carry_n(&g_actors[0],&g_actors[1],0,0," in "\n".join(after)
-    assert "g_support_normal);" in "\n".join(after)
+    def apres(dossier, script):
+        platform, rider = _actor("Lift", "KinematicBody"), _actor("Rider", "CharacterBody")
+        scene = Scene(name="S", actors=[platform, rider], physics_enabled=True)
+        project = Project(dossier)
+        project.scenes.items = [scene]
+        if script is not None:
+            project.user_library_dir.mkdir(parents=True, exist_ok=True)
+            (project.user_library_dir / "Hero.lua").write_text(script, encoding="utf-8")
+        _before, after, _crush = kinematic_tick_parts(project, [(platform, None), (rider, None)], 0, scene)
+        return "\n".join(after)
 
-    _before, after, _deltas = kinematic_tick_parts(_project(tmp_path / "none", None), actors, 0)
-    assert "kinematic_carry(&g_actors[0],&g_actors[1],0,0," in "\n".join(after)
+    # Le dernier argument est le côté d'appui : 0 = lu dans `g_support_normal`, sinon cuit (1 : le bas).
+    assert "_kin_pair,_kin_d,0);" in apres(tmp_path / "write", "scene.gravity = vec2(0, 1)\n")
+    assert "_kin_pair,_kin_d,1);" in apres(tmp_path / "none", None)
 
 
 def test_le_sol_lit_le_cote_d_appui_du_runtime_et_garde_les_faces_a_sens_unique_fixes(tmp_path):
     from codegen.runtime_codegen.physics.floor import floor_tick_lines
-    scene = Scene(name="S")
-    hero = _actor("Hero", "CharacterBody")
-    ground = _actor("Ground", "StaticBody")
-    shelf = _actor("Shelf", "StaticBody", one_way="up")
-    actors = [(hero, None), (ground, None), (shelf, None)]
+    from core.project import Project
 
-    code = "\n".join(floor_tick_lines(_project(tmp_path / "write", "scene.gravity = vec2(0, 1)\n"), actors, 0, scene))
-    assert "actor_floor_test_n(&g_actors[0],0,&g_actors[1],0,g_support_normal);" in code
-    assert "if(g_support_normal==1) actor_floor_test_n(&g_actors[0],0,&g_actors[2],0,g_support_normal);" in code
+    def emet(dossier, script):
+        hero = _actor("Hero", "CharacterBody")
+        ground = _actor("Ground", "StaticBody")
+        shelf = _actor("Shelf", "StaticBody", one_way="up")
+        scene = Scene(name="S", actors=[hero, ground, shelf], physics_enabled=True)
+        project = Project(dossier)
+        project.scenes.items = [scene]
+        if script is not None:
+            project.user_library_dir.mkdir(parents=True, exist_ok=True)
+            (project.user_library_dir / "Hero.lua").write_text(script, encoding="utf-8")
+        return "\n".join(floor_tick_lines(project, [(a, None) for a in scene.actors], 0, scene))
 
-    sans = "\n".join(floor_tick_lines(_project(tmp_path / "none", None), actors, 0, scene))
-    assert "g_support_normal" not in sans
-    assert "actor_floor_test(&g_actors[0],0,&g_actors[1],0);" in sans
+    # Le Hero (type 1) repose sur le sol (type 2) et sur l'étagère à sens unique (type 3).
+    code = emet(tmp_path / "write", "scene.gravity = vec2(0, 1)\n")
+    assert "_fl_pair[2]" in code and "={{0,0,0,0},{0,0,1,1}};" in code     # l'étagère : garde « haut », sens unique
+    assert "_fl_pair,0); }" in code                                   # côté d'appui lu dans g_support_normal
+
+    sans = emet(tmp_path / "none", None)
+    assert "={{0,0,0,0},{0,0,0,1}};" in sans                                # côté cuit : pas de garde
+    assert "_fl_pair,1); }" in sans
 
 
 def test_un_script_ecrit_et_lit_scene_gravity_en_q8():

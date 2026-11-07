@@ -105,9 +105,8 @@ def _block_lines() -> list[str]:
         "    else { a->y+=py<<8; a->vy=0; }",
         "}",
         "/* Les boîtes qui peuvent arrêter un mobile se lisent par COUPLE DE TYPES (`Actor.model`), que le mobile et le",
-        "   bloqueur soient posés ou nés : `BlockRun` désigne, dans `box` (rang, bit haut BLOCKER_MOVING), la suite des",
-        "   boîtes bloquantes du type du bloqueur que ce type de mobile rencontre. */",
-        "typedef struct { u16 first; u8 n; } BlockRun;",
+        "   bloqueur soient posés ou nés : un `PairRun` (actor_types_static.h) désigne, dans `box` (rang, bit haut",
+        "   BLOCKER_MOVING), la suite des boîtes bloquantes du type du bloqueur que ce type de mobile rencontre. */",
         *_typed_lines(one_way=False),
     ]
 
@@ -142,7 +141,7 @@ def _typed_lines(one_way: bool) -> list[str]:
         "}",
         "/* Parcourt tous les emplacements pour chaque mobile : en IWRAM, ARM, sans temps d'attente. */",
         "BS_ATTR_IWRAM",
-        f"static void __attribute__((unused)) actors_resolve_blocks{sfx}(Actor* a,u8 body_mask,const BlockRun* runs,"
+        f"static void __attribute__((unused)) actors_resolve_blocks{sfx}(Actor* a,u8 body_mask,const PairRun* runs,"
         f"const u8* bi,const u8* box{ow_param},int lo,int hi,int pool){{",
         "    if(!a->active) return;",
         "    int idle=!a->vx&&!a->vy;",
@@ -266,7 +265,7 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
         f"        static u8 _bk_mask[{len(movers)}]{_IW}={{{','.join(str(m) for _k, m, _w, _r in movers)}}};",
         *([f"        static u8 _bk_wall[{len(movers)}]{_IW}={{{','.join(str(w) for _k, _m, w, _r in movers)}}};"]
           if walls else []),
-        f"        static BlockRun _bk_run[{len(movers)}][{len(blocker_kinds)}]{_IW}={{{','.join(run_rows)}}};",
+        f"        static PairRun _bk_run[{len(movers)}][{len(blocker_kinds)}]{_IW}={{{','.join(run_rows)}}};",
         f"        static u8 _bk_box[{len(box)}]{_IW}={{{','.join(map(str, box))}}};",
         *([f"        static u8 _bk_ow[{len(ow)}]{_IW}={{{','.join(map(str, ow))}}};"] if one_way else []),
         *("    " + line for line in each_slot(

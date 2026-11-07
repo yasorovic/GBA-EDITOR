@@ -65,6 +65,11 @@ typedef struct ModelDesc {
 } ModelDesc;
 enum { BODY_MODE_NONE = 0, BODY_MODE_CHARACTER = 1, BODY_MODE_KINEMATIC = 2, BODY_MODE_RIGID = 3 };
 
+/* Les modules à PAIRES (blocage, appui au sol) se lisent par couple de types, que les deux emplacements soient posés
+   ou nés : une table par module et par scène donne, pour un type et un type partenaire, la suite `n` de ses entrées
+   à partir de `first` (couples de boîtes et réglages, propres au module). */
+typedef struct PairRun { u16 first; u8 n; } PairRun;
+
 /* Deux tables, deux unités :
 
      g_actors[]      — un indice = un ACTEUR : identité, position, vélocité,

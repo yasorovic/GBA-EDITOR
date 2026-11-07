@@ -45,7 +45,7 @@ static void mk(int i, int x, int y, int vx, int vy, int w, int h){
 }
 /* Le bloqueur (emplacement 1) est du type 1, rang compact 0 ; sa boîte 0 porte la face `dir`. */
 static void run(const char* nom, int dir){
-    const u8 bi[] = {255, 0}; const BlockRun runs[] = {{0, 1}}; const u8 box[] = {0}; const u8 ow[] = {dir};
+    const u8 bi[] = {255, 0}; const PairRun runs[] = {{0, 1}}; const u8 box[] = {0}; const u8 ow[] = {dir};
     g_actors[1].model = 1;
     actors_resolve_blocks_ow(&g_actors[0], 1, runs, bi, box, ow, 0, 2, 0);
     printf("%%s %%d %%d %%d %%d\n", nom, g_actors[0].x >> 8, g_actors[0].y >> 8, g_actors[0].vx, g_actors[0].vy);
