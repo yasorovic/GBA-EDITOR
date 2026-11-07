@@ -1,6 +1,6 @@
 """La passe de contacts émise par scène : qui y entre, et la taille de sa liste. Le cycle de vie d'un contact (enter,
 collide, exit, désactivé, détruit, emplacement réoccupé) est exécuté par la sonde `tests/native/actor_box_probe.c`, la
-parité posé / spawné par `test_parity_contacts.py`."""
+passe émise pour une vraie scène par `test_contacts_scene_native.py`."""
 from __future__ import annotations
 
 import re
