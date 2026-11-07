@@ -50,7 +50,8 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN
                   DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE, HARDWARE_ENUMS,
                   API_MODULES, module_members, REF_TYPES, REF_TYPE_TABLE,
                   ref_member, ref_lineage, REF_ACTOR, STATELESS_MODULES, module_call_form, LAYER_NUMBERS,
-                  modernize_message, REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY)
+                  modernize_message, REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY,
+                  REF_AREA, AREA_EVENTS, AREA_PARAM, DOMAIN_AREA_NAME)
 
 from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
@@ -138,6 +139,7 @@ class BuildContext:
     music_box_trigger_names: list[str] = None  # déclencheurs des MusicBox
     music_section_names: list[str] = None  # noms de section des musiques (music.set_section)
     actor_names:  list[str]  = None    # noms des actors de la scène (pour actor.get)
+    area_names:   list[str]  = None    # noms des Areas de la scène (pour area:get et area.name)
     prefab_names: list[str]  = None    # noms de Prefab du projet (pour actor.spawn)
     pooled_prefab_names: list[str] = None  # prefabs poolés dans CETTE scène (ils seuls ont un ACTOR_*)
     # Exports par prefab, utilisés pour valider `actor:spawn`.
@@ -1438,6 +1440,10 @@ class Checker:
                       if fn.name in COLLISION_EVENTS else [])
         for name in box_params:
             self._ref_types[name] = REF_COLLISION_SHAPE
+        # Le paramètre `area` d'un événement d'Area est une référence d'Area.
+        if fn.name in AREA_EVENTS and AREA_PARAM in fn.params:
+            box_params.append(AREA_PARAM)
+            self._ref_types[AREA_PARAM] = REF_AREA
         self._check_block(fn.body, seq_top=seq is not None)
         for name in box_params:
             self._ref_types.pop(name, None)
@@ -2928,6 +2934,16 @@ class Checker:
                 f"{', '.join(connus) or 'none'}.",
             ))
 
+    def _check_area_name(self, call_key: str, name: str):
+        """Le nom d'une Area DE CETTE SCÈNE : seules elles reçoivent un `#define AREA_*` (cf. headers.py). Erreur bloquante :
+        sans ce `#define`, le C généré cite un identifiant qui n'existe pas. Un script sans scène (`None`) relâche le contrôle."""
+        if self.ctx.area_names is not None and name not in self.ctx.area_names:
+            self.errors.append(CheckError(
+                "error",
+                f"{call_key} == '{name}': no Area named '{name}' in this scene. Areas of the scene: "
+                f"{', '.join(self.ctx.area_names) or 'none'}.",
+            ))
+
     def _check_box_tag(self, call_key: str, name: str):
         """Le tag d'une boîte de collision : `Project.collision_tags()`. Sans lui
         le `#define BOXTAG_*` n'existe pas et gcc échoue sur la ligne générée.
@@ -3078,6 +3094,7 @@ _DOMAIN_CHECKS: dict = {
     DOMAIN_ACTOR:   lambda c, key, val, p, a: c._check_actor(key, val),
     DOMAIN_ACTOR_NAME:     lambda c, key, val, p, a: c._check_actor_name(key, val),
     DOMAIN_BOX_TAG: lambda c, key, val, p, a: c._check_box_tag(key, val),
+    DOMAIN_AREA_NAME: lambda c, key, val, p, a: c._check_area_name(key, val),
     DOMAIN_GLOBAL:  lambda c, key, val, p, a: c._check_global(key, val),
     DOMAIN_SEQUENCE: lambda c, key, val, p, a: c._check_sequence(key, val),
     # Énumérations matérielles : une seule vérification pour les six, puisque

@@ -16,3 +16,22 @@ GBA_H = 160
 # (main_gen.py), le monde peut être bien plus grand que 512×512.
 MAX_CANVAS_W = 32767
 MAX_CANVAS_H = 32767
+
+# ── Poignées de redimensionnement (zones d'interface, Areas) ─────
+# Chaque nom porte les bords qu'il déplace (left, top, right, bottom) : les coins
+# bougent deux bords, les milieux un seul.
+HANDLE_EDGES = {
+    "nw": (True,  True,  False, False),
+    "n":  (False, True,  False, False),
+    "ne": (False, True,  True,  False),
+    "e":  (False, False, True,  False),
+    "se": (False, False, True,  True),
+    "s":  (False, False, False, True),
+    "sw": (True,  False, False, True),
+    "w":  (True,  False, False, False),
+}
+# Rayon de la poignée ronde et tolérance de préhension, en pixels ÉCRAN :
+# convertis en unités scène via le zoom courant pour rester constants à
+# l'affichage quel que soit le niveau de zoom.
+HANDLE_RADIUS_PX = 3.5
+HANDLE_GRAB_PX = 6.0

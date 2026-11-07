@@ -19,7 +19,7 @@ from typing import Optional
 from core.command_dispatcher import get_dispatcher
 from core.keybindings import get_keybindings
 from core.models.components import displayed_sprite_component
-from core.models.scene import Actor
+from core.models.scene import Actor, Area
 from core.project import Project
 from core.sprite_compose import compose_frame_image
 from core.models.gba_color import quantize_preview
@@ -40,7 +40,7 @@ from ui.scene_manager.canvas.canvas_raster import (
 # Items graphiques — extrait (A3, sous-package canvas/).
 from ui.scene_manager.canvas.canvas_items import (
     SpriteItem, MaskablePixmapItem, CameraItem, ScreenBezelItem, GridItem,
-    ActorBoxOverlay, GuideLine, CollisionOverlay, hw_layer_z,
+    ActorBoxOverlay, AreaItem, GuideLine, CollisionOverlay, hw_layer_z,
     make_placeholder_pixmap,
 )
 # Item de zone d'interface — extrait (A3, sous-package canvas/).
@@ -336,6 +336,7 @@ class SceneEditor(QWidget):
             lambda: QTimer.singleShot(
                 0, lambda: self._canvas_container.activate_tool_shortcut("select")))
         self._gba_view.actor_context_requested.connect(self._on_actor_context_menu)
+        self._gba_view.area_context_requested.connect(self._on_area_context_menu)
         self._gba_view.duplicate_drag_finished.connect(self._duplicate_selection)
 
         self._setup_shortcuts()
@@ -442,6 +443,9 @@ class SceneEditor(QWidget):
         return [it for it in self._gba_scene.selectedItems()
                 if isinstance(it, UIRegionItem)]
 
+    def _selected_areas(self) -> list:
+        return [it.area for it in self._gba_scene.selectedItems() if isinstance(it, AreaItem)]
+
     # ── Menu contextuel actor (clic-droit en mode Sélection) ──────
 
     def _on_actor_context_menu(self, item: "SpriteItem", global_pos):
@@ -480,6 +484,38 @@ class SceneEditor(QWidget):
                                 [], 'scncanvas.duplicated_elements')
         elif chosen is act_del:
             get_dispatcher().delete_actors(actors)
+
+    def _on_area_context_menu(self, item: "AreaItem", global_pos):
+        """Même règle que pour les acteurs : le menu agit sur toute la sélection d'Areas (Renommer reste réservé à
+        une seule). `item` sert de repli quand il vient d'un clic hors sélection."""
+        from PyQt6.QtWidgets import QMenu
+        areas = self._selected_areas()
+        if item.area not in areas:
+            areas = [item.area]
+        n = len(areas)
+        menu = QMenu(self)
+        menu.setFont(QFont(T.UI, T.MD))
+        menu.setStyleSheet(QSS.menu)
+        act_rename = menu.addAction(label('scncanvas.rename'))
+        act_rename.setEnabled(n == 1)
+        act_dup = menu.addAction(label('common.duplicate') if n == 1 else label('scncanvas.duplicate_n', n=n))
+        menu.addSeparator()
+        act_del = menu.addAction(label('common.delete') if n == 1 else label('scncanvas.delete_n', n=n))
+        chosen = menu.exec(global_pos)
+        if chosen is act_rename:
+            self._rename_area(areas[0])
+        elif chosen is act_dup:
+            self._select_copies([], [], 'scncanvas.duplicated_elements', get_dispatcher().duplicate_areas(areas))
+        elif chosen is act_del:
+            get_bus().clear()
+            get_dispatcher().delete_areas(areas)
+
+    def _rename_area(self, area):
+        from PyQt6.QtWidgets import QInputDialog
+        new_name, ok = QInputDialog.getText(
+            self, label('scncanvas.rename_area'), label('common.name_colon'), text=area.name)
+        if ok:
+            get_dispatcher().rename_area(area, new_name)    # nom vide, inchangé ou pris : refusé sans rien changer
 
     def _rename_actor(self, actor):
         from PyQt6.QtWidgets import QInputDialog
@@ -520,37 +556,39 @@ class SceneEditor(QWidget):
         """Suppr — sur TOUTE la sélection, acteurs et éléments d'interface
         confondus (même portée que Ctrl+D, Alt+glisser et Ctrl+C/V)."""
         actors = [it.scene_sprite for it in self._selected_sprite_items()]
+        areas = self._selected_areas()
         elements = [it._region for it in self._selected_ui_items()]
-        if not actors and not elements:
+        if not actors and not areas and not elements:
             return
         # Vider le bus AVANT la suppression : la persistance des zones réémet
         # la sélection courante vers l'inspecteur, qui rechargerait un élément
         # déjà retiré de la mise en page.
         get_bus().clear()
         get_dispatcher().delete_actors(actors)
+        get_dispatcher().delete_areas(areas)
         gone = self._ui_region_ctrl.delete_elements(elements)
-        n = len(actors) + len(elements)
-        if gone or actors:
+        n = len(actors) + len(areas) + len(elements)
+        if gone or actors or areas:
             get_dispatcher().status(label('scncanvas.deleted_elements', n=n))
 
     def _shortcut_duplicate(self):
         self._duplicate_selection(8, 8)
 
     # ── Dupliquer / copier / coller ───────────────────────────────
-    # Ctrl+D, Alt+glisser et Ctrl+V passent par le même chemin, seule l'origine
-    # du décalage change. Acteurs ET éléments d'interface.
+    # Ctrl+D et Alt+glisser partagent la duplication de la sélection.
 
     def _duplicate_selection(self, dx: int, dy: int):
         """Duplique la sélection courante, décalée de (dx, dy)."""
         actors = [it.scene_sprite for it in self._selected_sprite_items()]
+        areas = self._selected_areas()
         elements = [it._region for it in self._selected_ui_items()]
-        if not actors and not elements:
+        if not actors and not areas and not elements:
             return
         # Créer puis sélectionner les copies ne doit pas déplacer la vue.
         hbar = self._gba_view.horizontalScrollBar()
         vbar = self._gba_view.verticalScrollBar()
         scroll = (hbar.value(), vbar.value())
-        new_actors = get_dispatcher().duplicate_actors(actors, dx, dy)
+        new_actors, new_areas = get_dispatcher().duplicate_scene_members(actors, areas, dx, dy)
         # Une zone en cible BG s'écrit dans une tilemap : son origine ne peut
         # pas tomber entre deux tuiles, donc décalage aimanté.
         edx, edy = _tile_snap(dx), _tile_snap(dy)
@@ -559,7 +597,7 @@ class SceneEditor(QWidget):
             # l'original, donc invisible. Un cran de grille, comme au Ctrl+D.
             edx = edy = 8
         new_elements = self._ui_region_ctrl.duplicate_elements(elements, edx, edy)
-        self._select_copies(new_actors, new_elements, 'scncanvas.duplicated_elements')
+        self._select_copies(new_actors, new_elements, 'scncanvas.duplicated_elements', new_areas)
         hbar.setValue(scroll[0])
         vbar.setValue(scroll[1])
 
@@ -569,16 +607,17 @@ class SceneEditor(QWidget):
         Une sélection vide ne VIDE pas le presse-papier : un Ctrl+C manqué (clic
         à côté puis raccourci) perdrait sinon ce qu'on s'apprêtait à coller."""
         actors = [it.scene_sprite for it in self._selected_sprite_items()]
+        areas = self._selected_areas()
         elements = [it._region for it in self._selected_ui_items()]
-        if not actors and not elements:
+        if not actors and not areas and not elements:
             return
         # Même règle qu'à la duplication : un élément dont un ancêtre est du
         # lot voyage dans le sous-arbre de celui-ci, pas en double. Chaque nœud
         # `Interface` touché est traité à part (v0.25).
         groups = self._ui_region_ctrl.copy_groups(elements)
         scene = self._project.active_scene if self._project else None
-        _clipboard.take(actors, groups, getattr(scene, "name", ""))
-        n = len(actors) + len(groups)
+        _clipboard.take(actors, areas, groups, getattr(scene, "name", ""))
+        n = len(actors) + len(areas) + len(groups)
         get_dispatcher().status(
             label('scncanvas.copied_elements', n=n))
 
@@ -590,18 +629,19 @@ class SceneEditor(QWidget):
         scene = self._project.active_scene
         d = _clipboard.paste_offset(getattr(scene, "name", ""))
         new_actors = get_dispatcher().paste_actors(_clipboard.actors, d, d)
+        new_areas = get_dispatcher().paste_areas(_clipboard.areas, d, d)
         new_elements = self._ui_region_ctrl.paste_elements(
             _clipboard.ui_groups, _tile_snap(d), _tile_snap(d))
-        self._select_copies(new_actors, new_elements, 'scncanvas.pasted_elements')
+        self._select_copies(new_actors, new_elements, 'scncanvas.pasted_elements', new_areas)
 
-    def _select_copies(self, actors: list, elements: list, verb: str):
+    def _select_copies(self, actors: list, elements: list, verb: str, areas: list = ()):
         """Donne la sélection aux copies fraîches : c'est sur elles que porte le
         geste suivant, jamais sur les originaux.
 
         Signaux tus pendant la bascule — chaque setSelected() ferait transiter
         le bus par un état « plus rien de sélectionné » que l'inspecteur
         traduirait par un retour à l'aperçu."""
-        if not actors and not elements:
+        if not actors and not elements and not areas:
             return
         self._gba_scene.blockSignals(True)
         for item in self._gba_scene.selectedItems():
@@ -610,6 +650,11 @@ class SceneEditor(QWidget):
         by_actor = self._items_by_actor()
         for a in actors:
             it = by_actor.get(id(a))
+            if it is not None:
+                it.setSelected(True)
+                first = first or it
+        for area in areas:
+            it = self._item_for_selection(area)
             if it is not None:
                 it.setSelected(True)
                 first = first or it
@@ -626,15 +671,18 @@ class SceneEditor(QWidget):
         if first is not None:
             if isinstance(first, SpriteItem):
                 get_bus().select(first.scene_sprite)
+            elif isinstance(first, AreaItem):
+                get_bus().select(first.area)
             else:
                 from core.selection_bus import UIRegionSelection
                 get_bus().select(UIRegionSelection(first._layout, first._region))
-        n = len(actors) + len(elements)
+        n = len(actors) + len(areas) + len(elements)
         get_dispatcher().status(label(verb, n=n))
 
     def _shortcut_nudge(self, dx: int, dy: int):
         selected = self._selected_sprite_items()
-        if not selected:
+        area_items = [it for it in self._gba_scene._area_items if it.isSelected()]
+        if not selected and not area_items:
             return
         from core.history import get_history, MoveActorCmd, MoveActorGroupCmd
         # Comme un glisser à la souris : la sélection ET le sous-arbre de chaque parent bougent ensemble, en une
@@ -648,11 +696,17 @@ class SceneEditor(QWidget):
         for it in items:
             ox, oy = it.pos_px()   # résout px/tile/réf avant d'ajouter le delta
             moves.append((it.scene_sprite, ox, oy, ox + dx, oy + dy))
+        # Les Areas sélectionnées bougent dans la même entrée (mêmes données, x et y entiers, même commande), avec celles qui
+        # suivent un acteur déplacé : un parent entraîne ses Areas comme ses enfants. Chacune une fois.
+        followers = {id(a): a for it in selected for a in (f.area for f in self._gba_scene.descendant_area_items(it))}
+        followers.update({id(it.area): it.area for it in area_items})
+        moves += [(a, a.x, a.y, a.x + dx, a.y + dy) for a in followers.values()]
+        moved_areas = [it for it in self._gba_scene._area_items if id(it.area) in followers]
 
         def persist():
             # Le garde-fou itemChange (_drag_origin is None) empêche le
             # re-snap et la réécriture du modèle sur ce setPos programmatique.
-            for it in items:
+            for it in (*items, *moved_areas):
                 it.sync_pos()
             self._update_actor_box_overlay()
 
@@ -746,7 +800,8 @@ class SceneEditor(QWidget):
     # ── Outil actif ───────────────────────────────────────────────
 
     def _on_tool_changed(self, tool_id: str):
-        from ui.scene_manager.canvas_tools import AddActorTool, CollisionTool, EraseTool, SelectTool
+        from ui.scene_manager.canvas_tools import (
+            AddActorTool, AddAreaTool, CollisionTool, EraseTool, SelectTool)
 
         match tool_id:
             case t if t.startswith("collision"):
@@ -757,6 +812,8 @@ class SceneEditor(QWidget):
                 self._gba_view.set_tool(SceneInpaintingTool(self._gba_view, t))
             case "add":
                 self._gba_view.set_tool(AddActorTool(self._gba_view))
+            case "add_area":
+                self._gba_view.set_tool(AddAreaTool(self._gba_view))
             case "erase":
                 self._gba_view.set_tool(EraseTool(self._gba_view))
             case t if t.startswith("ui_"):
@@ -1069,9 +1126,10 @@ class SceneEditor(QWidget):
             for item in self._gba_scene._sprite_items
             if item.isSelected()
         }
+        prev_selected_areas = {id(it.area) for it in self._gba_scene._area_items if it.isSelected()}
         # Bloquer les signaux AVANT clear pour que selectionChanged ne fire pas
         # pendant le rebuild et ne vide pas l'inspector via get_bus().clear()
-        self._raw_sprite.clear()      # un acteur devenu repère (sprite retiré) ne doit pas retrouver son ancienne image
+        self._raw_sprite.clear()     # un acteur devenu repère (sprite retiré) ne doit pas retrouver son ancienne image
         self._gba_scene.blockSignals(True)
         self._gba_scene.clear_sprites()
         p = self._project
@@ -1176,10 +1234,24 @@ class SceneEditor(QWidget):
         for item in self._gba_scene._sprite_items:
             if id(item.scene_sprite) in prev_selected_ids:
                 item.setSelected(True)
+        self._reload_areas(prev_selected_areas)
         self._gba_scene.blockSignals(False)
         self._apply_editor_visibility()
 
         self._update_actor_box_overlay()
+
+    def _reload_areas(self, selected_ids: set) -> None:
+        """Recrée les items d'Area depuis le modèle ; ceux dont l'id (Python) est dans `selected_ids` restent
+        sélectionnés. Appelé avec les signaux de la scène Qt déjà bloqués."""
+        from core.models.field_value import make_resolver
+        scene = self._project.active_scene
+        self._gba_scene.clear_areas()
+        resolver = make_resolver(self._project)
+        save_fn = lambda _s=self: _s.scene_changed.emit()
+        for area in scene.areas:
+            item = self._gba_scene.add_area(area, resolver=resolver, save_fn=save_fn)
+            if id(area) in selected_ids:
+                item.setSelected(True)
 
     # ── Changements items ─────────────────────────────────────────
 
@@ -1277,6 +1349,8 @@ class SceneEditor(QWidget):
                 get_bus().select(ActorSelection(actors, target.scene_sprite))
             else:
                 get_bus().select(target.scene_sprite)
+        elif isinstance(target, AreaItem):
+            get_bus().select(target.area)
         elif isinstance(target, UIRegionItem):
             from core.selection_bus import UIRegionSelection
             get_bus().select(UIRegionSelection(target._layout, target._region))
@@ -1289,6 +1363,8 @@ class SceneEditor(QWidget):
         from core.selection_bus import UIRegionSelection
         if isinstance(obj, Actor):
             return self._find_item(obj)
+        if isinstance(obj, Area):
+            return next((it for it in self._gba_scene._area_items if it.area is obj), None)
         if isinstance(obj, UIRegionSelection):
             for it in self._gba_scene._ui_region_items:
                 if it._region is obj.region:
@@ -1344,6 +1420,11 @@ class SceneEditor(QWidget):
                 self._reveal(active_item)
         elif isinstance(obj, Actor):
             item = self._find_item(obj)
+            if item:
+                item.setSelected(True)
+                self._reveal(item)
+        elif isinstance(obj, Area):
+            item = self._item_for_selection(obj)
             if item:
                 item.setSelected(True)
                 self._reveal(item)

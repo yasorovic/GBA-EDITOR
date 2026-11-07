@@ -6,6 +6,7 @@ from __future__ import annotations
 from codegen.runtime_codegen.model_desc import (
     BODY_MODE_RIGID, body_desc, each_slot, model_desc_sym, scene_has_moving_bodies, scene_owners,
 )
+from codegen.runtime_codegen.physics.areas import effect_areas, effect_rank_lines, effect_table_lines
 from codegen.runtime_codegen.shared_pool_gen import shared_models
 
 
@@ -59,13 +60,15 @@ def motion_helper_lines() -> list[str]:
 
 
 def physics_motion_lines(scene, project_settings, scene_actors, pi: list[dict],
-                         dynamic_gravity: bool = False) -> list[str]:
+                         dynamic_gravity: bool = False, layout=None) -> list[str]:
     """Le pas automatique, après les scripts et avant toute résolution de collision : `body_motion_step` pour chaque
     emplacement actif, posé ou né, avec la ligne de son type dans le descripteur de modèle (`model_desc`). Le build ne
     spécialise plus rien par acteur ni par modèle ; il donne seulement les constantes de la scène.
 
     `dynamic_gravity` : un script écrit `scene.gravity` (cf. `project_sets_gravity`), la gravité se lit donc dans
-    `g_gravity_x/y` au lieu d'être une constante de la scène."""
+    `g_gravity_x/y` au lieu d'être une constante de la scène. `layout` : la mise en page OAM de la scène (`scene_oam_layout`),
+    nécessaire aux zones d'effet des Areas : chaque corps qu'une zone atteint la traverse (`area_effects_apply`) avant que la
+    gravité soit ajoutée à sa vitesse, ce qui réveille aussi un Rigid endormi."""
     if not scene_has_moving_bodies(scene_actors, pi):
         return []
     if dynamic_gravity:
@@ -75,10 +78,19 @@ def physics_motion_lines(scene, project_settings, scene_actors, pi: list[dict],
         gx, gy = round(gravity_x * 256), round(gravity_y * 256)
     _iterations, max_fall_speed, damping, sleep_enabled, _sleep_threshold, sleep_delay = (
         scene.effective_physics_simulation(project_settings))
-    step = (f"body_motion_step(_a,&{model_desc_sym(scene)}[_a->type_id],{gx},{gy},"
-            f"{round((1.0 - damping) * 256)},{round(max_fall_speed * 256)},{sleep_delay if sleep_enabled else 0});")
-    return ["    /* Kinematic/Rigid : mouvement avant les collisions, un seul pas pour les posés et les nés */",
-            *each_slot(step)]
+    desc = f"&{model_desc_sym(scene)}[_a->type_id]"
+    rest = f"{round((1.0 - damping) * 256)},{round(max_fall_speed * 256)},{sleep_delay if sleep_enabled else 0}"
+    ranks = effect_rank_lines(scene, layout, scene_actors, pi) if layout is not None else []
+    head = "    /* Kinematic/Rigid : mouvement avant les collisions, un seul pas pour les posés et les nés */"
+    if not ranks:
+        return [head, *each_slot(f"body_motion_step(_a,{desc},{gx},{gy},{rest});")]
+    zones = len(effect_areas(scene))
+    # La zone ajuste la vitesse et la gravité de scène du corps (`_gx/_gy`, avant l'échelle de gravité de son type) ; le pas
+    # est celui d'un corps sans zone.
+    step = (f"{{ int _gx={gx},_gy={gy}; u8 _r=_fx_rank[_a->type_id]; "
+            f"if(_r!=255) area_effects_apply(_fx,{zones},_a,_r,{desc},&_gx,&_gy); "
+            f"body_motion_step(_a,{desc},_gx,_gy,{rest}); }}")
+    return [head, *effect_table_lines(scene), *ranks, *each_slot(step)]
 
 
 def physics_sleep_lines(scene, project_settings, scene_actors, pi: list[dict]) -> list[str]:

@@ -18,6 +18,8 @@ from codegen.runtime_codegen.gen_scene_query import (
 from codegen.runtime_codegen.gen_sprite import anim_oam_pass_lines, resolve_initial_appearance
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.model_desc import hook_pass_lines, model_desc_lines, sfx_input_pass_lines
+from codegen.runtime_codegen.physics.areas import area_contact_lines, area_parent_lines
+from codegen.runtime_codegen.physics.audio_emitters import emitter_tick_lines
 from codegen.runtime_codegen.physics.contacts import contact_tick_lines
 from codegen.runtime_codegen.physics.body import project_has_one_way, project_sets_gravity
 from codegen.runtime_codegen.physics.character import physics_tile_lines
@@ -91,9 +93,11 @@ def gen_scene_tick(
     kinematic_before, kinematic_after, kinematic_crush = kinematic_tick_parts(
         p, scene_actors, scene, pi, resolve_initial_appearance)
     L += kinematic_before
-    L += physics_motion_lines(scene, p.settings, scene_actors, pi, project_sets_gravity(p))
+    L += physics_motion_lines(scene, p.settings, scene_actors, pi, project_sets_gravity(p), _lay)
     if link_depth(scene_actors, pi):
         L.append("    slot_compose_all();   /* actor hierarchy, posed and spawned: parents before children */")
+    L += area_parent_lines(scene, scene_actors, actor_offset)
+    L += emitter_tick_lines(p, scene)
 
     # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).
@@ -129,6 +133,9 @@ def gen_scene_tick(
 
     # Contacts entre acteurs, posés ou nés : les crochets se lisent au descripteur de modèle.
     L += contact_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance, placed_scripts, _def)
+
+    # Areas à déclencheur : chaque emplacement actif dont le type répond à une Area, posé ou né, par le même pas.
+    L += area_contact_lines(p, scene, scene_actors, pi, placed_scripts, _def)
 
     # Déclencheurs SoundFx par nom d'input : un SoundFxComponent répond à un bouton sans script (cf. `model_desc`).
     L += sfx_input_pass_lines(p, scene, scene_actors, pi, input_layout)

@@ -1325,7 +1325,7 @@ class PhysicsCollisionsPanel(QWidget):
         par défaut vide — ce que `RemoveCollisionTagCmd` va faire retomber à
         « body ». Sert au bouton × pour prévenir plutôt que surprendre."""
         p = self._project
-        owners = [a for sc in p.scenes for a in sc.actors] + list(p.prefabs)
+        owners = [a for sc in p.scenes for a in (*sc.actors, *sc.areas)] + list(p.prefabs)
         owners += [ch for pf in p.prefabs for ch in (getattr(pf, "children", []) or [])]
         return sum(1 for o in owners for c in getattr(o, "components", [])
                   if isinstance(c, CollisionShapeComponent) and (c.tag or "body") == tag_name)

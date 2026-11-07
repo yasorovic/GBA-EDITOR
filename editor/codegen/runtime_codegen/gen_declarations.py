@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from codegen.c_names import sym as c_sym, scene_actor_sym
 from codegen.runtime_codegen.gen_scene_query import actor_script, ui_image_sprites
+from scripting.api import AREA_EVENTS
 
 
 def include_lines(p, all_scene_data: list[dict], scene_bgi: list[list[dict]], prefab_actor_sprites: list,
@@ -81,7 +82,7 @@ def extern_lines(p, all_scene_data: list[dict], scene_pis: list, actor_defined_e
                 abs_sp = p.asset_abs(script_path)
                 if abs_sp and abs_sp.suffix.lower() == ".lua":
                     for ev in ("on_start", "on_update", "on_late_update", "on_tile_collide", "on_crushed",
-                               "on_collision_enter", "on_collide", "on_collision_exit", "on_interact"):
+                               "on_collision_enter", "on_collide", "on_collision_exit", *AREA_EVENTS, "on_interact"):
                         if _def(s, ev):
                             if ev == "on_tile_collide":
                                 L.append(f"extern void {s}_{ev}(Actor*,int,int);")
@@ -89,6 +90,8 @@ def extern_lines(p, all_scene_data: list[dict], scene_pis: list, actor_defined_e
                                 L.append(f"extern void {s}_{ev}(Actor*,Actor*);")
                             elif ev in ("on_collision_enter", "on_collide", "on_collision_exit"):
                                 L.append(f"extern void {s}_{ev}(Actor*,Actor*,u8,u8);")
+                            elif ev in AREA_EVENTS:
+                                L.append(f"extern void {s}_{ev}(Actor*,Area*,u8);")
                             else:
                                 L.append(f"extern void {s}_{ev}(Actor*);")
         if getattr(sc, "script", ""):

@@ -16,6 +16,8 @@ from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
 from codegen.runtime_codegen.gen_actor_hierarchy import link_depth, placed_link_lines
 from codegen.runtime_codegen.gen_pool import dispatch_sym
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
+from codegen.runtime_codegen.physics.areas import area_init_lines
+from codegen.runtime_codegen.physics.audio_emitters import emitter_init_lines
 from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
 from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scene_has_cmap, scene_world_size
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_spawn_lines
@@ -149,6 +151,8 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     # `actor:get(i)`/`actor:count()`. Les slots [0, placed) tiennent exactement ces
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.
     L.append(f"    g_scene_placed = {len(scene_actors)};")
+    L += area_init_lines(p, scene, scene_actors, actor_offset)
+    L += emitter_init_lines(p, scene)
     # Tout acteur repart SANS entrée OAM (-1) ; le lien est posé plus bas, pour les
     # seuls acteurs qui affichent un sprite (posés ci-dessous, pools à leur init).
     # La génération survit à la remise à zéro et avance : une référence rangée par la scène

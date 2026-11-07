@@ -15,6 +15,7 @@ from ui.common.pickers import collision_tag_slot
 from ui.common.icons import COLOR_SPRITE
 from core.history import get_history, AddListItemCmd
 from core.models.components import ONE_WAY_MODES, PhysicMaterialComponent
+from core.models.scene import Area
 
 
 @register("collision_shape")
@@ -55,37 +56,12 @@ class CollisionEditor(BaseComponentEditor):
         self.register_syncer("tag", lambda v, w=tag_slot: w.set_script(str(v) or "body"))
         W.row(label("comped.tag"), tag_slot, layout, LABEL_WIDTH)
 
-        # ── Mode Solid / Trigger ──────────────────────────────────
-        chk_solid = QCheckBox()
-        chk_solid.setChecked(is_solid)
-        notice("collision.solid", chk_solid, layout)
+        # La forme d'une Area est toujours un capteur que la carte n'arrête pas (cf. `Area.conform_shapes`) : ni mode,
+        # ni blocage, ni sens unique, ni matériau à régler.
+        sensor_only = isinstance(getattr(self.insp, "_actor", None), Area)
 
-        mode_lbl = QWidget()
-        hl = QHBoxLayout(mode_lbl); hl.setSpacing(6); hl.setContentsMargins(0, 0, 0, 0)
-        lbl = QLabel(label("comped.collision_solid"))
-        lbl.setFont(QFont(T.UI, T.SM))
-        lbl.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent; border:none;")
-        hl.addWidget(chk_solid); hl.addWidget(lbl); hl.addStretch()
-        W.row(label("common.mode"), mode_lbl, layout, LABEL_WIDTH)
-
-        # ── Blocage entre acteurs ─────────────────────────────────
-        # Une réponse à part de « Solid » (qui ne parle que de la carte) : Block repousse le Character
-        # mobile, Sensor ne fait que signaler le contact.
-        chk_blocks = QCheckBox(label("comped.collision_blocks"))
-        chk_blocks.setFont(QFont(T.UI, T.SM))
-        chk_blocks.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
-        chk_blocks.setChecked(getattr(comp, "response", "sensor") == "block")
-        chk_blocks.setToolTip(tooltip(title=label("comped.collision_blocks"),
-                                      body=label("comped.collision_blocks_tip")))
-        W.row(label("comped.collision_blocks_row"), chk_blocks, layout, LABEL_WIDTH)
-        chk_blocks.toggled.connect(lambda v: self.set_field(comp, "response", "block" if v else "sensor"))
-        self.register_syncer("response", lambda v, w=chk_blocks: (
-            w.blockSignals(True), w.setChecked(v == "block"), w.blockSignals(False)))
-
-        # Sans physique de scène, la forme se simplifie : ni sens unique ni matériau (le build les ignore).
-        scene = getattr(self.insp, "_scene", None)
-        if scene is None or scene.physics_enabled:
-            self._build_physics_fields(comp, layout)
+        if not sensor_only:
+            self._build_response_fields(comp, layout, is_solid)
 
         # ── AABB — champs px/tile ou référence de variable ────────
         # Les valeurs peuvent être un littéral (px/tile) ou pointer une
@@ -109,12 +85,42 @@ class CollisionEditor(BaseComponentEditor):
         W.pair(label("comped.offset"), "X", C.AXIS_X, vf_x, "Y", C.AXIS_Y, vf_y, layout, LABEL_WIDTH)
         W.pair(label("common.size"), "W", C.AXIS_X, vf_w, "H", C.AXIS_Y, vf_h, layout, LABEL_WIDTH)
 
-        def _on_solid(v):
-            self.set_field(comp, "solid", v)
+    def _build_response_fields(self, comp, layout, is_solid):
+        """Mode (carte), blocage entre acteurs, puis sens unique et matériau : ce qui dit comment la forme répond."""
+        # ── Mode Solid / Trigger ──────────────────────────────────
+        chk_solid = QCheckBox()
+        chk_solid.setChecked(is_solid)
+        notice("collision.solid", chk_solid, layout)
 
-        chk_solid.toggled.connect(_on_solid)
+        mode_lbl = QWidget()
+        hl = QHBoxLayout(mode_lbl); hl.setSpacing(6); hl.setContentsMargins(0, 0, 0, 0)
+        lbl = QLabel(label("comped.collision_solid"))
+        lbl.setFont(QFont(T.UI, T.SM))
+        lbl.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent; border:none;")
+        hl.addWidget(chk_solid); hl.addWidget(lbl); hl.addStretch()
+        W.row(label("common.mode"), mode_lbl, layout, LABEL_WIDTH)
+        chk_solid.toggled.connect(lambda v: self.set_field(comp, "solid", v))
         self.register_syncer("solid", lambda v, w=chk_solid: (
             w.blockSignals(True), w.setChecked(bool(v)), w.blockSignals(False)))
+
+        # ── Blocage entre acteurs ─────────────────────────────────
+        # Une réponse à part de « Solid » (qui ne parle que de la carte) : Block repousse le Character
+        # mobile, Sensor ne fait que signaler le contact.
+        chk_blocks = QCheckBox(label("comped.collision_blocks"))
+        chk_blocks.setFont(QFont(T.UI, T.SM))
+        chk_blocks.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
+        chk_blocks.setChecked(getattr(comp, "response", "sensor") == "block")
+        chk_blocks.setToolTip(tooltip(title=label("comped.collision_blocks"),
+                                      body=label("comped.collision_blocks_tip")))
+        W.row(label("comped.collision_blocks_row"), chk_blocks, layout, LABEL_WIDTH)
+        chk_blocks.toggled.connect(lambda v: self.set_field(comp, "response", "block" if v else "sensor"))
+        self.register_syncer("response", lambda v, w=chk_blocks: (
+            w.blockSignals(True), w.setChecked(v == "block"), w.blockSignals(False)))
+
+        # Sans physique de scène, la forme se simplifie : ni sens unique ni matériau (le build les ignore).
+        scene = getattr(self.insp, "_scene", None)
+        if scene is None or scene.physics_enabled:
+            self._build_physics_fields(comp, layout)
 
     def _build_physics_fields(self, comp, layout):
         """Sens unique et matériau : propres à la physique de scène."""

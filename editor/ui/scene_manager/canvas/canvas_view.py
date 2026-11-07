@@ -16,7 +16,7 @@ from ui.common.theme import C
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from ui.scene_manager.canvas.canvas_alt_duplicate import AltDuplicateGesture
 from ui.scene_manager.canvas.canvas_scene import GBAScene
-from ui.scene_manager.canvas.canvas_items import SpriteItem, CollisionOverlay, SnapPreviewItem
+from ui.scene_manager.canvas.canvas_items import AreaItem, SpriteItem, CollisionOverlay, SnapPreviewItem
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
 from PyQt6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRectF, QSizeF, Qt, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QCursor, QDrag, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform, QWheelEvent
@@ -228,6 +228,7 @@ class GBAView(GridBackdropViewMixin, QGraphicsView):
     collision_painted = pyqtSignal()
     # Clic-droit sur un actor en mode Sélection → (SpriteItem, QPoint global).
     actor_context_requested = pyqtSignal(object, object)
+    area_context_requested = pyqtSignal(object, object)    # AreaItem, position globale
     # Alt+glisser relâché au-delà du seuil : (dx, dy) en px scène. La création
     # des copies est l'affaire de l'appelant.
     duplicate_drag_finished = pyqtSignal(int, int)
@@ -463,9 +464,16 @@ class GBAView(GridBackdropViewMixin, QGraphicsView):
 
     def _selectable_item_at(self, scene_pos):
         """Premier item éligible à la multi-sélection sous la position :
-        acteur ou zone de texte."""
+        acteur, Area ou zone de texte."""
         for it in self.scene().items(scene_pos):
-            if isinstance(it, (SpriteItem, UIRegionItem)):
+            if isinstance(it, (SpriteItem, AreaItem, UIRegionItem)):
+                return it
+        return None
+
+    def _area_item_at(self, scene_pos) -> "Optional[AreaItem]":
+        """Première AreaItem sous la position (scène) donnée, sinon None."""
+        for it in self.scene().items(scene_pos):
+            if isinstance(it, AreaItem):
                 return it
         return None
 
@@ -507,16 +515,22 @@ class GBAView(GridBackdropViewMixin, QGraphicsView):
         Pour les autres outils, le clic-droit sert à peindre ou à l'outil — pas
         de menu OS."""
         if self._is_select_tool():
-            item = self._actor_item_at(self.mapToScene(e.pos()))
-            if item is not None:
-                if not item.isSelected():
+            pos = self.mapToScene(e.pos())
+            item = self._actor_item_at(pos)
+            area = None if item is not None else self._area_item_at(pos)
+            target = item or area
+            if target is not None:
+                if not target.isSelected():
                     self.scene().clearSelection()
-                    item.setSelected(True)
+                    target.setSelected(True)
             else:
-                item = next((it for it in self.scene().selectedItems()
-                             if isinstance(it, SpriteItem)), None)
+                selected = self.scene().selectedItems()
+                item = next((it for it in selected if isinstance(it, SpriteItem)), None)
+                area = None if item is not None else next((it for it in selected if isinstance(it, AreaItem)), None)
             if item is not None:
                 self.actor_context_requested.emit(item, e.globalPos())
+            elif area is not None:
+                self.area_context_requested.emit(area, e.globalPos())
             e.accept()
             return
         if self._active_tool:

@@ -120,7 +120,7 @@ def test_le_prefixe_des_snippets_vient_de_la_table(gizmo):
 def test_le_type_c_de_chaque_type_reel_vient_de_la_table():
     """Les trois types existants, avec leur représentation C d'avant la table."""
     assert {n: t.c_type for n, t in REF_TYPE_TABLE.items()} == {
-        "sfx": "mm_sfxhand", "collision_shape": "int", "ui_element": "int",
+        "sfx": "mm_sfxhand", "collision_shape": "int", "area": "int", "ui_element": "int",
         "physics_body": "Actor*",
         "image": "int", "textBox": "int",
         "background_layer": "int", "window_region": "int", "actor": "Actor*"}
@@ -172,6 +172,8 @@ def test_tout_type_declare_a_une_fabrique():
     # d'élément d'interface a donc pour fabrique cette seule fonction.
     if any(f.ret_by_name for f in RUNTIME_API.values()):
         rendus |= {n for n, t in REF_TYPE_TABLE.items() if t.ui_kind}
+    # `area` n'a pas de fabrique : un script la REÇOIT, par le paramètre des événements `on_area_*`.
+    rendus |= {api.REF_AREA}
     assert set(REF_TYPE_TABLE) <= rendus, set(REF_TYPE_TABLE) - rendus
 
 

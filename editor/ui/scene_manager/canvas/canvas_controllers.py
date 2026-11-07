@@ -506,16 +506,18 @@ class CanvasClipboard:
 
     def __init__(self):
         self.actors: list = []
+        self.areas: list = []
         self.ui_groups: list = []   # sous-arbres d'interface, racine en tête
         self.scene_name: str = ""   # scène d'origine (cf. paste_offset)
         self.pastes: int = 0
 
     @property
     def empty(self) -> bool:
-        return not self.actors and not self.ui_groups
+        return not self.actors and not self.areas and not self.ui_groups
 
-    def take(self, actors: list, ui_groups: list, scene_name: str):
+    def take(self, actors: list, areas: list, ui_groups: list, scene_name: str):
         self.actors = copy.deepcopy(actors)
+        self.areas = copy.deepcopy(areas)
         self.ui_groups = copy.deepcopy(ui_groups)
         self.scene_name = scene_name
         self.pastes = 0

@@ -364,6 +364,90 @@ def interactive_box_index(boxes: list, comp) -> int:
 
 
 @dataclass
+class TriggerComponent:
+    """Fait d'une Area un DÉCLENCHEUR : ses contacts avec les acteurs préviennent leurs scripts, qui reçoivent
+    `on_area_enter(area, my_box)`, `on_area_collide(area, my_box)` et `on_area_exit(area, my_box)` (`self` est
+    l'acteur qui touche l'Area, `my_box` sa boîte en contact).
+
+    Une Area sans ce composant ne teste aucun contact : elle ne coûte rien par frame, ce qui laisse la place aux
+    effets qui n'ont pas besoin d'événements. Quels acteurs la touchent se décide par la matrice des tags du projet
+    (le tag de la forme de l'Area contre ceux de leurs boîtes), comme entre deux acteurs. `active` désactive le
+    déclencheur sans le retirer."""
+    id: str = "trigger"
+    active: bool = True
+
+
+@dataclass
+class GravityOverrideComponent:
+    """Remplace, dans le volume de l'Area, la gravité de la scène : les corps qui la suivent (tout `RigidBody`, et les
+    `CharacterBody` / `KinematicBody` dont `use_scene_gravity` est vrai) reçoivent cette gravité, toujours multipliée par leur
+    `gravity_scale`, tant que leur boîte de physique recouvre l'Area. Unités : pixels par frame². Quand plusieurs zones se
+    recouvrent, la dernière de la scène l'emporte (les gravités ne s'additionnent pas)."""
+    id: str = "gravity_override"
+    active: bool = True
+    gravity_x: float = 0.0
+    gravity_y: float = 0.1
+
+    def __post_init__(self):
+        for name in ("gravity_x", "gravity_y"):
+            if not math.isfinite(getattr(self, name)) or not -8.0 <= getattr(self, name) <= 8.0:
+                raise ValueError(f"gravity override {name} must be between -8 and 8")
+
+
+@dataclass
+class ForceFieldComponent:
+    """Un champ de force dans le volume de l'Area (vent, courant, eau), appliqué avant la gravité du pas physique aux corps
+    `KinematicBody` et `RigidBody` dont la boîte de physique recouvre l'Area ; les `CharacterBody` seulement avec
+    `affects_characters`.
+
+    `force_x` / `force_y` : accélération constante (pixels par frame²). `turbulence` : amplitude d'une secousse aléatoire
+    ajoutée à chaque frame sur les deux axes (générateur congruentiel linéaire, donc déterministe). `buoyancy` : fraction de
+    la gravité annulée quand le CENTRE de la boîte du corps est dans la zone (1.0 = flottaison neutre, plus = le corps
+    remonte). `drag` : fraction de la vitesse perdue à chaque frame (viscosité, 0 = l'air libre)."""
+    id: str = "force_field"
+    active: bool = True
+    force_x: float = 0.0
+    force_y: float = 0.0
+    turbulence: float = 0.0
+    buoyancy: float = 0.0
+    drag: float = 0.0
+    affects_characters: bool = False
+
+    def __post_init__(self):
+        bounds = {"force_x": (-8.0, 8.0), "force_y": (-8.0, 8.0), "turbulence": (0.0, 8.0),
+                  "buoyancy": (0.0, 4.0), "drag": (0.0, 1.0)}
+        for name, (low, high) in bounds.items():
+            value = getattr(self, name)
+            if not math.isfinite(value) or not low <= value <= high:
+                raise ValueError(f"force field {name} must be between {low:g} and {high:g}")
+
+
+@dataclass
+class AudioEmitterComponent:
+    """Fait d'une Area un ÉMETTEUR sonore : un effet (`Sfx`) joué en continu tant que l'écouteur est dans la zone audible.
+
+    L'écouteur est le centre de la caméra. La zone audible est la forme de l'Area plus une marge de `falloff` pixels : plein
+    volume dans la forme, puis décroissance linéaire jusqu'à zéro à `falloff` pixels du rectangle (distance sans racine
+    carrée). Hors de la zone audible l'émetteur est coupé et ne tient plus de canal. `volume` : pourcentage du volume de
+    l'effet. `panning` : placer le son à gauche ou à droite selon la position de l'Area par rapport à l'écouteur.
+
+    La boucle se fait par relance : quand l'effet est fini et que l'écouteur est toujours dans la zone, il repart à la frame
+    suivante (au plus une frame de silence). Un effet n'a pas de boucle d'échantillon."""
+    id: str = "audio_emitter"
+    active: bool = True
+    sfx_name: Optional[str] = None
+    volume: int = 100
+    falloff: int = 64
+    panning: bool = False
+
+    def __post_init__(self):
+        if not 0 <= int(self.volume) <= 100:
+            raise ValueError("audio emitter volume must be between 0 and 100")
+        if not 0 <= int(self.falloff) <= 255:
+            raise ValueError("audio emitter falloff must be between 0 and 255")
+
+
+@dataclass
 class ScriptComponent:
     id: str = "script"
     active: bool = True
@@ -380,13 +464,17 @@ COMPONENT_REGISTRY: dict = {
     "sprite":        SpriteComponent,
     "sound_fx":      SoundFxComponent,
     "interactive":   InteractiveComponent,
+    "trigger":       TriggerComponent,
+    "gravity_override": GravityOverrideComponent,
+    "force_field":   ForceFieldComponent,
+    "audio_emitter": AudioEmitterComponent,
     "script":        ScriptComponent,
 }
 
 
 # Un seul composant de ces types par acteur : le script et le moteur les adressent par leur
 # type (`self:physics_body()`), jamais par un id. L'inspecteur n'en montre donc pas.
-SINGLETON_COMPONENTS = frozenset({"physics_body", "interactive", "script"})
+SINGLETON_COMPONENTS = frozenset({"physics_body", "interactive", "trigger", "gravity_override", "force_field", "audio_emitter", "script"})
 
 
 def component_type_name(comp) -> str:

@@ -424,6 +424,8 @@ def _check_each_scene(ctx: ValidationContext):
         if not (scene.actors or getattr(scene, "script", "") or getattr(scene, "ui_layouts", None)):
             ctx.warn(None, "The scene has no actor, script or interface: it will do nothing.")
         _check_actors(ctx)
+        _check_areas(ctx, scene)
+        _check_area_handlers(ctx, scene)
         _check_backgrounds(ctx)
         _check_collision_map(ctx)
         _check_frame_events(ctx)
@@ -475,6 +477,65 @@ def _check_prefabs(ctx: ValidationContext):
 def _check_actors(ctx: ValidationContext):
     for actor in ctx.actors:
         _check_components(ctx, actor, actor.components)
+
+
+def _check_areas(ctx: ValidationContext, scene):
+    """Une Area a une forme, et un nom unique dans sa scène (comme un acteur : son nom est la clé de
+    `area:get("…")`). Ses formes passent les mêmes contrôles que celles des acteurs."""
+    from codegen.c_names import sym as c_sym
+    from core.models.components import CollisionShapeComponent
+    seen: dict[str, str] = {}   # symbole C → premier nom vu DANS cette scène
+    for area in scene.areas:
+        s = c_sym(area.name)
+        if s in seen:
+            ctx.warn(area, f"Areas \"{seen[s]}\" and \"{area.name}\" share the C symbol `{s}` in scene "
+                           f"'{scene.name}'. Rename one of them.")
+        seen.setdefault(s, area.name)
+        # Le parent est un acteur POSÉ de la scène (une Area n'en a pas d'autre sorte) : sans lui, il n'y a pas de repère.
+        if area.parent and area.parent not in {a.name for a in scene.actors}:
+            ctx.error(area, f"Area \"{area.name}\" has parent \"{area.parent}\", which is not an actor of this scene. "
+                            "A parent is chosen within the same scene.")
+        if not any(c.active for c in area.components if isinstance(c, CollisionShapeComponent)):
+            ctx.warn(area, "The Area has no active collision shape: it covers nothing.")
+        _check_components(ctx, area, area.components)
+    _check_audio_emitters(ctx, scene)
+
+
+def _check_audio_emitters(ctx: ValidationContext, scene):
+    """Un émetteur sonore nomme un effet du projet, et la scène n'en porte pas plus que le projet n'a de canaux : chacun tient
+    un canal tant que l'écouteur est dans sa zone, et un effet sans canal libre ne sonne pas."""
+    from core.models.components import AudioEmitterComponent
+    sfx_names = {s.name for s in getattr(ctx.project, "sfx", [])}
+    active = []
+    for area in scene.areas:
+        comp = area.effect(AudioEmitterComponent)
+        if comp is None:
+            continue
+        if not comp.sfx_name or comp.sfx_name not in sfx_names:
+            ctx.warn(area, f"The audio emitter of Area \"{area.name}\" has no valid sound effect"
+                           + (f" (\"{comp.sfx_name}\" is not in the project)." if comp.sfx_name else "."))
+        else:
+            active.append(area)
+    channels = int(getattr(ctx.project.settings, "sound_channels", 8))
+    if len(active) > channels:
+        ctx.warn(active[0], f"Scene '{scene.name}' has {len(active)} audio emitters but the project has {channels} sound "
+                            "channels: some will stay silent while the others sound.")
+
+
+def _check_area_handlers(ctx: ValidationContext, scene):
+    """Un acteur posé dont le script répond à `on_area_*` n'a rien à entendre si la scène n'a aucune Area à déclencheur : le
+    handler ne sera jamais appelé. (Les scripts des modèles du pool ne sont pas lus ici : leur scène n'est pas connue.)"""
+    from scripting.api import AREA_EVENTS
+    if any(a.is_trigger() and a.shape() is not None for a in scene.areas):
+        return
+    for actor in scene.actors:
+        comp = actor.get_component("script")
+        path = ctx.project.asset_abs(comp.script) if comp and comp.active and comp.script else None
+        if path and path.suffix.lower() == ".lua":
+            handled = [ev for ev in AREA_EVENTS if ev in ctx.script_functions(path)]
+            if handled:
+                ctx.warn(actor, f"{', '.join(handled)} will never be called: the scene has no Area with an active "
+                                "Trigger. Add a Trigger to an Area, or remove the handler.")
 
 
 def _check_components(ctx: ValidationContext, owner, components):

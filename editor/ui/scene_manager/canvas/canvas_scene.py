@@ -16,7 +16,7 @@ from ui.common.theme import C
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from ui.scene_manager.canvas.canvas_items import (
     SpriteItem, CameraItem, CollisionOverlay, ScreenBezelItem, GridItem,
-    ActorBoxOverlay, GuideLine, MaskablePixmapItem, hw_layer_z,
+    ActorBoxOverlay, AreaItem, GuideLine, MaskablePixmapItem, hw_layer_z,
 )
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
@@ -36,6 +36,7 @@ class GBAScene(QGraphicsScene):
         self._canvas_h = canvas_h
         self._bg_items: list[Optional[QGraphicsPixmapItem]] = [None] * 4
         self._sprite_items: list[SpriteItem] = []
+        self._area_items: list[AreaItem] = []
         self._grid_item: Optional[GridItem] = None
         self._border: Optional[ScreenBezelItem] = None
         self._backdrop: Optional[QGraphicsRectItem] = None
@@ -81,6 +82,15 @@ class GBAScene(QGraphicsScene):
         return [it for it in self._sprite_items
                 if it is not item and it.scene_sprite.name in names]
 
+    def descendant_area_items(self, item: "SpriteItem") -> list:
+        """AreaItem des Areas qui suivent `item.scene_sprite` ou l'un de ses descendants : déplacer un parent entraîne ses Areas
+        comme ses enfants (`area_descendants`, la même lecture que le build)."""
+        from core.models.scene import actor_descendant_names, area_descendants
+        names = {item.scene_sprite.name} | actor_descendant_names(
+            [it.scene_sprite for it in self._sprite_items], item.scene_sprite.name)
+        followers = set(map(id, area_descendants([it.area for it in self._area_items], names)))
+        return [it for it in self._area_items if id(it.area) in followers]
+
     # ── Sélection multiple : membres + item ACTIF ─────────────────
     # Un item sélectionné est « membre » ; parmi eux, un seul est ACTIF —
     # c'est lui que l'inspecteur détaille et lui que les gestes visant « un »
@@ -89,13 +99,13 @@ class GBAScene(QGraphicsScene):
     # Palette Editor.
 
     def selectable_items(self) -> list:
-        """Items sélectionnés éligibles à la multi-sélection : acteurs et zones
+        """Items sélectionnés éligibles à la multi-sélection : acteurs, Areas et zones
         de texte (la caméra est un singleton, elle n'en fait pas partie)."""
         try:
             selected = self.selectedItems()
         except RuntimeError:      # scène Qt détruite en cours de rebuild
             return []
-        return [it for it in selected if isinstance(it, (SpriteItem, UIRegionItem))]
+        return [it for it in selected if isinstance(it, (SpriteItem, AreaItem, UIRegionItem))]
 
     @property
     def active_item(self):
@@ -486,6 +496,19 @@ class GBAScene(QGraphicsScene):
             self.removeItem(item)
         self._sprite_items.clear()
 
+    # ── Areas ─────────────────────────────────────────────────────
+
+    def add_area(self, area, resolver=None, save_fn=None) -> AreaItem:
+        item = AreaItem(area, resolver=resolver, snap=self._snap, save_fn=save_fn)
+        self.addItem(item)
+        self._area_items.append(item)
+        return item
+
+    def clear_areas(self):
+        for item in self._area_items:
+            self.removeItem(item)
+        self._area_items.clear()
+
     # ── Zones de texte ────────────────────────────────────────────
 
     def set_ui_regions(self, layouts, project, scene, save_fn=None):
@@ -568,6 +591,8 @@ class GBAScene(QGraphicsScene):
         self._snap = snap
         for item in self._sprite_items:
             item.set_snap(snap)
+        for item in self._area_items:
+            item.snap = snap
 
     # ── Grille ────────────────────────────────────────────────────
 

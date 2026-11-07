@@ -22,10 +22,11 @@ from core.models.components import (
 )
 
 # Les valeurs de `ModelDesc.body_mode` (enum `BODY_MODE_*` d'actor_types_static.h).
+BODY_MODE_CHARACTER = 1
 BODY_MODE_RIGID = 3
 # Les crochets de contact du script d'un type, dans l'ordre de `ModelDesc.on_contact`.
 CONTACT_EVENTS = ("on_collision_enter", "on_collide", "on_collision_exit")
-_BODY_MODE = {PHYSICS_BODY_CHARACTER: 1, PHYSICS_BODY_KINEMATIC: 2, PHYSICS_BODY_RIGID: BODY_MODE_RIGID}
+_BODY_MODE = {PHYSICS_BODY_CHARACTER: BODY_MODE_CHARACTER, PHYSICS_BODY_KINEMATIC: 2, PHYSICS_BODY_RIGID: BODY_MODE_RIGID}
 
 
 def model_desc_sym(scene) -> str:

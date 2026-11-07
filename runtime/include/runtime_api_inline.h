@@ -1086,6 +1086,140 @@ static u16 __attribute__((unused)) actors_overlap_mask(const Actor*a, const Acto
     return m;
 }
 
+/* ── Areas ────────────────────────────────────────────────────────────────────
+   Une Area n'a qu'une boîte et pas de script : seul l'acteur qui la touche apprend le contact. Le test est celui des
+   acteurs (`box_overlap`), la mémoire d'une frame à l'autre aussi ; le masque compte un bit par RANG de boîte de
+   l'acteur (canonique, comme `actors_overlap_mask`), puisqu'il n'y a qu'une boîte de l'autre côté. `allowed` : les rangs
+   dont le tag rencontre celui de l'Area (la matrice des tags, cuite au build). */
+BS_ATTR_IWRAM
+static u16 area_overlap_mask(const Area* ar, const Actor* a, u16 allowed) {
+    u16 m = 0;
+    if (!ar->active || ar->held || !ar->box.active) return 0;
+    for (int j=0; j<a->collision.box_count; j++) {
+        int cj=_box_canonical(a,j);
+        if ((allowed & (1u << cj)) && a->collision.boxes[j].active &&
+            box_overlap(ar->x>>8,ar->y>>8,&ar->box, a->x>>8,a->y>>8,&a->collision.boxes[j]))
+            m |= (u16)(1u << cj);
+    }
+    return m;
+}
+
+/* Un crochet d'Area : enter, collide, exit, dans cet ordre ; NULL si le script n'y répond pas. */
+typedef void (*AreaFn)(Actor*, Area*, u8);
+
+/* Les acteurs posés et nés passent par le MÊME code : `area_contact_step` est le pas d'un couple (Area, emplacement),
+   appelé par le parcours des emplacements avec la mémoire de chacun. Un contact qui naît appelle enter, un qui
+   dure collide, un qui se défait exit — avec le tag de la boîte de l'acteur. Un acteur détruit n'apprend rien (terminal) ;
+   désactivé, il l'apprend à sa réactivation seulement : le seul `exit` utile est celui d'un acteur encore en jeu. */
+BS_ATTR_IWRAM
+static void __attribute__((unused)) area_contact_step(Area* ar, Actor* a, u16 allowed, const AreaFn* on, u16* prev) {
+    u16 cur = a->active ? area_overlap_mask(ar, a, allowed) : 0;
+    u16 prv = *prev;
+    if (cur | prv)
+        for (u8 b = 0; b < MAX_BOXES; b++) {
+            u16 m = (u16)(1u << b);
+            u8 now = (cur & m) != 0, was = (prv & m) != 0;
+            if (!now && !was) continue;
+            u8 event = now ? (was ? 1 : 0) : 2;           /* enter : naît ; collide : dure ; exit : se défait */
+            if (event == 2 && !(a->active && a->alive)) continue;
+            if (on[event]) on[event](a, ar, a->collision.boxes[b].tag);
+        }
+    *prev = cur;
+}
+
+/* ── Effets de zone ───────────────────────────────────────────────────────────
+   Une Area qui porte un GravityOverrideComponent et/ou un ForceFieldComponent agit sur les corps dont la boîte de physique la
+   recouvre. Les acteurs posés et les instances du pool passent par la MÊME fonction, appelée dans le pas de mouvement juste
+   avant que la gravité (`body_motion_step`, qui l'échelonne par type) soit ajoutée à la vélocité. Les réglages sont une table `const` du build (Q8). `g_fx_rng` est le
+   générateur congruentiel linéaire de la turbulence : statique du fichier, remis à 1 à l entrée de chaque scène (`area_init_lines`), donc déterministe. */
+#define AREAFX_GRAVITY    1u   /* zone : remplace la gravité de la scène */
+#define AREAFX_CHARACTER  2u   /* zone : agit aussi sur les CharacterBody (force, turbulence, flottaison, traînée) */
+typedef struct { Area* area; s16 gx, gy, fx, fy, buoyancy; u16 turbulence, retain; u8 flags; } AreaEffect;   /* Q8 ; retain 256 = pas de traînée */
+static u32 g_fx_rng __attribute__((unused)) = 1;
+
+BS_ATTR_IWRAM
+static void __attribute__((unused)) area_effects_apply(const AreaEffect* fx, u8 n, Actor* a, u8 rank, const ModelDesc* d,
+                                                       int* gx, int* gy) {
+    const CollisionShape* b = &a->collision.boxes[rank];
+    int buoyancy = 0;
+    if (!b->active) return;
+    for (u8 i = 0; i < n; i++) {
+        const AreaEffect* e = &fx[i];
+        const Area* ar = e->area;
+        if (!ar->active || ar->held || !ar->box.active) continue;
+        debug_physics_fx_test();
+        if (!box_overlap(ar->x>>8, ar->y>>8, &ar->box, a->x>>8, a->y>>8, b)) continue;
+        /* Un corps qui ignore la gravité de scène (`gravity_scale` nul) n'en reçoit pas non plus de la zone. */
+        if ((e->flags & AREAFX_GRAVITY) && d->gravity_scale) { *gx = e->gx; *gy = e->gy; }
+        if (d->body_mode == BODY_MODE_CHARACTER && !(e->flags & AREAFX_CHARACTER)) continue;
+        if (e->retain != 256) { a->vx = (a->vx * e->retain) >> 8; a->vy = (a->vy * e->retain) >> 8; }
+        a->vx += e->fx; a->vy += e->fy;
+        if (e->turbulence) {
+            int span = 2 * e->turbulence + 1;
+            g_fx_rng = g_fx_rng * 1664525u + 1013904223u;
+            a->vx += (int)((g_fx_rng >> 16) % span) - e->turbulence;
+            g_fx_rng = g_fx_rng * 1664525u + 1013904223u;
+            a->vy += (int)((g_fx_rng >> 16) % span) - e->turbulence;
+        }
+        if (e->buoyancy) {
+            int cx = (a->x>>8) + b->x + b->w/2, cy = (a->y>>8) + b->y + b->h/2;
+            int ax = (ar->x>>8) + ar->box.x, ay = (ar->y>>8) + ar->box.y;
+            if (cx >= ax && cx < ax + ar->box.w && cy >= ay && cy < ay + ar->box.h) buoyancy += e->buoyancy;
+        }
+    }
+    if (buoyancy) { *gx -= (*gx * buoyancy) >> 8; *gy -= (*gy * buoyancy) >> 8; }
+}
+
+/* La référence `area` d'un script : le rang de l'Area dans `g_areas`, plus un (0 = pas d'Area), comme la référence d'une
+   boîte. `g_areas` existe dans tout projet (une entrée au moins), l'extern est donc toujours satisfait. */
+extern Area g_areas[];
+static inline int area_ref(const Area* ar) { return (int)(ar - g_areas) + 1; }
+static inline Area* _area_of(int h) { return h ? &g_areas[h - 1] : 0; }
+static inline int area_get_tag(int h)    { const Area* a = _area_of(h); return a ? a->box.tag : 0; }
+static inline int area_get_active(int h) { const Area* a = _area_of(h); return a ? a->active : 0; }
+static inline void area_set_active(int h, int on) { Area* a = _area_of(h); if (a) a->active = on ? 1 : 0; }
+/* `area:get("Door")` : la constante AREA_<SCÈNE>_<NOM> du build EST la référence, et `area.name` la rend telle quelle : le
+   nom se compare donc à cette même constante. */
+static inline int area_by_name(int h) { return h; }
+static inline int area_get_name(int h) { return h; }
+static inline Vec2 area_get_position(int h) { const Area* a = _area_of(h); return a ? (Vec2){ a->x>>8, a->y>>8 } : (Vec2){ 0, 0 }; }
+/* Une Area qui suit un acteur ne se déplace pas par script : sa position est recomposée à chaque frame depuis celle de son
+   parent, une écriture serait écrasée aussitôt. Elle est donc sans effet (comme sur une référence absente). */
+static inline void area_set_position(int h, Vec2 p) { Area* a = _area_of(h); if (a && !a->parent) { a->x = p.x << 8; a->y = p.y << 8; } }
+/* L'acteur posé qu'elle suit, ou nil : sans parent, ou si le parent est détruit. */
+static inline Actor* area_get_parent(int h) {
+    const Area* a = _area_of(h);
+    return (a && a->parent && g_actors[a->parent - 1].alive) ? &g_actors[a->parent - 1] : (Actor*)0;
+}
+/* La taille de la forme : w/h tiennent dans un u8 (cf. CollisionShape), bornés ici comme `collision_shape_set_size`. Une Area
+   sans forme (`box.active` à 0) garde sa taille nulle : lire ou écrire la taille ne la rallume pas. */
+static inline Vec2 area_get_size(int h) {
+    const Area* a = _area_of(h);
+    return (a && a->box.active) ? (Vec2){ a->box.w, a->box.h } : (Vec2){ 0, 0 };
+}
+static inline void area_set_size(int h, Vec2 v) {
+    Area* a = _area_of(h);
+    if (!a || !a->box.active) return;
+    a->box.w = (u8)(v.x < 0 ? 0 : v.x > 255 ? 255 : v.x);
+    a->box.h = (u8)(v.y < 0 ? 0 : v.y > 255 ? 255 : v.y);
+}
+/* Le rectangle MONDE de la forme : position (Q8 >> 8) plus décalage, plus taille ; vide sans Area ou sans forme. */
+static inline Rect area_get_bounds(int h) {
+    const Area* a = _area_of(h);
+    if (!a || !a->box.active) return (Rect){ 0, 0, 0, 0 };
+    return (Rect){ (a->x>>8) + a->box.x, (a->y>>8) + a->box.y, a->box.w, a->box.h };
+}
+/* Un test GÉOMÉTRIQUE : ni matrice de tags, ni déclencheur. Une Area ou une boîte inactive ne touche personne. */
+static inline int area_overlaps_actor(int h, const Actor* other) {
+    const Area* a = _area_of(h);
+    if (!a || !a->active || a->held || !a->box.active || !other) return 0;
+    for (int j = 0; j < other->collision.box_count; j++)
+        if (other->collision.boxes[j].active &&
+            box_overlap(a->x>>8, a->y>>8, &a->box, other->x>>8, other->y>>8, &other->collision.boxes[j]))
+            return 1;
+    return 0;
+}
+
 /* Rétrocompatibilité — teste sans récupérer les tags */
 static inline int actors_overlap(const Actor*a, const Actor*b) {
     u8 _a=0,_b=0; return actors_overlap_boxes(a,b,&_a,&_b);

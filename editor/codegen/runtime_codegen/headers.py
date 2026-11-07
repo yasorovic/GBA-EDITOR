@@ -18,6 +18,7 @@ import codegen.build_output as build_output
 from codegen.runtime_codegen.gen_camera import project_cameras
 from codegen.oam_alloc import scene_oam_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
+from scripting.api import area_name_constant
 
 
 def actorname_ids(p: Project) -> dict:
@@ -88,6 +89,10 @@ def generate_actor_types(p: Project) -> None:
             placed_names.add(f"ACTOR_{scene_actor_sym(sc.name, actor.name).upper()}")
             h.append(f"#define ACTOR_{scene_actor_sym(sc.name, actor.name).upper()} {i}")
             i += 1
+        # Les Areas de la scène : AREA_<Scène>_<Nom> est la référence de l'Area (son rang dans `g_areas`, plus un), la même
+        # valeur que `area:get("Nom")` et `area.name` rendent au script.
+        for rank, area in enumerate(sc.areas):
+            h.append(f"#define {area_name_constant(area.name, c_sym(sc.name))} {rank + 1}")
         for pl in lay.pools:
             u = pl.sym.upper()
             if pl.shared:
@@ -372,6 +377,11 @@ def generate_runtime_api(
             "static inline void music_cut_to(int id, int loop, int volume)"
             "{(void)id;(void)loop;(void)volume;}",
         ]
+
+    # Émetteurs sonores d'Area : le pas appelle `sfx_*`, définis ci-dessus dans les deux branches.
+    from codegen.runtime_codegen.physics.audio_emitters import emitter_function_lines, project_has_emitters
+    if project_has_emitters(p):
+        a += emitter_function_lines()
 
     # ── destroy() + SoundFxComponent("on_destroy") ─────────────────────
     # `actor_destroy_internal` (runtime_api_inline.h) ne connaît que le

@@ -7,7 +7,8 @@ from core.models.resource import Resource
 from core.models.palette import OWN_PAL_BANK
 from core.models.components import (
     ComponentOwnerMixin, components_to_list, components_from_list, ScriptComponent,
-    SpriteComponent, affine_sprite_component,
+    SpriteComponent, affine_sprite_component, CollisionShapeComponent, COLLISION_RESPONSE_SENSOR,
+    TriggerComponent,
 )
 from core.models.background import BackgroundLayer, decode_tile_palette_overrides
 from core.models.camera import Camera
@@ -504,6 +505,12 @@ def actor_descendant_names(actors: list, name: str) -> set:
     return out
 
 
+def area_descendants(areas: list, actor_names: set) -> list:
+    """Les Areas dont le parent est l'un de ces acteurs. Source unique pour le canvas (déplacer un parent entraîne ses Areas) :
+    `actor_names` est le parent déplacé ET ses descendants (cf. `actor_descendant_names`)."""
+    return [a for a in areas if a.parent and a.parent in actor_names]
+
+
 def actor_prefab_linked(actor: "Actor", prefab: "Prefab") -> bool:
     """« Linké » (True) si `actor` reste sur le MÊME chemin de compilation que
     son prefab, « unlinké » (False) s'il en a dérivé — la distinction que le
@@ -561,6 +568,96 @@ class WindowSlot(SceneMember):
 
 
 # ──────────────────────────────────────────────────────────────────
+#  Area — une zone de jeu posée dans une scène
+# ──────────────────────────────────────────────────────────────────
+
+AREA_DEFAULT_TAG = "area"
+AREA_DEFAULT_SIZE = 32
+
+
+def default_area_components() -> list:
+    """Ce qu'une Area neuve porte : une forme de collision capteur de 32×32 pixels, et le déclencheur qui prévient les
+    scripts des acteurs qui la touchent."""
+    return [CollisionShapeComponent(id="collision", solid=False, response=COLLISION_RESPONSE_SENSOR,
+                                    tag=AREA_DEFAULT_TAG, w=AREA_DEFAULT_SIZE, h=AREA_DEFAULT_SIZE),
+            TriggerComponent()]
+
+
+@dataclass
+class Area(SceneMember, ComponentOwnerMixin):
+    """Un volume de jeu sans sprite, sans OAM et sans script : un acteur dont il ne reste que la boîte.
+
+    L'Area n'a pas de rectangle à elle : elle porte une `CollisionShapeComponent` (comme un acteur), dont le
+    décalage, la taille et le tag sont lus par les mêmes fonctions que celles des acteurs. `x`/`y` posent
+    l'Area dans le monde, comme ceux d'un acteur. Elle est toujours un capteur et n'est jamais arrêtée par la
+    carte : `conform_shapes` le force sur ses formes, quelle que soit la façon dont elles sont arrivées.
+
+    Posée dans la scène, jamais un asset : elle se réutilise d'une scène à l'autre par le copier/coller du canvas. Elle peut
+    SUIVRE un acteur posé (`parent`) ; elle n'a jamais d'enfant. Elle peut porter des effets physiques (`GravityOverrideComponent`, `ForceFieldComponent`) qui agissent sur les corps qu'elle recouvre."""
+    name: str = "Area"
+    active: bool = True
+    components: list = field(default_factory=default_area_components)
+    x: int = 112
+    y: int = 72
+    # Nom de l'acteur POSÉ de la même scène dans le repère duquel la position est exprimée : même règle que `Actor.parent` (posée
+    # en monde dans l'éditeur, local constant au build, recomposée à chaque frame). Vide = aucun parent. Une Area ne peut pas
+    # être parent, et un acteur ne peut pas avoir une Area pour parent : la profondeur est toujours de un.
+    parent: Optional[str] = None
+    notes: str = ""   # note libre utilisateur (éditeur uniquement, jamais compilée)
+
+    def __post_init__(self):
+        self.conform_shapes()
+
+    def shape(self) -> Optional[CollisionShapeComponent]:
+        """La forme de l'Area : sa première forme ACTIVE, ou None. L'unique lecture, celle du canvas et du build."""
+        return next((c for c in self.components if isinstance(c, CollisionShapeComponent) and c.active), None)
+
+    def is_trigger(self) -> bool:
+        """Cette Area prévient-elle les scripts des acteurs qui la touchent ? Oui avec un déclencheur actif."""
+        return any(isinstance(c, TriggerComponent) and c.active for c in self.components)
+
+    def effect(self, kind):
+        """Le composant d'effet physique ACTIF de ce type (`GravityOverrideComponent` ou `ForceFieldComponent`), ou None."""
+        return next((c for c in self.components if isinstance(c, kind) and c.active), None)
+
+    def conform_shapes(self) -> None:
+        """Les formes d'une Area sont des capteurs que la carte n'arrête pas : `solid`, `response` et `one_way`
+        n'ont pas de sens ici, l'inspecteur les masque et cette méthode les ramène à leur seule valeur."""
+        for comp in self.components:
+            if isinstance(comp, CollisionShapeComponent):
+                comp.solid = False
+                comp.response = COLLISION_RESPONSE_SENSOR
+                comp.one_way = "off"
+
+    def to_dict(self) -> dict:
+        return {
+            **self.member_header(),
+            "active":     self.active,
+            "components": components_to_list(self.components),
+            "x":          self.x,
+            "y":          self.y,
+            # Écrit seulement s'il y a un parent : une Area ordinaire ne gagne pas de clé.
+            **({"parent": self.parent} if self.parent else {}),
+            "notes":      self.notes,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Area":
+        area = cls(
+            name       = d.get("name", "Area"),
+            active     = d.get("active", True),
+            # Sans la clé, l'Area reprend sa forme par défaut ; une liste vide est respectée (le validateur la signale).
+            components = components_from_list(d["components"]) if "components" in d else default_area_components(),
+            x          = d.get("x", 112),
+            y          = d.get("y", 72),
+            parent     = (d.get("parent") or None),
+            notes      = d.get("notes", ""),
+        )
+        area.read_member_header(d)
+        return area
+
+
+# ──────────────────────────────────────────────────────────────────
 #  Scene — une scène complète
 # ──────────────────────────────────────────────────────────────────
 
@@ -585,6 +682,8 @@ class Scene(Resource):
     # une par région (cf. WindowSlot). Liste vide = comportement identique à
     # aujourd'hui (aucune window active, tout s'affiche normalement).
     windows: list = field(default_factory=list)  # list[WindowSlot]
+    # Zones de jeu posées dans cette scène (cf. Area). Liste vide = aucune.
+    areas: list = field(default_factory=list)  # list[Area]
     scroll_h: bool = True  # défilement horizontal activé (mode "follow")
     scroll_v: bool = True  # défilement vertical activé (mode "follow") — par défaut pour une NOUVELLE scène ; un fichier sans la clé reste à False (cf. from_dict)
     # Mode vidéo GBA de la scène (0-5). 0 = 4 fonds tuilés réguliers (défaut) ;
@@ -720,7 +819,7 @@ class Scene(Resource):
 
     def members(self) -> list:
         """Tout ce qui est posé dans la scène et porte un en-tête `name`/`id`/`source`."""
-        return [*self.actors, *self.background_layers, *self.cameras, *self.windows, *self.ui_layouts]
+        return [*self.actors, *self.areas, *self.background_layers, *self.cameras, *self.windows, *self.ui_layouts]
 
     def ensure_member_names(self) -> None:
         """Un calque ou une interface sans nom en reçoit un, unique parmi les siens : celui de l'asset qu'il
@@ -749,6 +848,8 @@ class Scene(Resource):
                 for L in self.background_layers
             ],
             "actors": [a.to_dict() for a in self.actors],
+            # Absente tant que la scène n'a pas d'Area : une scène existante ne gagne pas de clé.
+            **({"areas": [a.to_dict() for a in self.areas]} if self.areas else {}),
             "cameras": [{**c.header(), **c.body()} for c in self.cameras],
             "camera": self.camera,
             "windows": [
@@ -825,6 +926,7 @@ class Scene(Resource):
             name=d.get("name", "Scene"),
             background_layers=bg_layers,
             actors=actors,
+            areas=[Area.from_dict(a) for a in d.get("areas", [])],
             cameras=[_camera_from_dict(c) for c in d.get("cameras", [])],
             # Les anciens champs `cam_*` inline ne sont PAS relus : la maison
             # ne migre pas les formats (cf. core/project.py). Une scène

@@ -132,6 +132,62 @@ class AddActorTool(BaseTool):
 
 
 # ──────────────────────────────────────────────────────────────────
+#  Ajout d'Area — grille 8px, aperçu de la taille d'une Area neuve
+# ──────────────────────────────────────────────────────────────────
+
+
+class AddAreaTool(BaseTool):
+    """Clic → crée une Area neuve (forme capteur 32×32) centrée sur le point cliqué, aimanté à la grille de 8 px.
+    L'aperçu montre la zone que le clic poserait."""
+
+    _STEP = 8
+    _FILL = QColor(110, 150, 255, 70)
+    _BORDER = QColor(140, 175, 255, 220)
+
+    def __init__(self, view):
+        super().__init__(view)
+        from core.models.scene import AREA_DEFAULT_SIZE
+        self._size = AREA_DEFAULT_SIZE
+        self._preview: QGraphicsRectItem | None = None
+
+    def activate(self):
+        self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
+        self._view.setCursor(Qt.CursorShape.CrossCursor)
+        self._preview = QGraphicsRectItem(0, 0, self._size, self._size)
+        self._preview.setBrush(QBrush(self._FILL))
+        self._preview.setPen(QPen(self._BORDER, 0))
+        self._preview.setZValue(50)
+        self._preview.setVisible(False)
+        self._view.scene().addItem(self._preview)
+
+    def deactivate(self):
+        self._view.unsetCursor()
+        if self._preview and self._preview.scene():
+            self._preview.scene().removeItem(self._preview)
+        self._preview = None
+
+    def _centre(self, pos: QPointF) -> tuple[int, int]:
+        """Le point cliqué, aimanté : c'est le CENTRE de l'Area (cf. `CommandDispatcher.add_area`)."""
+        return (round(pos.x() / self._STEP) * self._STEP, round(pos.y() / self._STEP) * self._STEP)
+
+    def on_move(self, pos: QPointF, e) -> bool:
+        cx, cy = self._centre(pos)
+        self._preview.setPos(cx - self._size // 2, cy - self._size // 2)
+        self._preview.setVisible(True)
+        return True
+
+    def on_press(self, pos: QPointF, e) -> bool:
+        from core.command_dispatcher import get_dispatcher
+        get_dispatcher().add_area(*self._centre(pos))
+        self._view.placement_done.emit()
+        return True
+
+    def on_leave(self):
+        if self._preview:
+            self._preview.setVisible(False)
+
+
+# ──────────────────────────────────────────────────────────────────
 #  Sélection / déplacement (comportement Qt par défaut)
 # ──────────────────────────────────────────────────────────────────
 
@@ -159,12 +215,15 @@ class EraseTool(BaseTool):
 
     def on_press(self, pos: QPointF, e) -> bool:
         from core.command_dispatcher import get_dispatcher
-        from ui.scene_manager.canvas.canvas_items import SpriteItem
+        from ui.scene_manager.canvas.canvas_items import AreaItem, SpriteItem
 
         items = self._view.scene().items(pos)
         for item in items:
             if isinstance(item, SpriteItem):
                 get_dispatcher().delete_actor(item.scene_sprite)
+                break
+            if isinstance(item, AreaItem):
+                get_dispatcher().delete_areas([item.area])
                 break
         return True  # toujours consommé — évite le rubber band
 

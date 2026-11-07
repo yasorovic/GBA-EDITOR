@@ -7,6 +7,7 @@ from ui.common.shortcut_hints import Hints, bound, combo, key_icon, mouse
 _TITLES = {
     "select": "cvtool.select",
     "add": "cvtool.add_actor",
+    "add_area": "cvtool.add_area",
     "erase": "cvtool.eraser",
     "collision_8": "cvtool.8_8_px_brush",
     "collision_16": "cvtool.16_16_px_brush",
@@ -49,6 +50,8 @@ def _tool_rows(tool: str) -> list:
         ]
     if tool == "add":
         return [(mouse("left_click"), "hints.scene.place_actor")]
+    if tool == "add_area":
+        return [(mouse("left_click"), "hints.scene.place_area")]
     if tool == "erase":
         return [(mouse("left_click"), "hints.scene.erase_actor")]
     if tool in ("collision_8", "collision_16"):

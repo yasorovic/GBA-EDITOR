@@ -7,7 +7,7 @@ from codegen.runtime_codegen.gen_scene_query import parent_depths
 from core.models.field_value import number_value as _number_value
 
 
-def _local_transform(child, ref, ref_x: int, ref_y: int) -> tuple[int, int, int, int, int]:
+def local_transform(child, ref, ref_x: int, ref_y: int) -> tuple[int, int, int, int, int]:
     """Le transform LOCAL de `child` dans le repère de `ref` : (ox, oy Q8, rotation en degrés, sx, sy Q8).
 
     L'auteur pose en coordonnées MONDE ; le build en tire le local, et la composition du runtime (`slot_compose`), appliquée
@@ -57,7 +57,7 @@ def part_link_lines(pf, root: str, indent: str) -> list[str]:
         ref = by_rank.get(p_off, pf)
         ref_xy = (int(ref.x), int(ref.y)) if p_off else (0, 0)
         L.append(_link_line(indent, f"group_slot({root}, {k})", f"group_slot({root}, {p_off})" if p_off else root,
-                            depth, part, _local_transform(part, ref, *ref_xy)))
+                            depth, part, local_transform(part, ref, *ref_xy)))
     return L
 
 
@@ -74,7 +74,7 @@ def link_depth(scene_actors: list, pi: list[dict]) -> int:
 
 def placed_link_lines(scene_actors: list, actor_offset: int) -> list[str]:
     """Les liens des acteurs POSÉS qui ont un parent de scène, après leur construction (`scene_init`) : le parent,
-    la profondeur et le local, tiré de la pose authorée (`_local_transform`). Un parent inconnu ou un cycle ont été
+    la profondeur et le local, tiré de la pose authorée (`local_transform`). Un parent inconnu ou un cycle ont été
     refusés avant (`parent_depths`)."""
     depths, _errs = parent_depths(scene_actors)
     idx_of = {a.name: actor_offset + j for j, (a, _) in enumerate(scene_actors)}
@@ -85,5 +85,5 @@ def placed_link_lines(scene_actors: list, actor_offset: int) -> list[str]:
         if par is None or a.name not in depths:
             continue
         L.append(_link_line("    ", actor_offset + j, idx_of[par.name], depths[a.name], a,
-                            _local_transform(a, par, int(par.x), int(par.y))))
+                            local_transform(a, par, int(par.x), int(par.y))))
     return L

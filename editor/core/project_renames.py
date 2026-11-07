@@ -34,7 +34,7 @@ from core.models.sprite import SpriteAsset
 from core.models.unique_name import unique_name
 from scripting.api import (
     DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_PREFAB, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_JINGLE, DOMAIN_FONT,
-    DOMAIN_ACTOR, DOMAIN_UI_ELEMENT, DOMAIN_WIN_REGION,
+    DOMAIN_ACTOR, DOMAIN_UI_ELEMENT, DOMAIN_WIN_REGION, DOMAIN_AREA_NAME,
 )
 
 
@@ -223,10 +223,30 @@ class ProjectRenameMixin:
             refs = self.rename_lua_refs(DOMAIN_ACTOR, old_name, new_name)
             for path, n in self._rename_actor_ref_exports(old_name, new_name).items():
                 refs[path] = refs.get(path, 0) + n
+            # Les Areas de la scène qui suivent cet acteur le suivent aussi sous son nouveau nom (le défaire les remet).
+            for area in (owner.areas if owner is not None else []):
+                if area.parent == old_name:
+                    area.parent = new_name
             actor.name = new_name
             if scene is not None:
                 self.save_scene(scene)
         self._notify_renamed("Actor", old_name, new_name, refs)
+        return True
+
+    def rename_area(self, scene: Scene, area, new_name: str) -> bool:
+        """Renomme une Area POSÉE dans `scene` et répare les `area:get("…")` et `area.name == "…"` des scripts. Rend False, sans
+        rien changer, pour un nom vide, inchangé ou déjà pris dans la scène : le nom est la clé de `area:get`, deux Areas du même
+        nom le rendraient ambigu (même refus silencieux que `rename_actor`)."""
+        new_name = new_name.strip()
+        old_name = area.name
+        if (not new_name or new_name == old_name or not any(a is area for a in scene.areas)
+                or any(a is not area and a.name == new_name for a in scene.areas)):
+            return False
+        with self._renaming():
+            area.name = new_name
+            self.save_scene(scene)
+            refs = self.rename_lua_refs(DOMAIN_AREA_NAME, old_name, new_name)
+        self._notify_renamed("Area", old_name, new_name, refs)
         return True
 
     def _rename_actor_ref_exports(self, old_name: str, new_name: str) -> dict:

@@ -23,9 +23,12 @@ from ui.common.theme import C
 from ui.scene_manager.align_snap import (
     candidate_lines, collect_targets, snap as _align_snap, SNAP_PX as _ALIGN_SNAP_PX,
 )
-from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
+from ui.scene_manager.canvas.canvas_const import (
+    GBA_W, GBA_H, HANDLE_EDGES as _HANDLE_EDGES, HANDLE_RADIUS_PX as _HANDLE_RADIUS_PX,
+    HANDLE_GRAB_PX as _HANDLE_GRAB_PX,
+)
 from core.models.ui_region import ANCHOR_SCREEN
-from ui.scene_manager.canvas.canvas_items import hw_layer_z
+from ui.scene_manager.canvas.canvas_items import HANDLE_CURSORS as _HANDLE_CURSORS, hw_layer_z
 from PyQt6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap,
@@ -37,29 +40,6 @@ from PyQt6.QtWidgets import (
 # Largeur de coupe d'une chaîne : assez grande pour que rien ne se coupe.
 NO_WRAP_PX = 1 << 16
 
-# Poignées de redimensionnement — chaque nom porte les bords qu'il déplace
-# (left, top, right, bottom). Les coins bougent deux bords, les milieux un seul.
-_HANDLE_EDGES = {
-    "nw": (True,  True,  False, False),
-    "n":  (False, True,  False, False),
-    "ne": (False, True,  True,  False),
-    "e":  (False, False, True,  False),
-    "se": (False, False, True,  True),
-    "s":  (False, False, False, True),
-    "sw": (True,  False, False, True),
-    "w":  (True,  False, False, False),
-}
-_HANDLE_CURSORS = {
-    "nw": Qt.CursorShape.SizeFDiagCursor, "se": Qt.CursorShape.SizeFDiagCursor,
-    "ne": Qt.CursorShape.SizeBDiagCursor, "sw": Qt.CursorShape.SizeBDiagCursor,
-    "n":  Qt.CursorShape.SizeVerCursor,   "s":  Qt.CursorShape.SizeVerCursor,
-    "e":  Qt.CursorShape.SizeHorCursor,   "w":  Qt.CursorShape.SizeHorCursor,
-}
-# Rayon de la poignée ronde et tolérance de préhension, en pixels ÉCRAN :
-# convertis en unités scène via le zoom courant pour rester constants à
-# l'affichage quel que soit le niveau de zoom.
-_HANDLE_RADIUS_PX = 3.5
-_HANDLE_GRAB_PX = 6.0
 
 # Planches de glyphes trouées : {(chemin, mtime, taille): QPixmap | None}.
 # Au niveau du module, pas de l'item — les items sont reconstruits à chaque

@@ -115,6 +115,19 @@ static void contact_frame(const char *nom) {
     printf("%s %d %d %d %d %d\n", nom, s_ev_a[0], s_ev_a[1], s_ev_a[2], s_ev_b[0], s_ev_b[2]);
 }
 
+/* Les Areas : `g_areas` est défini par main.c d'ordinaire ; le runtime en déclare l'extern. Les deux côtés du scénario de
+   parité (deux emplacements passés par `area_contact_step`, chacun avec sa mémoire) écrivent chacun
+   dans leur ligne de `s_area_ev` : enter, collide, exit. */
+Area g_areas[4];
+static int s_area_ev[2][3];
+static u8 s_area_tag[2];
+static void ap_enter(Actor *s, Area *a, u8 t)   { (void)s; (void)a; s_area_ev[0][0]++; s_area_tag[0] = t; }
+static void ap_collide(Actor *s, Area *a, u8 t) { (void)s; (void)a; (void)t; s_area_ev[0][1]++; }
+static void ap_exit(Actor *s, Area *a, u8 t)    { (void)s; (void)a; (void)t; s_area_ev[0][2]++; }
+static void as_enter(Actor *s, Area *a, u8 t)   { (void)s; (void)a; s_area_ev[1][0]++; s_area_tag[1] = t; }
+static void as_collide(Actor *s, Area *a, u8 t) { (void)s; (void)a; (void)t; s_area_ev[1][1]++; }
+static void as_exit(Actor *s, Area *a, u8 t)    { (void)s; (void)a; (void)t; s_area_ev[1][2]++; }
+
 int main(void) {
     for (int i = 0; i < 64; i++) g_slot_link[i].parent = -1;   /* chaque emplacement est une racine */
     Actor *a = &g_actors[0];
@@ -639,6 +652,184 @@ int main(void) {
         Vec2 lue = scene_get_gravity();
         printf("gravite_lue %d %d\n", lue.x, lue.y);
         g_scene_placed = 0;
+    }
+    /* Areas : la même séquence pour deux emplacements, l'un posé et l'autre né. Ils passent par `area_contact_step`, chacun
+       avec sa mémoire de la frame précédente : leurs compteurs doivent rester égaux. */
+    {
+        for (int i = 4; i < 6; i++) {
+            g_actors[i] = (Actor){0};
+            g_actors[i].active = 1; g_actors[i].alive = 1; g_actors[i].collision.box_count = 2;
+            g_actors[i].collision.boxes[0] = (CollisionShape){ 0,  0, 16, 16, 0, 1, TAG_BODY };   /* le corps (rang 0) */
+            g_actors[i].collision.boxes[1] = (CollisionShape){ 0, 16, 16,  4, 0, 1, TAG_HIT  };   /* les pieds (rang 1) */
+        }
+        g_areas[0] = (Area){ 100 << 8, 50 << 8, (CollisionShape){ 0, 0, 16, 16, 0, 1, TAG_HIT }, 1 };
+        /* Seul le rang 1 (les pieds) rencontre le tag de l'Area : le masque cuit au build vaut 0b10. */
+        static const AreaFn sur_posee[3] = { ap_enter, ap_collide, ap_exit };
+        static const AreaFn sur_pool[3] = { as_enter, as_collide, as_exit };
+        u16 prev_posee = 0, prev_pool = 0;
+        #define AREA_FRAME(nom, px, py) do {                                                            \
+            g_actors[4].x = g_actors[5].x = (px) << 8; g_actors[4].y = g_actors[5].y = (py) << 8;       \
+            area_contact_step(&g_areas[0], &g_actors[4], 2, sur_posee, &prev_posee);                    \
+            area_contact_step(&g_areas[0], &g_actors[5], 2, sur_pool, &prev_pool);                      \
+            printf("%s %d %d %d %d %d %d\n", nom, s_area_ev[0][0], s_area_ev[0][1], s_area_ev[0][2],    \
+                   s_area_ev[1][0], s_area_ev[1][1], s_area_ev[1][2]);                                  \
+        } while (0)
+        printf("area_refs %d %d %d %d\n", area_ref(&g_areas[0]), area_get_tag(1), area_get_active(1), area_get_tag(0));
+        AREA_FRAME("area_1_loin", 0, 0);
+        AREA_FRAME("area_2_entre", 100, 34);       /* les pieds (y 50..54) recouvrent l'Area ; le corps la touche à peine : rien */
+        printf("area_tag %d %d\n", s_area_tag[0], s_area_tag[1]);
+        AREA_FRAME("area_3_dure", 100, 34);
+        AREA_FRAME("area_4_corps_exclu", 100, 45);  /* le corps recouvre aussi, mais son tag n'est pas permis : un seul contact */
+        AREA_FRAME("area_5_sort", 200, 34);
+        AREA_FRAME("area_6_rentre", 100, 34);
+        g_areas[0].active = 0;
+        AREA_FRAME("area_7_area_inactive", 100, 34);   /* l'Area s'éteint : l'acteur apprend la sortie */
+        g_areas[0].active = 1;
+        AREA_FRAME("area_8_reactive", 100, 34);
+        g_actors[4].active = g_actors[5].active = 0;
+        AREA_FRAME("area_9_acteur_inactif", 100, 34);  /* un acteur inactif ne touche rien, et n'apprend aucune sortie */
+        g_actors[4].active = g_actors[5].active = 1;
+        AREA_FRAME("area_10_reactive", 100, 34);
+        g_actors[4].active = g_actors[5].active = 0; g_actors[4].alive = g_actors[5].alive = 0;
+        AREA_FRAME("area_11_detruit", 100, 34);        /* détruire est terminal : aucune sortie */
+        #undef AREA_FRAME
+        /* Le masque : un bit par RANG de boîte de l'acteur, filtré par `allowed` ; une Area ou une boîte inactive ne touche rien. */
+        g_actors[4].alive = 1; g_actors[4].active = 1; g_actors[4].x = 100 << 8; g_actors[4].y = 45 << 8;
+        printf("area_masque %d %d %d\n", area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF),
+               area_overlap_mask(&g_areas[0], &g_actors[4], 1), area_overlap_mask(&g_areas[0], &g_actors[4], 2));
+        g_areas[0].box.active = 0;
+        printf("area_masque_boite_inactive %d\n", area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF));
+        g_areas[0].box.active = 1; g_areas[0].active = 0;
+        printf("area_masque_area_inactive %d\n", area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF));
+    }
+    /* Areas : les accès d'un script. Une forme décalée de (2, 3) et grande de 16×12 ; la référence EST la constante du build. */
+    {
+        g_actors[4].alive = 1; g_actors[4].active = 1; g_actors[4].collision.box_count = 2;
+        g_actors[4].x = 100 << 8; g_actors[4].y = 34 << 8;
+        g_areas[0] = (Area){ 100 << 8, 50 << 8, (CollisionShape){ 2, 3, 16, 12, 0, 1, TAG_HIT }, 1 };
+        int h = area_by_name(1);
+        printf("area_acces %d %d %d\n", h, area_get_name(h), area_get_name(h) == 1);
+        Vec2 pos = area_get_position(h);
+        printf("area_position %d %d\n", pos.x, pos.y);
+        area_set_position(h, (Vec2){ 7, 9 });
+        printf("area_position_ecrite %d %d\n", g_areas[0].x >> 8, g_areas[0].y >> 8);
+        Rect r = area_get_bounds(h);
+        printf("area_bounds %d %d %d %d\n", r.x, r.y, r.w, r.h);       /* position, plus le décalage de la forme, plus sa taille */
+        Vec2 taille = area_get_size(h);
+        area_set_size(h, (Vec2){ 300, -4 });                                         /* hors bornes : serré, jamais de débordement */
+        Vec2 serree = area_get_size(h);
+        area_set_size(h, (Vec2){ 20, 6 });
+        Rect apres = area_get_bounds(h);
+        printf("area_taille %d %d %d %d %d %d %d\n", taille.x, taille.y, serree.x, serree.y, area_get_size(h).x, apres.w, apres.h);
+        area_set_size(h, (Vec2){ 16, 12 });
+        area_set_position(h, (Vec2){ 100, 50 });
+        printf("area_recouvre %d\n", area_overlaps_actor(h, &g_actors[4]));          /* les pieds (y 50..54) touchent la forme (y 53..65) */
+        g_actors[4].x = 300 << 8;
+        printf("area_recouvre_loin %d\n", area_overlaps_actor(h, &g_actors[4]));
+        g_actors[4].x = 100 << 8;
+        area_set_active(h, 0);
+        printf("area_inactive %d %d\n", area_get_active(h), area_overlaps_actor(h, &g_actors[4]));
+        area_set_active(h, 7);                                                       /* toute valeur non nulle = vrai */
+        printf("area_reactive %d %d\n", area_get_active(h), area_overlaps_actor(h, &g_actors[4]));
+        g_actors[4].collision.boxes[0].active = 0; g_actors[4].collision.boxes[1].active = 0;
+        printf("area_acteur_sans_boite_active %d\n", area_overlaps_actor(h, &g_actors[4]));
+        /* Une référence absente (0) : lecture vide, écriture sans effet. */
+        area_set_position(0, (Vec2){ 5, 5 });  area_set_active(0, 1);
+        Vec2 vide = area_get_position(0);  Rect rv = area_get_bounds(0);
+        printf("area_absente %d %d %d %d %d %d %d\n", vide.x, vide.y, rv.x, rv.y, rv.w, rv.h, area_overlaps_actor(0, &g_actors[4]));
+        g_areas[0].box.active = 0;
+        Rect sans = area_get_bounds(h);
+        area_set_size(h, (Vec2){ 50, 50 });                                         /* sans forme : l'écriture ne la rallume pas */
+        printf("area_sans_forme %d %d %d %d\n", sans.w, sans.h, area_get_size(h).x, g_areas[0].box.w);
+    }
+    /* Areas : une Area qui suit un acteur posé (l'emplacement 6, d'où `parent` = 7). Sa position est recomposée chaque frame par le
+       build : un script ne la déplace pas. Tant que le parent est inactif ou détruit (`held`), elle ne touche personne. */
+    {
+        g_actors[6] = (Actor){0};
+        g_actors[6].alive = 1; g_actors[6].active = 1;
+        g_actors[4].alive = 1; g_actors[4].active = 1; g_actors[4].x = 100 << 8; g_actors[4].y = 34 << 8;
+        g_actors[4].collision.boxes[0].active = 1; g_actors[4].collision.boxes[1].active = 1;
+        g_areas[0] = (Area){ 100 << 8, 50 << 8, (CollisionShape){ 0, 0, 16, 16, 0, 1, TAG_HIT }, 1, 0, 7 };
+        int h = 1;
+        area_set_position(h, (Vec2){ 5, 5 });
+        printf("area_parent_ecriture %d %d\n", g_areas[0].x >> 8, g_areas[0].y >> 8);          /* sans effet : elle ne bouge pas */
+        area_set_size(h, (Vec2){ 20, 20 });
+        printf("area_parent_taille %d %d\n", g_areas[0].box.w, g_areas[0].box.h);              /* la taille, elle, s'écrit */
+        printf("area_parent_lue %d\n", area_get_parent(h) == &g_actors[6]);
+        printf("area_parent_touche %d %d\n", area_overlaps_actor(h, &g_actors[4]), area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF));
+        g_areas[0].held = 1;                                                                    /* le parent s'est éteint */
+        printf("area_parent_tenue %d %d\n", area_overlaps_actor(h, &g_actors[4]), area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF));
+        g_areas[0].held = 0;
+        g_actors[6].alive = 0;                                                                  /* le parent est détruit */
+        printf("area_parent_detruit %d\n", area_get_parent(h) == 0);
+        g_areas[0].parent = 0;                                                                  /* sans parent : l'écriture passe */
+        area_set_position(h, (Vec2){ 5, 6 });
+        printf("area_libre %d %d %d\n", g_areas[0].x >> 8, g_areas[0].y >> 8, area_get_parent(h) == 0);
+    }
+
+    /* Les effets de zone : `area_effects_apply` est le pas commun du posé et du né, il n'a qu'une forme. Le corps est
+       l'acteur 4 (boîte 0 de 8x8, centre à (104, 54)) ; la zone couvre (100,50)..(116,66). */
+    {
+        static const AreaEffect gravite = { &g_areas[0], 0, 64, 0, 0, 0, 0, 256, AREAFX_GRAVITY };
+        static const AreaEffect force   = { &g_areas[0], 0, 0, 2560, -1280, 0, 0, 256, 0 };
+        static const AreaEffect trainee = { &g_areas[0], 0, 0, 0, 0, 0, 0, 128, 0 };
+        static const AreaEffect flotte  = { &g_areas[0], 0, 0, 0, 0, 256, 0, 256, 0 };
+        static const AreaEffect secoue  = { &g_areas[0], 0, 0, 0, 0, 0, 100, 256, 0 };
+        static const AreaEffect persos  = { &g_areas[0], 0, 0, 1000, 0, 0, 0, 256, AREAFX_CHARACTER };
+        Actor *c = &g_actors[4];
+        int gx, gy;
+        /* Le descripteur du corps : `gravity_scale` nul = il ignore la gravité de scène ; l'échelle elle-même est
+           appliquée ensuite par `body_motion_step`, pas ici. */
+        static const ModelDesc suit   = { .body_mode = BODY_MODE_RIGID, .gravity_scale = 256 };
+        static const ModelDesc suit2  = { .body_mode = BODY_MODE_RIGID, .gravity_scale = 512 };
+        static const ModelDesc ignore = { .body_mode = BODY_MODE_KINEMATIC };
+        static const ModelDesc perso  = { .body_mode = BODY_MODE_CHARACTER };
+        g_actors[4] = (Actor){0};
+        c->alive = 1; c->active = 1; c->x = 100 << 8; c->y = 50 << 8;
+        c->collision.box_count = 1;
+        c->collision.boxes[0] = (CollisionShape){ 0, 0, 8, 8, 0, 1, TAG_HIT };
+        g_areas[0] = (Area){ 100 << 8, 50 << 8, (CollisionShape){ 0, 0, 16, 16, 0, 1, TAG_HIT }, 1 };
+
+        gx = 5; gy = 100; area_effects_apply(&gravite, 1, c, 0, &suit, &gx, &gy);
+        printf("fx_gravite %d %d\n", gx, gy);                                   /* remplacée par celle de la zone */
+        gx = 5; gy = 100; area_effects_apply(&gravite, 1, c, 0, &suit2, &gx, &gy);
+        printf("fx_gravite_echelle %d %d\n", gx, gy);                           /* multipliée par le gravity_scale du corps */
+        gx = 5; gy = 100; area_effects_apply(&gravite, 1, c, 0, &ignore, &gx, &gy);
+        printf("fx_gravite_ignoree %d %d\n", gx, gy);                           /* un corps qui ne suit pas la gravité */
+        c->vx = 0; c->vy = 0; gx = 0; gy = 0;
+        area_effects_apply(&force, 1, c, 0, &suit, &gx, &gy);
+        printf("fx_force %d %d\n", c->vx, c->vy);
+        c->vx = 256; c->vy = -256;
+        area_effects_apply(&trainee, 1, c, 0, &suit, &gx, &gy);
+        printf("fx_trainee %d %d\n", c->vx, c->vy);
+        gx = 40; gy = 100;
+        area_effects_apply(&flotte, 1, c, 0, &suit, &gx, &gy);
+        printf("fx_flottaison %d %d\n", gx, gy);                                /* le centre est dans la zone : neutre */
+        c->x = 112 << 8;                                                        /* centre à (116, 54) : hors de la zone */
+        gx = 40; gy = 100;
+        area_effects_apply(&flotte, 1, c, 0, &suit, &gx, &gy);
+        printf("fx_flottaison_bord %d %d\n", gx, gy);                           /* il recouvre la zone mais flotte pas */
+        c->x = 100 << 8;
+        c->vx = 0; c->vy = 0; g_fx_rng = 1;
+        area_effects_apply(&secoue, 1, c, 0, &suit, &gx, &gy);
+        int t1x = c->vx, t1y = c->vy;
+        c->vx = 0; c->vy = 0; g_fx_rng = 1;
+        area_effects_apply(&secoue, 1, c, 0, &suit, &gx, &gy);
+        printf("fx_turbulence %d %d %d\n", t1x == c->vx && t1y == c->vy, (c->vx >= -100 && c->vx <= 100),
+               (c->vy >= -100 && c->vy <= 100));                                /* déterministe, bornée */
+        c->vx = 0; c->vy = 0;
+        area_effects_apply(&persos, 1, c, 0, &perso, &gx, &gy);
+        printf("fx_personnage_ok %d\n", c->vx);                                 /* la zone le demande : il subit */
+        c->vx = 0;
+        area_effects_apply(&force, 1, c, 0, &perso, &gx, &gy);
+        printf("fx_personnage_exclu %d\n", c->vx);                              /* la zone ne le demande pas : rien */
+        c->vx = 0;
+        g_areas[0].active = 0;
+        area_effects_apply(&force, 1, c, 0, &suit, &gx, &gy);
+        printf("fx_zone_inactive %d\n", c->vx);
+        g_areas[0].active = 1; c->x = 200 << 8;
+        area_effects_apply(&force, 1, c, 0, &suit, &gx, &gy);
+        printf("fx_hors_zone %d\n", c->vx);
     }
     return 0;
 }

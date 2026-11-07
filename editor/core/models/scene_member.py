@@ -10,7 +10,7 @@ Même grammaire que le sidecar d'un asset (cf. `Resource.header`), lue à l'int�
 Le nom reste la poignée du code écrit à la main, l'id celle des fichiers de données : renommer le prefab ne
 réécrit aucune scène.
 
-Les membres sont les acteurs, les calques de fond, les caméras, les fenêtres et les interfaces. Ils n'ont pas de
+Les membres sont les acteurs, les zones (`Area`), les calques de fond, les caméras, les fenêtres et les interfaces. Ils n'ont pas de
 fichier à eux : leur scène les porte, et c'est elle qui leur donne leur id (`assign_member_ids`). L'id n'entre
 jamais dans la ROM, comme tous les ids (cf. ids.py).
 """
