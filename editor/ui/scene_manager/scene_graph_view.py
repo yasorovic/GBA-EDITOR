@@ -1,4 +1,4 @@
-"""ui/scene_manager/scene_graph_view.py — la vue Graphe des scènes.
+"""ui/scene_manager/scene_graph_view.py : la vue Graphe des scènes.
 
 Vue autonome du Canvas (à côté du `SceneEditor` 2D) qui DESSINE le graphe des
 transitions ``scene.switch`` d'un projet. La **structure** (nœuds/arêtes) reste

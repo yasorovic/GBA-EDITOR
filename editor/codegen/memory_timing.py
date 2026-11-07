@@ -1,4 +1,4 @@
-"""codegen/memory_timing.py — les temps d'accès de la ROM (`REG_WAITCNT`) que le jeu pose au démarrage.
+"""codegen/memory_timing.py : les temps d'accès de la ROM (`REG_WAITCNT`) que le jeu pose au démarrage.
 
 Le moteur est compilé en Thumb et exécuté depuis la ROM : chaque lecture coûte des états d'attente (wait states). Un accès
 « N » (non séquentiel, le premier) et un accès « S » (séquentiel, les suivants) ont chacun le leur ; le tampon de lecture

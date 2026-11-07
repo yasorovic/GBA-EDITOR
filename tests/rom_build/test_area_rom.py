@@ -1,5 +1,5 @@
 """Les Areas à déclencheur, de bout en bout : un projet qui en pose une et dont un script répond à `on_area_*` se compile en
-ROM avec le vrai gcc, et le C émis contient la table `g_areas`, les contacts de l'acteur posé et ceux du pool."""
+ROM avec le vrai gcc, et le C émis contient la table `g_areas`, les contacts des emplacements posés et nés."""
 from __future__ import annotations
 
 import pytest
@@ -96,13 +96,13 @@ def test_un_projet_avec_areas_se_compile_et_emet_les_contacts_poses_et_pool(tmp_
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
     assert "Area g_areas[2] EWRAM_BSS;" in main_c                    # la scène la plus fournie
     assert "g_areas[0].x=(40)<<8;" in main_c and "g_areas[0].box.tag=BOXTAG_DOOR;" in main_c
-    # L'acteur posé : une table de couples, une seule ligne (l'Area sans déclencheur n'entre dans aucun test).
-    assert "static const AreaContact _area_pairs[1]" in main_c
-    assert "{&g_areas[0]," in main_c and "_Hero_on_area_enter,0,Scene_01_Hero_on_area_exit}" in main_c
-    assert "area_contact_run(" in main_c
-    # Le pool : la boucle sur les emplacements, le même pas, la mémoire par emplacement.
-    assert "area_contact_step(&g_areas[0],_a," in main_c and "_parea_gen" in main_c
-    assert "g_areas[1]" not in main_c.split("_area_pairs")[1].split("};")[0]   # l'Area muette n'est pas testée
+    # Posés et nés : un seul parcours des emplacements, crochets et masques lus par type, mémoire par emplacement (l'Area sans
+    # déclencheur n'entre dans aucun test).
+    assert "static const AreaFn _ar_on[" in main_c
+    assert "_Hero_on_area_enter,0,Scene_01_Hero_on_area_exit}" in main_c
+    assert "area_contact_step(&g_areas[0],_a,_ar_allowed[_i][0],_ar_on[_i],&g_area_prev[_k][0]);" in main_c
+    assert "g_area_gen[_k]!=_a->gen" in main_c
+    assert "area_contact_step(&g_areas[1]" not in main_c            # l'Area muette n'est pas testée
     # Le module `area` : les noms deviennent les références (rang + 1), et le script du héros les cite.
     types_h = next((projet.root / "build").rglob("actor_types.h")).read_text(encoding="utf-8")
     assert "#define AREA_SCENE_01_DOOR 1" in types_h and "#define AREA_SCENE_01_QUIET 2" in types_h
@@ -112,7 +112,7 @@ def test_un_projet_avec_areas_se_compile_et_emet_les_contacts_poses_et_pool(tmp_
     # Une Area qui suit un acteur : le parent est posé à l'entrée de scène, la position recomposée après les acteurs.
     assert "g_areas[0].parent=2;" in main_c and "g_areas[1].parent" not in main_c          # le héros est l'emplacement 1
     assert "g_areas[0].held = !(g_actors[1].active && g_actors[1].alive);" in main_c
-    assert main_c.index("Areas that follow an actor") < main_c.index("static const AreaContact _area_pairs")   # avant les contacts
+    assert main_c.index("Areas that follow an actor") < main_c.index("static const AreaFn _ar_on")   # avant les contacts
     assert "area_get_parent(area)" in sources and "area_set_size(door," in sources
 
 
@@ -154,6 +154,6 @@ def test_une_zone_d_effet_se_compile_et_agit_sur_le_pose_et_le_spawne(tmp_path):
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
     assert "static const AreaEffect _fx[1]" in main_c
     assert "{&g_areas[0],0,13,26,0,128,26,230,AREAFX_GRAVITY}" in main_c
-    assert "area_effects_apply(_fx,1,&g_actors[" in main_c          # le posé
-    assert "area_effects_apply(_fx,1,_a," in main_c                  # le pool
+    assert "static const u8 _fx_rank[" in main_c                     # les rangs de boîte, par type d'emplacement
+    assert "area_effects_apply(_fx,1,_a,_r," in main_c               # un seul pas pour le posé et le spawné
     assert "g_fx_rng=1;" in main_c                                   # la suite de la turbulence repart à chaque scène

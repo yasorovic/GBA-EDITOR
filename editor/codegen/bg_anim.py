@@ -1,4 +1,4 @@
-"""codegen/bg_anim.py — fonds ANIMÉS posés sur un fond hôte, côté build.
+"""codegen/bg_anim.py : fonds ANIMÉS posés sur un fond hôte, côté build.
 
 Un `BackgroundAsset` de kind `animated` est une planche découpée en grille, posée
 à une position d'un fond hôte (cf. `BackgroundAnimation`, dont le placement vit

@@ -404,7 +404,7 @@ class Actor(SceneMember, ComponentOwnerMixin):
     # x/y/rotation/scale gardent leur sens de POSE AUTHORÉE dans l'éditeur ;
     # au build, ils deviennent le transform LOCAL, et la position monde de
     # l'acteur est recomposée chaque frame depuis celle du parent (cf.
-    # `gen_pool.parent_compose_lines`). La parenté est authorée et jamais
+    # `runtime_api_inline.h`, `slot_compose`). La parenté est authorée et jamais
     # assignée au runtime : c'est ce qui rend le tri de profondeur possible au
     # build, donc l'ordre d'une frame lisible dans le C émis.
     parent: Optional[str] = None

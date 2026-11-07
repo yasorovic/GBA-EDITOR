@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_declarations.py — l'en-tête de main.c : les includes (union de toutes les scènes) et les
+"""runtime_codegen/gen_declarations.py : l'en-tête de main.c : les includes (union de toutes les scènes) et les
 `extern` des fonctions de script que main.c appelle."""
 from __future__ import annotations
 

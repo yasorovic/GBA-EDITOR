@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_scene_switch.py — le passage d'une scène à l'autre dans main.c : la table des scènes
+"""runtime_codegen/gen_scene_switch.py : le passage d'une scène à l'autre dans main.c : la table des scènes
 (`g_scene_vtable`), la recherche d'un acteur par nom dans la scène active, et la transition de fondu."""
 from __future__ import annotations
 

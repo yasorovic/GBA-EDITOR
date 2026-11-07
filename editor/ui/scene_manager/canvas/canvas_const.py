@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_const.py — les constantes partagées du canvas.
+"""ui/scene_manager/canvas/canvas_const.py : les constantes partagées du canvas.
 
 Le module le plus bas du sous-package : ni Qt, ni modèle, juste les dimensions.
 Items, scène, vue et façade les lisent d'ici, ce qui évite qu'un module bas

@@ -1,4 +1,4 @@
-"""ui/background_editor/bg_hints.py — contenu de la table des raccourcis du
+"""ui/background_editor/bg_hints.py : contenu de la table des raccourcis du
 Background Editor. Contexte = outil de peinture actif, ou « select » (le mode Canvas)."""
 from __future__ import annotations
 

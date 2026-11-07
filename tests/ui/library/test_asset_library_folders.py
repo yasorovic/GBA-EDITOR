@@ -5,6 +5,47 @@ from __future__ import annotations
 import hashlib
 
 
+def test_ecran_palettes_reutilise_les_dossiers_partages(qapp, tmp_path):
+    from core.asset_folder_store import AssetFolderStore
+    from core.models.palette import PaletteBank
+    from core.project import Project
+    from ui.common.asset_kinds import PALETTES
+    from ui.common.asset_library import _ROLE_OBJ
+    from ui.palette_editor.palette_editor_screen import PaletteEditorScreen
+
+    project = Project.create(tmp_path / "Game", "Game")
+    bank = PaletteBank(name="Hero", colors=[0] * 16)
+    project.palettes.append(bank)
+    project.palettes.save(bank)
+    store = AssetFolderStore(project.root)
+    folder = store.create_folder("palettes", "Characters")
+    store.move_member("palettes", bank.id, folder.id)
+    store.move_member("palettes", "aaaaaaaaaaaa", folder.id)
+    screen = PaletteEditorScreen()
+    screen.load_project(project)
+    screen.set_folder_store(store)
+
+    library = screen._library
+    tree = library._trees[PALETTES.label]
+    shown = _folder_items(tree)
+    assert [item.text(0) for item in shown] == ["Characters"]
+    assert shown[0].child(0).data(0, _ROLE_OBJ).id == bank.id
+    assert store.folders("palettes")[0].members == (bank.id,)
+    assert library._sections[PALETTES.label]._btn_add._icon_name == "add_menu"
+    menu = library._add_menu(PALETTES, library.folder_scheme(PALETTES.label))
+    next(action for action in menu.actions() if action.text() == "New folder").trigger()
+    assert len(store.folders("palettes")) == 2
+
+    project.rename_palette(bank, "Hero night")
+    screen.refresh()
+    screen.select_palette("Hero night")
+    assert tree.currentItem().data(0, _ROLE_OBJ).id == bank.id
+    assert tree.currentItem().parent().text(0) == "Characters"
+    reopened = AssetFolderStore(project.root)
+    assert reopened.folder_of("palettes", bank.id) == folder.id
+    assert reopened.folders("scenes") == []
+
+
 def _sid(name):
     """L'id (12 chiffres hex) qu'un test donne à la scène `name` — déterministe, pour écrire les rangements sans projet."""
     return hashlib.sha1(name.encode()).hexdigest()[:12]

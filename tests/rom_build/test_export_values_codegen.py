@@ -118,8 +118,11 @@ def test_spawn_avec_table_ecrit_les_exports():
            "end\n")
     code = _gen_spawner(src, _SPAWN_META)
     assert "extern void Arena_Bullet_set_speed(Actor* self, int v);" in code
-    assert "Arena_Bullet_set_speed(b, 8);" in code
-    assert "Arena_Bullet_set_team(b, 1);" in code   # "BLUE" → index 1
+    init = code.index("actor_spawn_init_Arena_Bullet(10, 20)")
+    speed = code.index("Arena_Bullet_set_speed(_spawn0, 8);")
+    team = code.index("Arena_Bullet_set_team(_spawn0, 1);")
+    start = code.index("actor_spawn_start_Arena_Bullet(_spawn0);")
+    assert init < speed < team < start   # "BLUE" → index 1
 
 
 def test_spawn_nu_avec_table_utilise_un_temporaire():
@@ -127,8 +130,10 @@ def test_spawn_nu_avec_table_utilise_un_temporaire():
            '    actor:spawn("Bullet", vec2(10, 20), { speed = 3 })\n'
            "end\n")
     code = _gen_spawner(src, _SPAWN_META)
-    assert "Actor* _spawn0 = spawn_Arena_Bullet(10, 20);" in code
-    assert "Arena_Bullet_set_speed(_spawn0, 3);" in code
+    init = code.index("Actor* _spawn0 = actor_spawn_init_Arena_Bullet(10, 20);")
+    setter = code.index("Arena_Bullet_set_speed(_spawn0, 3);")
+    start = code.index("actor_spawn_start_Arena_Bullet(_spawn0);")
+    assert init < setter < start
 
 
 def test_spawn_sans_table_inchange():
@@ -179,9 +184,9 @@ def test_spawn_table_refs_et_vec():
     assert "extern void Arena_Bullet_set_vel(Actor* self, Vec2 v);" in code
     assert "extern void Arena_Bullet_set_boom(Actor* self, int v);" in code
     # Valeurs résolues au site du spawn, dans la scène du spawner.
-    assert "Arena_Bullet_set_vel(b, (Vec2){1, 2});" in code
-    assert "Arena_Bullet_set_boom(b, SFX_POP);" in code
-    assert "Arena_Bullet_set_tgt(b, ACTOR_ARENA_ENEMY);" in code
+    assert "Arena_Bullet_set_vel(_spawn0, (Vec2){1, 2});" in code
+    assert "Arena_Bullet_set_boom(_spawn0, SFX_POP);" in code
+    assert "Arena_Bullet_set_tgt(_spawn0, ACTOR_ARENA_ENEMY);" in code
 
 
 def test_poole_setter_composite_typé():

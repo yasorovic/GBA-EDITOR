@@ -358,8 +358,8 @@ class _ScreenPlaceholder(QWidget):
 
 
 class SceneManagerScreen(QWidget):
-    """Les colonnes du Scene Manager (colonne 1 scindée en deux panneaux
-    empilés : liste projet au-dessus, contenu de la scène active en-dessous).
+    """Les colonnes du Scene Manager : Content/Priority/Scene library en haut à gauche,
+    navigateur Disk partagé en dessous, canvas au centre et inspecteur à droite.
 
     Assemblée par `MainWindow._build_scene_manager_screen` : ses colonnes sont
     des attributs de la FENÊTRE (`scene_library_panel`, `scene_tree_panel`,
@@ -489,7 +489,7 @@ class MainWindow(QMainWindow):
 
         # Nav cachée tant qu'aucun projet n'est chargé
         self._screen_stack.setCurrentIndex(0)   # Scene Manager
-        self._move_build_panel_to(0)
+        self._move_shared_panels_to(0)
         self._set_editor_nav_visible(False)
 
         self._gba_bar = GbaStatusBar()
@@ -683,11 +683,9 @@ class MainWindow(QMainWindow):
         # Les trois colonnes sont assemblées en bas (ThreeColumnBody), une fois
         # l'inspecteur construit.
 
-        # ── Colonne 1 : Project Panel (haut) + Scene Tree (bas) ───
-        # Deux questions distinctes, deux panneaux : « quelles scènes/prefabs/
-        # scripts existe-t-il dans le projet » (SceneLibraryPanel) et « qu'y
-        # a-t-il DANS la scène active » (SceneTreePanel — acteurs + mise en
-        # page UI, à la façon du Scene dock de Godot).
+        # ── Colonne 1 : Content / Priority / Scene library, puis Disk ──
+        # Les vues de scène et la bibliothèque projet partagent les onglets du haut.
+        # Le navigateur Disk reste indépendant dans la partie basse.
         self.scene_library_panel = SceneLibraryPanel()
         self._setup_menu()
         self.scene_library_panel.scene_selected.connect(self._on_scene_selected)
@@ -698,15 +696,13 @@ class MainWindow(QMainWindow):
         self.scene_library_panel.prefab_uses_requested.connect(
             lambda p: self._inspector.show_prefab_uses(p))
 
-        self.scene_tree_panel = SceneTreePanel()
+        self.scene_tree_panel = SceneTreePanel(library=self.scene_library_panel)
+        settings = QSettings(APP_NAME, "Layout")
+        context = settings.value("scene_tree_context",
+                                 "library" if settings.value("left_tab") == "project" else "content")
+        self.scene_tree_panel._set_context(context)
 
-        self._left_v_split = QSplitter(Qt.Orientation.Vertical)
-        self._left_v_split.setStyleSheet(QSS.splitter)
-        self._left_v_split.addWidget(self.scene_tree_panel)
-        self._left_v_split.addWidget(self._left_tabs())
-        self._left_v_split.setSizes([260, 420])
-        self._left_v_split.setStretchFactor(0, 1)
-        self._left_v_split.setStretchFactor(1, 1)
+        self._left_tabs()
 
         # ── Colonne 2 : Canvas (le panneau de build s'accroche dessous) ──
         self.scene_editor = SceneEditor()
@@ -847,8 +843,10 @@ class MainWindow(QMainWindow):
         # resynchronisé à sa revisite ») le remet à jour au retour, sans
         # rafraîchir un écran invisible.
 
-        self._h_split = ThreeColumnBody(self._left_v_split, self.canvas_workspace,
+        self._h_split = ThreeColumnBody(self.scene_tree_panel, self.canvas_workspace,
                                         self._inspector, sizes=(220, 760, 300))
+        self._left_v_split = self._h_split.left_split
+        self._h_split.attach_disk(self._left_tab_widget)
         self._center_v_split = self._h_split.center_split
 
         screen = SceneManagerScreen(self.scene_library_panel, self.scene_tree_panel,
@@ -882,8 +880,7 @@ class MainWindow(QMainWindow):
         s.setValue("h_split", self._h_split.saveState())
         s.setValue("center_v_split", self._center_v_split.saveState())
         s.setValue("left_v_split", self._left_v_split.saveState())
-        on_project = self._left_tab_widget.currentWidget() is self.scene_library_panel
-        s.setValue("left_tab", "project" if on_project else "disk")
+        s.setValue("scene_tree_context", self.scene_tree_panel._context)
         s.setValue("disk_layout", self.build_panel.disk.layout_mode())
         s.setValue("disk_grid_cell", self.build_panel.disk.grid_cell_width())
         s.setValue("build_tab", "disk" if self.build_panel.tab_is_disk() else "console")
@@ -1214,7 +1211,7 @@ class MainWindow(QMainWindow):
         if self.project:
             self._watcher.rescan()          # ce qui a changé dehors depuis la dernière visite (sur deux écrans, le retour du focus ne vient pas)
         self._ensure_screen(index)
-        self._move_build_panel_to(index)
+        self._move_shared_panels_to(index)
         # Revisite ? On le capture AVANT `_load_screen_for_project`, qui ajoute
         # l'index au set à la première visite : sinon, la première visite serait
         # prise pour une revisite et rafraîchirait juste après avoir chargé.
@@ -1236,16 +1233,16 @@ class MainWindow(QMainWindow):
         sans `body`, ou pas encore construit)."""
         return getattr(self._screen_widgets[index], "body", None)
 
-    def _move_build_panel_to(self, index: int):
-        """Garde l'état ouvert/fermé de l'écran qu'on quitte, puis accroche le panneau
-        à celui d'arrivée, ouvert ou fermé selon son dernier état (le défaut du
-        catalogue à la première visite)."""
+    def _move_shared_panels_to(self, index: int):
+        """Déplace les panneaux Disk et build vers l'écran affiché.
+        L'ouverture du build reste propre à chaque écran ; l'arbre Disk garde sa navigation."""
         leaving = self._body_of(self._screen_stack.currentIndex())
         if leaving is not None and leaving.holds_dock(self.build_panel):
             self._build_panel_open[self._screen_stack.currentIndex()] = leaving.dock_is_open()
         body = self._body_of(index)
         if body is None:
             return
+        body.attach_disk(self._left_tab_widget)
         body.attach_dock(self.build_panel)
         body.set_dock_open(self._build_panel_open.setdefault(
             index, self._screens[index].build_panel_open))
@@ -1311,7 +1308,7 @@ class MainWindow(QMainWindow):
                 self._status.showMessage(
                     label("win.screen_error", name=spec.name, error=exc), 8000)
                 return
-        if spec.name == "Sounds":
+        if spec.name in ("Sounds", "Palettes", "Animations"):
             store = self.scene_library_panel.folder_store
             if store is not None:
                 widget.set_folder_store(store)
@@ -1392,9 +1389,7 @@ class MainWindow(QMainWindow):
 
     # ── Disk (arbre de assets/, lecture seule) ────────────────────
     def _left_tabs(self):
-        """Scene library et Disk, côte à côte : la première est ce que le projet
-        contient (scènes, prefabs), le second ce que le disque contient."""
-        self.scene_library_panel.hide_title()
+        """Disk reste dans la partie basse ; Scene library rejoint Content et Priority en haut."""
         self.disk_tree_view = DiskTreeView()
         self.disk_tree_view.refresh_requested.connect(self._rescan_and_refresh_disk)
         self.disk_tree_view.folder_selected.connect(self._show_disk_folder)
@@ -1407,7 +1402,6 @@ class MainWindow(QMainWindow):
         self.disk_tree_view.set_drop_check(self._disk_drop_verdict)
         self.disk_tree_view.drop_blocked.connect(self._say_move_refused)
         tabs = tab_widget()
-        tabs.addTab(self.scene_library_panel, label('scenelibrary.scene_library'))
         add_disk_tab(tabs, self.disk_tree_view)
         tabs.currentChanged.connect(
             lambda i: self.disk_tree_view.refresh_requested.emit()
@@ -1416,14 +1410,10 @@ class MainWindow(QMainWindow):
         tabs.setMaximumWidth(420)
         self._left_tab_widget = tabs
         restore_tab_order(tabs, self._left_tab_keys(), QSettings(APP_NAME, "Layout").value("left_tab_order"))
-        # Première ouverture : Disk. Ensuite, le dernier onglet vu (cf. _save_layout).
-        saved = QSettings(APP_NAME, "Layout").value("left_tab")
-        tabs.setCurrentWidget(self.scene_library_panel if saved == "project"
-                              else self.disk_tree_view)
         return tabs
 
     def _left_tab_keys(self) -> tuple:
-        return (("project", self.scene_library_panel), ("disk", self.disk_tree_view))
+        return (("disk", self.disk_tree_view),)
 
     def _locate_file(self, path, name: str):
         """LOCATE : l'arbre et le panneau du bas de l'onglet Disk montrent `path`, sélectionné (cf. `ui/common/locate_bus.py`).
@@ -1439,8 +1429,7 @@ class MainWindow(QMainWindow):
         self._disk_refresh_suspended = True
         try:
             self._left_tab_widget.setCurrentWidget(self.disk_tree_view)
-            # L'onglet Disk de la colonne de gauche n'existe que dans le Scene Manager : sur tout autre écran
-            # (Sounds, Palettes…), seul le panneau du bas peut montrer le fichier — encore faut-il qu'il soit ouvert.
+            # Le navigateur de gauche et le panneau central montrent le même fichier, sur tout écran.
             self._open_build_panel()
             self.build_panel.show_disk_tab()
         finally:

@@ -1,4 +1,4 @@
-"""« Voir les utilisations » d'un script, dans le Script Editor : la colonne droite alterne bibliothèque / utilisations."""
+"""« Voir les utilisations » d'un script, dans le Script Editor : la colonne gauche alterne bibliothèque / utilisations."""
 from __future__ import annotations
 
 import pytest
@@ -19,11 +19,13 @@ def project(tmp_path) -> Project:
 def test_the_uses_view_lists_a_scene_script_and_a_click_names_its_target(qapp, project):
     screen = ScriptEditorScreen()
     screen.load_project(project)
+    assert screen.body.left_split.widget(0) is screen._library_column
+    assert screen.body.widget(2) is screen._sidebar
     targets = []
     screen.script_user_requested.connect(targets.append)
 
     screen._show_script_uses(str(project.user_library_dir / "scripts" / "hero.lua"))
-    assert screen._right_column.currentWidget() is screen._uses_panel
+    assert screen._library_column.currentWidget() is screen._uses_panel
 
     layout = screen._uses_panel._list_layout
     leaves = [layout.itemAt(i).widget() for i in range(layout.count())
@@ -40,4 +42,4 @@ def test_closing_the_uses_view_brings_back_the_library(qapp, project):
 
     screen._uses_panel.close_requested.emit()
 
-    assert screen._right_column.currentWidget() is screen._file_tree
+    assert screen._library_column.currentWidget() is screen._file_tree

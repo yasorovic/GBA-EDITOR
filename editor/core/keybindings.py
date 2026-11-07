@@ -109,6 +109,7 @@ BINDINGS: list[Binding] = [
     # Sprite editor (ui/sprite_editor/*)
     Binding("sprite.flip_h", "sprite_editor", "Shift+X"),
     Binding("sprite.flip_v", "sprite_editor", "Shift+Y"),
+    Binding("sprite.delete_frame", "sprite_editor", "Ctrl+Del"),
 
     # Sound mixer (ui/sound_mixer/sound_panel.py)
     Binding("sound.play_pause", "sound_mixer", "Space"),

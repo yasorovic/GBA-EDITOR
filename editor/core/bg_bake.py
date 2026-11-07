@@ -1,4 +1,4 @@
-"""core/bg_bake.py — l'image d'un fond tel qu'il s'affiche : calque de peinture et repeints de palette compris.
+"""core/bg_bake.py : l'image d'un fond tel qu'il s'affiche : calque de peinture et repeints de palette compris.
 
 Deux sorties. `render_rgba` : l'image vue (export, aperçu). `save_indexed_png` : un PNG INDEXÉ « par banques »,
 index = banque × 16 + couleur, l'index 0 de chaque banque transparent (tRNS) — la convention des outils GBA. Les

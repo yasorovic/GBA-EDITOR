@@ -1,4 +1,4 @@
-"""core/project_renames.py — renommer un élément et réparer ce qui le cite.
+"""core/project_renames.py : renommer un élément et réparer ce qui le cite.
 
 Un renommage n'est jamais une simple écriture de champ : il déplace le fichier
 sidecar, réécrit les scripts Lua qui citent l'ancien nom, met à jour les `$nom`

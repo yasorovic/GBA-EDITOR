@@ -1,4 +1,4 @@
-"""core/sprite_import.py — validator + encodage d'import sprite (miroir de bg_import).
+"""core/sprite_import.py : validator + encodage d'import sprite (miroir de bg_import).
 
 Pipeline aligné sur les backgrounds : Watcher → **Validator** (detect) →
 **Encodage** (non-destructif) → Asset éditable. Un sprite OBJ est TOUJOURS paletté

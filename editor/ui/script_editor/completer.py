@@ -1,4 +1,4 @@
-"""ui/script_editor/completer.py — le popup d'autocomplétion, branché sur `LuaEditor`.
+"""ui/script_editor/completer.py : le popup d'autocomplétion, branché sur `LuaEditor`.
 
 Couche mince : il ne SAIT rien de l'API. Il demande à `scripting.completion` les
 candidats pour le texte à gauche du curseur, les affiche, et insère le choix. La

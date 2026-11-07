@@ -1,4 +1,4 @@
-"""ui/sound_mixer/section_colors.py — la couleur d'une section de boucle.
+"""ui/sound_mixer/section_colors.py : la couleur d'une section de boucle.
 
 Une section porte sa couleur (`MusicSection.color`, « #RRGGBB »), choisie à sa création ; vide, elle
 prend celle de son rang. Quatre composants la lisent — la forme d'onde, la bande des ordres, le

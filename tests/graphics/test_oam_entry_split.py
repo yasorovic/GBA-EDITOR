@@ -84,9 +84,9 @@ def test_la_table_est_declaree_et_initialisee_avec_son_lien():
     # pour les seuls acteurs qui affichent un sprite…
     init = (CODEGEN / "gen_scene_init.py").read_text(encoding="utf-8")
     assert "g_actors[_i].oam_entry=-1" in init
-    # …et le spawn le repose, puisqu'il remet l'acteur à zéro.
-    spawn = (CODEGEN / "gen_pool.py").read_text(encoding="utf-8")
-    assert "g_actors[_i].gen = _g + 1; }} g_actors[_i].oam_entry = {_e0 or -1};" in spawn
+    # Le constructeur commun lie l'entrée quand l'emplacement est occupé.
+    api = (ROOT / "runtime" / "include" / "runtime_api_inline.h").read_text(encoding="utf-8")
+    assert "actor->oam_entry = entry;" in api
 
 
 def test_l_acteur_sans_sprite_a_des_accesseurs_neutres():

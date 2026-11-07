@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_region_item.py — l'item de zone d'interface.
+"""ui/scene_manager/canvas/canvas_region_item.py : l'item de zone d'interface.
 
 Extrait de `scene_canvas` (A3) : `UIRegionItem`, l'item graphique le plus riche du
 canvas — il rend une zone/conteneur/texte (aplat, image, nine-slice, glyphes

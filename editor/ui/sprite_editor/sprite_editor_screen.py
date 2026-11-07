@@ -55,10 +55,14 @@ class SpriteEditorScreen(QWidget):
         """Le PNG du sprite courant a changé (réindexation/remplacement) —
         recharger le centre pour refléter les nouvelles couleurs/tuiles."""
         if self._project and self._right._sprite:
-            self._center.load_sprite(self._right._sprite, self._project)
+            self._center.reload_image()
 
     def _selection_key(self) -> str:
         return f"last_sprite/{self._project.root}"
+
+    def set_folder_store(self, store) -> None:
+        """Range les sprites dans le store partagé de la session."""
+        self._left.set_folder_store(store)
 
     def load_project(self, project: Project):
         self._project = project

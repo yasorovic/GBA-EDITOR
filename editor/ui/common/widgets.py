@@ -197,28 +197,28 @@ def make_add_menu_button(button: HoverIconButton) -> None:
 class ResetToDefaultButton(QPushButton):
     """Bouton « Reset to default », pleine largeur, icône circulaire.
 
-    Toujours placé en bas de la section qu'il remet à zéro. Grisé et non cliquable tant que les
-    valeurs de la section sont celles par défaut ; `set_modified(True)` le rend cliquable dès
+    Toujours placé en bas de la section qu'il remet à zéro. Masqué tant que les
+    valeurs de la section sont celles par défaut ; `set_modified(True)` le montre dès
     qu'elles diffèrent. Le parent décide de ce qui compte comme « différent » et branche
     `clicked` sur sa propre remise à zéro."""
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(label("common.reset_to_default"), parent)
         self.setFont(_FONT_UI_SM)
-        self.setStyleSheet(BTN_GHOST)
+        self.setStyleSheet(QSS.button_reset)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setIconSize(QSize(14, 14))
-        # Un clic se grise lui-même le bouton : s'il avait le focus, Qt le donne à un autre champ
+        self.setMinimumHeight(30)
+        self.setIconSize(QSize(16, 16))
+        # Un clic masque lui-même le bouton : s'il avait le focus, Qt le donne à un autre champ
         # et la zone de défilement saute vers lui. Sans focus, l'inspecteur reste où il est.
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        from ui.common import icons
+        self.setIcon(icons.get("reset", C.TEXT_NORM))
         self.set_modified(False)
 
     def set_modified(self, modified: bool):
-        self.setEnabled(modified)
-        self.setCursor(Qt.CursorShape.PointingHandCursor if modified
-                       else Qt.CursorShape.ArrowCursor)
-        from ui.common import icons
-        self.setIcon(icons.get("reset", C.TEXT_NORM if modified else C.TEXT_MUTED))
+        self.setVisible(modified)
 
 
 # ── Factory class (namespace) ─────────────────────────────────────────
@@ -1028,6 +1028,7 @@ class LibrarySection(QFrame):
     """
 
     add_clicked = pyqtSignal()
+    sort_requested = pyqtSignal(object)     # bouton qui ancre le menu de tri
     toggled_by_user = pyqtSignal(bool)      # un clic sur l'en-tête, pas un set_expanded()
 
     # Air au-dessus du titre et sous le corps. Le bas ne compte que déplié :
@@ -1035,7 +1036,7 @@ class LibrarySection(QFrame):
     _PAD_TOP    = S.MD
     _PAD_BOTTOM = S.MD
 
-    def __init__(self, title: str, color: str = C.TEXT_NORM, parent=None):
+    def __init__(self, title: str, color: str = C.TEXT_NORM, parent=None, *, sortable: bool = False):
         # `color` par défaut neutre : les libraries n'utilisent plus de code
         # couleur par type d'asset (distinction par forme d'icône + libellé).
         # Le paramètre reste pour un usage ponctuel hors library si besoin.
@@ -1105,6 +1106,10 @@ class LibrarySection(QFrame):
 
         hl.addWidget(toggle_area, 1)
         hl.addWidget(self._btn_add)
+        if sortable:
+            sort_button = W.btn_sort()
+            sort_button.clicked.connect(lambda: self.sort_requested.emit(sort_button))
+            hl.addWidget(sort_button)
         hl.addWidget(self._btn_search)
         root.addWidget(hdr)
 

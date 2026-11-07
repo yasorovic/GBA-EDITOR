@@ -1,4 +1,4 @@
-"""ui/sound_mixer/section_table.py — les sections de boucle d'une musique, en tableau.
+"""ui/sound_mixer/section_table.py : les sections de boucle d'une musique, en tableau.
 
 Une ligne par section : boucle par icône, défaut par pastille, nom, puis `début → fin` et retrait.
 La durée et l'écoute vivent sur la bande des ordres (cf. order_strip). Tout s'édite en place — le bouton « + » crée une ligne prérenseignée dont le nom prend le focus, pas une

@@ -1682,20 +1682,25 @@ def _check_actor_budget(ctx: ValidationContext):
             ctx.error(None,
                 f"Scene '{scene.name}': {lay.placed} actors are placed for the "
                 f"{lay.capacity} a scene holds — nothing is left for the ones that are born during play.")
-        # `Actor.model` est un octet : 255 types d'emplacement par scène (un par prefab, plus un par partie).
+        # `Actor.type_id` est un octet : 255 types d'emplacement par scène (un par prefab, plus un par partie).
         from scripting.refactor import scene_spawned_prefabs
         born = {pl.prefab.name for pl in lay.pools if pl.shared}
         for name in sorted(scene_spawned_prefabs(p, scene) - born):
             ctx.error(None,
                 f"Scene '{scene.name}': prefab '{name}' is spawned but cannot be born — the 255 actor "
                 "types of a scene (one per prefab, plus one per part) are taken.")
+        if lay.type_table_size > 256:
+            ctx.error(None,
+                f"Scene '{scene.name}': {lay.type_table_size - 1} actor types for 255 (spawned prefabs and their parts, then "
+                "one per placed actor that differs from the others). Make placed copies of a prefab identical, "
+                "or place fewer distinct actors.")
         ctx.focus(None)
 
 
 def _check_affine_budget(ctx: ValidationContext):
-    """Les 32 matrices affines d'une scène : celles des acteurs posés sont réservées au build
-    (`compute_affine_info`), les instances nées prennent à la frame celles qui restent. Au-delà de 32 posés, les
-    derniers s'affichent SANS rotation ni échelle — sans un mot au build avant cet avertissement."""
+    """Les 32 matrices affines d'une scène, prises à la frame par chaque sprite affine dessiné, posé ou né. Au-delà
+    de 32 posés affines, les derniers dessinés s'affichent SANS rotation ni échelle, sans un mot au build avant cet
+    avertissement."""
     from codegen.oam_budget import scene_affine_requests, AFFINE_LIMIT
     for scene in ctx.project.scenes:
         n = scene_affine_requests(ctx.project, scene)
@@ -1964,9 +1969,9 @@ def _check_interactive(ctx: ValidationContext):
 
     - `box_tag` nomme une boîte DÉJÀ posée : sans elle, la zone n'existe pas ;
     - sans `box_tag`, le composant ajoute SA boîte : il lui faut un emplacement libre (`MAX_BOXES`) ;
-    - un composant sans `on_interact` dans le script de l'acteur ne fait rien (et inversement :
+    - un composant sans `on_interact` ni SoundFx d'interaction ne fait rien (et inversement :
       un `on_interact` sans composant n'est jamais appelé) — avertissement, le jeu tourne."""
-    from core.models.components import CollisionShapeComponent, InteractiveComponent, ScriptComponent
+    from core.models.components import CollisionShapeComponent, InteractiveComponent, ScriptComponent, SoundFxComponent
     MAX_BOXES = 4      # actor_types_static.h
     scenes = list(ctx.project.scenes)
     owners = [(a, a.name) for sc in scenes for a in sc.actors]
@@ -1993,8 +1998,15 @@ def _check_interactive(ctx: ValidationContext):
             if path and path.suffix.lower() == ".lua":
                 handlers = ctx.script_functions(path)
         active = [c for c in comps if c.active]
+        sound = next((c for c in getattr(owner, "components", [])
+                      if isinstance(c, SoundFxComponent)), None)
+        sound_interact = bool(sound and sound.active and sound.trigger == "on_interact" and sound.sfx_name
+                              and any(s.name == sound.sfx_name for s in getattr(ctx.project, "sfx", [])))
+        if sound and sound.active and sound.trigger == "on_interact" and not active:
+            ctx.warn(name, "SoundFx uses on_interact but this actor has no active Interactive component: "
+                           "the sound is never triggered. Add the component.")
         if handlers is not None:
-            if active and "on_interact" not in handlers:
+            if active and "on_interact" not in handlers and not sound_interact:
                 ctx.warn(name, "Interactive is set but the script has no on_interact(who): the "
                                "interaction does nothing. Add the handler to the script.")
             if not active and "on_interact" in handlers:

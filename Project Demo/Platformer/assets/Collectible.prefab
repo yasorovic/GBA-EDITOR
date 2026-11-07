@@ -19,12 +19,14 @@
       "pivot_y": 0
     },
     {
-      "component_type": "collision_box",
+      "component_type": "collision_shape",
       "id": "collision",
       "active": true,
       "solid": false,
       "response": "sensor",
       "tag": "body",
+      "material_id": "",
+      "one_way": "off",
       "x": 4,
       "y": 4,
       "w": 8,

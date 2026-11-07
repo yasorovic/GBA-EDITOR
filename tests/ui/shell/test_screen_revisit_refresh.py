@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 
 # ── Le gating de `_show_screen` ───────────────────────────────────────────
 
@@ -62,7 +64,7 @@ def _make_window(screen):
     )
     win._watcher = SimpleNamespace(rescan=lambda: win.rescans.append(1))
     win._ensure_screen = lambda index: screen
-    win._move_build_panel_to = lambda index: None   # le panneau de build n'est pas l'objet du test
+    win._move_shared_panels_to = lambda index: None   # le panneau de build n'est pas l'objet du test
     win._load_screen_for_project = MainWindow._load_screen_for_project.__get__(win)
     win._refresh_screen_for_project = MainWindow._refresh_screen_for_project.__get__(win)
     return win
@@ -83,6 +85,25 @@ def test_refresh_appele_en_revisite_pas_a_la_premiere_visite():
     MainWindow._show_screen(win, 0)
     assert (screen.loaded, screen.refreshed) == (1, 2)
     assert len(win.rescans) == 3                # chaque changement d'écran rattrape d'abord le disque
+
+
+@pytest.mark.parametrize("screen_name", ["Sounds", "Palettes", "Animations"])
+def test_premiere_visite_recoit_le_store_partage(screen_name):
+    from window import MainWindow
+
+    screen = _FakeScreen()
+    received = []
+    screen.set_folder_store = received.append
+    win = _make_window(screen)
+    win.project = SimpleNamespace(load_audio=lambda: None, load_sprites=lambda: None)
+    win._screens[0].name = screen_name
+    store = object()
+    win.scene_library_panel = SimpleNamespace(folder_store=store)
+
+    MainWindow._load_screen_for_project(win, 0)
+
+    assert screen.loaded == 1
+    assert received == [store]
 
 
 def test_pas_de_refresh_sans_projet():

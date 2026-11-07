@@ -502,6 +502,18 @@ QPushButton:hover {{ color: {C.TEXT_HI}; background: {C.BG_HOVER}; border-color:
 QPushButton:disabled {{ color: {C.TEXT_MUTED}; border-color: {C.BORDER_DARK}; }}
 """
 
+    @property
+    def button_reset(self) -> str:
+        """Action de restauration : surface discrète, survol et appui explicites."""
+        return self.button_ghost + f"""
+QPushButton {{
+    color: {C.TEXT_NORM}; background: {C.BG_INPUT};
+    border-color: {C.BORDER_MID}; border-radius: 4px; padding: 5px 12px;
+}}
+QPushButton:enabled:hover {{ color: {C.TEXT_HI}; background: {C.BG_HOVER}; border-color: {C.ACCENT}; }}
+QPushButton:enabled:pressed {{ background: {C.BG_SEL}; border-color: {C.ACCENT_PRESSED}; }}
+"""
+
     # Variante accent du bouton discret : contour périwinkle, se remplit au survol
     # (Ouvrir/Choisir secondaire — entre button_ghost et button_primary)
     @property
@@ -651,7 +663,7 @@ QTreeWidget {{
 }}
 QTreeWidget::item {{
     height: {S.ROW}px;
-    padding-left: 2px;
+    padding-left: 6px;
     border: none;
     /* liseré transparent au repos : la ligne ne se décale pas de 2 px
        quand elle passe en sélection */
@@ -894,7 +906,7 @@ QTabBar::tab {{
     color: {C.TEXT_DIM};
     border: none;
     border-bottom: 2px solid transparent;
-    padding: 6px 12px;
+    padding: 6px 6px;
     margin: 0;
     font-family: {T.UI_STACK};
     font-size: {T.SM}px;

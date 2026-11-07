@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_controllers.py — les contrôleurs du canvas.
+"""ui/scene_manager/canvas/canvas_controllers.py : les contrôleurs du canvas.
 
 Extrait de `scene_canvas` (A3) : la logique NON graphique du canvas.
 `UIRegionController` crée/duplique/colle/supprime les éléments d'interface (via le

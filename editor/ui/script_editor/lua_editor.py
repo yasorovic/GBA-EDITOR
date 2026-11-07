@@ -1,4 +1,4 @@
-"""ui/script_editor/lua_editor.py — coloration syntaxique Lua + widget d'édition."""
+"""ui/script_editor/lua_editor.py : coloration syntaxique Lua + widget d'édition."""
 from PyQt6.QtWidgets import QPlainTextEdit
 from PyQt6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat, QTextCursor
 from PyQt6.QtCore import Qt, QRegularExpression

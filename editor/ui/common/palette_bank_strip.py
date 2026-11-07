@@ -1,4 +1,4 @@
-"""editor/ui/common/palette_bank_strip.py — bandeau flottant de sélection de
+"""editor/ui/common/palette_bank_strip.py : bandeau flottant de sélection de
 palette active (banque de peinture / aperçu).
 
 Overlay bas-centre à coins arrondis, pastilles cliquables ; vue pure — émet

@@ -1,10 +1,11 @@
 """Le squelette commun des écrans : library | centre | inspecteur, et sous la
-colonne centrale un emplacement pour le panneau de build.
+colonne centrale un emplacement pour le panneau de build et sous la bibliothèque le navigateur Disk.
 
 Chaque écran refaisait ce `QSplitter` à la main (poignées, stretch, tailles) ; ce
 composant le possède une fois. Le panneau de build, lui, n'a qu'UNE instance dans
 la fenêtre : elle l'accroche à l'écran affiché (`attach_dock`) et lui dit s'il
-est ouvert (`set_dock_open`) — l'écran ne sait rien du build.
+est ouvert (`set_dock_open`). Le même principe garde une seule instance du navigateur
+Disk (`attach_disk`) sous la bibliothèque de chaque écran.
 """
 
 from __future__ import annotations
@@ -44,13 +45,37 @@ class ThreeColumnBody(QSplitter):
         self.center_split.setStretchFactor(1, 0)
         self.center_split.setCollapsible(1, True)
 
-        self.addWidget(left)
+        self._disk_host = QWidget()
+        self._disk_layout = QVBoxLayout(self._disk_host)
+        self._disk_layout.setContentsMargins(0, 0, 0, 0)
+        self._disk_layout.setSpacing(0)
+        self.left_split = QSplitter(Qt.Orientation.Vertical)
+        self.left_split.setStyleSheet(QSS.splitter)
+        self.left_split.setMinimumWidth(left.minimumWidth())
+        self.left_split.setMaximumWidth(left.maximumWidth())
+        self.left_split.addWidget(left)
+        self.left_split.addWidget(self._disk_host)
+        self.left_split.setStretchFactor(0, 1)
+        self.left_split.setStretchFactor(1, 1)
+        self._disk_host.hide()
+
+        self.addWidget(self.left_split)
         self.addWidget(self.center_split)
         self.addWidget(right)
         self.setSizes(list(sizes))
         self.setStretchFactor(0, 0)
         self.setStretchFactor(1, 1)     # le centre absorbe le redimensionnement
         self.setStretchFactor(2, 0)
+
+    def attach_disk(self, panel: QWidget) -> None:
+        """Accroche l'unique navigateur Disk sous la bibliothèque, sans perdre son état."""
+        first_visit = self._disk_host.isHidden()
+        panel.hide()
+        self._disk_layout.addWidget(panel)
+        self._disk_host.show()
+        panel.show()
+        if first_visit:
+            self.left_split.setSizes([700, 300])
 
     # ── Emplacement du panneau de build ──────────────────────────────
     #

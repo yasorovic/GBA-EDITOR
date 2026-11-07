@@ -115,12 +115,12 @@ def test_les_types_autrefois_refuses_sont_des_champs(decl, champ, octets):
 
 def test_l_etat_vit_dans_le_bloc_de_l_emplacement_pas_dans_un_tableau_du_modele():
     """L'état d'une instance est rangé dans le BLOC de son emplacement (`g_obj_state`, indexé par
-    `Actor.inst`) : aucun tableau par modèle, donc aucun nombre d'instances à connaître ici et aucun écart
+    `Actor.slot_index`) : aucun tableau par modèle, donc aucun nombre d'instances à connaître ici et aucun écart
     possible avec la boucle de `main.c`. Un état plus grand que le bloc est refusé à la compilation C."""
     _errs, code, _n = _pooled(
         "local n = 0\nfunction on_update()\n    n = 1\nend\n")
     assert ("static inline BallState* Ball_state(Actor* self) { return (BallState*)(g_obj_state + "
-            "(int)self->inst * (OBJ_STATE_STRIDE / 4)); }") in code
+            "(int)self->slot_index * (OBJ_STATE_STRIDE / 4)); }") in code
     assert '_Static_assert(sizeof(BallState) <= OBJ_STATE_STRIDE' in code
     assert "g_state_Ball" not in code and "POOL_BALL" not in code
 
@@ -162,7 +162,7 @@ def test_sans_etat_rien_n_est_emis():
     assert "BallState" not in code
     assert "Ball_state" not in code
     assert state_bytes == 0
-    assert "void Ball_pool_init(Actor* self) {" in code
+    assert "void Ball_init_script_state(Actor* self) {" in code
 
 
 # ── Un acteur de scène n'a qu'une instance ────────────────────────

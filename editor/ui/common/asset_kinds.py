@@ -123,6 +123,8 @@ SCENES = AssetKind(
     label         = "Scenes",
     label_key = 'akind.scenes',
     icon          = "scene",
+    icon_activates = True,
+    tooltip_of    = lambda scene: tooltip(title=scene.name, body=label("scenelibrary.activate_scene_tip")),
     nodes         = store_nodes("scenes"),
     rename        = _renamer("rename_scene"),
     delete        = _store_deleter("scenes"),
@@ -227,13 +229,6 @@ def add_script(project, on_created) -> None:
 #  Entités — sprites
 # ──────────────────────────────────────────────────────────────────
 
-def _sprite_group(sprite) -> str:
-    """Dossier DEVINÉ d'un sprite : ce qui précède le premier « _ ». Un préfixe
-    trop court ne dit rien (« a_ », « ui_ ») et ne fait pas un rangement."""
-    head, sep, _rest = sprite.name.partition("_")
-    return head if sep and len(head) > 2 else ""
-
-
 def _rename_sprite(project, sprite, new_name: str) -> str:
     """Par le DISPATCHER et non par le projet : renommer un sprite déplace aussi
     le PNG et son sidecar, ce qui doit se faire surveillant suspendu, et les
@@ -295,8 +290,8 @@ SPRITES = AssetKind(
     label         = "Sprites",
     label_key = 'common.sprites',
     icon          = "sprite",
-    nodes         = store_nodes("sprites", group_by=_sprite_group,
-                                collapse_singletons=True),
+    nodes         = store_nodes("sprites"),
+    folder_family = "sprites",
     rename        = _rename_sprite,
     delete        = _store_deleter("sprites"),
     delete_prompt = lambda s: label('akind.delete_sprite_name_ctrl_z_to_undo', name=s.name),
@@ -475,6 +470,7 @@ PALETTES = AssetKind(
     add_tooltip_key = 'akind.add_palette',
     add_tip_key = 'akind.add_palette_tip',
     file_of     = store_file("palettes"),
+    folder_family = "palettes",
     duplicate   = _store_duplicator("palettes"),
 )
 

@@ -548,7 +548,7 @@ class CodeGen:
             self._emit_helper(fn)
         # Remise à l'état de départ du slot, pour les prefabs poolés (avant les handlers)
         if self.ctx.is_pooled:
-            self._emit_pool_init()
+            self._emit_init_script_state()
         defined = set()
         for fn in script.functions:
             if fn.name in self._helpers:
@@ -778,7 +778,7 @@ class CodeGen:
         Côté prefab, l'accès passe par `_st`, un pointeur posé en tête de la
         fonction qui en a besoin (cf. `_close_state_scope`). Écrire
         `Ball_state(self)->fx` à chaque site laissait gcc recalculer le bloc plus souvent que
-        nécessaire ; `Actor.inst` évite en plus la division par `sizeof(Actor)`, qui n'est pas une
+        nécessaire ; `Actor.slot_index` évite en plus la division par `sizeof(Actor)`, qui n'est pas une
         puissance de deux, qu'une soustraction de pointeurs coûterait."""
         if self.ctx.is_pooled:
             self._state_touched = True
@@ -923,12 +923,12 @@ class CodeGen:
             step_ref = self._state_ref(f"seq_{plan.name}_step")
             self._w(f"if ({step_ref}) {self._sequence_sym(plan)}({arg});")
 
-    def _emit_pool_init(self):
-        """Génère void SYM_pool_init(Actor* self) : appelée par spawn avant
+    def _emit_init_script_state(self):
+        """Génère void SYM_init_script_state(Actor* self) : appelée par spawn avant
         on_start. Une seule affectation de structure : elle couvre les tableaux
         et les vecteurs, qu'un champ à la fois ne saurait pas réinitialiser."""
         sym = self.ctx.actor_sym
-        self._w(f"void {sym}_pool_init(Actor* self) {{")
+        self._w(f"void {sym}_init_script_state(Actor* self) {{")
         self._indent += 1
         mark = self._open_state_scope()
         if self._pool_state_init:
@@ -1271,7 +1271,7 @@ class CodeGen:
         """L'état par instance d'un prefab poolé : une structure par slot du
         pool, un champ par variable de tête que le script écrit.
 
-        Le rang d'une instance dans son modèle est rangé dans l'acteur (`Actor.inst`, posé
+        L’indice de l’emplacement est rangé dans l’acteur (`Actor.slot_index`, posé
         par le spawn et à l'entrée de scène) : l'état ne suppose plus les instances d'un
         modèle contiguës dans `g_actors[]`.
 
@@ -1354,7 +1354,7 @@ class CodeGen:
         self._w(f'_Static_assert(sizeof({struct_t}) <= OBJ_STATE_STRIDE, '
                 f'"{sym}: the script state does not fit in an object state block");')
         self._w(f"static inline {struct_t}* {sym}_state(Actor* self) {{ "
-                f"return ({struct_t}*)(g_obj_state + (int)self->inst * (OBJ_STATE_STRIDE / 4)); }}")
+                f"return ({struct_t}*)(g_obj_state + (int)self->slot_index * (OBJ_STATE_STRIDE / 4)); }}")
         # Un setter par export réglable : c'est le SEUL point d'accès de l'état
         # depuis un autre `.c` (le script qui spawne). `<sym>_state` reste privé :
         # le setter, lui, est extern (le spawner le forward-
@@ -1562,17 +1562,6 @@ class CodeGen:
             if (isinstance(s.call, ExprCall)
                     and self._call_key(s.call.func) == "sfx.play"):
                 self._w(self._emit_sfx_play(s.call.args, hold=False) + ";")
-            elif (isinstance(s.call, ExprCall)
-                    and self._call_key(s.call.func) == "actor.spawn"
-                    and self._spawn_table(s.call.args) is not None
-                    and isinstance(s.call.args[0], ExprString)):
-                # `actor:spawn("X", pos, {k=v})` posé seul : on tient l'instance
-                # dans un temporaire le temps d'écrire ses exports, puis on la
-                # lâche (chantier « Les exports de script », tranche poolé).
-                tmp = f"_spawn{self._next_spawn_tmp()}"
-                self._w(f"Actor* {tmp} = {self._emit_actor_spawn(s.call.args)};")
-                self._emit_spawn_setters(tmp, s.call.args[0].value,
-                                         self._spawn_table(s.call.args))
             elif self._live_guard_receiver(s.call) is not None:
                 # Une action sur la référence d'un autre acteur : il a pu disparaître depuis
                 # qu'on l'a obtenu. L'appel est sauté et signalé (log debug), jamais exigé.
@@ -1720,14 +1709,6 @@ class CodeGen:
                 self._ref_targets.pop(s.name, None)
             ctype = "Actor*" if is_actor_ref else (REF_TYPE_TABLE[rt].c_type if rt else "int")
             self._w(f"{ctype} {s.name} = {val};")
-            # `local b = actor:spawn("X", pos, {k=v})` : écrire les exports de
-            # l'instance née juste après (tranche poolé D2).
-            if (isinstance(s.value, ExprCall)
-                    and self._call_key(s.value.func) == "actor.spawn"
-                    and self._spawn_table(s.value.args) is not None
-                    and isinstance(s.value.args[0], ExprString)):
-                self._emit_spawn_setters(s.name, s.value.args[0].value,
-                                         self._spawn_table(s.value.args))
 
         elif isinstance(s, StmtIf):
             cond = self._expr(s.cond)
@@ -2759,14 +2740,14 @@ class CodeGen:
         return f"actor_model_clear({pool})" if pool else "0 /* actor:clear(model): a scene is needed */"
 
     def _pool_macro(self, prefab: str):
-        """`g_model_<S>, MODEL_<S>_COUNT, MODELID_<S>` : la table des instances posées (et de réserve) d'un
+        """`g_model_<S>, MODEL_<S>_COUNT, ROOT_TYPE_ID_<S>` : la table des instances posées (et de réserve) d'un
         modèle, leur nombre, et son identité dans le pool partagé (0 s'il n'y est pas), dans la scène
         qui compile ce script (headers.py, main.c), ou None sans scène (script partagé)."""
         if not self.ctx.scene_sym:
             return None
         from codegen.c_names import sym as c_sym
         sym = f"{self.ctx.scene_sym}_{c_sym(prefab)}"
-        return f"g_model_{sym}, MODEL_{sym.upper()}_COUNT, MODELID_{sym.upper()}"
+        return f"g_model_{sym}, MODEL_{sym.upper()}_COUNT, ROOT_TYPE_ID_{sym.upper()}"
 
     def _emit_layer_get(self, args: list) -> str:
         """layer:get(2) → 2 : le numéro EST la référence (un fond n'a pas d'autre identité que
@@ -2843,7 +2824,20 @@ class CodeGen:
         else:
             e = self._expr(pos)
             px, py = f"({e}).x", f"({e}).y"
-        return f"spawn_{sym}({px}, {py})"
+        table = self._spawn_table(args)
+        calls = []
+        if table is not None:
+            tmp = f"_spawn{self._next_spawn_tmp()}"
+            for key, val in zip(table.keys, table.items):
+                if key is None:
+                    continue
+                cval = self._spawn_export_value(args[0].value, key, val)
+                if cval is not None:
+                    calls.append(f"{sym}_set_{key}({tmp}, {cval});")
+        if not calls:
+            return f"spawn_{sym}({px}, {py})"
+        return (f"({{ Actor* {tmp} = actor_spawn_init_{sym}({px}, {py}); "
+                f"if ({tmp}) {{ {' '.join(calls)} actor_spawn_start_{sym}({tmp}); }} {tmp}; }})")
 
     def _spawn_setter_externs(self, script) -> list[str]:
         """Les `extern void <Scène>_<Prefab>_set_<clé>(Actor*, int);` de tous les
@@ -2874,6 +2868,10 @@ class CodeGen:
                     continue
                 seen.add((sym, key))
                 arg_t = export_setter_c_type(meta[key].get("type"))
+                if sym not in seen:
+                    seen.add(sym)
+                    out.extend([f"extern Actor* actor_spawn_init_{sym}(int x, int y);",
+                                f"extern void actor_spawn_start_{sym}(Actor* actor);"])
                 out.append(f"extern void {sym}_set_{key}(Actor* self, {arg_t} v);")
 
         def visit(stmts):
@@ -2904,29 +2902,6 @@ class CodeGen:
         if len(args) >= 3 and isinstance(args[2], ExprTable) and args[2].keys:
             return args[2]
         return None
-
-    def _emit_spawn_setters(self, dest: str, prefab_name: str, table) -> None:
-        """Écrit les exports fournis dans l'instance née, via les setters extern
-        du prefab (`<Scène>_<Prefab>_set_<clé>`). Seules les clés fournies sont
-        posées ; les autres gardent le défaut du pool (repli template, T1)."""
-        from codegen.c_names import sym as c_sym
-        sym = f"{self.ctx.scene_sym}_{c_sym(prefab_name)}"
-        calls = []
-        for key, val in zip(table.keys, table.items):
-            if key is None:
-                continue
-            cval = self._spawn_export_value(prefab_name, key, val)
-            if cval is None:
-                continue   # clé inconnue / type non réglable : signalé par le checker
-            calls.append(f"{sym}_set_{key}({dest}, {cval});")
-        if not calls:
-            return
-        self._w(f"if ({dest}) {{")
-        self._indent += 1
-        for c in calls:
-            self._w(c)
-        self._indent -= 1
-        self._w("}")
 
     def _spawn_export_value(self, prefab_name: str, key: str, value_expr) -> Optional[str]:
         """La valeur d'une clé de table de spawn, en littéral C. Résolue DANS la

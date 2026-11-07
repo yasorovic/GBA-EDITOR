@@ -1,4 +1,4 @@
-"""tools/run_pool_ingame.py — joue le scénario de `Project Test/PoolIngame` dans mGBA et rend son verdict.
+"""tools/run_pool_ingame.py : joue le scénario de `Project Test/PoolIngame` dans mGBA et rend son verdict.
 
     python tools/run_pool_ingame.py [--project PoolIngame|PoolPlaced] [--mgba CHEMIN] [--seconds 15]
 

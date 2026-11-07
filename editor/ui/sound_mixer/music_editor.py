@@ -1,4 +1,4 @@
-"""ui/sound_mixer/music_editor.py — la colonne centrale de l'écran Son pour une musique ou un jingle
+"""ui/sound_mixer/music_editor.py : la colonne centrale de l'écran Son pour une musique ou un jingle
 (la forme d'onde et la bande des ordres) ; les sections de boucle (`sections_panel`) et le mixage (`mix_panel`)
 sont deux panneaux que l'écran loge dans la colonne de droite.
 

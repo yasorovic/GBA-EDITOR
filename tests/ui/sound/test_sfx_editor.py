@@ -49,7 +49,7 @@ def _saved(project, name="coin"):
 
 def test_an_untouched_effect_shows_its_whole_file(editor):
     assert (editor._start.value(), editor._end.value()) == (0, 1000)
-    assert not editor._reset.isEnabled()
+    assert editor._reset.isHidden()
     assert "Whole file" in editor._summary.text() and "7.8 KiB" in editor._summary.text()    # 8000 frames, un octet chacune
 
 
@@ -63,7 +63,7 @@ def test_dragging_a_trim_handle_writes_the_trim_only_when_the_hand_lets_go(edito
     assert (editor.sfx.trim_start, editor.sfx.trim_end) == (250, 750) and editor.changed_count == 1
     saved = _saved(project)
     assert (saved.trim_start, saved.trim_end) == (250, 750)
-    assert editor._reset.isEnabled() and "instead of 7.8 KiB" in editor._summary.text()
+    assert not editor._reset.isHidden() and "instead of 7.8 KiB" in editor._summary.text()
 
 
 def test_the_two_fields_write_the_same_trim(editor, project):
@@ -78,7 +78,7 @@ def test_a_range_that_covers_the_whole_file_is_written_as_no_trim(editor):
     editor._trim_bar.changed.emit(0, 1000)
 
     assert (editor.sfx.trim_start, editor.sfx.trim_end) == (0, 0)                           # la fin à 0 suit un fichier remplacé
-    assert not editor._reset.isEnabled()
+    assert editor._reset.isHidden()
 
 
 def test_the_end_cannot_cross_the_start_nor_leave_less_than_the_shortest_trim(editor):
@@ -108,7 +108,7 @@ def test_an_effect_without_a_readable_file_has_nothing_to_set(qapp, project):
     widget = SfxEditor()
     widget.load(project, sfx)
 
-    assert not widget._start.isEnabled() and not widget._end.isEnabled() and not widget._reset.isEnabled()
+    assert not widget._start.isEnabled() and not widget._end.isEnabled() and widget._reset.isHidden()
     widget.load(project, None)
     assert widget._summary.text() == ""
 

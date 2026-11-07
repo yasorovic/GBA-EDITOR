@@ -265,7 +265,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "prep_mirror_y":          ("mdi.reflect-vertical",        "⥮"),
     "prep_reset":             ("mdi.backup-restore",          "↺"),
     # « Reset to default » d'une section (widgets.ResetToDefaultButton).
-    "reset":                  ("mdi.refresh",                 "↻"),
+    "reset":                  ("mdi.backup-restore",          "↺"),
     # LOCATE : montrer un élément dans l'onglet Disk (cf. ui/common/locate_bus.py).
     # À droite de chaque ligne d'une library ; le même geste partout.
     "locate":                 ("mdi.crosshairs-gps",          "⌖"),

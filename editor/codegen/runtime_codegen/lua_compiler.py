@@ -125,7 +125,7 @@ def _export_inits(owner, script, resolver) -> dict:
 
 def prefab_lua_script(p, pf):
     """Le chemin du script Lua d'un prefab, ou None s'il n'en a pas (ou s'il n'est pas du Lua). Seul un prefab
-    qui en a un est transpilé en `actor_<Scène>_<Prefab>.c`, donc seul lui définit `<sym>_pool_init`."""
+    qui en a un est transpilé en `actor_<Scène>_<Prefab>.c`, donc seul lui définit `<sym>_init_script_state`."""
     sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
     if not sc or not sc.script:
         return None

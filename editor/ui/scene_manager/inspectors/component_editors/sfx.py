@@ -9,12 +9,13 @@ from . import BaseComponentEditor, register
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 
-# CLÉS de libellé pour les trois triggers fixes — résolues par `label()` à
+# CLÉS de libellé pour les triggers fixes, résolues par `label()` à
 # l'affichage.
 _FIXED_LABELS: dict[str, str] = {
     "manual":     "comped.trig_manual",
     "on_spawn":   "comped.trig_on_spawn",
     "on_destroy": "comped.trig_on_destroy",
+    "on_interact": "comped.trig_on_interact",
 }
 
 

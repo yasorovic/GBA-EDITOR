@@ -1,4 +1,4 @@
-"""ui/background_editor/background_encoding.py — le service d'encodage unique d'un fond.
+"""ui/background_editor/background_encoding.py : le service d'encodage unique d'un fond.
 
 Un seul chemin pour tout ce qui encode : un geste du canvas, un curseur de compression, le bouton « Run encoding »,
 l'import. Il ne connaît ni l'inspecteur ni le canvas : on lui donne un `EncodingJob` (ce qu'on veut encoder), il calcule en

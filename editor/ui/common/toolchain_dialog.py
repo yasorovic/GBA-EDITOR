@@ -1,4 +1,4 @@
-"""ui/common/toolchain_dialog.py — la fenêtre qui explique pourquoi on ne peut pas
+"""ui/common/toolchain_dialog.py : la fenêtre qui explique pourquoi on ne peut pas
 construire la ROM faute d'outils, et propose d'ouvrir les réglages de la toolchain.
 
 Même mise en page que `crash_dialog.CrashDialog` (mascotte, titre, texte, boutons

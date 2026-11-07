@@ -1,4 +1,4 @@
-"""ui/palette_editor/swatch_button.py — case de palette (swatch) peinte sur mesure."""
+"""ui/palette_editor/swatch_button.py : case de palette (swatch) peinte sur mesure."""
 from __future__ import annotations
 
 from typing import Optional

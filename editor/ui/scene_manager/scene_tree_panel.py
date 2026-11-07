@@ -1193,10 +1193,15 @@ class _ActiveSceneTree(_Tree):
         # silence par `Project.rename_camera` : le rebuild qui suit remontre
         # alors l'ancien nom, sans message dédié.
         old_name = camera.name
+        state = self._panel._content_state
+        if new_name in (proj.camera_names() - {old_name}):
+            state = None
+        if state:
+            # Le rangement doit précéder le rafraîchissement synchrone du renommage.
+            state.rename_member(self._scene.name, f"camera:{old_name}", f"camera:{new_name}")
         proj.rename_camera(self._scene, camera, new_name)
-        if self._panel._content_state:
-            self._panel._content_state.rename_member(
-                self._scene.name, f"camera:{old_name}", f"camera:{camera.name}")
+        if state and camera.name != new_name:
+            state.rename_member(self._scene.name, f"camera:{new_name}", f"camera:{old_name}")
         get_dispatcher()._emit("cameras_list_changed")
 
     def _commit_rename_ui_elem(self, item: QTreeWidgetItem):
@@ -1222,11 +1227,11 @@ class _ActiveSceneTree(_Tree):
             item.setText(0, el.name)
             self.blockSignals(False)
             return
-        proj.rename_ui_element(layout, el, chosen)
         if self._panel._content_state and self._scene:
             self._panel._content_state.rename_member(
                 self._scene.name, f"ui_element:{layout.name}:{old_name}",
-                f"ui_element:{layout.name}:{el.name}")
+                f"ui_element:{layout.name}:{chosen}")
+        proj.rename_ui_element(layout, el, chosen)
         self._panel._after_ui_change()
 
     def _commit_rename_actor(self, item: QTreeWidgetItem):
@@ -1244,15 +1249,20 @@ class _ActiveSceneTree(_Tree):
             # ne plus y toucher après cet appel (même mise en garde que
             # ci-dessus et que `_commit_rename_scene` dans scene_library_panel).
             old_name = actor.name
+            state = self._panel._content_state
+            if any(a is not actor and a.name == new_name for a in self._scene.actors):
+                state = None
+            if state:
+                # Le rebuild purge les anciennes clés : les migrer avant son déclenchement.
+                state.rename_member(self._scene.name, f"actor:{old_name}", f"actor:{new_name}")
             if not proj.rename_actor(actor, new_name, scene=self._scene):
+                if state:
+                    state.rename_member(self._scene.name, f"actor:{new_name}", f"actor:{old_name}")
                 # Nom déjà pris dans la scène : refusé, la ligne reprend l'ancien nom.
                 self.blockSignals(True)
                 self._update_actor_item(item, actor)
                 self.blockSignals(False)
                 return
-            if self._panel._content_state:
-                self._panel._content_state.rename_member(
-                    self._scene.name, f"actor:{old_name}", f"actor:{actor.name}")
         else:
             actor.name = new_name
             self.blockSignals(True)
@@ -1551,12 +1561,17 @@ class SceneTreePanel(QWidget):
     # Ensemble de clés (actor:/camera:/ui:) que le Canvas masque localement.
     editor_visibility_changed = pyqtSignal(object)
 
-    # Les deux projections de la scène, dans l'ordre des onglets : (contexte, clé de libellé).
+    # Les projections de la scène : (contexte, clé de libellé).
     _CONTEXTS = (("content", "scttree.context_content"),
                  ("priority", "scttree.context_priority"))
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, library: QWidget | None = None):
         super().__init__(parent)
+        self._library = library
+        self._contexts = self._CONTEXTS + ((("library", "scenelibrary.scene_library"),) if library is not None else ())
+        if library is not None:
+            library.setParent(self)
+            library.hide_title()
         self._project: Project | None = None
         self._scene: Scene | None = None
         self._context = "content"
@@ -1639,23 +1654,25 @@ class SceneTreePanel(QWidget):
         self._filters_bar.setVisible(False)
         layout.addWidget(self._filters_bar)
 
-        # ── Deux projections, deux onglets texte ───────────────────
+        # ── Projections de scène et bibliothèque projet ───────────
         # Le nom « Scene tree » ne dit rien que le contenu ne montre déjà.
         # Ces deux entrées nomment en revanche le choix réel de l'auteur.
         tabs = QFrame()
         tabs.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
         tl = QHBoxLayout(tabs)
-        tl.setContentsMargins(S.GUTTER, 0, S.GUTTER, 0)
+        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(0)
         self._context_tabs = QTabBar()
-        self._context_tabs.setExpanding(False)
+        self._context_tabs.setExpanding(True)
+        self._context_tabs.setUsesScrollButtons(False)
+        self._context_tabs.setElideMode(Qt.TextElideMode.ElideRight)
         self._context_tabs.setDrawBase(False)
         self._context_tabs.setCursor(Qt.CursorShape.PointingHandCursor)
-        for context, key in self._CONTEXTS:
+        for context, key in self._contexts:
             self._context_tabs.addTab(label(key))
         self._context_tabs.currentChanged.connect(
-            lambda index: self._set_context(self._CONTEXTS[index][0]))
-        tl.addWidget(self._context_tabs)
-        tl.addStretch()
+            lambda index: self._set_context(self._contexts[index][0]))
+        tl.addWidget(self._context_tabs, 1)
         layout.addWidget(tabs)
 
         # ── Corps : arbre, ou état vide si aucune scène active ────
@@ -1681,7 +1698,11 @@ class SceneTreePanel(QWidget):
         cl.addWidget(self._empty)
         cl.addStretch()
         scroll.setWidget(container)
-        layout.addWidget(scroll)
+        layout.addWidget(scroll, 1)
+        self._scroll = scroll
+        if self._library is not None:
+            layout.addWidget(self._library, 1)
+            self._library.hide()
 
     # ── Chargement ────────────────────────────────────────────────
 
@@ -1695,7 +1716,15 @@ class SceneTreePanel(QWidget):
         self.refresh()
 
     def refresh(self):
-        self._scene_lbl.setText(self._scene.name if self._scene else label("scttree.no_scene"))
+        showing_library = self._context == "library"
+        self._scene_lbl.setText(label("scenelibrary.scene_library") if showing_library
+                                else self._scene.name if self._scene else label("scttree.no_scene"))
+        self._btn_add.setVisible(not showing_library)
+        self._btn_search.setVisible(not showing_library)
+        self._filters_bar.setVisible(not showing_library and self._btn_search.isChecked())
+        self._scroll.setVisible(not showing_library)
+        if self._library is not None:
+            self._library.setVisible(showing_library)
         self._btn_add.setEnabled(self._scene is not None)
         self._tree.populate(self._project, self._scene)
         self._priority_tree.populate(self._project, self._scene)
@@ -1774,12 +1803,12 @@ class SceneTreePanel(QWidget):
         self._tree._fit()
 
     def _set_context(self, context: str):
-        self._context = context if context in ("content", "priority") else "content"
+        self._context = context if context in dict(self._contexts) else "content"
         self.refresh()
 
     def _update_context_tabs(self):
         """Montre l'onglet du contexte courant, sans le faire passer pour un clic."""
-        index = [context for context, _key in self._CONTEXTS].index(self._context)
+        index = [context for context, _key in self._contexts].index(self._context)
         self._context_tabs.blockSignals(True)
         self._context_tabs.setCurrentIndex(index)
         self._context_tabs.blockSignals(False)

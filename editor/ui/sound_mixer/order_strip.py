@@ -1,4 +1,4 @@
-"""ui/sound_mixer/order_strip.py — la structure musicale d'une piste, avec ses sections.
+"""ui/sound_mixer/order_strip.py : la structure musicale d'une piste, avec ses sections.
 
 Un module : une cellule par POSITION de la table BRUTE — celle que la ROM numérote (cf.
 engine_emulation/module_model.ORDER_SKIP) — et non par pattern : une section vise une position, et

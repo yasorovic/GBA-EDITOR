@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_scene_init.py — le `scene_init_<scène>` : tout ce qu'une scène pose à son activation.
+"""runtime_codegen/gen_scene_init.py : le `scene_init_<scène>` : tout ce qu'une scène pose à son activation.
 
 Une section par fonction, dans l'ordre où le C est émis : l'ordre compte (les registres d'affichage après le
 texte, les windows après DISPCNT, les `on_start` en dernier). Le texte et l'interface vivent dans `gen_ui_scene`,
@@ -9,30 +9,23 @@ from codegen.actor_appearance import owner_appearances
 from codegen.c_names import scene_actor_sym, sym as c_sym
 from codegen.oam_alloc import scene_oam_layout
 from codegen.palette_alloc import scene_bank_layout
-from codegen.runtime_codegen.gen_appearance import (
-    appearance_init_lines, appearance_layout, appearance_table_lines,
-)
+from codegen.runtime_codegen.gen_actor_init import actor_init_lines
+from codegen.runtime_codegen.gen_appearance import appearance_layout, appearance_table_lines
 from codegen.runtime_codegen.gen_camera import scene_camera_index
 from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
-from codegen.runtime_codegen.gen_pool import dispatch_sym, placed_parent_table
+from codegen.runtime_codegen.gen_actor_hierarchy import link_depth, placed_link_lines
+from codegen.runtime_codegen.gen_pool import dispatch_sym
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
 from codegen.runtime_codegen.physics.areas import area_init_lines
 from codegen.runtime_codegen.physics.audio_emitters import emitter_init_lines
 from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
-from codegen.runtime_codegen.gen_scene_query import (
-    collision_pairs, lua_actor_indices, scene_anim_descriptors, scene_has_cmap, scene_world_size,
-)
-from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
-from codegen.runtime_codegen.gen_sprite import initial_state_rank, shown
+from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scene_has_cmap, scene_world_size
+from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_spawn_lines
 from codegen.runtime_codegen.gen_ui_scene import scene_ui_lines
 from codegen.runtime_codegen.physics.body import support_normal
 from codegen.runtime_codegen.gen_vram_layout import layer_base_bank
-from codegen.runtime_codegen.interact_gen import owner_boxes
 from codegen.runtime_codegen.sound_emit import scene_music_lines
-from core.models.field_value import (
-    FieldValue as _FV, number_c as _number_c, var_names_from_project as _var_names,
-)
-from core.models.palette import OWN_PAL_BANK
+from core.models.field_value import FieldValue, var_names_from_project
 from core.models.scene import Scene
 from core.project import Project
 
@@ -80,8 +73,12 @@ def gen_scene_init(
     L += _background_lines(p, scene, sym, bgi, scene_actors, sprite_offsets, obj_layout, bg_layout, anims, tanims)
     L += scene_ui_lines(p, scene, sym, sprite_offsets, obj_text_oam, obj_text_tile, emit)
     L += scene_display_lines(p, scene, dispcnt, cam_idx, emit)
+    L += _shared_pool_lines(pi, scene_oam_layout(p, scene).type_table_size)
     L += _placed_actor_lines(p, scene, scene_actors, actor_offset, obj_layout, alay, affine_info)
-    L += _shared_pool_lines(pi)
+    # La hiérarchie, posés comme nés (`g_slot_link`) : la profondeur de la scène, puis le lien des posés qui ont un
+    # parent ; une partie de modèle reçoit le sien à son spawn.
+    L.append(f"    g_slot_depth = {link_depth(scene_actors, pi)};")
+    L += placed_link_lines(scene_actors, actor_offset)
     L += _start_lines(p, scene, sym, scene_actors, actor_offset, lua_idx, pi, has_sound, sound_assets,
                       actor_defined_events)
     L.append("}")
@@ -156,22 +153,13 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     L.append(f"    g_scene_placed = {len(scene_actors)};")
     L += area_init_lines(p, scene, scene_actors, actor_offset)
     L += emitter_init_lines(p, scene)
-    # La mémoire des contacts des paires posées ne survit pas à la scène (cf. `gen_scene_tick`).
-    if collision_pairs(p, scene_actors, actor_offset, lua_actor_indices(p, scene_actors, actor_offset)):
-        L.append("    for(unsigned _i=0;_i<sizeof(g_col_prev)/sizeof(g_col_prev[0]);_i++) g_col_prev[_i]=0;")
-    # La hiérarchie des acteurs posés, lue par `a.parent` / `a.root` (runtime_api_inline.h).
-    _ppar = placed_parent_table(scene_actors, actor_offset)
-    if _ppar:
-        L.append(f"    {{ static const s16 _ppar[{len(_ppar)}] = {{{','.join(map(str, _ppar))}}}; g_placed_parent = _ppar; }}")
-    else:
-        L.append("    g_placed_parent = 0;")
     # Tout acteur repart SANS entrée OAM (-1) ; le lien est posé plus bas, pour les
     # seuls acteurs qui affichent un sprite (posés ci-dessous, pools à leur init).
     # La génération survit à la remise à zéro et avance : une référence rangée par la scène
     # précédente ne résout dans aucun emplacement de celle-ci.
     L.append("    for(int _i=0; _i<G_ACTOR_COUNT; _i++) { u16 _g=g_actors[_i].gen; g_actors[_i]=(Actor){0}; "
-             "g_actors[_i].gen=_g+1; g_actors[_i].oam_entry=-1; g_actors[_i].inst=_i; "
-             "actor_slot_tables_clear(_i); }")
+             "g_actors[_i].gen=_g+1; g_actors[_i].oam_entry=-1; g_actors[_i].slot_index=_i; "
+             "actor_slot_tables_clear(_i); g_slot_link[_i].parent=-1; g_slot_link[_i].depth=0; }")
     L.append("    for(int _i=0; _i<(G_ACTOR_COUNT+31)/32; _i++) g_alive_bits[_i]=0;")
     L.append("    g_alive_epoch++;")
     L.append("    for(int _i=0; _i<G_OAM_ENTRY_COUNT; _i++) g_oam_entries[_i]=(OamEntry){0};")
@@ -310,139 +298,60 @@ def _background_lines(p, scene, sym: str, bgi: list[dict], scene_actors: list, s
 
 def _placed_actor_lines(p, scene, scene_actors: list, actor_offset: int, obj_layout, alay,
                         affine_info: dict | None) -> list[str]:
-    """L'état de départ de chaque acteur posé, puis ses déclencheurs Sfx `on_spawn`."""
+    """Construit les acteurs de la scène dans leurs emplacements réservés."""
     L: list[str] = []
-    _lay = scene_oam_layout(p, scene)
-    # Init actors
-    # Les acteurs posés qui sont des instances d'un modèle : leur rang dans le modèle (l'indice de leur
-    # état de script). Les membres sont les premières instances ; la réserve du spawn suit.
-    for j, (actor, sprite) in enumerate(scene_actors):
-        idx = actor_offset + j
-        _e = _lay.placed_entry[j]   # son entrée OAM, -1 = sans sprite : rien à afficher
-        s = scene_actor_sym(scene.name, actor.name)
-        boxes = owner_boxes(actor, sprite)
-        own = list(sprite.own_palette) if (sprite and getattr(sprite, "own_palette", None)) else []
-        pal = obj_layout.bank_index(getattr(actor, "pal_bank", OWN_PAL_BANK), own)
-        _lines = [
-            # x/y en Q8 en interne, l'auteur place l'acteur en pixels.
-            f"    g_actors[{idx}].x       = ({_FV.parse(actor.x, _var_names(p)).c_expr()})<<8;",
-            f"    g_actors[{idx}].y       = ({_FV.parse(actor.y, _var_names(p)).c_expr()})<<8;",
-            f"    g_actors[{idx}].active  = {1 if actor.visible else 0};",
-            f"    g_actors[{idx}].alive   = 1;",
-            f"    g_oam_entries[{_e}].visible = {1 if actor.visible else 0};",
-            f"    g_oam_entries[{_e}].flip_h  = {1 if actor.flip_h else 0};",
-            f"    g_oam_entries[{_e}].flip_v  = {1 if actor.flip_v else 0};",
-            f"    g_actors[{idx}].dir_x   = {getattr(actor,'dir_x',0)};",
-            f"    g_actors[{idx}].dir_y   = {getattr(actor,'dir_y',0)};",
-            f"    g_oam_entries[{_e}].pal_bank= {pal if pal is not None else 0};",
-            f"    g_oam_entries[{_e}].obj_mode= {int(getattr(actor, 'obj_mode', 0)) & 3};",
-            f"    g_oam_entries[{_e}].priority= {_number_c(getattr(actor, 'priority', 0), _var_names(p), mask=3)};",
-            f"    g_oam_entries[{_e}].facing_auto= {1 if getattr(shown(p, actor)[0], 'facing_auto', True) else 0};",
-            # Le regard de départ est la direction posée dans l'inspecteur.
-            f"    g_actors[{idx}].facing_x= {getattr(actor,'dir_x',0)};",
-            f"    g_actors[{idx}].facing_y= {getattr(actor,'dir_y',0)};",
-            # L'état de départ choisi dans l'inspecteur (`initial_state`) : rang dans
-            # les états du sprite AFFICHÉ, 0 si le nom n'existe plus.
-            f"    g_oam_entries[{_e}].anim_state={initial_state_rank(*shown(p, actor))};",
-            # self.frame_w/frame_h : posées une fois ici depuis le sprite,
-            # jamais recalculées — un acteur sans sprite (rare, cf. `sprite`
-            # potentiellement None plus haut) rend 0 des deux côtés.
-            f"    g_oam_entries[{_e}].frame_w = {sprite.frame_w if sprite else 0};",
-            f"    g_oam_entries[{_e}].frame_h = {sprite.frame_h if sprite else 0};",
-            f"    g_actors[{idx}].name     = ACTOR_{s.upper()};",
-            # Transform MONDE : émise pour TOUT acteur, affine ou non. Un acteur
-            # non-affine ne l'AFFICHE pas (aucun slot de matrice), mais un enfant
-            # en HÉRITE par la composition parent→enfant — un enfant hérite des
-            # propriétés de son parent direct, puis les override. Sans ça, un
-            # parent non-affine restait à scale 0 (le zéro-init) et écrasait la
-            # position ET l'échelle affine de ses enfants (matrice dégénérée).
-            # Défaut 256 = ×1 ; la branche affine ci-dessous ne rajoute que le
-            # slot et la transform LOCALE du sprite.
-            f"    g_actors[{idx}].rotation     = {_number_c(getattr(actor, 'rotation', 0), _var_names(p))};",
-            f"    g_actors[{idx}].scale_x      = {_number_c(getattr(actor, 'scale_x', 1.0), _var_names(p), q8=True)};",
-            f"    g_actors[{idx}].scale_y      = {_number_c(getattr(actor, 'scale_y', 1.0), _var_names(p), q8=True)};",
-            f"    g_oam_entries[{_e}].screen_space = {1 if getattr(actor, 'screen_space', False) else 0};",
-            f"    g_actors[{idx}].collision.box_count = {len(boxes)};",
-        ]
-        # Les lignes d'AFFICHAGE portent `g_oam_entries[-1]` quand l'acteur n'a pas
-        # de sprite : on les écarte, et le lien reste à -1 (posé par le reset).
-        L += [l for l in _lines if _e >= 0 or "g_oam_entries[-1]" not in l]
-        if _e >= 0:
-            L.append(f"    g_actors[{idx}].oam_entry = {_e};")
-            L += appearance_init_lines(p, actor, str(_e), "    ", alay.actor_base.get(j))
-        _aff_i = (affine_info or {}).get(idx)
-        if _aff_i and _e >= 0:
-            _aslot = _aff_i["slot"]
-            L += [
-                f"    g_oam_entries[{_e}].affine_slot = {_aslot};",
-                f"    g_oam_entries[{_e}].rotation   = {_aff_i['sprite_rotation']};",
-                f"    g_oam_entries[{_e}].scale_x = {_aff_i['sprite_scale_x']};",
-                f"    g_oam_entries[{_e}].scale_y = {_aff_i['sprite_scale_y']};",
-                f"    g_oam_entries[{_e}].offset_x     = {_aff_i['offset_x']};",
-                f"    g_oam_entries[{_e}].offset_y     = {_aff_i['offset_y']};",
-                f"    g_oam_entries[{_e}].pivot_x      = {_aff_i['pivot_x']};",
-                f"    g_oam_entries[{_e}].pivot_y      = {_aff_i['pivot_y']};",
-            ]
-        elif _e >= 0:
-            L.append(f"    g_oam_entries[{_e}].affine_slot = -1;")
-        for bi2, cb in enumerate(boxes):
-            tag_s = "BOXTAG_" + c_sym(cb.tag or "body").upper()
-            _vn = _var_names(p)
-            bx, by = _FV.parse(cb.x, _vn).c_expr(), _FV.parse(cb.y, _vn).c_expr()
-            bw, bh = _FV.parse(cb.w, _vn).c_expr(), _FV.parse(cb.h, _vn).c_expr()
-            L += [
-                f"    g_actors[{idx}].collision.boxes[{bi2}].x=(s8){bx}; g_actors[{idx}].collision.boxes[{bi2}].y=(s8){by};",
-                f"    g_actors[{idx}].collision.boxes[{bi2}].w=(u8){bw};  g_actors[{idx}].collision.boxes[{bi2}].h=(u8){bh};",
-                f"    g_actors[{idx}].collision.boxes[{bi2}].solid={1 if cb.solid else 0}; g_actors[{idx}].collision.boxes[{bi2}].active={1 if cb.active else 0}; g_actors[{idx}].collision.boxes[{bi2}].tag={tag_s};",
-            ]
+    layout = scene_oam_layout(p, scene)
+    names = var_names_from_project(p)
+    for j, (actor, _sprite) in enumerate(scene_actors):
+        slot = actor_offset + j
+        sym = scene_actor_sym(scene.name, actor.name)
+        position = (FieldValue.parse(actor.x, names).c_expr(), FieldValue.parse(actor.y, names).c_expr())
+        L += actor_init_lines(
+            p, actor, obj_layout, slot=slot, entry=layout.placed_entry[j],
+            name=f"ACTOR_{sym.upper()}", type_id=layout.placed_type_ids[j], position=position,
+            active=actor.visible, appearance_base=alay.actor_base.get(j),
+            affine=(affine_info or {}).get(slot), indent="    ",
+        )
     # SoundFxComponent en trigger="on_spawn" — TOUS les actors de la scène,
     # scriptés ou non : c'est une donnée du component, pas du script. Émis ici plutôt que dans le on_start généré (ancien
     # comportement) pour qu'un actor sans ScriptComponent en bénéficie aussi.
-    for j, (actor, _sprite) in enumerate(scene_actors):
-        sfx_sym, sfx_vol, sfx_trig = sfx_trigger_info(p, actor)
-        if sfx_sym and sfx_trig == "on_spawn":
-            L.append(f"    sfx_play({sfx_sym}, {sfx_vol}, 0);"
-                     f"   /* SoundFxComponent : {actor.name} */")
+    for actor, _sprite in scene_actors:
+        L += sfx_on_spawn_lines(p, actor, "    ")
     return L
 
 
-def _shared_pool_lines(pi: list[dict]) -> list[str]:
-    """Le pool PARTAGÉ : sa fenêtre d'emplacements, ses modèles à parties, ses entrées d'état."""
+def _shared_pool_lines(pi: list[dict], type_table_size: int) -> list[str]:
+    """Le pool PARTAGÉ : sa fenêtre d'emplacements, ses modèles à parties, ses entrées d'état.
+
+    `type_table_size` : tous les types d'emplacement de la scène, posés compris (`OamLayout.type_table_size`). La table `g_spool_part` est
+    lue par `Actor.type_id` pour tout emplacement (`group_root_slot`) : elle couvre donc aussi les types des posés, à 0."""
     L: list[str] = []
     # Le pool PARTAGÉ : les emplacements que tout modèle qui naît prend. Posés ici, puisque les
     # globales survivent à la scène : une scène sans pool partagé le dit aussi (début = fin = 0).
     _spool = next((p2["spool"] for p2 in pi if p2.get("shared")), None)
     if _spool:
         L.append(f"    g_spool_start = {_spool['start']}; g_spool_end = {_spool['end']}; "
-                 f"g_spool_hw = g_spool_free = {_spool['start']}; "
+                 f"g_actor_slot_end = g_spool_free = {_spool['start']}; "
                  f"g_spool_entry = {_spool['entry_start'] if _spool['entries'] else -1};")
-        # Les modèles à parties : taille du groupe (pour la racine) et rang de la partie, par type d'emplacement.
+        # Les modèles à parties : le rang de la partie, par type d'emplacement (l'allocation du pool, `group_root_slot`).
         _grouped = [m for m in pi if m.get("shared") and m["group"] > 1]
         if _grouped:
-            _kinds = max(m["model_id"] + m["group"] for m in pi if m.get("shared"))
-            _grp, _part, _par = [0] * _kinds, [0] * _kinds, [0] * _kinds
+            _part = [0] * type_table_size
             for m in _grouped:
-                _grp[m["model_id"]] = m["group"]
-                _parts = list(getattr(m["prefab"], "children", []) or [])
-                _rank = {pt.name: k for k, pt in enumerate(_parts, start=1)}
-                for k, pt in enumerate(_parts, start=1):
-                    _part[m["model_id"] + k] = k
-                    # La partie parente : une autre partie nommée par `parent`, sinon la racine (rang 0).
-                    _par[m["model_id"] + k] = _rank.get(getattr(pt, "parent", None) or "", 0)
-            L.append(f"    {{ static const u8 _g[{_kinds}]={{{','.join(map(str, _grp))}}}; "
-                     f"static const u8 _pt[{_kinds}]={{{','.join(map(str, _part))}}}; "
-                     f"static const u8 _pr[{_kinds}]={{{','.join(map(str, _par))}}}; "
-                     f"g_spool_grp = _g; g_spool_part = _pt; g_spool_parent = _pr; }}")
+                for k in range(1, m["group"]):
+                    _part[m["root_type_id"] + k] = k
+            L.append(f"    {{ static const u8 _pt[{type_table_size}]={{{','.join(map(str, _part))}}}; g_spool_part = _pt; }}")
         else:
-            L.append("    g_spool_grp = g_spool_part = g_spool_parent = 0;")
+            L.append("    g_spool_part = 0;")
         if _spool["entries"]:
             L.append(f"    for(int _k={_spool['start']}; _k<{_spool['end']}; _k++) {{")
             L.append(f"        int _e = {_spool['entry_start']} + (_k - {_spool['start']});")
             L.append("        g_actors[_k].oam_entry = _e; g_oam_entries[_e].affine_slot = -1;")
             L.append("    }")
     else:
-        L.append("    g_spool_start = g_spool_end = g_spool_hw = g_spool_free = 0; g_spool_entry = -1;")
-        L.append("    g_spool_grp = g_spool_part = g_spool_parent = 0;")
+        # Sans pool, le plus haut emplacement utilisé est le dernier posé : `SLOT_EACH` s'y arrête.
+        L.append("    g_spool_start = g_spool_end = g_spool_free = 0; g_actor_slot_end = g_scene_placed; g_spool_entry = -1;")
+        L.append("    g_spool_part = 0;")
     return L
 
 
@@ -451,9 +360,7 @@ def _start_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, lua_
                  actor_defined_events: dict[str, set[str]] | None) -> list[str]:
     """La musique de la scène, l'état des instances d'un modèle, puis les `on_start` (acteurs, scène)."""
     L: list[str] = []
-    # Les acteurs posés qui sont des instances d'un modèle : leur rang dans le modèle (l'indice de leur
-    # état de script). Les membres sont les premières instances ; la réserve du spawn suit.
-    _member_rank = {j: r for pl in pi for r, j in enumerate(pl["members"])}
+    members = {j for pl in pi for j in pl["members"]}
     # ── Musique de la scène ───────────────────────
     # Posée AVANT les on_start : le réglage déclaratif passe en premier et le
     # script ajuste ensuite, exactement comme pour la caméra (v0.6.1). Un
@@ -461,32 +368,29 @@ def _start_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, lua_
     if has_sound:
         L += scene_music_lines(p, scene, sound_assets)
 
-    # on_start actors (seulement si défini dans le script Lua)
-    def _def_init(s, ev):
-        if actor_defined_events is None:
-            return True
-        return ev in actor_defined_events.get(s, set())
-
-    _dsym = dispatch_sym(scene, scene_actors, pi)
+    symbol = dispatch_sym(scene, scene_actors, pi)
+    scripts = [(j, symbol(scene.name, scene_actors[j - actor_offset][0].name)) for j in sorted(lua_idx)]
     # L'état des instances POSÉES d'un modèle, AVANT tout on_start : l'un peut lire l'autre. Le modèle
     # remet l'état de départ de son script, puis chaque valeur d'export propre au membre y est posée.
-    if _member_rank:
+    if members:
         from codegen.runtime_codegen.lua_compiler import member_export_inits
         from scripting.codegen import export_setter_c_type
-        for j in sorted(lua_idx):
-            if j not in _member_rank:
+        for j, s in scripts:
+            if j not in members:
                 continue
             actor, _ = scene_actors[j - actor_offset]
-            s = _dsym(scene.name, actor.name)
-            L.append(f"    {s}_pool_init(&g_actors[{j}]);")
+            L.append(f"    {s}_init_script_state(&g_actors[{j}]);")
             for name, typ, literal in member_export_inits(p, scene, actor):
                 arg = f"({export_setter_c_type(typ)}){literal}" if literal.startswith("{") else literal
                 L.append(f"    {s}_set_{name}(&g_actors[{j}], {arg});")
-    for j in sorted(lua_idx):
-        actor, _ = scene_actors[j - actor_offset]
-        s = _dsym(scene.name, actor.name)
-        if _def_init(s, "on_start"):
-            L.append(f"    {s}_on_start(&g_actors[{j}]);")
+    starts = [(j, s) for j, s in scripts
+              if actor_defined_events is None or "on_start" in actor_defined_events.get(s, ())]
+    # Le lot garde la génération initiale de chaque acteur. Un callback peut en détruire un
+    # autre et réutiliser sa place par un spawn, qui a déjà appelé son propre on_start.
+    for j, _ in starts:
+        L.append(f"    int _start_ref_{j} = actor_ref_make(&g_actors[{j}]);")
+    for j, s in starts:
+        L.append(f"    actor_start(_start_ref_{j}, {s}_on_start);")
     # on_start scene
     if getattr(scene, "script", ""):
         L.append(f"    {sym}_scene_on_start();")

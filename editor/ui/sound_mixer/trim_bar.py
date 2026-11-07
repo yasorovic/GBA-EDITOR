@@ -1,4 +1,4 @@
-"""ui/sound_mixer/trim_bar.py — la barre qui rogne un WAV : le FICHIER entier en vignette, deux poignées, le reste estompé.
+"""ui/sound_mixer/trim_bar.py : la barre qui rogne un WAV : le FICHIER entier en vignette, deux poignées, le reste estompé.
 
 Une seule barre pour les trois familles de WAV (un effet, une musique, un jingle) : elle ne connaît ni l'asset ni l'écran,
 seulement une durée, une enveloppe et une plage `(début, fin)` en millisecondes depuis le début du fichier — la convention de

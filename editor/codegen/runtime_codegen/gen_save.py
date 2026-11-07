@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_save.py — émission des tables de sauvegarde (SRAM).
+"""codegen/runtime_codegen/gen_save.py : émission des tables de sauvegarde (SRAM).
 
 Extrait de `main_gen` (A3, découpe du fichier-dieu) : `main_gen` reste la façade
 et l'orchestrateur (`generate_main`), les domaines vivent dans des sous-modules

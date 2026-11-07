@@ -1779,8 +1779,8 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="actor.parent", c_getter="actor_parent", ptype=PARAM_INT,
         self_first=True, read_only=True, ref=REF_ACTOR,
         doc="The part this actor hangs from (read-only): the root of its prefab, or another part. nil for "
-            "a root, for a destroyed actor and when the parent part was destroyed. For an actor placed in the "
-            "scene it is its scene parent. Ex: local boss = other.parent; if boss then boss:hide() end",
+            "a root and for a destroyed actor (destroying a parent destroys its children). For an actor placed in "
+            "the scene it is its scene parent. Ex: local boss = other.parent; if boss then boss:hide() end",
     ),
     "actor.root": ApiProp(
         lua_name="actor.root", c_getter="actor_root", ptype=PARAM_INT,

@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_toolbar.py — la palette d'outils flottante.
+"""ui/scene_manager/canvas/canvas_toolbar.py : la palette d'outils flottante.
 
 Extrait de `scene_canvas` (A3) : `FloatingToolbar`, le `QFrame` déplaçable
 superposé au canvas — les boutons d'outils (sélection, collision, inpaint,

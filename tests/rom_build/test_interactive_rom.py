@@ -101,9 +101,45 @@ def test_un_prefab_joueur_poole_interagit_par_une_boucle(tmp_path):
 
     assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
-    assert "POOL_EACH(_w)" in main_c and "interact_pick(&g_actors[_w]" in main_c
+    assert "SLOT_EACH(_k){" in main_c and "interact_pick(_a,_ia_tag,_ia_aim," in main_c
     # Sans sprite, pas de tick d'animation : le regard de l'interacteur se suit dans le bloc Interactive.
     assert "(*_a).facing_x=(*_a).dir_x" in main_c
+
+
+def test_soundfx_interaction_sans_script_pose_et_spawne_se_compile(tmp_path):
+    import wave
+    from asset_fixtures import create
+    from core.models.components import SoundFxComponent
+    from core.models.scene import Prefab
+    project = _projet(tmp_path)
+    path = project.user_library_dir / "Open.wav"
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(1)
+        out.setframerate(8000)
+        out.writeframes(bytes([128]) * 800)
+    sound = create(project, "sfx", path)
+    chest = next(a for a in project.scenes[0].actors if a.name == "Chest")
+    chest.components = [InteractiveComponent(), SoundFxComponent(sfx_name=sound.name, trigger="on_interact")]
+    prefab = Prefab(name="Bell", actor=Actor(name="Bell", components=[
+        InteractiveComponent(), SoundFxComponent(sfx_name=sound.name, trigger="on_interact")]))
+    project.prefabs.append(prefab)
+    project.prefabs.save(prefab)
+    (project.user_library_dir / "scripts" / "Spawn.lua").write_text(
+        'function on_start()\n actor:spawn("Bell", vec2(50,40))\nend\n', encoding="utf-8")
+    project.scenes[0].script = "assets/scripts/Spawn.lua"
+    project.save()
+    worker = BuildWorker(Project.open(project.root), Toolchain())
+    worker._step_launch_mgba = lambda p: True
+    diagnostics, verdict = [], []
+    worker.on("diagnostic", diagnostics.append)
+    worker.on("finished", verdict.append)
+    worker.run()
+    assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
+    code = next((project.root / "build").rglob("main.c")).read_text(encoding="utf-8")
+    assert "_ia_action[]" in code and "_ia_paction[" in code
+    assert "{0,SFX_OPEN," in code
+    assert "KEY_ON_INTERACT" not in code and "BTN_ON_INTERACT" not in code
 
 
 def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
@@ -126,7 +162,7 @@ def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
 
     assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
-    h, c = scene.actors.index(heros), scene.actors.index(coffre)       # le Player du modèle prend le rang 0
-    assert f"static const u16 _bk_idx[]={{{c}}};" in main_c
-    assert f"actors_resolve_blocks(&g_actors[{h}],1,_bk_idx,_bk_box,1);" in main_c
+    # La passe est par type : le héros est un mobile, le coffre un bloqueur, posés tous deux.
+    assert "static const PairRun _bk_run[" in main_c
+    assert "_bk_n=block_targets(_bk_bi,_bk_list);" in main_c and "actors_resolve_blocks(_a,_bk_mask[_mi],_bk_run[_mi],_bk_list,_bk_n,_bk_box);" in main_c
     assert "static void __attribute__((unused)) actors_resolve_blocks(" in main_c

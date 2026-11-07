@@ -15,6 +15,7 @@ from core.models.components import (
     PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
     CollisionShapeComponent, PhysicMaterialComponent, PhysicsBodyComponent, owner_effective_boxes,
 )
+from core.models.scene import Prefab
 
 
 def without_scene_physics(owner):
@@ -33,7 +34,12 @@ def without_scene_physics(owner):
     if not needs_change(owner) and not any(needs_change(part) for part in parts):
         return owner
     view = copy.copy(owner)
-    view.components = simplified(owner.components)
+    if isinstance(owner, Prefab):
+        # Un prefab délègue `components` à son acteur racine, en lecture seule : la vue porte une copie de cet acteur.
+        view.actor = copy.copy(owner.actor)
+        view.actor.components = simplified(owner.components)
+    else:
+        view.components = simplified(owner.components)
     if parts:
         view.children = [without_scene_physics(part) for part in parts]
     return view

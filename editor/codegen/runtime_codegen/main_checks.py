@@ -1,4 +1,4 @@
-"""runtime_codegen/main_checks.py — les contrôles bloquants de `generate_main`, avant d'écrire une ligne de C.
+"""runtime_codegen/main_checks.py : les contrôles bloquants de `generate_main`, avant d'écrire une ligne de C.
 
 Ce qui ne se verrait qu'à l'exécution, chez le joueur, fait échouer le build ici : tuiles OBJ, SRAM, parenté.
 L'avertissement sur l'affine d'un enfant ne bloque pas."""

@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_camera.py — la table des caméras et le suivi.
+"""codegen/runtime_codegen/gen_camera.py : la table des caméras et le suivi.
 
 Extrait de `main_gen` (A3). `project_cameras` est l'ordre de vérité de la table
 runtime : `headers.py` (les `#define CAM_*`) et `lua_compiler.py` en dérivent la

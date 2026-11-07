@@ -1,4 +1,4 @@
-"""codegen/runtime_codegen/gen_ui.py — l'émetteur des tables d'interface au niveau PROJET.
+"""codegen/runtime_codegen/gen_ui.py : l'émetteur des tables d'interface au niveau PROJET.
 
 Extrait de `main_gen` (A3), au-dessus de la couche de requêtes (il consomme
 `ui_item_geometry` de `gen_scene_query`, vers le bas). Les tables PARTAGÉES par

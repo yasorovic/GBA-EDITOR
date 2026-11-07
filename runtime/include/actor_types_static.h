@@ -31,7 +31,7 @@ typedef struct Area {
     u8  active;          /* 0 = l'Area ne touche plus personne (un `exit` part au partenaire encore actif) */
     u8  held;            /* 1 = son parent est inactif ou détruit : elle ne touche personne, sans avoir été éteinte (recalculé à chaque frame) */
     u16 parent;          /* emplacement de l'acteur posé qu'elle suit, plus un ; 0 = aucun. Sa position est alors recomposée à chaque
-                            frame (cf. `parent_compose_lines`) : une écriture de script est sans effet. */
+                            frame (cf. `area_parent_lines`) : une écriture de script est sans effet. */
 } Area;
 
 /* Vec2/Vec3/Rect — les valeurs COMPOSÉES du sous-ensemble Lua (vec2(x,y),
@@ -50,7 +50,43 @@ typedef struct { int x, y, w, h; } Rect;
    libre, `actor:count("M")` et `actor:get("M", i)` pour parcourir les instances vivantes. */
 typedef struct ModelSlot { u16 slot; s16 entry; } ModelSlot;
 /* Seules les instances POSÉES d'un modèle et celles de sa réserve à part y figurent ; celles qui naissent
-   dans le pool partagé se retrouvent à `Actor.model`. */
+   dans le pool partagé se retrouvent à `Actor.type_id`. */
+
+/* Le DESCRIPTEUR d'un type d'emplacement : ce que le runtime lit au modèle, pour un acteur posé comme pour un
+   acteur né, par `Actor.type_id`. Une table par scène (`g_model_desc_<Scène>[]`), émise par le build et rangée en
+   IWRAM. Le type 0 ne décrit rien ; un champ nul veut dire « rien ».
+     body_mode      : 0 aucun mouvement automatique (pas de corps, ou Static), 1 Character, 2 Kinematic, 3 Rigid ;
+     can_sleep      : un Rigid peut s'endormir ;
+     tile_mask      : les rangs des boîtes résolues contre la carte de collision, 0 si le type ne la rencontre pas ;
+     interactor     : 1 le type porte le tag d'acteur Player (il interagit), 2 de même sans sprite (son regard suit
+                      sa vitesse hors du tick d'animation) ;
+     gravity_scale  : facteur de la gravité de scène, Q8 (256 = x1) ; 0 pour un corps qui l'ignore ;
+     sfx, sfx_vol   : l'effet du SoundFxComponent déclenché par un bouton ou une action, et son volume ;
+     sfx_input      : le masque de ce bouton ou de cette action, 0 sans déclencheur par l'input ;
+     on_tile        : le `on_tile_collide` du script du type ;
+     on_crushed     : le `on_crushed` d'un Character (appelé aussi quand la carte arrête un transport) ;
+     on_update, on_late_update : les crochets d'image du script du type ;
+     on_contact     : `on_collision_enter`, `on_collide`, `on_collision_exit` du script du type (soi, l'autre, tag de sa
+                      boîte, tag de celle de l'autre), dans cet ordre ; NULL s'il n'y répond pas. */
+struct Actor;   /* défini plus bas : sans cette déclaration, le nom ne vivrait que dans le prototype des crochets */
+typedef struct ModelDesc {
+    u8 body_mode; u8 can_sleep; u8 tile_mask; u8 interactor;
+    s16 gravity_scale; s16 sfx; u16 sfx_input; u8 sfx_vol;
+    void (*on_tile)(struct Actor*, int, int);
+    void (*on_crushed)(struct Actor*, struct Actor*);
+    void (*on_update)(struct Actor*);
+    void (*on_late_update)(struct Actor*);
+    void (*on_contact[3])(struct Actor*, struct Actor*, u8, u8);
+} ModelDesc;
+enum { BODY_MODE_NONE = 0, BODY_MODE_CHARACTER = 1, BODY_MODE_KINEMATIC = 2, BODY_MODE_RIGID = 3 };
+
+/* Les modules à PAIRES (blocage, appui au sol) se lisent par couple de types, que les deux emplacements soient posés
+   ou nés : une table par module et par scène donne, pour un type et un type partenaire, la suite `n` de ses entrées
+   à partir de `first` (couples de boîtes et réglages, propres au module). */
+typedef struct PairRun { u16 first; u8 n; } PairRun;
+
+/* Le lien d'un emplacement à son parent (`g_slot_link`, runtime_api_inline.h). */
+typedef struct SlotLink { s16 parent; u8 depth; u8 visible; int ox, oy; s16 rot; u16 sx, sy; } SlotLink;
 
 /* Deux tables, deux unités :
 
@@ -178,14 +214,16 @@ typedef struct OamEntry {
     /* 1 = x/y de l'acteur sont des pixels d'ÉCRAN (UI en sprite), la caméra ne
        les touche pas. Posé au build depuis l'Actor de l'éditeur ; lecture seule
        côté script (self.screen_space) : le C de rendu émis diffère selon la
-       valeur, la changer en jeu n'aurait donc aucun effet. Reste 0 pour un
-       acteur poolé, dont le rendu ignore le drapeau. */
+       valeur, la changer en jeu n'aurait donc aucun effet. Posé de même au
+       spawn d'un acteur né, depuis son prefab. */
     u8 screen_space;
-    /* Slot de matrice affine OAM (0-31), ou -1. Réservé au build à tout
-       sprite dont « Affine transform » est coché (cf. main_gen.
-       _compute_affine_info) — c'est une capacité de RENDU. -1 = OAM normale :
-       le transform monde de l'acteur et le transform local ci-dessus gardent
-       leur valeur, mais aucune matrice n'est écrite et rien ne les affiche. */
+    /* >= 0 : le sprite est affine (« Affine transform » coché, ou enfant qui
+       tourne avec un parent affine, cf. gen_affine.compute_affine_info) ; posé à
+       l'init d'un posé comme au spawn d'un né. Aucune matrice n'est réservée :
+       le rendu en prend une à la frame et écrit ici son numéro (0-31). -1 = OAM
+       normale : le transform monde de l'acteur et le transform local ci-dessus
+       gardent leur valeur, mais aucune matrice n'est écrite et rien ne les
+       affiche. */
     s8 affine_slot;
     /* Point de pivot du sprite, pixels, depuis le CENTRE du cadre ((0,0) = le
        centre). Rotation, échelle et flip s'exercent autour de lui
@@ -226,7 +264,7 @@ typedef struct Actor {
     /* L'indice de CET emplacement dans `g_actors[]`, posé une fois à l'entrée de scène : c'est aussi
        celui de son bloc d'état de script dans `g_obj_state` (cf. runtime_api_inline.h). Il évite la
        division par la taille d'un `Actor` qu'une soustraction de pointeurs coûterait. */
-    u16 inst;
+    u16 slot_index;
     /* GÉNÉRATION de l'emplacement : +1 quand l'acteur qui l'occupait est détruit, quand un autre y
        naît, et à chaque entrée de scène. Une référence rangée dans une variable
        (`actor_ref_make`) retient la génération qu'elle a vue ; si l'emplacement a changé de
@@ -239,10 +277,9 @@ typedef struct Actor {
        son emplacement (alive = 0) ; un acteur seulement DÉSACTIVÉ (active = 0) le garde, reste
        adressable et peut être réactivé. Seul un emplacement libre est repris par un spawn. */
     u8 alive;
-    /* Le MODÈLE d'un acteur né dans le pool partagé (1.. : `MODELID_*`), 0 ailleurs. Un emplacement du
-       pool accueille n'importe quel modèle simple : c'est ce champ qui dit lequel, donc quel code
-       l'anime et quel sprite l'affiche. */
-    u8 model;
+    /* Type runtime de l’acteur, posé ou spawné. Indexe le descripteur de la scène.
+       Chaque partie de prefab a son propre type. Le type 0 est réservé. */
+    u8 type_id;
     s8 dir_x;              /* TRAJECTOIRE X courante : -1 | 0 | 1 (0 à l'arrêt) */
     s8 dir_y;              /* TRAJECTOIRE Y courante : -1 | 0 | 1 (0 à l'arrêt) */
     /* REGARD : la dernière direction non nulle, conservée à l'arrêt (self.facing).
@@ -278,16 +315,26 @@ typedef struct Actor {
     } collision;
 } Actor;
 
-/* ── Parcours du pool partagé ─────────────────────────────────────────────────────────────────────────
-   `g_alive_bits` : un bit par emplacement de `g_actors`, à 1 tant que son occupant est VIVANT. Posé par
-   le spawn (`pool_bit_set`), effacé par `actor_destroy_internal` (`pool_bit_clear`), remis à zéro par
-   `scene_init`. Seuls les emplacements du pool partagé (au-delà de `g_spool_start`) y figurent.
+/* ── Parcours des emplacements ────────────────────────────────────────────────────────────────────────
+   `g_alive_bits` : un bit par emplacement de `g_actors`, à 1 tant que son occupant est VIVANT, posé ou né.
+   Posé par le constructeur (`actor_init_slot` : `alive_bit_set`), effacé par `actor_destroy_internal`
+   (`alive_bit_clear`), remis à zéro par `scene_init`.
 
-   `POOL_EACH(v)` remplace `for(int v = g_spool_start; v < g_spool_hw; v++)` : même ordre, même borne relue
-   à chaque tour, mais un bloc de 32 emplacements dont aucun n'est vivant est sauté d'un seul test. Dans un
-   bloc occupé le parcours reste linéaire et les corps de boucle gardent leurs tests `alive` / `active`.
+   `g_actor_slot_end` est le plus haut emplacement utilisé de la scène + 1 : le pool partagé commence juste après les
+   posés (`g_spool_start` = leur nombre), et une scène sans pool le pose au nombre de posés (`scene_init`).
+
+   `SLOT_EACH(v)` parcourt tous les emplacements de la scène `[0, g_actor_slot_end)`, posés puis nés : c'est le
+   parcours des passes du tick, qui ne demandent jamais si un emplacement est posé ou né. Une boucle simple :
+   `g_actor_slot_end` est rabattu sur le dernier vivant à chaque image, les corps de boucle testent `active`, et une
+   boucle plus grosse (le saut des blocs vides par `g_alive_bits`) chassait une phase du tick hors de l'IWRAM
+   (mesuré le 2026-11-07 : Platformer +5 %). La borne est relue à chaque tour : un acteur né pendant la
+   boucle est vu.
+
+   `POOL_EACH(v)` ne parcourt que le pool partagé `[g_spool_start, g_actor_slot_end)` : `actor:count`,
+   `actor:get(nom, i)` et `actor:clear` y comptent les nés après avoir lu la table des posés d'un modèle. Il saute
+   d'un seul test un bloc de 32 emplacements sans vivant ; dans un bloc occupé le parcours reste linéaire.
    `continue` marche ; un `break` hors d'un `switch` ne sort que du bloc courant. */
-extern int g_spool_start, g_spool_hw;
+extern int g_spool_start, g_actor_slot_end;
 extern u32 g_alive_bits[];
 /* Ce qui rend `actor:get("Balle", i)` et `actor:count("Balle")` rapides dans une boucle : `g_alive_epoch` avance à CHAQUE
    changement de vie d'un emplacement (naissance, destruction, entrée de scène), et `g_nth` retient la dernière réponse avec
@@ -296,19 +343,20 @@ extern u32 g_alive_bits[];
    la recherche repart du début, comme avant : la réponse est toujours celle d'un parcours complet. */
 typedef struct {
     u32 epoch;                          /* époque du dernier `get` */
-    int model, rank, slot;              /* son modèle, son rang parmi les vivants du pool, son emplacement */
+    int root_type_id, rank, slot;              /* son modèle, son rang parmi les vivants du pool, son emplacement */
     u32 count_epoch;                    /* époque du dernier `count` */
-    int count_model, count;             /* son modèle et son résultat (la part du pool) */
+    int count_root_type_id, count;             /* son modèle et son résultat (la part du pool) */
 } PoolCursor;
 extern PoolCursor g_nth;
 extern u32 g_alive_epoch;
 #define POOL_EACH(v) \
-    for(int _pw_ = g_spool_start >> 5; _pw_ <= ((g_spool_hw - 1) >> 5); _pw_++) \
+    for(int _pw_ = g_spool_start >> 5; _pw_ <= ((g_actor_slot_end - 1) >> 5); _pw_++) \
         if(g_alive_bits[_pw_]) \
             for(int v = ((_pw_ << 5) < g_spool_start ? g_spool_start : (_pw_ << 5)), _pe_ = (_pw_ << 5) + 32; \
-                v < _pe_ && v < g_spool_hw; v++)
-static inline void pool_bit_set(int k)   { g_alive_epoch++; if (k >= g_spool_start) g_alive_bits[k >> 5] |= (1u << (k & 31)); }
-static inline void pool_bit_clear(int k) { g_alive_epoch++; g_alive_bits[k >> 5] &= ~(1u << (k & 31)); }
+                v < _pe_ && v < g_actor_slot_end; v++)
+#define SLOT_EACH(v) for(int v = 0; v < g_actor_slot_end; v++)
+static inline void alive_bit_set(int k)   { g_alive_epoch++; g_alive_bits[k >> 5] |= (1u << (k & 31)); }
+static inline void alive_bit_clear(int k) { g_alive_epoch++; g_alive_bits[k >> 5] &= ~(1u << (k & 31)); }
 
 /* Masques boutons */
 #define BTN_A      0x0001

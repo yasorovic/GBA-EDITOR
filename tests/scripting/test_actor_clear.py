@@ -22,12 +22,12 @@ def _errors(body: str, owner_kind: str = "actor") -> list[str]:
 
 def test_clear_est_un_appel_c_sur_la_table_du_modele():
     code = _c('actor:clear("Bullet")')
-    assert "actor_model_clear(g_model_Sc_Bullet, MODEL_SC_BULLET_COUNT, MODELID_SC_BULLET);" in code
+    assert "actor_model_clear(g_model_Sc_Bullet, MODEL_SC_BULLET_COUNT, ROOT_TYPE_ID_SC_BULLET);" in code
 
 
 def test_clear_rend_le_nombre_d_instances_detruites():
     code = _c('local n = actor:clear("Bullet")')
-    assert "int n = actor_model_clear(g_model_Sc_Bullet, MODEL_SC_BULLET_COUNT, MODELID_SC_BULLET);" in code
+    assert "int n = actor_model_clear(g_model_Sc_Bullet, MODEL_SC_BULLET_COUNT, ROOT_TYPE_ID_SC_BULLET);" in code
 
 
 def test_un_script_qui_ne_fait_que_clear_ne_fait_pas_naitre_le_prefab():

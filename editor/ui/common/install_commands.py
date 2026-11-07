@@ -1,4 +1,4 @@
-"""ui/common/install_commands.py — les commandes qui installent un outil, à copier.
+"""ui/common/install_commands.py : les commandes qui installent un outil, à copier.
 
 Sous Linux aucun installateur ne s'en charge : l'accueil, les réglages et la boîte
 « Construction impossible » montrent ce même bloc, qui vient de

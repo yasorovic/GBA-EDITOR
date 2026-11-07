@@ -1,4 +1,4 @@
-"""ui/scene_manager/canvas/canvas_items.py — les items graphiques du canvas.
+"""ui/scene_manager/canvas/canvas_items.py : les items graphiques du canvas.
 
 Extrait de `scene_canvas` (A3) : les primitives `QGraphicsItem` que la scène
 pose — sprite d'acteur draggable, rectangle de caméra, overlays (grille, bezel,

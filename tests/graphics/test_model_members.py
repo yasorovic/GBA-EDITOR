@@ -139,7 +139,7 @@ def test_l_identite_du_modele_sans_spawn_ne_vaut_aucun_nom(tmp_path):
     generate_actor_types(p)
     text = (p.src_dir / "actor_types.h").read_text(encoding="utf-8")
     assert "#define ACTOR_S_COIN -1" in text
-    assert "#define MODEL_S_COIN_COUNT 2" in text and "#define MODELID_S_COIN 0" in text
+    assert "#define MODEL_S_COIN_COUNT 2" in text and "#define ROOT_TYPE_ID_S_COIN 0" in text
 
 
 def test_un_spawn_qui_reprend_l_emplacement_d_un_membre_lui_garde_son_identite(tmp_path):
@@ -147,7 +147,7 @@ def test_un_spawn_qui_reprend_l_emplacement_d_un_membre_lui_garde_son_identite(t
     from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene, _coin = _projet(tmp_path, n=2, spawned=True)
     code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
-    assert "g_actors[_i].name      = _n < 2 ? _i : ACTOR_S_COIN;" in code
+    assert ".name = _n < 2 ? _i : ACTOR_S_COIN" in code
 
 
 def test_un_modele_sans_spawn_n_ecrit_pas_de_sfx_de_destruction_a_son_nom(tmp_path):

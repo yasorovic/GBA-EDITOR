@@ -18,6 +18,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QPoint
 from ui.common.theme import C, T, QSS
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from ui.common import shortcut_hints
 from core.models.sprite import AnimFrame, AnimState, SpriteAsset, StateDirection
 from core.sprite_compose import compose_frame_image
 from core.keybindings import bind
@@ -279,10 +280,14 @@ class SpriteTimeline(QWidget):
         dup.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         dup.activated.connect(lambda: self._copy_frames(self._selected_indices()))
         bind("common.duplicate", dup)
+        clear = QShortcut(QKeySequence(), self)
+        clear.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        clear.activated.connect(lambda: self._clear_frames(self._selected_indices()))
+        bind("common.delete", clear)
         delete = QShortcut(QKeySequence(), self)
         delete.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         delete.activated.connect(lambda: self._delete_frames(self._selected_indices()))
-        bind("common.delete", delete)
+        bind("sprite.delete_frame", delete)
 
     # ── API publique ───────────────────────────────────────────────────
 
@@ -434,6 +439,7 @@ class SpriteTimeline(QWidget):
         copy_a  = menu.addAction(label("sprframe.menu_copy"))
         clone_a = menu.addAction(label("sprframe.menu_clone"))
         clear_a = menu.addAction(label("sprframe.menu_clear"))
+        clear_a.setShortcut(shortcut_hints.bound("common.delete"))
 
         # Déclencheurs : propres à une frame, absents en multi-sélection.
         if not multi:
@@ -442,6 +448,7 @@ class SpriteTimeline(QWidget):
 
         menu.addSeparator()
         del_a   = menu.addAction(label("sprframe.menu_delete"))      # Delete en dernier, comme partout
+        del_a.setShortcut(shortcut_hints.bound("sprite.delete_frame"))
         del_a.setEnabled(len(self._sd.frames) > len(targets))
 
         act = menu.exec(pos)

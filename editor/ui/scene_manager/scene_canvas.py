@@ -1215,7 +1215,7 @@ class SceneEditor(QWidget):
                      if (sprite_comp and _aff) else 0)
             # L'offset décale le cadre dans le repère de l'ACTOR (il tourne et
             # change d'échelle avec lui, pas avec le sprite ni son flip) — comme
-            # `affine_oam_lines_dynamic`. `origin_*` du SpriteItem = l'opposé.
+            # `affine_oam_lines`. `origin_*` du SpriteItem = l'opposé.
             _ra = math.radians(arot)
             disp_x = math.cos(_ra) * asx * off_x - math.sin(_ra) * asy * off_y
             disp_y = math.sin(_ra) * asx * off_x + math.cos(_ra) * asy * off_y

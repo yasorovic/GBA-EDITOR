@@ -19,12 +19,14 @@
       "pivot_y": 0
     },
     {
-      "component_type": "collision_box",
+      "component_type": "collision_shape",
       "id": "Body",
       "active": true,
       "solid": false,
       "response": "sensor",
       "tag": "player",
+      "material_id": "",
+      "one_way": "off",
       "x": -13,
       "y": -13,
       "w": 26,
@@ -41,12 +43,14 @@
       }
     },
     {
-      "component_type": "collision_box",
+      "component_type": "collision_shape",
       "id": "Feet",
       "active": true,
       "solid": true,
       "response": "sensor",
       "tag": "Feet",
+      "material_id": "",
+      "one_way": "off",
       "x": -7,
       "y": 11,
       "w": 17,

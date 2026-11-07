@@ -1,4 +1,4 @@
-"""editor/ui/common/asset_palette_view.py — vues tier-ASSET pour PaletteSlotGridAsset.
+"""editor/ui/common/asset_palette_view.py : vues tier-ASSET pour PaletteSlotGridAsset.
 
 `PaletteSlotGridAsset` (ui/common/palette_slot_grid) consomme une vue duck-typée
 (`scene_entries` / `asset_entries` / `can_add()`). Le Scene Inspector fournit une

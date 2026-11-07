@@ -1,4 +1,4 @@
-"""codegen/font_emit.py — polices et textes émis en C.
+"""codegen/font_emit.py : polices et textes émis en C.
 
 **Police → tuiles.** Chaque glyphe est rendu dans une cellule de
 `tiles_x × tiles_y` tuiles 8×8 (1 seule pour une police 8×8, le cas courant),

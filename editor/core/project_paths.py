@@ -1,4 +1,4 @@
-"""core/project_paths.py — où chaque chose vit sur le disque.
+"""core/project_paths.py : où chaque chose vit sur le disque.
 
 Toutes les propriétés dérivent de `self.root` et rien d'autre : ce sont des
 chemins CANONIQUES, la seule réponse à « où est-ce rangé ». Il n'y en a jamais

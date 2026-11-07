@@ -1,4 +1,4 @@
-"""runtime_codegen/gen_vram_layout.py — le placement VRAM des fonds d'une scène, posé une fois sur la scène.
+"""runtime_codegen/gen_vram_layout.py : le placement VRAM des fonds d'une scène, posé une fois sur la scène.
 
 `scene_init` et `scene_tick` relisent ce placement (posé par `apply_vram_layout`), ils ne le recalculent pas."""
 from __future__ import annotations

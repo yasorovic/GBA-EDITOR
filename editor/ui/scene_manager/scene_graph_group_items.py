@@ -1,4 +1,4 @@
-"""ui/scene_manager/scene_graph_group_items.py — boîtes de groupe du Graphe.
+"""ui/scene_manager/scene_graph_group_items.py : boîtes de groupe du Graphe.
 
 Un groupe de scènes (dossier de la famille `scenes`, cf. `AssetFolderStore`) se
 dessine ici de deux façons, décidées par la vue :

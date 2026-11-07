@@ -1,13 +1,14 @@
-"""ui/script_editor/var_table_panel.py — liste GLOBALS/CONSTANTS de la sidebar Script Editor."""
+"""ui/script_editor/var_table_panel.py : liste GLOBALS/CONSTANTS de la sidebar Script Editor."""
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox, QMenu,
-    QSizePolicy,
+    QSizePolicy, QLabel,
 )
 from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 
 from ui.common.theme import C, T, S, QSS
 from ui.common.labels import label
+from ui.common.disk_view import show_sort_menu
 from ui.common.tooltip import tooltip
 from core.models.unique_name import unique_name
 from .colors import _C_GLOBAL, _C_CONST
@@ -28,6 +29,7 @@ def _type_tooltip(type_: str) -> str:
 # Une ligne = un nom cliquable + son type + sa valeur, sans grille ni en-tête :
 # le nom se lit comme les boutons des autres sections de la sidebar.
 _ROW_SS = f"""
+QLabel#persistDot {{ background:{C.ACCENT_COOL}; border:none; border-radius:3px; }}
 QPushButton#varName {{
     background:none; border:none; text-align:left; padding:2px 4px;
     font-family:{T.CODE}; font-size:{T.MD}px;
@@ -46,9 +48,8 @@ QComboBox QAbstractItemView {{
 
 
 class _VarRow(QWidget):
-    """Une variable. Le clic sur le nom insère son accès ; le renommage passe
-    par le clic droit (ou s'ouvre de lui-même sur une variable neuve) — un
-    double-clic ne pouvait pas servir aux deux, l'insertion l'emportait."""
+    """Une variable. Le clic gauche renomme ; le clic central insère sa référence.
+    Une variable neuve s'ouvre directement en renommage."""
 
     name_clicked   = pyqtSignal(object)           # entry
     renamed        = pyqtSignal(object, str)      # entry, nouveau nom
@@ -65,12 +66,27 @@ class _VarRow(QWidget):
         row.setContentsMargins(S.LG, 0, S.SM, 0)
         row.setSpacing(4)
 
+        self._persist_dot = QLabel(self)
+        self._persist_dot.setObjectName("persistDot")
+        self._persist_dot.setFixedSize(6, 6)
+        self._persist_dot.move((S.LG - 6) // 2, (S.ROW - 6) // 2)
+        self._persist_dot.setToolTip(tooltip(title=label("vartbl.persist")))
+
         self._name_btn = QPushButton(entry.name)
         self._name_btn.setObjectName("varName")
         self._name_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._name_btn.setStyleSheet(f"QPushButton#varName{{color:{color};}}")
-        self._name_btn.setToolTip(tooltip(title=label("vartbl.insert_title")))
-        self._name_btn.clicked.connect(lambda: self.name_clicked.emit(self.entry))
+        self._name_btn.setToolTip(tooltip(title=label("vartbl.rename"), body=label("vartbl.name_tip")))
+        self._name_btn.clicked.connect(self.begin_rename)
+        original_release = self._name_btn.mouseReleaseEvent
+
+        def name_release(event):
+            if event.button() == Qt.MouseButton.MiddleButton:
+                self.name_clicked.emit(self.entry)
+                event.accept()
+            else:
+                original_release(event)
+        self._name_btn.mouseReleaseEvent = name_release
         self._name_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._name_btn.customContextMenuRequested.connect(
             lambda pos: self.menu_requested.emit(self.entry, self._name_btn.mapToGlobal(pos)))
@@ -116,6 +132,8 @@ class _VarRow(QWidget):
         self._combo.setToolTip(_type_tooltip(self.entry.type))
 
     def refresh_value(self):
+        self._persist_dot.setVisible(self._kind == "global" and self.entry.persist)
+        self._name_btn.setText(("[] " if self._is_array() else "") + self.entry.name)
         # Une string est un texte ; un tableau de strings garde sa taille dans la cellule.
         text_mode = self._is_string() and not self._is_array()
         if self._is_array():
@@ -150,7 +168,7 @@ class _VarRow(QWidget):
         self._name_btn.show()
         if new and new != self.entry.name:
             self.renamed.emit(self.entry, new)
-        self._name_btn.setText(self.entry.name)  # le nom réel : un refus le laisse intact
+        self.refresh_value()  # Le nom réel : un refus le laisse intact.
 
     def _on_type(self, text: str):
         was_string = self._is_string()
@@ -193,8 +211,8 @@ class _VarRow(QWidget):
 class VarTablePanel(QWidget):
     """
     Liste des GLOBALS ou CONSTANTS déclarées dans le projet : un nom, son type,
-    sa valeur. Clic sur le nom → insère l'accès (`global.x`, `const.x`). Clic
-    droit → accès, écriture (globals), Renommer, Array (la valeur devient une
+    sa valeur. Clic gauche sur le nom : renomme ; clic central : insère l'accès.
+    Clic droit : accès, Renommer, Array (la valeur devient une
     taille), Persist (SRAM) et Supprimer.
 
     Pas de header propre : posé via LibrarySection.set_widget() pour la même
@@ -210,6 +228,7 @@ class VarTablePanel(QWidget):
         self._project = None
         self._color = _C_GLOBAL if kind == "global" else _C_CONST
         self._rows: list[_VarRow] = []
+        self._sort = "name"
 
         # « Array » et « persist » n'ont pas de colonne : une constante ne change
         # jamais, et un global n'est qu'exceptionnellement un tableau ou
@@ -235,6 +254,22 @@ class VarTablePanel(QWidget):
         self._rows = []
         for entry in self._entries():
             self._append_row(entry)
+        self._sort_rows()
+
+    def show_sort_menu(self, button):
+        show_sort_menu(self, button, self._sort, self._set_sort,
+                       options=(("name", label("disk.sort_name")), ("type", label("vartbl.sort_type"))))
+
+    def _set_sort(self, mode: str):
+        self._sort = mode
+        self._sort_rows()
+
+    def _sort_rows(self):
+        self._rows.sort(key=lambda row: (row.entry.type.casefold() if self._sort == "type" else "",
+                                         row.entry.name.casefold()))
+        for row in self._rows:
+            self._layout.removeWidget(row)
+            self._layout.addWidget(row)
 
     def _append_row(self, entry) -> _VarRow:
         row = _VarRow(entry, self._kind, self._color)
@@ -257,12 +292,14 @@ class VarTablePanel(QWidget):
         if entry is None:
             return   # le nom vient d'être garanti libre — ne devrait pas arriver
         row = self._append_row(entry)
+        self._sort_rows()
         self.changed.emit()
         row.begin_rename()
 
     def _save(self):
         if self._project:
             self._project.save_variables()
+            self._sort_rows()
             self.changed.emit()
 
     def _rename(self, entry, new: str):
@@ -279,6 +316,7 @@ class VarTablePanel(QWidget):
         if not self._project:
             return
         if self._project.rename_variable(self._kind, entry, new):
+            self._sort_rows()
             self.changed.emit()
         elif self._project.variable_name_taken(self._kind, new, exclude=entry):
             QMessageBox.warning(self, label("common.duplicate"),
@@ -299,12 +337,9 @@ class VarTablePanel(QWidget):
 
     def _ctx_menu(self, entry, global_pos: QPoint):
         is_array = self._kind == "global" and entry.count > 1
-        write_snippet = f'global.{entry.name}[1] = ' if is_array else f'global.{entry.name} = '
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
         a_get = menu.addAction(self._snippet_get(entry))
-        a_set = (menu.addAction(write_snippet.rstrip(" ") + "...")
-                 if self._kind == "global" else None)
         menu.addSeparator()
         a_rename = menu.addAction(label("vartbl.rename"))
         a_array = a_persist = None
@@ -323,8 +358,6 @@ class VarTablePanel(QWidget):
             return
         if action == a_get:
             self.snippet_requested.emit(self._snippet_get(entry))
-        elif a_set is not None and action == a_set:
-            self.snippet_requested.emit(write_snippet)
         elif action == a_rename:
             row = self._row_of(entry)
             if row:
@@ -334,6 +367,9 @@ class VarTablePanel(QWidget):
         elif a_persist is not None and action == a_persist:
             entry.persist = not entry.persist
             self._save()
+            row = self._row_of(entry)
+            if row:
+                row.refresh_value()
         elif action == a_del:
             self._delete(entry)
 

@@ -1,4 +1,4 @@
-"""ui/common/tree_selection.py — surlignage par identité dans un QTreeWidget.
+"""ui/common/tree_selection.py : surlignage par identité dans un QTreeWidget.
 
 Deux arbres de l'éditeur reçoivent une sélection venue d'AILLEURS et doivent la
 refléter sans la réémettre : la Scene library (sélection croisée avec le graphe

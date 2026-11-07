@@ -1,4 +1,4 @@
-"""codegen/layout_cache.py — la mémoïsation des dispositions (banques de palettes, OAM, entrées), à PORTÉE DE CONTEXTE.
+"""codegen/layout_cache.py : la mémoïsation des dispositions (banques de palettes, OAM, entrées), à PORTÉE DE CONTEXTE.
 
 Éteinte par défaut : sans contexte actif, `layout_memo` recalcule à chaque appel, et aucun appelant ne peut recevoir une
 disposition périmée. Deux lots de calculs l'ouvrent, sur des objets qu'ils savent figés pendant sa durée :

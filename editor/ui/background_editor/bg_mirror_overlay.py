@@ -1,4 +1,4 @@
-"""ui/background_editor/bg_mirror_overlay.py — barres de miroir posées sur le canvas du Background Editor.
+"""ui/background_editor/bg_mirror_overlay.py : barres de miroir posées sur le canvas du Background Editor.
 
 Une barre verticale (axe X) et/ou une barre horizontale (axe Y). Deux prises par barre : la LIGNE, qu'on tire pour
 déplacer l'axe — avec un point posé sur elle, à son milieu —, et la poignée-FLÈCHE, à côté du point sur le côté gardé et

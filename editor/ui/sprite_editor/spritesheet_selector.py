@@ -1,4 +1,4 @@
-"""ui/sprite_editor/spritesheet_selector.py — le spritesheet : sélecteur de tuiles sur le PNG source."""
+"""ui/sprite_editor/spritesheet_selector.py : le spritesheet : sélecteur de tuiles sur le PNG source."""
 from __future__ import annotations
 from pathlib import Path
 from typing import Optional
@@ -6,7 +6,7 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QMenu,
 )
-from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QPixmap, QBrush
+from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QPixmap, QBrush, QImage
 from PyQt6.QtCore import Qt, pyqtSignal, QRect, QPoint
 
 from ui.common.theme import C, T, QSS, ui_font
@@ -47,7 +47,8 @@ class SpritesheetCanvas(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
 
     def load(self, path: Optional[Path]):
-        self._pixmap = QPixmap(str(path)) if path and path.exists() else None
+        # QPixmap(fichier) peut rendre l'ancienne planche après un remplacement rapide.
+        self._pixmap = QPixmap.fromImage(QImage(str(path))) if path and path.exists() else None
         self._selection = []
         self._drag_start = self._drag_end = None
         self._pan = QPoint(0, 0)

@@ -1,4 +1,4 @@
-"""ui/common/direction_grid.py — grille 3×3 de directions, partagée Sprite Editor / inspecteurs.
+"""ui/common/direction_grid.py : grille 3×3 de directions, partagée Sprite Editor / inspecteurs.
 
 Un seul widget de direction dans tout l'éditeur : mêmes icônes, mêmes couleurs,
 même géométrie. Deux usages :

@@ -1,4 +1,4 @@
-"""editor/codegen/palette_alloc.py — allocation des banques de palette par scène.
+"""editor/codegen/palette_alloc.py : allocation des banques de palette par scène.
 
 Source de vérité UNIQUE (pipeline grit + main_gen) pour :
 - quelles couleurs occupent chacune des 16 banques matérielles d'un pool

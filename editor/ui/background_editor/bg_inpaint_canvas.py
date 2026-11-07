@@ -1,4 +1,4 @@
-"""ui/background_editor/bg_inpaint_canvas.py — canvas de peinture BackgroundInpainting.
+"""ui/background_editor/bg_inpaint_canvas.py : canvas de peinture BackgroundInpainting.
 
 Repeindre, AU NIVEAU ÉDITEUR (partagé entre toutes les scènes), la palette
 (pal_bank local) de chaque tuile 8×8 d'un fond. Les overrides vivent dans

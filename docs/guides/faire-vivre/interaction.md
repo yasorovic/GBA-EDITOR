@@ -35,8 +35,9 @@ end
 ```
 
 `self` est le coffre et `who` l'acteur qui interagit, c'est-à-dire le joueur. Le moteur n'appelle
-`on_interact` que sur un acteur dont le script la définit : un coffre sans cette fonction ne coûte
-rien. Si le composant et le script ne vont pas ensemble, le Build vous prévient.
+`on_interact` que sur un acteur dont le script la définit. Une interaction peut aussi déclencher
+uniquement un son, sans script, comme décrit ci-dessous. Si un composant Interactive n'a ni handler
+ni son configuré pour l'interaction, le Build vous prévient.
 
 Lancez **Run** : approchez le joueur du coffre et appuyez sur **A**.
 
@@ -96,6 +97,13 @@ Quand plusieurs zones sont atteintes au même appui, seule **la plus proche du j
 l'appel. Deux panneaux côte à côte ne se déclenchent donc pas ensemble.
 
 ## À savoir
+
+Pour sonoriser une interaction, ajoutez un composant **SoundFx** sur l'objet interactif, choisissez
+un SFX et réglez **Trigger** sur **On interaction** (**À l'interaction** en français).
+Le composant **Interactive** doit être actif : le son joue seulement si cet objet est la cible
+retenue, jamais sur un appui dans le vide. Aucun script n'est nécessaire pour ce son.
+Si l'objet a aussi un handler `on_interact`, le son joue avant son appel, même si le handler
+détruit l'objet. Ce fonctionnement est identique pour un acteur posé et une instance de prefab.
 
 - L'option **Solid** d'une boîte ne concerne que la carte de collision : par défaut, le joueur
   traverse un coffre. La boîte propre d'un composant Interactive en mode **Facing** bloque déjà les

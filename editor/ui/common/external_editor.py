@@ -1,4 +1,4 @@
-"""ui/common/external_editor.py — ouvrir un asset (image ou audio) dans un
+"""ui/common/external_editor.py : ouvrir un asset (image ou audio) dans un
 logiciel externe.
 
 L'éditeur n'est PAS un outil de dessin ni un outil audio (cf.

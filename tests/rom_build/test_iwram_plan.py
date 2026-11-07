@@ -33,6 +33,24 @@ def test_la_physique_enorme_part_avant_l_affichage_et_les_petites_boucles_resten
     assert plan.placed <= plan.budget
 
 
+def test_une_grande_table_compte_dans_le_budget_et_part_avant_le_rendu():
+    from types import SimpleNamespace
+
+    scene = SimpleNamespace(name="Dense")
+    code = "#define BS_IWRAM_Other_render 2\n" + "\n".join(ip.iwram_table(
+        scene, "_ct_allowed", "static const u16 _ct_allowed[129][129] = {{1}};"))
+    modes = ip.read_modes(code)
+    sections = ".data.bs_table.Dense._ct_allowed 33282 0\n.data 200 0\n.iwram 4800 0\n"
+    sizes = ip.read_sizes("00000000 000012c0 t scene_tick_Other_render", sections)
+    static_bytes = ip.static_from_objects([sections], placed=sum(sizes.values()))
+    result = ip.make_plan(modes, sizes, static_bytes)
+
+    assert static_bytes == 200 + ip.LIBRARIES_IWRAM_ESTIMATE
+    assert result.dropped == [("Dense", "_ct_allowed")]
+    assert result.modes[("Other", "render")] == ip.ARM
+    assert ip.cflags(result) == "-DBS_IWRAM_TABLE_Dense__ct_allowed=0"
+
+
 def test_la_pile_garde_sa_reserve():
     # 32 Ko - 4 Ko de pile - 6 Ko de données = 22 Ko pour le code placé
     plan = ip.make_plan({("A", "render"): 2}, {("A", "render"): 23 * K}, static_bytes=6 * K)

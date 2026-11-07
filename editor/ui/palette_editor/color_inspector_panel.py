@@ -1,4 +1,4 @@
-"""ui/palette_editor/color_inspector_panel.py — panneau droit : édition de la couleur active.
+"""ui/palette_editor/color_inspector_panel.py : panneau droit : édition de la couleur active.
 
 Vue PURE sur une seule couleur BGR555 : roue chromatique, hex, sliders RGB
 (0-31, natif GBA) et TSL dérivé. Ne connaît ni le projet ni la banque — elle

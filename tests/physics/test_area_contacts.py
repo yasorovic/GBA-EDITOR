@@ -1,13 +1,14 @@
 """Les contacts d'une Area : le C (sonde native) et le C émis par le générateur.
 
 Le comportement du runtime est vérifié par la sonde `tests/native/actor_box_probe.c`, qui joue la MÊME séquence pour un acteur
-posé (table de couples, `area_contact_run`) et un acteur du pool (`area_contact_step` avec sa propre mémoire) : posé = spawné.
+posé et un acteur né (`area_contact_step` avec leur propre mémoire, un seul parcours des emplacements) : posé = spawné.
 """
 from __future__ import annotations
 
 import os
 import subprocess
 from pathlib import Path
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -30,13 +31,15 @@ def sortie_sonde(tmp_path_factory):
             pytest.fail(message)
         pytest.skip(message + " ; ils le sont en CI")
     from codegen.runtime_codegen.api_prototypes import build_enum_defines
+    from codegen.runtime_codegen.physics.contacts import contact_helper_lines
     dossier = tmp_path_factory.mktemp("area_probe")
     (dossier / "enums.h").write_text("\n".join(build_enum_defines()) + "\n")
+    (dossier / "contacts_gen.h").write_text("\n".join(contact_helper_lines()) + "\n", encoding="utf-8")
     binaire = dossier / "actor_box_probe"
     env = environnement(compilateur)
     r = subprocess.run(
         [compilateur, "-std=c11", "-w", "-O0", "-include", str(dossier / "enums.h"),
-         "-I", str(NATIVE_DIR / "libgba_shim"), "-I", str(MOTEUR_DIR),
+         "-I", str(NATIVE_DIR / "libgba_shim"), "-I", str(MOTEUR_DIR), "-I", str(dossier),
          str(NATIVE_DIR / "actor_box_probe.c"), "-o", str(binaire)],
         capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
@@ -157,41 +160,49 @@ def test_seules_les_areas_a_declencheur_et_a_forme_entrent_dans_les_tests():
     assert [(i, a.name) for i, a in trigger_areas(scene)] == [(0, "Door")]
 
 
-def test_la_table_des_couples_ne_garde_que_les_acteurs_dont_le_script_repond():
-    from codegen.runtime_codegen.physics.areas import area_pair_lines, trigger_areas
+def _projet(tmp_path, scene):
+    from core.project import Project
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    return p
+
+
+def test_la_passe_ne_garde_que_les_types_dont_le_script_repond(tmp_path):
+    from codegen.runtime_codegen.physics.areas import area_contact_lines
     scene = Scene(name="S", areas=[_area("Door")])
     hero, rock = _actor("Hero"), _actor("Rock")
+    scene.actors = [hero, rock]
+    p = _projet(tmp_path, scene)
     actors = [(hero, None), (rock, None)]
-    project = SimpleNamespace(settings=_settings())
-    lines = area_pair_lines(project, scene, actors, 0, {0, 1},
-                            lambda s, ev: s == "Hero" and ev in ("on_area_enter", "on_area_exit"),
-                            lambda scene_name, actor_name: actor_name, trigger_areas(scene))
-    text = "\n".join(lines)
-    assert "static const AreaContact _area_pairs[1]" in text
-    assert "{&g_areas[0],0,1,{Hero_on_area_enter,0,Hero_on_area_exit}}" in text
-    assert "debug_physics_area_test();" in text
-    # Rien à émettre sans aucun handler : pas de table, pas de test par frame.
-    assert area_pair_lines(project, scene, actors, 0, {0, 1}, lambda s, ev: False,
-                           lambda scene_name, actor_name: actor_name, trigger_areas(scene)) == []
+    code = "\n".join(area_contact_lines(p, scene, actors, [], ["Hero", "Rock"],
+                                        lambda s, ev: s == "Hero" and ev in ("on_area_enter", "on_area_exit")))
+    assert "_ar_type[3]={255,0,255};" in code                        # le type 1 (Hero) seul a une ligne
+    assert "static const AreaFn _ar_on[1][3]={{Hero_on_area_enter,0,Hero_on_area_exit}};" in code
+    assert "static const u16 _ar_allowed[1][1]={{1}};" in code
+    assert "SLOT_EACH(_k)" in code and "debug_physics_area_test();" in code
+    assert "area_contact_step(&g_areas[0],_a,_ar_allowed[_i][0],_ar_on[_i],&g_area_prev[_k][0]);" in code
+    assert "g_area_gen[_k]!=_a->gen" in code                         # la mémoire repart de zéro quand l'occupant change
+    # Rien à émettre sans aucun crochet : pas de table, pas de test par frame.
+    assert area_contact_lines(p, scene, actors, [], ["Hero", "Rock"], lambda s, ev: False) == []
 
 
-def test_les_acteurs_du_pool_passent_par_le_meme_pas_avec_leur_memoire_par_emplacement():
-    from codegen.runtime_codegen import shared_pool_gen
-    from codegen.runtime_codegen.physics.areas import area_mask, trigger_areas
-    from scripting.api import AREA_EVENTS
-    scene = Scene(name="S", areas=[_area("Door"), _area("Zone", x=90)])
-    model = {"sym": "S_Bullet", "prefab": _actor("Bullet"), "model_id": 3, "group": 1, "shared": True}
-    lines = shared_pool_gen.area_lines(
-        [model], 8, trigger_areas(scene), lambda pf, area: area_mask(area, pf, _settings()),
-        lambda s, ev: ev == "on_area_enter", AREA_EVENTS)
-    text = "\n".join(lines)
-    assert "static u16 _parea[8][2] EWRAM_BSS;" in text            # un souvenir par emplacement ET par Area
-    assert "_parea_gen[_sl]!=_a->gen" in text                      # il repart de zéro quand l'occupant change
-    assert "static const AreaFn _on[3]={S_Bullet_on_area_enter,0,0};" in text
-    assert "area_contact_step(&g_areas[0],_a,1,_on,&_parea[_sl][0]);" in text
-    assert "area_contact_step(&g_areas[1],_a,1,_on,&_parea[_sl][1]);" in text
-    assert shared_pool_gen.area_lines([model], 8, trigger_areas(scene), lambda pf, area: 1,
-                                      lambda s, ev: False, AREA_EVENTS) == []
+def test_un_modele_ne_passe_par_le_meme_parcours_que_les_poses(tmp_path):
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.runtime_codegen.physics.areas import area_contact_lines
+    from core.models.scene import Prefab
+    from oam_fixtures import faire_naitre
+    cible = _actor("Cible")
+    prefab = Prefab(name="Bullet", actor=_actor("Bullet"))
+    scene = Scene(name="S", areas=[_area("Door"), _area("Zone", x=90)], actors=[cible])
+    p = _projet(tmp_path, scene)
+    p.prefabs.items = [prefab]
+    faire_naitre(tmp_path, scene, prefab.name)
+    code = "\n".join(area_contact_lines(p, scene, [(cible, None)], scene_pi(p, scene), [None],
+                                        lambda s, ev: ev == "on_area_enter"))
+    assert code.count("SLOT_EACH(") == 1                              # un seul parcours, posés et nés ensemble
+    assert re.search(r"_ar_on\[1\]\[3\]=\{\{\w*Bullet_on_area_enter,0,0\}\};", code)
+    assert "_ar_allowed[1][2]={{1,1}}" in code                       # une colonne par Area à déclencheur
+    assert "&g_area_prev[_k][0]" in code and "&g_area_prev[_k][1]" in code
 
 
 def _scene_with_follower(**boss):
@@ -225,30 +236,29 @@ def _recompose(par, local, rotation, scale):
 
 def test_la_frame_0_recompose_la_position_vue_dans_l_editeur():
     """Le local est tiré de la pose authorée du parent : recomposé avec cette même pose, il redonne la position du canvas."""
-    from codegen.runtime_codegen.gen_pool import world_to_local_offset
+    from codegen.runtime_codegen.gen_actor_hierarchy import local_transform
     for boss in ({}, {"rotation": 90, "scale_x": 2.0, "scale_y": 2.0}, {"rotation": 37, "scale_x": 0.5, "scale_y": 0.5}):
         scene = _scene_with_follower(**boss)
         par, area = scene.actors[0], scene.areas[0]
-        got = _recompose(par, world_to_local_offset(par, area.x, area.y), boss.get("rotation", 0), boss.get("scale_x", 1.0))
+        got = _recompose(par, local_transform(area, par, par.x, par.y)[:2], boss.get("rotation", 0), boss.get("scale_x", 1.0))
         assert abs(got[0] - area.x) <= 1 and abs(got[1] - area.y) <= 1, (boss, got)
 
 
 def test_une_seule_conversion_monde_vers_local_pour_acteurs_parties_et_areas():
     """Les parties d'un prefab passent par la conversion des acteurs, avec la racine du prefab (sans pose) pour origine."""
-    from codegen.runtime_codegen import gen_pool
+    from codegen.runtime_codegen.gen_actor_hierarchy import local_transform, part_link_lines
     from core.models.scene import Prefab
     arm = Actor(name="Arm", x=0, y=0, rotation=90, scale_x=2.0, scale_y=2.0)
     # (30, 10) vu depuis un parent tourné de 90° et doublé : on défait la rotation, puis l'échelle (Q8).
-    assert gen_pool.world_to_local_offset(arm, 30, 10) == (1280, -3840)
-    assert gen_pool.world_to_local_offset(arm, 30, 10, origin=(30, 10)) == (0, 0)           # une origine explicite remplace la pose
-    assert gen_pool.world_to_local_offset(Actor(name="P", x=10, y=0), 30, 10) == (20 * 256, 10 * 256)
+    assert local_transform(Actor(name="C", x=30, y=10), arm, 0, 0)[:2] == (1280, -3840)
+    assert local_transform(Actor(name="C", x=30, y=10), arm, 30, 10)[:2] == (0, 0)           # l'origine donnée remplace la pose
+    assert local_transform(Actor(name="C", x=30, y=10), Actor(name="P", x=10, y=0), 10, 0)[:2] == (20 * 256, 10 * 256)
     # La racine d'un prefab n'a pas de pose : ses parties s'expriment depuis l'origine, sans rotation ni échelle.
     pf = Prefab(name="Boss", actor=Actor(name="Boss"),
                 children=[arm, Actor(name="Hand", x=30, y=10, parent="Arm"), Actor(name="Leg", x=7, y=-3)])
-    model = {"prefab": pf, "shared": True, "model_id": 3, "group": 4, "member_entries": [0, 1, 2, 3], "spool": {"entries": True}}
-    text = "\n".join(gen_pool.pool_compose_lines([model]))
-    assert "int _lx = (1280 * _px) >> 8, _ly = (-3840 * _py) >> 8;" in text                   # Hand, dans le repère d'Arm
-    assert "int _lx = (1792 * _px) >> 8, _ly = (-768 * _py) >> 8;" in text                    # Leg, depuis la racine (7, -3) × 256
+    text = "\n".join(part_link_lines(pf, "_b", ""))
+    assert "group_slot(_b, 2), group_slot(_b, 1), 2, 1, 1280, -3840," in text                  # Hand, dans le repère d'Arm
+    assert "group_slot(_b, 3), _b, 1, 1, 1792, -768," in text                                  # Leg, depuis la racine (7, -3) × 256
 
 
 def test_l_entree_de_scene_pose_les_areas_et_remet_les_contacts_a_zero():
@@ -259,14 +269,14 @@ def test_l_entree_de_scene_pose_les_areas_et_remet_les_contacts_a_zero():
     text = "\n".join(area_init_lines(project, scene, [], 0))
     assert "g_areas[0].x=(40)<<8; g_areas[0].y=(56)<<8; g_areas[0].active=1;" in text
     assert "g_areas[0].box.w=(u8)48;" in text and "g_areas[0].box.tag=BOXTAG_DOOR;" in text
-    assert "g_area_prev[_i]=0" in text                              # la mémoire des couples ne survit pas à la scène
+    assert "((u16*)g_area_prev)[_i]=0" in text                     # la mémoire des couples ne survit pas à la scène
     assert area_init_lines(project, Scene(name="Empty"), [], 0) == []     # une scène sans Area n'émet rien
 
 
 def test_c_les_effets_de_zone(sortie_sonde):
-    """`area_effects_apply` : le pas commun du posé et du pool (un seul code, une seule forme)."""
+    """`area_effects_apply` : le pas commun du posé et du né (un seul code, une seule forme)."""
     assert sortie_sonde["fx_gravite"] == [0, 64]                    # la gravité de zone remplace celle de la scène
-    assert sortie_sonde["fx_gravite_echelle"] == [0, 128]           # multipliée par le gravity_scale du corps
+    assert sortie_sonde["fx_gravite_echelle"] == [0, 64]            # l'échelle du corps est appliquée ensuite, par `body_motion_step`
     assert sortie_sonde["fx_gravite_ignoree"] == [5, 100]           # un corps qui ne suit pas la gravité n'en reçoit pas
     assert sortie_sonde["fx_force"] == [2560, -1280]
     assert sortie_sonde["fx_trainee"] == [128, -128]                # la moitié de la vitesse est retenue

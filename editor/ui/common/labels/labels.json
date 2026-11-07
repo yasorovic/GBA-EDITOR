@@ -1,5 +1,6 @@
 {
   "labels": {
+    "scenelibrary.activate_scene_tip": { "text": "Clicking the icon or middle-clicking the row opens this scene in the canvas. Clicking the name selects it for inspection." },
     "txtentry.collapse": { "text": "Collapse text field" },
     "common.copied": { "text": "Copied" },
     "txtentry.expand": { "text": "Expand text field" },
@@ -420,7 +421,8 @@
     "common.copy": {
       "text": "Copy"
     },
-    "settings.shortcuts.action.sprite.flip_h": {
+    "settings.shortcuts.action.sprite.delete_frame": { "text": "Delete animation frame" },
+  "settings.shortcuts.action.sprite.flip_h": {
       "text": "Flip brush horizontally"
     },
     "settings.shortcuts.action.sprite.flip_v": {
@@ -1719,6 +1721,7 @@
     "comped.trig_on_destroy": {
       "text": "on_destroy"
     },
+    "comped.trig_on_interact": { "text": "On interaction" },
     "comped.sfx": {
       "text": "Sfx"
     },
@@ -1728,7 +1731,7 @@
     "comped.trigger": {
       "text": "Trigger"
     },
-    "comped.trigger_tip": { "text": "manual: plays nothing; call self:play_sfx() from a script.\non_spawn: plays when the actor starts.\non_destroy: plays just before the actor is destroyed.\nA button or an input: plays while the actor is active and that button is held." },
+    "comped.trigger_tip": { "text": "manual: plays nothing; self:play_sfx() plays it from a script.\non_spawn: plays when the actor starts.\non_destroy: plays just before the actor is destroyed.\nOn interaction: plays when this actor is selected by an interaction; requires an active Interactive component.\nA button or an input: plays when it is pressed, while the actor is active." },
     "comped.script_add": {
       "text": "Add a script"
     },
@@ -4804,7 +4807,8 @@
     "scrsb.filter_tip": { "text": "Filters events, API entries and project references by name." },
     "scrsb.event_tip_note": { "text": "Selecting inserts this handler, or jumps to it when it already exists." },
     "scrsb.behavior_stub_tip": { "text": "Inserts an exported function for this behavior module." },
-    "vartbl.insert_title": { "text": "Insert variable access" },
+    "vartbl.name_tip": { "text": "A left click renames the variable. A middle click inserts its reference in the script." },
+    "vartbl.sort_type": { "text": "Sort by type" },
     "vartbl.rename_tip": { "text": "Renames this variable and updates its references in scripts and text." },
     "vartbl.value_title": { "text": "Initial value" },
     "vartbl.type_int_tip": { "text": "Whole number from -2,147,483,648 to 2,147,483,647 (32 bits). The general-purpose type." },
