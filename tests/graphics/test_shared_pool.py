@@ -361,18 +361,15 @@ def test_la_scene_sans_modele_a_parties_garde_le_test_simple(tmp_path):
     assert "spool_slot_free" not in code and "while(_k<g_spool_end && g_actors[_k].alive) _k++;" in code
 
 
-def test_la_composition_des_parties_parcourt_les_racines_vivantes_du_pool(tmp_path):
-    from codegen.runtime_codegen.gen_pool import scene_pi, pool_compose_lines
+def test_le_spawn_lie_chaque_partie_a_son_parent(tmp_path):
+    """La composition est celle du runtime (`slot_compose_all`, posés compris) : le spawn ne fait que poser le lien de
+    chaque partie, parent la racine ou une autre partie, par les accès de groupe."""
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene = _scene_boss(tmp_path)
-    code = "\n".join(pool_compose_lines(scene_pi(p, scene)))
-    assert "POOL_EACH(_b) {" in code
-    assert "if(g_actors[_b].model!=2||!g_actors[_b].alive) continue;" in code
-    assert "int _eb = g_spool_entry + (_b - g_spool_start);" in code
-    assert "int _s1 = group_slot(_b, 1), _s2 = group_slot(_b, 2);" in code
-    assert "g_actors[_s1].x" in code and "g_actors[_s2].x" in code
-    assert "g_oam_entries[group_entry(_eb, 1)].visible" in code    # la partie k : l'entrée de son emplacement
-    assert "_b+1" not in code and "_b+2" not in code and "_eb+1" not in code     # contiguïté : seulement dans group_slot / group_entry
-    assert "alive = 0" not in code                                 # la libération du groupe est celle de destroy
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
+    assert "actor_link_slot(group_slot(_i, 1), _i, 1, 1," in code
+    assert "actor_link_slot(group_slot(_i, 2), _i, 1, 1," in code
+    assert "_i+1" not in code and "_i+2" not in code     # contiguïté : seulement dans group_slot / group_entry
 
 
 def test_chaque_type_d_emplacement_a_son_cas_d_affichage_et_ses_collisions(tmp_path, monkeypatch):
@@ -468,8 +465,8 @@ def test_une_copie_identique_au_prefab_ne_prend_le_type_du_modele_ne(tmp_path):
 
 
 def test_les_tables_par_type_couvrent_les_poses(tmp_path):
-    """`actor_destroy_internal` lit `g_spool_grp[Actor.model]` pour tout acteur détruit : la table d'un modèle à parties
-    doit avoir une ligne pour chaque type de posé."""
+    """`group_root_slot` lit `g_spool_part[Actor.model]` pour tout emplacement : la table d'un modèle à parties doit avoir
+    une ligne pour chaque type de posé."""
     from codegen.runtime_codegen.gen_scene_init import _shared_pool_lines
     from codegen.runtime_codegen.gen_pool import scene_pi
     p, scene = _scene_de_copies(tmp_path, spawne=True)
@@ -478,4 +475,4 @@ def test_les_tables_par_type_couvrent_les_poses(tmp_path):
     code = "\n".join(_shared_pool_lines(scene_pi(p, scene), lay.kinds))
     # Un prefab à parties n'a pas de membres posés : chaque copie est un modèle à elle seule (types 3 à 6).
     assert lay.placed_model == [3, 4, 5, 6]
-    assert lay.kinds == 7 and "static const u8 _g[7]={0,2,0,0,0,0,0};" in code
+    assert lay.kinds == 7 and "static const u8 _pt[7]={0,0,1,0,0,0,0};" in code

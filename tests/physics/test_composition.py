@@ -1,12 +1,10 @@
-"""Parité posé / spawné de la composition parent → enfant.
+"""La composition parent → enfant, posé ou né : une seule fonction runtime (`slot_compose_all`), deux façons d'avoir le lien.
 
-Même hiérarchie, deux façons de l'avoir : une racine, un bras (enfant de la racine) et une main (enfant du bras)
-posés dans la scène, ou ces trois pièces nées ensemble dans le pool comme un prefab à parties. Les lignes C sont
-celles de `parent_compose_lines` (posé) et `pool_compose_lines` (pool), compilées avec le vrai `gba_sincos`.
-À une racine donnée (position, rotation, échelle), le bras et la main doivent tomber au même endroit, avec la même
-rotation et la même échelle. Les sprites sont absents : la propagation de `visible` n'est pas couverte.
-
-Voir `test_parity_posed_spawned.py` pour la règle.
+Une racine, un bras (enfant de la racine) et une main (enfant du bras), posés dans la scène (`placed_link_lines`) ou nés
+ensemble comme un prefab à parties (`part_link_lines`). Les deux dérivent le local de la pose authorée ; à une racine donnée
+(position, rotation, échelle), le bras et la main tombent au même endroit, avec la même rotation et la même échelle. Les
+deux règles du sous-arbre sont vérifiées : une racine éteinte éteint ses enfants, un enfant éteint ne se recompose pas (et
+éteint les siens). Les sprites sont absents : la propagation de `visible` n'est pas couverte.
 """
 from __future__ import annotations
 
@@ -42,6 +40,8 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 Actor g_actors[8];
 int g_spool_start, g_spool_hw, g_scene_placed;
 u32 g_alive_bits[1], g_alive_epoch;
+SlotLink g_slot_link[8]; int g_slot_depth;
+OamEntry g_oam_entries[1];
 #define EASE_IN 0
 #define EASE_OUT 1
 #define EASE_IN_OUT 2
@@ -51,8 +51,9 @@ void window_show(int id,int on);
 
 static void membre(int k, int x, int y, int rot, int sx, int sy, int actif){
     g_actors[k] = (Actor){0};
-    g_actors[k].inst = k; g_actors[k].alive = 1; g_actors[k].active = actif;
+    g_actors[k].inst = k; g_actors[k].alive = 1; g_actors[k].active = actif; g_actors[k].oam_entry = -1;
     g_actors[k].x = x; g_actors[k].y = y; g_actors[k].rotation = rot; g_actors[k].scale_x = sx; g_actors[k].scale_y = sy;
+    g_slot_link[k].parent = -1; g_slot_link[k].depth = 0;
 }
 static void rapporte(const char* chemin, const char* nom, int base){
     for(int k = 1; k <= 2; k++){
@@ -62,24 +63,27 @@ static void rapporte(const char* chemin, const char* nom, int base){
 }
 /* Posé : racine 0, bras 1, main 2. */
 static void joue_pose(const char* nom, int x, int y, int rot, int echelle, int racine_active, int bras_actif){
+    for(int k = 0; k < 8; k++) membre(k, 0, 0, 0, 256, 256, 0);
     membre(0, x << 8, y << 8, rot, echelle, echelle, racine_active);
     membre(1, 0, 0, 0, 256, 256, bras_actif);
     membre(2, 0, 0, 0, 256, 256, 1);
 @PLACED@
+    slot_compose_all();
     rapporte("pose", nom, 0);
 }
-/* Pool : racine 4, bras 5, main 6 (un groupe contigu de 3 emplacements, modèle 1 puis 2 et 3). */
+/* Né : racine 4, bras 5, main 6 (un groupe contigu de 3 emplacements). */
 static void joue_pool(const char* nom, int x, int y, int rot, int echelle, int racine_active, int bras_actif){
-    membre(4, x << 8, y << 8, rot, echelle, echelle, racine_active); g_actors[4].model = 1;
-    membre(5, 0, 0, 0, 256, 256, bras_actif); g_actors[5].model = 2;
-    membre(6, 0, 0, 0, 256, 256, 1); g_actors[6].model = 3;
-    g_spool_start = 4; g_spool_hw = 7;
-    alive_bit_set(4); alive_bit_set(5); alive_bit_set(6);
+    for(int k = 0; k < 8; k++) membre(k, 0, 0, 0, 256, 256, 0);
+    membre(4, x << 8, y << 8, rot, echelle, echelle, racine_active);
+    membre(5, 0, 0, 0, 256, 256, bras_actif);
+    membre(6, 0, 0, 0, 256, 256, 1);
 @POOL@
+    slot_compose_all();
     rapporte("pool", nom, 4);
 }
 
 int main(void){
+    g_spool_hw = 8;
 @RUNS@
     return 0;
 }
@@ -101,29 +105,29 @@ def _hierarchie():
     return posés, prefab
 
 
-def _emissions():
-    from codegen.runtime_codegen.gen_pool import parent_compose_lines, pool_compose_lines
+def _liens():
+    from codegen.runtime_codegen.gen_pool import link_depth, part_link_lines, placed_link_lines
 
     posés, prefab = _hierarchie()
-    posé = parent_compose_lines([(a, None) for a in posés], 0, [-1] * len(posés))
-    modele = {"prefab": prefab, "shared": True, "model_id": 1, "group": 3, "member_entries": [-1, -1, -1],
-              "spool": {"entries": False}}
-    return posé, pool_compose_lines([modele])
+    scene = [(a, None) for a in posés]
+    profondeur = link_depth(scene, [{"prefab": prefab, "shared": True}])
+    return placed_link_lines(scene, 0), part_link_lines(prefab, "4", "    "), profondeur
 
 
 @pytest.fixture(scope="module")
 def etats(tmp_path_factory):
     compilateur = compilateur_hote()
     if compilateur is None:
-        pytest.skip("aucun compilateur C hôte ; la parité est vérifiée en CI")
-    posé, pool = _emissions()
-    assert posé, "le chemin posé n'émet aucune composition : la sonde ne comparerait rien"
-    assert pool, "le chemin du pool n'émet aucune composition : la sonde ne comparerait rien"
+        pytest.skip("aucun compilateur C hôte ; la composition est vérifiée en CI")
+    posé, pool, profondeur = _liens()
+    assert len(posé) == 2 and len(pool) == 2, "un lien par enfant, de chaque côté"
+    assert profondeur == 2
     cas = [(nom, x, y, rot, e, 1, 1) for nom, x, y, rot, e in SCENARIOS]
     cas += [("racine_eteinte", 100, 50, 0, 256, 0, 1), ("bras_eteint", 100, 50, 0, 256, 1, 0)]
     runs = "\n".join(f'    joue_pose("{n}", {x}, {y}, {r}, {e}, {ra}, {ba}); joue_pool("{n}", {x}, {y}, {r}, {e}, {ra}, {ba});'
                      for n, x, y, r, e, ra, ba in cas)
-    dossier = tmp_path_factory.mktemp("parite_composition")
+    runs = f"    g_slot_depth = {profondeur};\n" + runs
+    dossier = tmp_path_factory.mktemp("composition")
     (dossier / "obj_state.h").write_text("#define OBJ_STATE_STRIDE 1\n", encoding="utf-8")
     source = SONDE.replace("@PLACED@", "\n".join(posé)).replace("@POOL@", "\n".join(pool)).replace("@RUNS@", runs)
     (dossier / "probe.c").write_text(source, encoding="utf-8")
@@ -141,15 +145,15 @@ def etats(tmp_path_factory):
     return etats
 
 
-@pytest.mark.parametrize("nom", [s[0] for s in SCENARIOS])
-def test_la_composition_donne_le_meme_etat_pose_et_spawne(etats, nom):
-    """(x, y, rotation, échelle x, échelle y, actif) du bras puis de la main, identiques pour les deux chemins."""
+@pytest.mark.parametrize("nom", [s[0] for s in SCENARIOS] + ["racine_eteinte", "bras_eteint"])
+def test_un_lien_pose_et_un_lien_ne_composent_pareil(etats, nom):
+    """(x, y, rotation, échelle x, échelle y, actif) du bras puis de la main, identiques quel que soit le lien."""
     assert len(etats[("pose", nom)]) == 2
     assert etats[("pool", nom)] == etats[("pose", nom)]
 
 
-def test_la_reference_pose_compose_vraiment(etats):
-    """Sans cela, des états égaux mais jamais recomposés passeraient pour une parité."""
+def test_la_composition_place_les_enfants(etats):
+    """Sans cela, des états égaux mais jamais recomposés passeraient pour une égalité."""
     (bras_x, bras_y, bras_rot, bras_sx, _sy, _a), (main_x, main_y, main_rot, main_sx, _sy2, _a2) = etats[("pose", "neutre")]
     assert (bras_x, bras_y, bras_rot, bras_sx) == ((100 + 16) << 8, (50 + 8) << 8, 0, 256)
     assert (main_x, main_y) == ((100 + 24) << 8, (50 + 8) << 8)       # 8 px à droite du bras, sans rotation parente
@@ -157,17 +161,11 @@ def test_la_reference_pose_compose_vraiment(etats):
     assert etats[("pose", "tournee_90")][0][2] == 90                  # le bras tourne avec la racine
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "écart de règle : le pool éteint le sous-arbre d'une racine éteinte (`pool_compose_lines`), le posé ne le fait "
-    "pas (`parent_compose_lines` ne lit pas `active`; `actor_set_active` n'écrit que l'acteur). À trancher : une seule "
-    "règle pour les deux, puis retirer ce xfail."))
-def test_une_racine_eteinte_eteint_ses_enfants_posee_comme_spawnee(etats):
-    assert etats[("pool", "racine_eteinte")] == etats[("pose", "racine_eteinte")]
+def test_une_racine_eteinte_eteint_ses_enfants(etats):
+    """Le bras et la main s'éteignent, sans être recomposés."""
+    assert etats[("pose", "racine_eteinte")] == [(0, 0, 0, 256, 256, 0), (0, 0, 0, 256, 256, 0)]
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "écart de règle : le posé recompose un enfant éteint (position et échelle écrites), le pool ne compose pas un "
-    "enfant éteint (`if(g_actors[_sK].active)`), et sa propre descendance (la main) se compose alors sur la position "
-    "périmée de ce parent : (2048, 0) au lieu de (31744, 14848). À trancher, puis retirer ce xfail."))
-def test_un_enfant_eteint_n_est_pas_recompose_pose_comme_spawne(etats):
-    assert etats[("pool", "bras_eteint")] == etats[("pose", "bras_eteint")]
+def test_un_enfant_eteint_n_est_pas_recompose_et_eteint_les_siens(etats):
+    """Le bras éteint garde sa position ; la main, dont le parent est éteint, s'éteint à son tour."""
+    assert etats[("pose", "bras_eteint")] == [(0, 0, 0, 256, 256, 0), (0, 0, 0, 256, 256, 0)]

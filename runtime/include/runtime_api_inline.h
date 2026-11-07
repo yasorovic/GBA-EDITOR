@@ -65,12 +65,18 @@ extern const AppearanceInit* g_appearance_init;
 extern Actor* runtime_get_actor(int name_id);
 /* Nombre d'acteurs POSÉS de la scène active — la borne de get_actor(i). */
 extern int g_scene_placed;
-/* La hiérarchie des acteurs POSÉS : `g_placed_parent[s]` est l'emplacement du parent de scène de l'acteur posé `s`, ou -1.
-   Posée par `scene_init` (nulle quand la scène n'a aucun parent) ; indexée par emplacement, donc valable pour les
-   emplacements `[0, g_scene_placed)`. Le pool, lui, a ses parties (`g_spool_part`, `g_spool_parent`). */
-extern const s16 *g_placed_parent;
-static inline int placed_parent_slot(int slot) {
-    return (g_placed_parent && slot < g_scene_placed) ? g_placed_parent[slot] : -1;
+/* La HIÉRARCHIE, posés comme nés : pour chaque emplacement, l'emplacement de son parent (-1 pour une racine), sa
+   profondeur (0 pour une racine : l'ordre de la composition, parents avant enfants), sa visibilité propre et son
+   transform LOCAL dans le repère du parent (position Q8, degrés, échelle Q8). Le constructeur remet le lien à zéro ;
+   `actor_link_slot` le pose : `scene_init` pour un posé qui a un parent de scène, le spawn pour une partie d'un modèle.
+   `g_slot_depth` est la profondeur maximale de la scène (0 : aucune hiérarchie, ni composition ni cascade). */
+extern SlotLink g_slot_link[];
+extern int g_slot_depth;
+static inline int slot_parent(int slot) { return g_slot_link[slot].parent; }
+static inline void actor_link_slot(int slot, int parent, int depth, int visible, int ox, int oy, int rot, int sx, int sy) {
+    SlotLink* l = &g_slot_link[slot];
+    l->parent = parent; l->depth = depth; l->visible = visible;
+    l->ox = ox; l->oy = oy; l->rot = rot; l->sx = sx; l->sy = sy;
 }
 extern u32   _g_keys_held;
 extern u32   _g_keys_pressed;
@@ -324,12 +330,11 @@ extern int g_spool_start, g_spool_end, g_spool_hw, g_spool_entry, g_spool_free;
 
 /* Un modèle à PARTIES occupe un groupe d'emplacements contigus (le script atteint la partie k par
    `self + k`). `Actor.model` dit alors AUSSI quelle partie l'emplacement occupe : la racine porte l'identité
-   du modèle, sa partie k cette identité + k. Deux tables par type d'emplacement, posées par `scene_init`
-   (nulles pour une scène sans modèle à parties) :
-     g_spool_grp[type]  = taille du groupe pour la RACINE d'un modèle à parties, 0 ailleurs ;
-     g_spool_part[type] = rang de la partie (k), 0 pour une racine ou un modèle plat ;
-     g_spool_parent[type] = rang de la partie PARENTE d'une partie (0 = la racine). */
-extern const u8 *g_spool_grp, *g_spool_part, *g_spool_parent;
+   du modèle, sa partie k cette identité + k. Une table par type d'emplacement, posée par `scene_init` (nulle pour
+   une scène sans modèle à parties) : g_spool_part[type] = rang de la partie (k), 0 pour une racine ou un modèle plat.
+   Elle ne sert qu'à l'allocation du pool (`group_root_slot`, `spool_slot_free`) : le parent d'une partie est dans
+   `g_slot_link`, comme celui d'un posé. */
+extern const u8 *g_spool_part;
 
 /* OÙ EST LA PARTIE k D'UN GROUPE ? Aujourd'hui à `racine + k` : un groupe est une série contiguë d'emplacements,
    et l'entrée d'état d'une partie suit son emplacement (une entrée par emplacement du pool). Ces quatre fonctions sont
@@ -353,29 +358,19 @@ static inline Actor* actor_child(Actor* root, int k) {
     return (c && c->alive) ? c : (Actor*)0;
 }
 
-/* `a.root` et `a.parent` (propriétés en lecture seule du catalogue). nil si `a` est nil ou détruit.
-   Un acteur du POOL : la racine de son groupe (elle-même pour une racine ou un modèle plat), et sa partie parente (la racine ou
-   une autre partie, `g_spool_parent`), nil pour une racine ou quand cette partie a été détruite.
-   Un acteur POSÉ : son parent de scène (`g_placed_parent`), et le sommet de la chaîne pour la racine ; nil si ce parent, ou ce
-   sommet, a été détruit (détruire un parent posé ne détruit pas ses enfants). */
+/* `a.root` et `a.parent` (propriétés en lecture seule du catalogue), posé ou né : le sommet de sa chaîne (lui-même pour
+   une racine) et son parent (nil pour une racine), lus dans `g_slot_link`. nil si `a` est nil ou détruit. Détruire un
+   parent détruit ses enfants (`actor_destroy_internal`) : un enfant vivant a toujours un parent vivant. */
 static inline Actor* actor_root(Actor* a) {
     if (!a || !a->alive) return (Actor*)0;
     int s = a->inst;
-    if (s < g_scene_placed) {
-        for (int p = placed_parent_slot(s); p >= 0; p = placed_parent_slot(s)) s = p;
-        return g_actors[s].alive ? &g_actors[s] : (Actor*)0;
-    }
-    return &g_actors[group_root_slot(s)];
+    for (int p = slot_parent(s); p >= 0; p = slot_parent(s)) s = p;
+    return &g_actors[s];
 }
 static inline Actor* actor_parent(Actor* a) {
     if (!a || !a->alive) return (Actor*)0;
-    if (a->inst < g_scene_placed) {
-        int p = placed_parent_slot(a->inst);
-        return (p >= 0 && g_actors[p].alive) ? &g_actors[p] : (Actor*)0;
-    }
-    if (!g_spool_part || !g_spool_part[a->model]) return (Actor*)0;
-    Actor* p = &g_actors[group_slot(group_root_slot(a->inst), g_spool_parent[a->model])];
-    return p->alive ? p : (Actor*)0;
+    int p = slot_parent(a->inst);
+    return p >= 0 ? &g_actors[p] : (Actor*)0;
 }
 
 /* `boss.Bras` quand `boss` est un acteur POSÉ de la scène : le bras est un autre acteur posé, à une adresse que le build connaît.
@@ -819,25 +814,62 @@ static inline void __attribute__((unused, noinline)) actor_init_slot(
     actor->inst = slot;
     actor->oam_entry = entry;
     actor_slot_tables_clear(slot);
+    g_slot_link[slot].parent = -1; g_slot_link[slot].depth = 0;   /* racine, jusqu'à `actor_link_slot` */
     if (entry >= 0) g_oam_entries[entry] = *display;
     actor->alive = 1;
     alive_bit_set(slot);
 }
 
 /* Activation / destruction */
-static inline void actor_destroy_internal(Actor* s)  {
+static inline void slot_kill(Actor* s) {
     s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; alive_bit_clear(s->inst);
     actor_slot_tables_clear(s->inst);
-    if (g_spool_grp) {
-        /* Détruire la racine d'un modèle à parties détruit le sous-arbre : le groupe entier est rendu au pool. */
-        int g = g_spool_grp[s->model];
-        for (int k = 1; k < g; k++) {
-            Actor* c = group_part(s, k);
-            c->active = 0; c->alive = 0; c->gen++; c->model = 0; actor_oam_entry(c)->visible = 0; alive_bit_clear(c->inst);
-            actor_slot_tables_clear(c->inst);
-        }
-    }
     if ((int)s->inst >= g_spool_start && (int)s->inst < g_spool_free) g_spool_free = s->inst;   /* l'emplacement redevient le premier libre */
+}
+/* Les enfants de l'emplacement `s` (`g_slot_link`), puis les leurs : chaque vivant est détruit. `release` : le sommet
+   détruit était une RACINE, tout son sous-arbre est rendu ; ses emplacements perdent leur type (0), morts d'avant
+   compris, et une partie de modèle redevient un emplacement libre du pool (`spool_slot_free`). Sans `release` (une
+   partie détruite, sa racine vivante), le type reste : la partie garde sa place dans le groupe. */
+static inline void slot_destroy_children(int s, int release) {
+    SLOT_EACH(k) {
+        if (g_slot_link[k].parent != s) continue;
+        if (g_actors[k].alive) slot_kill(&g_actors[k]);
+        else if (!release) continue;
+        if (release) g_actors[k].model = 0;
+        slot_destroy_children(k, release);
+    }
+}
+/* Détruire un acteur détruit son sous-arbre, posé ou né. */
+static inline void actor_destroy_internal(Actor* s)  {
+    int release = slot_parent(s->inst) < 0;
+    slot_kill(s);
+    if (g_slot_depth) slot_destroy_children(s->inst, release);
+}
+
+/* La composition d'un enfant, chaque image, posé ou né : son transform monde est celui de son parent composé avec son
+   local (rotation = somme des degrés, échelle = produit Q8, position = parent + R(rotation)·S(échelle)·local), sa
+   visibilité celle de son parent ET la sienne. Un parent ÉTEINT éteint l'enfant (désactiver la racine désactive le
+   sous-arbre) ; un enfant éteint ne se compose pas, et la racine ne le rallume pas. Appelée profondeur par
+   profondeur (`slot_compose_all`) : le parent est toujours composé avant. */
+static inline void slot_compose(int s) {
+    const SlotLink* l = &g_slot_link[s];
+    Actor* c = &g_actors[s];
+    const Actor* p = &g_actors[l->parent];
+    if (!p->active) { c->active = 0; return; }
+    if (!c->active) return;
+    int si, co; gba_sincos(p->rotation, &si, &co);
+    int lx = (l->ox * p->scale_x) >> 8, ly = (l->oy * p->scale_y) >> 8;
+    c->x = p->x + ((lx * co - ly * si) >> 8);
+    c->y = p->y + ((lx * si + ly * co) >> 8);
+    c->rotation = p->rotation + l->rot;
+    c->scale_x = (p->scale_x * l->sx) >> 8;
+    c->scale_y = (p->scale_y * l->sy) >> 8;
+    if (c->oam_entry >= 0)
+        g_oam_entries[c->oam_entry].visible = l->visible && (p->oam_entry < 0 || g_oam_entries[p->oam_entry].visible);
+}
+static inline void slot_compose_all(void) {
+    for (int d = 1; d <= g_slot_depth; d++)
+        SLOT_EACH(k) if (g_actors[k].alive && g_slot_link[k].depth == d) slot_compose(k);
 }
 
 /* Input */

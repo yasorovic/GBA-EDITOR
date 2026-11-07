@@ -10,7 +10,7 @@ from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen import shared_pool_gen
 from codegen.runtime_codegen.physics.blocks import block_tick_lines
 from codegen.runtime_codegen.gen_camera import camera_follow_lines
-from codegen.runtime_codegen.gen_pool import dispatch_sym, parent_compose_lines, pool_compose_lines
+from codegen.runtime_codegen.gen_pool import dispatch_sym, link_depth
 from codegen.runtime_codegen.gen_scene_query import (
     scene_anim_descriptors, scene_has_cmap,
 )
@@ -91,8 +91,8 @@ def gen_scene_tick(
         p, scene_actors, scene, pi, shown)
     L += kinematic_before
     L += physics_motion_lines(scene, p.settings, scene_actors, pi, project_sets_gravity(p))
-    L += parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
-    L += pool_compose_lines(pi)
+    if link_depth(scene_actors, pi):
+        L.append("    slot_compose_all();   /* actor hierarchy, posed and spawned: parents before children */")
 
     # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).

@@ -527,20 +527,20 @@ def test_c_un_groupe_garde_sa_partie_detruite_et_rend_tout_avec_sa_racine(sortie
     assert sortie_sonde["pose_parent"] == [1, 1, 1, 1, 1]       # enfant, petit-enfant, sommet (aucun), autre chaîne, nil
     assert sortie_sonde["pose_racine"] == [1, 1, 1, 1, 1]
     assert sortie_sonde["pose_enfant"] == [1, 1]
-    assert sortie_sonde["pose_milieu_mort"] == [1, 1, 1]        # parent mort : nil ; mais le sommet reste la racine ; l'enfant mort se lit nil
-    assert sortie_sonde["pose_sommet_mort"] == [1, 1]
-    assert sortie_sonde["pose_sans_table"] == [1, 1]
+    assert sortie_sonde["pose_milieu_mort"] == [0, 1, 1, 1]     # l'enfant part avec son parent, le sommet reste ; l'enfant mort se lit nil
+    assert sortie_sonde["pose_sommet_mort"] == [0, 1]           # un sommet détruit emporte son enfant, l'autre chaîne ne bouge pas
+    assert sortie_sonde["pose_sans_lien"] == [1, 1]
     assert sortie_sonde["nth_fuzz"] == [0, 1]         # 0 écart avec un parcours complet, sur plus de 1000 vérifications
     assert sortie_sonde["nth_curseur"] == [1]         # et le curseur a bien suivi les boucles qui avancent de 1
     assert sortie_sonde["grp_racine_de"] == [1, 1, 1, 1]   # partie, partie de partie, racine (elle-même), nil
     assert sortie_sonde["grp_parent_de"] == [1, 1, 1, 1]   # la racine, la partie 1, aucun pour une racine, nil
-    assert sortie_sonde["grp_apres_perte"] == [1, 1, 1]    # parent détruit : nil ; la racine reste ; l'acteur détruit n'a pas de racine
+    assert sortie_sonde["grp_apres_perte"] == [0, 0, 1, 1]  # la partie 2 part avec la partie 1 et garde sa place ; la racine vit
     assert sortie_sonde["grp_curseur"] == [2]
     assert sortie_sonde["ref_signe"] == [1, 1]        # génération 0x8000 : handle négatif, résolu
     assert sortie_sonde["ref_300"] == [1]             # au-delà des 256 d'un octet, toujours périmée
     assert sortie_sonde["ref_boucle"] == [1, 1]       # le compteur boucle : la référence meurt, sans devenir nil
     assert sortie_sonde["ref_zero"] == [1, 1]         # génération 0, emplacement 0 : ce n'est pas « aucun acteur »
-    assert sortie_sonde["grp_bits_partie"] == [(1 << 2) | (1 << 4)]   # emplacements 2 et 4 vivants, 3 détruit
+    assert sortie_sonde["grp_bits_partie"] == [1 << 2]    # seule la racine vit : 3 et sa partie 4 sont détruits
     assert sortie_sonde["grp_bits_racine"] == [0]
 
 

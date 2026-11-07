@@ -23,19 +23,6 @@ def _boss_project(tmp_path):
     return p, scene
 
 
-def test_desactiver_la_racine_desactive_le_sous_arbre_sans_liberer_le_groupe(tmp_path):
-    from codegen.runtime_codegen.gen_pool import scene_pi, pool_compose_lines
-    p, scene = _boss_project(tmp_path)
-    code = "\n".join(pool_compose_lines(scene_pi(p, scene)))
-    garde = "if(!g_actors[_b].active) {"
-    assert garde in code
-    # Désactiver ne libère rien : la branche `active` n'écrit jamais `alive`.
-    apres = code[code.index(garde):]
-    assert "alive" not in apres[:apres.index("continue;")]
-    # Détruire la racine n'est pas fait ici : le groupe est rendu au moment de la destruction.
-    assert "alive = 0" not in code
-
-
 def test_le_spawn_ne_reprend_qu_un_emplacement_libre(tmp_path):
     from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene = _boss_project(tmp_path)

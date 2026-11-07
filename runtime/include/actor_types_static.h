@@ -73,6 +73,9 @@ enum { BODY_MODE_NONE = 0, BODY_MODE_CHARACTER = 1, BODY_MODE_KINEMATIC = 2, BOD
    à partir de `first` (couples de boîtes et réglages, propres au module). */
 typedef struct PairRun { u16 first; u8 n; } PairRun;
 
+/* Le lien d'un emplacement à son parent (`g_slot_link`, runtime_api_inline.h). */
+typedef struct SlotLink { s16 parent; u8 depth; u8 visible; int ox, oy; s16 rot; u16 sx, sy; } SlotLink;
+
 /* Deux tables, deux unités :
 
      g_actors[]      — un indice = un ACTEUR : identité, position, vélocité,

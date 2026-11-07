@@ -1,5 +1,5 @@
-"""runtime_codegen/gen_pool.py : le C des instances d'un modèle de prefab : le spawn, la composition de la hiérarchie
-(parent, enfant) et le nom du symbole qui répond d'un acteur.
+"""runtime_codegen/gen_pool.py : le C des instances d'un modèle de prefab : le spawn, les liens de la hiérarchie
+(parent, enfant, `actor_link_slot`) et le nom du symbole qui répond d'un acteur.
 
 `scene_pi` est la liste des pools d'une scène, lue de `oam_alloc.scene_oam_layout`."""
 from __future__ import annotations
@@ -176,7 +176,7 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
             appearance_base=_alay.member_base.get((s, 0)), affine=pool_affine(p, pf, pf),
             indent="            ",
         )
-        # Les parties prennent leur transform monde à la première composition.
+        # Les parties prennent leur transform monde à la première composition, par leur lien.
         for k, part in enumerate(pf.children, start=1):
             entry = f"group_entry(_e, {k})" if pi["member_entries"][k] >= 0 else -1
             L += actor_init_lines(
@@ -185,6 +185,7 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
                 appearance_base=_alay.member_base.get((s, k)), affine=pool_affine(p, pf, part),
                 indent="            ", composed=True,
             )
+        L += part_link_lines(pf, "_i", "            ")
         if has_script:
             L.append(f"            {s}_pool_init(&g_actors[_i]);")
         L += sfx_on_spawn_lines(p, pf, "            ")
@@ -201,212 +202,83 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
     return L
 
 
-def _visible_line(indent: str, entry, parent_entry, own_visible) -> list[str]:
-    """`visible` d'un enfant = celui de son parent ET le sien. Une entrée OAM
-    n'existe que pour un porteur de sprite : un enfant sans sprite n'a rien à
-    montrer (aucune ligne), et un parent sans sprite ne masque personne — son
-    « visible » vaut vrai. `entry`/`parent_entry` : indices d'entrée, -1 si aucune."""
-    if entry == -1:
-        return []
-    own = 1 if own_visible else 0
-    if parent_entry == -1:
-        return [f"{indent}g_oam_entries[{entry}].visible = {own};"]
-    return [f"{indent}g_oam_entries[{entry}].visible = g_oam_entries[{parent_entry}].visible && {own};"]
+def _local_transform(child, ref, ref_x: int, ref_y: int) -> tuple[int, int, int, int, int]:
+    """Le transform LOCAL de `child` dans le repère de `ref` : (ox, oy Q8, rotation en degrés, sx, sy Q8).
+
+    L'auteur pose en coordonnées MONDE ; le build en tire le local, et la composition du runtime (`slot_compose`), appliquée
+    à la pose authorée du parent, redonne exactement la pose authorée de l'enfant : la scène de l'éditeur est la frame 0 du
+    jeu. C'est l'inverse de la composition : on défait la rotation du parent, puis son échelle. `ref_x`, `ref_y` : la
+    position du parent (0, 0 pour la racine d'un prefab, posée à l'origine du template). Tout reste en Q8 jusqu'à l'OAM :
+    un arrondi par niveau ferait dériver un bras d'un pixel par cran de profondeur."""
+    p_rot = float(_number_value(getattr(ref, "rotation", 0)) or 0)
+    p_sx = float(_number_value(getattr(ref, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
+    p_sy = float(_number_value(getattr(ref, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
+    dx, dy = float(int(child.x) - ref_x), float(int(child.y) - ref_y)
+    th = math.radians(-p_rot)
+    ux = dx * math.cos(th) - dy * math.sin(th)
+    uy = dx * math.sin(th) + dy * math.cos(th)
+    rot = int(_number_value(getattr(child, "rotation", 0)) or 0) - int(round(p_rot))
+    sx = int(round(float(_number_value(getattr(child, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
+    sy = int(round(float(_number_value(getattr(child, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
+    return int(round(ux / p_sx * 256)), int(round(uy / p_sy * 256)), rot, sx, sy
 
 
-def parent_compose_lines(scene_actors: list, actor_offset: int,
-                          placed_entry: list[int]) -> list[str]:
-    """Recompose, chaque frame, le transform monde des acteurs qui ont un parent.
+def _link_line(indent: str, slot, parent, depth: int, child, local) -> str:
+    vis = 1 if getattr(child, "visible", True) else 0
+    return f"{indent}actor_link_slot({slot}, {parent}, {depth}, {vis}, {', '.join(map(str, local))});"
 
-    La formule n'est PAS nouvelle : c'est celle que le modèle affine applique
-    déjà entre un acteur et son sprite,
-    d'un cran plus haut — l'`Actor` parent tenant la place que tenait l'acteur.
-        rotation = somme des degrés
-        scale    = produit Q8
-        position = parent + R(rotation_parent)·S(scale_parent)·offset_local
-    Aucune règle nouvelle à apprendre, et c'est ce qui rend le chantier petit.
 
-    Le transform LOCAL est une CONSTANTE du build : la parenté est authorée, et
-    la tranche A n'ouvre pas l'accès script aux parties. Un enfant ne porte donc
-    aucun champ de plus dans `g_actors` — le coût annoncé de 144 octets par
-    acteur ne bouge pas.
+def _part_parents(pf) -> list[tuple]:
+    """Les parties d'un prefab : (rang k, partie, rang de sa partie parente (0 = la racine), profondeur)."""
+    parts = list(getattr(pf, "children", []) or [])
+    rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
+    par_of = {k: rank.get(getattr(pt, "parent", None) or "", 0) for k, pt in enumerate(parts, start=1)}
+    out = []
+    for k, pt in enumerate(parts, start=1):
+        depth, cur = 0, k
+        while cur and depth <= len(parts):       # borne : une chaîne de parties ne revient pas sur elle-même
+            depth, cur = depth + 1, par_of[cur]
+        out.append((k, pt, par_of[k], depth))
+    return out
 
-    **L'auteur pose en coordonnées MONDE ; c'est le build qui en tire le
-    local.** x/y/rotation/scale gardent donc exactement le sens qu'ils avaient
-    au canvas, et un bras se place là où il doit apparaître à l'écran plutôt
-    qu'à un offset qu'il faudrait calculer de tête. La conséquence est que la
-    scène dessinée dans l'éditeur est EXACTEMENT la frame 0 du jeu : le local
-    dérivé ici, recomposé au runtime avec la pose authorée du parent, redonne
-    la position authorée de l'enfant.
 
-    La conversion faite ici est réversible, et le canvas s'en sert désormais :
-    déplacer un parent y recompose son sous-arbre, et les enfants suivent à
-    l'écran comme au runtime. L'auteur voit donc la même hiérarchie vivante des
-    deux côtés. (Le champ Position de l'inspecteur reflète aussi ce déplacement
-    depuis 2026-09-05 — cf. actor_inspector `_sync_transform_from_canvas`.)
-
-    Tout est en Q8 et l'arrondi reste à l'émission OAM : un
-    arrondi par niveau ferait dériver un bras d'un pixel par cran de
-    profondeur.
-
-    `visible` se propage ici aussi : cacher un boss cache ses bras, comme un
-    conteneur d'UI caché cache son sous-arbre (v0.15). Deux endroits du logiciel,
-    une seule règle."""
-    depths, _errs = parent_depths(scene_actors)
-    idx_of = {a.name: actor_offset + j for j, (a, _) in enumerate(scene_actors)}
-    kids = [(a, j) for j, (a, _) in enumerate(scene_actors)
-            if getattr(a, "parent", None) and a.name in depths]
-    if not kids:
-        return []
-    kids.sort(key=lambda t: depths[t[0].name])   # parents avant enfants
-    L = ["    /* Actor hierarchy — parents before children, depth",
-         "       computed at build. Same composition as that of",
-         "       an actor and its sprite, one level up. */"]
-    by_name = {a.name: a for a, _ in scene_actors}
-    for a, _j in kids:
-        c = idx_of[a.name]
-        p = idx_of[a.parent]
-        par = by_name[a.parent]
-        # ── Du MONDE authoré vers le LOCAL ────────────────────────
-        # L'inverse exact de la composition émise juste en dessous, appliqué
-        # à la POSE AUTHORÉE du parent : on défait sa rotation puis son
-        # échelle. Le résultat, recomposé au runtime avec cette même pose,
-        # redonne la position que l'auteur a vue au canvas.
-        p_rot = float(_number_value(getattr(par, "rotation", 0)) or 0)
-        p_sx = float(_number_value(getattr(par, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
-        p_sy = float(_number_value(getattr(par, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
-        dx = float(int(a.x) - int(par.x))
-        dy = float(int(a.y) - int(par.y))
-        th = math.radians(-p_rot)
-        ux = dx * math.cos(th) - dy * math.sin(th)
-        uy = dx * math.sin(th) + dy * math.cos(th)
-        ox = int(round((ux / p_sx) * 256))
-        oy = int(round((uy / p_sy) * 256))
-        rot = int(_number_value(getattr(a, "rotation", 0)) or 0) - int(round(p_rot))
-        sx = int(round(float(_number_value(getattr(a, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
-        sy = int(round(float(_number_value(getattr(a, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
-        L += [
-            f"    {{   /* {a.name} in the frame of {a.parent} */",
-            f"        int _pr = g_actors[{p}].rotation;",
-            f"        int _px = g_actors[{p}].scale_x, _py = g_actors[{p}].scale_y;",
-            f"        int _co, _si; gba_sincos(_pr, &_si, &_co);",
-            f"        int _lx = ({ox} * _px) >> 8, _ly = ({oy} * _py) >> 8;",
-            f"        g_actors[{c}].x = g_actors[{p}].x + ((_lx * _co - _ly * _si) >> 8);",
-            f"        g_actors[{c}].y = g_actors[{p}].y + ((_lx * _si + _ly * _co) >> 8);",
-            f"        g_actors[{c}].rotation = _pr + {rot};",
-            f"        g_actors[{c}].scale_x  = (_px * {sx}) >> 8;",
-            f"        g_actors[{c}].scale_y  = (_py * {sy}) >> 8;",
-            *_visible_line("        ", placed_entry[c - actor_offset], placed_entry[p - actor_offset],
-                           getattr(a, "visible", True)),
-            f"    }}",
-        ]
+def part_link_lines(pf, root: str, indent: str) -> list[str]:
+    """Les liens des parties d'un modèle né à l'emplacement `root` (une expression C), après leur construction : le
+    parent est une autre partie, sinon la racine, et le local se tire de la pose authorée de la partie, dans le monde du
+    template posé à l'origine (la racine d'un prefab n'a pas de pose : `spawn(x, y)` décide où)."""
+    by_rank = {k: pt for k, pt in enumerate(pf.children, start=1)}
+    L = []
+    for k, part, p_off, depth in _part_parents(pf):
+        ref = by_rank.get(p_off, pf)
+        ref_xy = (int(ref.x), int(ref.y)) if p_off else (0, 0)
+        L.append(_link_line(indent, f"group_slot({root}, {k})", f"group_slot({root}, {p_off})" if p_off else root,
+                            depth, part, _local_transform(part, ref, *ref_xy)))
     return L
 
 
-def placed_parent_table(scene_actors: list, actor_offset: int):
-    """La table `g_placed_parent` d'une scène : pour chaque emplacement de `g_actors[]`, l'emplacement du parent de scène de
-    l'acteur posé qui l'occupe, ou -1. Mêmes acteurs que `parent_compose_lines` (un parent inconnu ou un cycle ont été
-    refusés avant). None quand aucun acteur n'a de parent : la scène n'émet alors aucune table."""
+def link_depth(scene_actors: list, pi: list[dict]) -> int:
+    """La profondeur maximale de la hiérarchie d'une scène, posés et parties des modèles qui y naissent : le nombre de
+    passes de `slot_compose_all` (`g_slot_depth`). 0 : aucune hiérarchie, ni composition ni cascade."""
+    depths, _errs = parent_depths(scene_actors)
+    d = max(depths.values(), default=0)
+    for m in pi:
+        if m["shared"]:
+            d = max([d] + [dep for *_, dep in _part_parents(m["prefab"])])
+    return d
+
+
+def placed_link_lines(scene_actors: list, actor_offset: int) -> list[str]:
+    """Les liens des acteurs POSÉS qui ont un parent de scène, après leur construction (`scene_init`) : le parent,
+    la profondeur et le local, tiré de la pose authorée (`_local_transform`). Un parent inconnu ou un cycle ont été
+    refusés avant (`parent_depths`)."""
     depths, _errs = parent_depths(scene_actors)
     idx_of = {a.name: actor_offset + j for j, (a, _) in enumerate(scene_actors)}
-    table = [-1] * (actor_offset + len(scene_actors))
+    by_name = {a.name: a for a, _ in scene_actors}
+    L = []
     for j, (a, _) in enumerate(scene_actors):
-        if getattr(a, "parent", None) and a.name in depths and a.parent in idx_of:
-            table[actor_offset + j] = idx_of[a.parent]
-    return table if any(v >= 0 for v in table) else None
-
-
-def _pool_entry_expr(rank: int):
-    """Entrée OAM d'un membre de pool dans `pool_compose_lines` : `_eb` est la
-    1re entrée de l'instance, `rank` le rang du membre. -1 = aucune."""
-    if rank < 0:
-        return -1
-    return f"group_entry(_eb, {rank})" if rank else "_eb"
-
-
-def pool_compose_lines(pi: list[dict]) -> list[str]:
-    """La composition des enfants d'un prefab segmenté, chaque frame.
-
-    Même formule que pour les acteurs de scène (`parent_compose_lines`), mais
-    déroulée sur le POOL : une boucle par instance, et les enfants d'une
-    instance sont à un décalage constant de sa racine — le groupe est contigu
-    et sa taille est une constante du build.
-
-    Un enfant ÉTEINT ne se compose pas, et il n'est PAS rallumé par sa racine :
-    sa vie lui appartient. Un boss qui
-    perd un bras appelle `MonBras:destroy()`, et le bras disparaît pour de bon —
-    plus d'OAM, plus de collision. Écrire `enfant.active = racine.active` à
-    chaque frame, comme la première version le faisait, annulait cet appel dès
-    la frame suivante et sans un mot. La racine, elle, éteint tout en mourant :
-    c'est la branche du dessus, et les deux règles ne se marchent pas dessus.
-
-    Comme pour un acteur de scène, la pose authorée d'un enfant est du MONDE
-    (elle a été placée par rapport au template posé à l'origine) : le local en
-    est dérivé ici, une fois, au build."""
-    L: list[str] = []
-    for p2 in pi:
-        pf = p2["prefab"]
-        parts = list(getattr(pf, "children", []) or [])
-        if not parts or not p2["shared"]:
+        par = by_name.get(getattr(a, "parent", None) or "")
+        if par is None or a.name not in depths:
             continue
-        ranks = p2["member_entries"]      # rang d'entrée de chaque membre, -1 si aucun
-        by_name = {pt.name: pt for pt in parts}
-        rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
-        # La partie k est à l'entrée `_eb + k` (une par emplacement du pool), et un groupe mort est déjà rendu
-        # (`actor_destroy_internal`) : la boucle ne parcourt que les racines vivantes.
-        ranks = [k if r >= 0 else -1 for k, r in enumerate(ranks)]
-        L += [f"    /* {pf.name} — subtree of each instance */",
-              "    POOL_EACH(_b) {",
-              f"        if(g_actors[_b].model!={p2['model_id']}||!g_actors[_b].alive) continue;",
-              *(["        int _eb = g_spool_entry + (_b - g_spool_start);"] if p2["spool"]["entries"] else []),
-              # Les deux règles du sous-arbre : « détruire la racine détruit le sous-arbre » (le groupe est RENDU AU
-              # POOL par `actor_destroy_internal`), et « désactiver la racine désactive le sous-arbre » (il reste
-              # occupé, mais n'est ni dessiné ni en collision), ici. Sans cette branche, un boss désactivé
-              # laisserait ses bras actifs. Les parties ne suivent pas une RÉACTIVATION de la racine : une partie
-              # se réactive elle-même (`self.Bras:activate()`).
-              f"        if(!g_actors[_b].active) {{",
-              f"            for(int _k=1; _k<{p2['group']}; _k++) g_actors[group_slot(_b, _k)].active = 0;",
-              f"            continue;",
-              f"        }}",
-              "        int " + ", ".join(f"_s{k} = group_slot(_b, {k})" for k in range(1, len(parts) + 1)) + ";"]
-        for k, pt in enumerate(parts, start=1):
-            par = by_name.get(getattr(pt, "parent", None) or "")
-            # Parent = une autre partie, sinon la racine du groupe (décalage 0).
-            p_off = rank.get(par.name, 0) if par is not None else 0
-            ref = par if par is not None else pf
-            p_rot = float(_number_value(getattr(ref, "rotation", 0)) or 0)
-            p_sx = float(_number_value(getattr(ref, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
-            p_sy = float(_number_value(getattr(ref, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
-            # La racine d'un prefab n'a pas de pose authorée — le template est
-            # posé à l'origine, et c'est `spawn(x, y)` qui décide où. Le monde
-            # d'un enfant se lit donc directement comme un offset au template.
-            rx = int(getattr(ref, "x", 0) or 0) if par is not None else 0
-            ry = int(getattr(ref, "y", 0) or 0) if par is not None else 0
-            dx, dy = float(int(pt.x) - rx), float(int(pt.y) - ry)
-            th = math.radians(-p_rot)
-            ux = dx * math.cos(th) - dy * math.sin(th)
-            uy = dx * math.sin(th) + dy * math.cos(th)
-            ox, oy = int(round(ux / p_sx * 256)), int(round(uy / p_sy * 256))
-            rot = int(_number_value(getattr(pt, "rotation", 0)) or 0) - int(round(p_rot))
-            sx = int(round(float(_number_value(getattr(pt, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
-            sy = int(round(float(_number_value(getattr(pt, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
-            src = f"_s{p_off}" if p_off else "_b"
-            L += [
-                f"        if(g_actors[_s{k}].active) {{   /* {pt.name} in the frame of "
-                f"{par.name if par is not None else pf.name} */",
-                f"            int _pr = g_actors[{src}].rotation;",
-                f"            int _px = g_actors[{src}].scale_x, _py = g_actors[{src}].scale_y;",
-                f"            int _co, _si; gba_sincos(_pr, &_si, &_co);",
-                f"            int _lx = ({ox} * _px) >> 8, _ly = ({oy} * _py) >> 8;",
-                f"            g_actors[_s{k}].x = g_actors[{src}].x + ((_lx * _co - _ly * _si) >> 8);",
-                f"            g_actors[_s{k}].y = g_actors[{src}].y + ((_lx * _si + _ly * _co) >> 8);",
-                f"            g_actors[_s{k}].rotation = _pr + {rot};",
-                f"            g_actors[_s{k}].scale_x  = (_px * {sx}) >> 8;",
-                f"            g_actors[_s{k}].scale_y  = (_py * {sy}) >> 8;",
-                *_visible_line("            ",
-                               _pool_entry_expr(ranks[k]), _pool_entry_expr(ranks[p_off]),
-                               getattr(pt, "visible", True)),
-                f"        }}",
-            ]
-        L.append("    }")
+        L.append(_link_line("    ", actor_offset + j, idx_of[par.name], depths[a.name], a,
+                            _local_transform(a, par, int(par.x), int(par.y))))
     return L
