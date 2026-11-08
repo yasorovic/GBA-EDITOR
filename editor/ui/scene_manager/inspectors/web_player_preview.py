@@ -181,7 +181,10 @@ class WebPlayerPreview:
                     self.send_error(404)
                     return
                 self.send_response(200)
-                self.send_header("Content-Type", mime)
+                safe_mime = mime.replace("\r", "").replace("\n", "")
+                if not safe_mime:
+                    safe_mime = "application/octet-stream"
+                self.send_header("Content-Type", safe_mime)
                 self.send_header("Content-Length", str(len(data)))
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("Referrer-Policy", "no-referrer")
