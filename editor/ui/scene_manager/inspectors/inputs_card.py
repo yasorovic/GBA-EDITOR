@@ -34,7 +34,7 @@ from core.models.settings import (InputBinding, BUTTON_NAMES, INTERACT_INPUT_NAM
                                   MAX_INTERACT_REACH)
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitSpin
-from ui.common.widgets import CollapsibleCard, HoverIconButton, W
+from ui.common.widgets import CardInset, CollapsibleCard, HoverIconButton, W
 
 
 # Icône de chaque bouton — les MÊMES clés que les events `on_button_*`
@@ -83,9 +83,8 @@ class InputsCard(CollapsibleCard):
         hint.setWordWrap(True)
         inner.addWidget(hint)
 
-        self._rows_host = QWidget()
-        self._rows = QVBoxLayout(self._rows_host)
-        self._rows.setContentsMargins(0, 6, 0, 0)
+        self._rows_host = CardInset()
+        self._rows = self._rows_host.inset_layout
         self._rows.setSpacing(3)
         inner.addWidget(self._rows_host)
 

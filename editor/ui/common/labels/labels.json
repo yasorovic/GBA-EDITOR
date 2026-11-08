@@ -580,6 +580,7 @@
     "uiinsp.text.page_remove_title": { "text": "Delete page?" },
     "uiinsp.text.page_remove_msg": { "text": "Delete the text “{page}” and its translations? Undo restores it." },
     "uiinsp.text.page_drag": { "text": "Drag to reorder pages (renames their keys)" },
+    "common.card_drag": { "text": "Drag to reorder sections" },
     "txtseq.delete_sequence_tip": { "text": "Delete the whole sequence, empty its table and its TextBox" },
     "txtpnl.delete_sequence_title": { "text": "Delete sequence?" },
     "txtpnl.delete_sequence_msg": { "text": "Delete “{name}”: its {n} texts and their translations?\n\nLinked: {users}. The table is emptied and the TextBox is left empty. Undo restores everything." },
@@ -1004,9 +1005,6 @@
       "text": "Backdrop color"
     },
     "sceneinsp.backdrop_reset_tip": { "text": "Reuses the backdrop color defined at project level." },
-    "sceneinsp.backdrop_dialog": {
-      "text": "Backdrop color"
-    },
     "sceneinsp.backdrop_project_suffix": {
       "text": "  (project)"
     },
@@ -2265,6 +2263,7 @@
     "win.build_unavailable": { "singular": "Build unavailable: {what} is missing.", "plural": "Build unavailable: {what} are missing." },
     "win.build_no_scene": { "text": "A scene is required before building." },
     "win.build_run_tip": { "text": "Builds the project, then starts it in the configured emulator." },
+    "win.build_web": { "text": "Build WEB" },
     "win.build_start": {
       "text": "\n[build] {project}, scene: {scene}"
     },
@@ -4332,6 +4331,45 @@
     "projset.build": {
       "text": "Build"
     },
+    "projset.rom_build": { "text": "ROM build" },
+    "projset.web_build": { "text": "WEB build" },
+    "projset.web_build_output": { "text": "Build WEB creates a ZIP for local testing in the project's build folder." },
+    "projset.web_preview_title": { "text": "Player preview" },
+    "projset.web_preview_view": { "text": "Preview layout" },
+    "projset.web_preview_desktop": { "text": "Desktop" },
+    "projset.web_preview_portrait": { "text": "Mobile portrait" },
+    "projset.web_preview_landscape": { "text": "Mobile landscape" },
+    "projset.web_preview_unavailable": { "text": "Player preview unavailable. The source editor uses PyQt6-WebEngine from the development dependencies." },
+    "projset.web_build_unavailable": { "text": "WEB build requires the player prototype in proto/web." },
+    "projset.web_mode_builtin": { "text": "Built-in" },
+    "projset.web_mode_builtin_tip": { "text": "The provided player, themed with colors, a texture, a shadow and a frame. These settings only change CSS variables: the layout stays intact." },
+    "projset.web_mode_custom": { "text": "Custom CSS" },
+    "projset.web_mode_custom_tip": { "text": "The blank player, styled by the project's CSS. Its HTML and JavaScript can be edited after ejecting the template." },
+    "projset.web_player_color": { "text": "Player color" },
+    "projset.web_player_shadow": { "text": "Drop shadow" },
+    "projset.web_player_shadow_tip": { "text": "Dark shadow under the player. Fullscreen mode has none." },
+    "projset.web_text_color": { "text": "Text color" },
+    "projset.web_button_color": { "text": "Button color" },
+    "projset.web_button_border_color": { "text": "Button border" },
+    "projset.web_button_border_width": { "text": "Border width" },
+    "projset.web_accent_color": { "text": "Accent color" },
+    "projset.web_frame": { "text": "Frame" },
+    "projset.web_frame_tip": { "text": "Border drawn around the game screen. Fullscreen mode hides it." },
+    "projset.web_frame_backstage": { "text": "Made with Backstage" },
+    "projset.web_frame_backstage_light": { "text": "Made with Backstage (white)" },
+    "projset.web_frame_none": { "text": "None" },
+    "projset.web_frame_image": { "text": "Image" },
+    "projset.web_frame_image_file": { "text": "Frame image" },
+    "projset.web_frame_image_tip": { "text": "PNG or WebP of {width} x {height} px (or an exact multiple), or an SVG with the same proportions. It sits on top of the game: the 240 x 160 screen area, 16 px from the top and sides, stays transparent." },
+    "projset.web_choose_image": { "text": "Choose…" },
+    "projset.web_clear_image": { "text": "Remove the image" },
+    "projset.web_no_image": { "text": "No image" },
+    "projset.web_image_filter": { "text": "Images" },
+    "projset.web_custom_css": { "text": "Custom CSS" },
+    "projset.web_custom_css_tip": { "text": "Written to custom.css at each build. This field is the only source of the custom CSS: a custom.css placed in the ejected template is ignored." },
+    "projset.web_eject": { "text": "Eject Web Template" },
+    "projset.web_eject_tip": { "text": "Copies the blank player (HTML, JavaScript, mGBA, shaders) into {folder}/. Builds in Custom CSS mode then use that folder. The CSS stays in the project field." },
+    "projset.web_eject_overwrite": { "text": "{folder}/ already exists. Replace the player files it contains? Other files are kept." },
     "projset.visual": {
       "text": "Visual"
     },
@@ -4523,9 +4561,6 @@
     },
     "projinsp.fade_to_white": {
       "text": "Fade to white"
-    },
-    "projset.project_backdrop_color": {
-      "text": "Project backdrop color"
     },
     "scrinsp.min": {
       "text": "Min"

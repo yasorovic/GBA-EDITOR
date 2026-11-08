@@ -5,7 +5,7 @@
   "author": "",
   "version": "0.1",
   "physics_gravity_x": 0.0,
-  "physics_gravity_y": 0.0,
+  "physics_gravity_y": 0.25,
   "backdrop_color": 16912,
   "save_slots": 1,
   "transition_kind": "none",
@@ -28,5 +28,6 @@
     "player"
   ],
   "language_mode": "multilingual",
-  "build_language": ""
+  "build_language": "",
+  "web_player_color": "#1e1d1d"
 }

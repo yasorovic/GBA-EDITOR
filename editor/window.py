@@ -28,6 +28,7 @@ from core.models.components import affine_sprite_component, displayed_sprite_com
 from codegen.oam_alloc import scene_oam_layout
 from codegen.oam_budget import project_obj_tiles, scene_affine_requests
 from codegen.rom_report import RomReport
+from codegen.web_build import WEB_TEMPLATE
 from ui.common.stack_gauge import StackGauge
 from ui.scene_manager.scene_canvas import SceneEditor
 from ui.scene_manager.canvas.canvas_workspace import CanvasWorkspace
@@ -965,9 +966,14 @@ class MainWindow(QMainWindow):
             if a: m_file.addAction(a)
             else: m_file.addSeparator()
         m_game = mb.addMenu(label("win.menu_game"))
-        a_build = QAction(label("common.build_run"), self); bind("game.build", a_build)
+        a_build = QAction(label("common.run"), self); bind("game.build", a_build)
         a_build.triggered.connect(self._run_build)
         m_game.addAction(a_build)
+        a_web = m_game.addAction(label("win.build_web"))
+        a_web.triggered.connect(lambda: self._run_build(web_export=True))
+        m_game.aboutToShow.connect(lambda: a_web.setEnabled(
+            bool(self.project and self.project.active_scene)
+            and self._worker is None and WEB_TEMPLATE.is_dir()))
         m_game.aboutToShow.connect(lambda: self._fill_language_build_menu(m_game, a_build))
         self._language_build_actions = []
         m_game.addSeparator()
@@ -2603,12 +2609,13 @@ class MainWindow(QMainWindow):
             label="Projet.cartridge_mib", persist_fn=_persist,
         ))
 
-    def _explain_missing_toolchain(self):
+    def _explain_missing_toolchain(self, *, web_export=False):
         """Dit POURQUOI on ne peut pas construire maintenant, et où trouver ce qui
         manque, avant d'ouvrir les réglages — au lieu d'une fenêtre de réglages qui
         surgit sans un mot (cf. ALPHA_CHECKLIST, « Build & Run sans devkitPro »)."""
         from ui.common.toolchain_dialog import ToolchainMissingDialog
-        missing = [tool for tool, path in self.toolchain.check().items() if not path]
+        missing = [tool for tool, path in self.toolchain.check().items()
+                   if not path and (not web_export or tool != "mgba")]
         dialog = ToolchainMissingDialog(missing, self)
         dialog.exec()
         if dialog.open_settings_requested:
@@ -2622,11 +2629,11 @@ class MainWindow(QMainWindow):
         mono = self.project and self.project.settings.language_mode == "monolingual"
         selected = self.project.settings.selected_build_language() if mono else None
         build_action.setText(
-            f"{label('common.build_run')} ({selected.code or label('langcard.source')})"
-            if mono else label('common.build_run'))
+            f"{label('common.run')} ({selected.code or label('langcard.source')})"
+            if mono else label('common.run'))
         if not mono:
             return
-        before = menu.actions()[1]
+        before = next(action for action in menu.actions() if action.isSeparator())
         settings = self.project.settings
         for lang in settings.all_languages() or [settings.source_lang]:
             action = QAction(f"Build_{lang.code or label('langcard.source')}", self)
@@ -2635,17 +2642,17 @@ class MainWindow(QMainWindow):
             menu.insertAction(before, action)
             self._language_build_actions.append(action)
 
-    def _run_build(self, language_code=None):
+    def _run_build(self, language_code=None, *, web_export=False):
         # Qt buttons pass a checked flag; only menu language actions pass a code.
         if isinstance(language_code, bool):
             language_code = None
         if not self.project or not self.project.active_scene: return
         if self._worker is not None: return     # un build tourne déjà : le clic est ignoré
         get_deferred_writes().flush()           # le build lit les sidecars sur le disque
-        if not (self.toolchain.devkitpro_ok and self.toolchain.mgba_ok):
+        if not (self.toolchain.devkitpro_ok and (web_export or self.toolchain.mgba_ok)):
             self.toolchain.recheck()    # outils installés depuis le dernier inventaire ?
-            if not (self.toolchain.devkitpro_ok and self.toolchain.mgba_ok):
-                self._explain_missing_toolchain(); return
+            if not (self.toolchain.devkitpro_ok and (web_export or self.toolchain.mgba_ok)):
+                self._explain_missing_toolchain(web_export=web_export); return
             self._update_build_state()
 
         self._open_build_panel()
@@ -2666,7 +2673,7 @@ class MainWindow(QMainWindow):
         self._build_drain.timeout.connect(self._drain_build_queue)
 
         self._worker = BuildWorker(project=self.project, toolchain=self.toolchain,
-                                   language_code=language_code)
+                                   language_code=language_code, web_export=web_export)
         self._worker.on("log_line",   lambda m:  self._build_queue.put(("log",      m)))
         self._worker.on("error_line", lambda m:  self._build_queue.put(("error",    m)))
         self._worker.on("diagnostic", lambda d:  self._build_queue.put(("diagnostic", d)))
@@ -2700,12 +2707,14 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_build_finished(self, success: bool):
+        web_export = self._worker.web_export
         self._worker = None
         self.build_panel.set_building(False)
         has_errors = self.build_panel.show_build_diagnostics()
         self._tb_build_btn.build_finished.emit(success)
         if success:
-            self.build_panel.log_info(label("win.build_rom_ok"))
+            if not web_export:
+                self.build_panel.log_info(label("win.build_rom_ok"))
             self._status.showMessage(label("win.build_ok"))
         else:
             # Des erreurs de diagnostic expliquent l'échec ; sinon (make, outil) c'est la console.

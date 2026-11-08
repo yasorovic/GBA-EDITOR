@@ -36,7 +36,7 @@ from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QListWidget, QListWidgetItem, QStackedWidget, QScrollArea,
-    QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox, QPushButton, QColorDialog,
+    QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox, QPushButton,
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QFontMetrics
 from PyQt6.QtCore import Qt, QEvent, QPointF
@@ -50,11 +50,11 @@ from core.history import (get_history, SetFieldCmd, AddListItemCmd,
                           RemoveListItemCmd, RenameCollisionTagCmd,
                           RemoveCollisionTagCmd)
 from core.command_dispatcher import get_dispatcher
-from core.models.gba_color import bgr555_to_rgb888, rgb888_to_bgr555
 from ui.common.deferred_writes import schedule_unwatched
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitDoubleSpin, UnitSpin
-from ui.common.widgets import W
+from ui.common.widgets import CollapsibleCard, W
+from ui.common.color_field import ColorField
 from ui.common.cartridge_preview import CartridgePreview, save_preview_profiles, save_capacity_text
 from ui.common.notice import note, tip
 from ui.scene_manager.inspectors.languages_card import LanguagesCard
@@ -62,6 +62,7 @@ from ui.scene_manager.inspectors.inputs_card import InputsCard
 from ui.scene_manager.inspectors.sequences_card import SequencesCard
 from ui.scene_manager.inspectors.axes_card import AxesCard
 from ui.scene_manager.inspectors.project_inspector import TRANSITION_LABELS
+from ui.scene_manager.inspectors.web_player_card import WebPlayerCard
 
 
 def _save_settings_soon(project: Project) -> None:
@@ -199,6 +200,8 @@ class BuildPanel(QWidget):
         lay.setSpacing(10)
         lay.addWidget(_category_title(label('projset.build')))
 
+        rom = CollapsibleCard(label('projset.rom_build'))
+        lay.addWidget(rom)
         body = QHBoxLayout()
         body.setSpacing(16)
         controls = QVBoxLayout()
@@ -207,7 +210,7 @@ class BuildPanel(QWidget):
         body.addLayout(controls)
         self._cartridge_preview = CartridgePreview()
         body.addWidget(self._cartridge_preview, 1, Qt.AlignmentFlag.AlignTop)
-        lay.addLayout(body)
+        rom.body_layout.addLayout(body)
 
         # ── Emplacements de sauvegarde ────────────────────────────
         self._spin_slots = QSpinBox()
@@ -338,6 +341,8 @@ class BuildPanel(QWidget):
 
         controls.addStretch()
 
+        self._web = WebPlayerCard(project, self._set_setting)
+        lay.addWidget(self._web)
         lay.addStretch()
         self._refresh_fields()
 
@@ -357,6 +362,7 @@ class BuildPanel(QWidget):
         self._combo_cart.blockSignals(False)
         self._cartridge_preview.set_target(self._combo_cart.currentData())
         self._refresh_timing()
+        self._web.refresh()
 
     def _refresh_timing(self):
         from codegen import memory_timing
@@ -464,24 +470,17 @@ class VisualPanel(QWidget):
         # Couleur de PAL_BG_RAM[0] : ce que le hardware affiche là où aucun
         # calque ni sprite ne dessine. Réglée ici pour TOUT le projet ; une
         # scène peut la surcharger depuis son propre inspecteur.
-        bd_box = QWidget()
-        bd_row = QHBoxLayout(bd_box)
-        bd_row.setContentsMargins(0, 0, 0, 0)
-        bd_row.setSpacing(6)
-        self._btn_backdrop = QPushButton()
-        self._btn_backdrop.setFixedSize(40, 22)
-        self._btn_backdrop.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_backdrop.setToolTip(tooltip(
+        # Quantifiée en BGR555 : la valeur stockée est celle que la console affichera.
+        self._backdrop = ColorField(gba=True)
+        self._backdrop.setToolTip(tooltip(
             title=label('projset.backdrop_title'), body=label('projset.backdrop_tip'),
             note=label('projset.backdrop_note')))
-        self._btn_backdrop.clicked.connect(self._pick_backdrop)
-        self._lbl_backdrop = QLabel()
-        self._lbl_backdrop.setFont(QFont(T.MONO, T.XS))
-        self._lbl_backdrop.setStyleSheet(f"color:{C.TEXT_MUTED};")
-        bd_row.addWidget(self._btn_backdrop)
-        bd_row.addWidget(self._lbl_backdrop)
-        bd_row.addStretch(1)
-        _row(label('projset.backdrop'), bd_box, lay)
+        self._backdrop.committed.connect(lambda v: self._set_setting(
+            "backdrop_color", v,
+            # Les scènes sans override affichent cette couleur : prévenir le
+            # canvas pour qu'il se repeigne (même signal que SceneInspector).
+            extra_persist=lambda: get_dispatcher()._emit("backdrop_changed")))
+        _row(label('projset.backdrop'), self._backdrop, lay, stretch=False)
 
         # ── Transition de scène (défaut projet) ───────────────────
         # Le fondu joué à chaque changement de scène. Réglé une fois ici pour
@@ -520,14 +519,7 @@ class VisualPanel(QWidget):
 
     def _refresh_fields(self):
         p = self._project
-        v = p.settings.backdrop_color
-        r, g, b = bgr555_to_rgb888(v)
-        self._btn_backdrop.setStyleSheet(
-            f"QPushButton{{background:rgb({r},{g},{b});"
-            f"border:1px solid {C.BORDER_MID};border-radius:3px;}}"
-            f"QPushButton:hover{{border-color:{C.ACCENT};}}"
-        )
-        self._lbl_backdrop.setText(f"0x{v:04X}")
+        self._backdrop.set_value(p.settings.backdrop_color)
 
         kind = getattr(p.settings, "transition_kind", "none")
         self._combo_trans.blockSignals(True)
@@ -564,24 +556,6 @@ class VisualPanel(QWidget):
             self._project.settings, field, old, value,
             label=f"Projet.{field}", persist_fn=_do_persist,
         ))
-
-    def _pick_backdrop(self):
-        """Couleur de backdrop par défaut du projet — quantifiée en BGR555 :
-        la valeur stockée est celle que la console affichera réellement, pas
-        la couleur 8 bits/canal choisie dans le dialogue."""
-        r, g, b = bgr555_to_rgb888(self._project.settings.backdrop_color)
-        col = QColorDialog.getColor(
-            QColor(r, g, b), self, label('projset.project_backdrop_color'),
-            QColorDialog.ColorDialogOption.DontUseNativeDialog,
-        )
-        if not col.isValid():
-            return
-        self._set_setting(
-            "backdrop_color", rgb888_to_bgr555(col.red(), col.green(), col.blue()),
-            # Les scènes sans override affichent cette couleur : prévenir le
-            # canvas pour qu'il se repeigne (même signal que SceneInspector).
-            extra_persist=lambda: get_dispatcher()._emit("backdrop_changed"),
-        )
 
 
 # ── Sound ───────────────────────────────────────────────────────────────
@@ -1662,8 +1636,10 @@ class ProjectSettingsDialog(QDialog):
         body.addWidget(self._list)
 
         self._stack = QStackedWidget()
+        general = GeneralPanel(project)
+        self._build_panel = BuildPanel(project)
         panels = [
-            GeneralPanel(project), BuildPanel(project), VisualPanel(project), SoundPanel(project),
+            general, self._build_panel, VisualPanel(project), SoundPanel(project),
             InputsPanel(project), LanguagesPanel(project), PhysicsCollisionsPanel(project),
         ]
         for panel in panels:
@@ -1686,3 +1662,8 @@ class ProjectSettingsDialog(QDialog):
         btn_close.clicked.connect(self.accept)
         footer.addWidget(btn_close)
         root.addLayout(footer)
+
+    def exec(self) -> int:
+        # La surface WebEngine est installée tant que la boîte est masquée.
+        self._build_panel._web.prepare_preview()
+        return super().exec()

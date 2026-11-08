@@ -2,7 +2,8 @@
 
 Pendant le glissement, un FANTÔME (capture semi-transparente de la ligne tirée) suit le curseur et
 la ligne d'origine s'atténue : le geste paraît déplacer la ligne elle-même."""
-from PyQt6.QtCore import Qt, QPoint, pyqtSignal
+from PyQt6.QtCore import Qt, QPoint, QPointF, pyqtSignal
+from PyQt6.QtGui import QColor, QPainter, QPixmap
 from PyQt6.QtWidgets import QLabel, QGraphicsOpacityEffect
 
 from ui.common import icons
@@ -11,7 +12,25 @@ from ui.common.labels import label
 _GHOST_OPACITY = 0.75
 _SOURCE_OPACITY = 0.35
 _ICON_PX = 16
+_DOT_RADIUS = 1.6
 _START_DISTANCE = 3         # px avant de considérer un clic comme un glissement
+
+
+def _grip_pixmap(ratio: float) -> QPixmap:
+    """Quatre points en carré, dessinés ici (aucune icône MDI n'a cette forme)."""
+    size = round(_ICON_PX * ratio)
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    pixmap.setDevicePixelRatio(ratio)            # net en HiDPI, affiché à _ICON_PX
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(icons.COLOR_DEFAULT))
+    for x in (5.5, 10.5):
+        for y in (5.5, 10.5):
+            painter.drawEllipse(QPointF(x, y), _DOT_RADIUS, _DOT_RADIUS)
+    painter.end()
+    return pixmap
 
 
 class _Ghost(QLabel):
@@ -42,10 +61,7 @@ class DragGrip(QLabel):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setStyleSheet("background:transparent;")
-        pixmap = icons.scaled_pixmap("drag_grip", icons.COLOR_DEFAULT, _ICON_PX,
-                                     self.devicePixelRatioF()).copy()
-        pixmap.setDevicePixelRatio(pixmap.width() / _ICON_PX)   # net en HiDPI, affiché à _ICON_PX
-        self.setPixmap(pixmap)
+        self.setPixmap(_grip_pixmap(self.devicePixelRatioF()))
         self.setToolTip(label("uiinsp.text.page_drag"))
 
     def set_ghost_source(self, source) -> None:

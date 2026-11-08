@@ -1,5 +1,8 @@
 {
   "notices": {
+    "web.itch_integration": {
+      "text": "Intégration itch.io\nChoisis le type de projet HTML, importe le ZIP de Build WEB et indique que le fichier se joue dans le navigateur.\nDans Embed options, choisis Embed in page puis Manually set size. Essaie d’abord un cadre de 544 × 416 px.\nPour les téléphones, coche Mobile friendly et garde Orientation sur Default. Laisse les barres de défilement désactivées pour le lecteur intégré."
+    },
     "physics.static_body": {
       "text": "StaticBody n’a aucun mouvement automatique et ignore les impulsions. Modifier la position de l’Actor téléporte sa géométrie de collision ; utiliser KinematicBody pour un déplacement continu."
     },

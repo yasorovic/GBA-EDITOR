@@ -95,7 +95,6 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "tool_inpaint_rect":          ("mdi.select-drag",             "▭"),
     "tool_fill":                  ("mdi.format-color-fill",       "🪣"),
     # Poignée de réordonnancement d'une ligne (pages d'un texte, boîtes de texte).
-    "drag_grip":                  ("mdi.drag-vertical",           "⋮⋮"),
     "export_png":                 ("mdi.export-variant",          "⇩"),
     # Rôle d'un layer dans le mélange de couleurs — la FORME dit le rôle :
     # hors du mélange, au-dessus (ce qui est mélangé), en dessous (ce avec quoi).
@@ -565,6 +564,10 @@ def _arrow_polygon(direction: str):
         return QPolygonF([QPointF(cx - h / 2, cy - w / 2),
                            QPointF(cx - h / 2, cy + w / 2),
                            QPointF(cx + h / 2, cy)])
+    if direction == "up":
+        return QPolygonF([QPointF(cx - w / 2, cy + h / 2),
+                           QPointF(cx + w / 2, cy + h / 2),
+                           QPointF(cx, cy - h / 2)])
     return QPolygonF([QPointF(cx - w / 2, cy - h / 2),
                        QPointF(cx + w / 2, cy - h / 2),
                        QPointF(cx, cy + h / 2)])

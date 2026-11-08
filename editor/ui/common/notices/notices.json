@@ -1,6 +1,10 @@
 {
   "lang": "en",
   "notices": {
+    "web.itch_integration": {
+      "tone": "accent",
+      "text": "Publishing on itch.io\nChoose HTML as the project type, upload the Build WEB ZIP and mark it as playable in the browser.\nIn Embed options, choose Embed in page and Manually set size. Start with a 544 × 416 px viewport.\nFor phones, enable Mobile friendly and keep Orientation on Default. Leave scrollbars off for the built-in player."
+    },
     "actor.active": {
       "tone": "accent",
       "code": "self.active",

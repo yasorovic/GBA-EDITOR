@@ -38,7 +38,6 @@
       "active": true,
       "script": "assets/scripts/Player.lua",
       "exports_values": {
-        "gravity": 60,
         "jump_force": 1024
       }
     },
@@ -55,6 +54,17 @@
       "y": 11,
       "w": 17,
       "h": 4
+    },
+    {
+      "component_type": "physics_body",
+      "id": "physics_body",
+      "active": true,
+      "mode": "CharacterBody",
+      "collider_id": "",
+      "mass": 1.0,
+      "gravity_scale": 1.0,
+      "can_sleep": true,
+      "use_scene_gravity": true
     }
   ],
   "pal_bank": -1,

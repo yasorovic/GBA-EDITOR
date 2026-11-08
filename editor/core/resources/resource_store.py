@@ -81,14 +81,7 @@ def atomic_write(path: Path, text: str, encoding: str = "utf-8") -> None:
         tmp.write_text(text, encoding=encoding, newline="\n")
         with open(tmp, "rb+") as f:
             os.fsync(f.fileno())    # sans ça, une coupure juste après le rename peut laisser un fichier vide
-        for attempt in range(_REPLACE_RETRIES):
-            try:
-                tmp.replace(path)   # atomique sur NTFS/ext4
-                return
-            except PermissionError:
-                if attempt == _REPLACE_RETRIES - 1:
-                    raise
-                time.sleep(_REPLACE_RETRY_DELAY)
+        replace_with_retry(tmp, path)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
@@ -97,6 +90,18 @@ def atomic_write(path: Path, text: str, encoding: str = "utf-8") -> None:
 # Rename atomique : nb de tentatives et délai entre elles (cf. atomic_write).
 _REPLACE_RETRIES = 12
 _REPLACE_RETRY_DELAY = 0.02   # 12 × 20 ms ≈ 240 ms de fenêtre de retry
+
+
+def replace_with_retry(source: Path, destination: Path) -> None:
+    """Remplace la cible atomiquement, en laissant passer les verrous brefs."""
+    for attempt in range(_REPLACE_RETRIES):
+        try:
+            source.replace(destination)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_RETRIES - 1:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY)
 
 
 class ResourceStore(Generic[T]):

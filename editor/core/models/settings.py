@@ -1,7 +1,8 @@
 """Settings globaux du projet + variables déclarées explicitement (globals/constants)."""
 
+import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 
 
 # ── Langues ────────────────────────────────────────
@@ -177,6 +178,11 @@ class InputMovement:
         return cls(name=str(d.get("name", "")), steps=str(d.get("steps", "")))
 
 
+WEB_PLAYER_MODES = ("builtin", "custom")
+WEB_FRAMES = ("backstage", "backstage-light", "none", "image")
+WEB_BUTTON_BORDER_WIDTH_MAX = 8
+
+
 @dataclass
 class ProjectSettings:
     name: str = "mon_jeu"
@@ -303,6 +309,22 @@ class ProjectSettings:
     axes: list = field(default_factory=list)
     # Mouvements personnalisés, en plus des six built-in du parseur.
     movements: list = field(default_factory=list)
+    # ── Lecteur web (Build WEB, cf. codegen/web_build.py) ───────────
+    # "builtin" : le lecteur fourni, habillé par les variables ci-dessous, qui
+    # ne touchent jamais la mise en page. "custom" : le lecteur vierge (ou le
+    # dossier `web_template/` éjecté dans le projet) et `web_custom_css`, seule
+    # source du CSS personnalisé. Les défauts sont ceux du `style.css` fourni.
+    web_player_mode: str = "builtin"
+    web_player_color: str = "#171717"
+    web_player_shadow: bool = False
+    web_text_color: str = "#d5d5d5"
+    web_button_color: str = "#262626"
+    web_button_border_color: str = "#666666"
+    web_button_border_width: int = 2    # px
+    web_accent_color: str = "#e7d642"
+    web_frame: str = "backstage"
+    web_frame_image: str = ""           # 272 × 208 px ou multiple exact, chemin relatif au projet
+    web_custom_css: str = ""
 
     def all_languages(self) -> list:
         """Source d'abord, puis les traductions — l'ordre du menu de choix.
@@ -319,6 +341,31 @@ class ProjectSettings:
     def selected_build_language(self) -> Language:
         return next((lang for lang in self.all_languages()
                      if lang.code == self.build_language), self.source_lang)
+
+
+WEB_PLAYER_FIELDS = tuple(f.name for f in fields(ProjectSettings) if f.name.startswith("web_"))
+_WEB_COLOR = re.compile(r"#[0-9a-fA-F]{6}")
+
+
+def web_player_setting(name: str, raw):
+    """Valeur lue dans project.json pour un réglage du lecteur web, ramenée au
+    défaut si elle est hors du domaine. Le thème Built-in écrit ces valeurs
+    telles quelles dans du CSS : une couleur mal formée n'y entre pas."""
+    default = ProjectSettings.__dataclass_fields__[name].default
+    if name == "web_player_mode":
+        return raw if raw in WEB_PLAYER_MODES else default
+    if name == "web_frame":
+        return raw if raw in WEB_FRAMES else default
+    if name == "web_button_border_width":
+        try:
+            return max(0, min(WEB_BUTTON_BORDER_WIDTH_MAX, int(raw)))
+        except (TypeError, ValueError):
+            return default
+    if isinstance(default, bool):
+        return bool(raw)
+    if name.endswith("_color"):
+        return raw.lower() if isinstance(raw, str) and _WEB_COLOR.fullmatch(raw) else default
+    return raw if isinstance(raw, str) else default
 
 
 # ── Variables du projet ───────────────────────────────────────────

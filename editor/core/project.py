@@ -99,7 +99,8 @@ from core.project_renames import ProjectRenameMixin
 from core.models.settings import (ProjectSettings, GlobalVar, Constant, DEFAULT_COLLISION_TAGS, lang_code,
                                   Language, InputBinding, InputSequence, InputAxis, InputMovement,
                                   BUTTON_NAMES, DEFAULT_INTERACT_BUTTONS, RESERVED_COLLISION_TAGS,
-                                  DEFAULT_INTERACT_REACH, MAX_INTERACT_REACH)
+                                  DEFAULT_INTERACT_REACH, MAX_INTERACT_REACH,
+                                  WEB_PLAYER_FIELDS, web_player_setting)
 from core.models.text import Text
 from core.models.palette import PaletteBank, OWN_PAL_BANK, DEFAULT_UI_PALETTE
 from core.models.sprite import SpriteAsset
@@ -1035,6 +1036,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
                if self.settings.axes else {}),
             **({"input_movements": [m.to_dict() for m in self.settings.movements]}
                if self.settings.movements else {}),
+            # Lecteur web : seuls les réglages changés sont écrits.
+            **{name: getattr(self.settings, name) for name in WEB_PLAYER_FIELDS
+               if getattr(self.settings, name) != ProjectSettings.__dataclass_fields__[name].default},
         }
         atomic_write(self.project_file, project_json.dumps(data))
         # Projet d'avant v0.10 : le .project vient d'être écrit, l'ancien
@@ -1174,6 +1178,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.settings.movements = [InputMovement.from_dict(x)
                                    for x in (d.get("input_movements") or [])
                                    if (x or {}).get("name")]
+        for name in WEB_PLAYER_FIELDS:
+            default = ProjectSettings.__dataclass_fields__[name].default
+            setattr(self.settings, name, web_player_setting(name, d.get(name, default)))
 
     def collision_tags(self) -> list:
         """Tags de collision du projet, DÉCLARÉS d'abord (dans leur ordre —

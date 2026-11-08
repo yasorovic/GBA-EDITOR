@@ -13,3 +13,5 @@
 # tests/text/test_text_layout_native.py.
 pytest
 ruff
+# Aperçu CSS dans les paramètres, lorsque le gabarit local proto/web est présent.
+PyQt6-WebEngine>=6.11,<7

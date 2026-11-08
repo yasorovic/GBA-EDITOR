@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QCheckBox,
 )
 from ui.common.popup import MessageBox as QMessageBox
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPoint
 
 from core.models.palette import OWN_PAL_BANK
@@ -26,6 +26,7 @@ from core.command_dispatcher import get_dispatcher
 from ui.common.deferred_writes import schedule_save
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitDoubleSpin, UnitSpin
+from ui.common.color_field import ColorField
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, AssetPickerPopup, NotesEdit, CollapsibleCard, ResetToDefaultButton
 from ui.common.labels import label
@@ -266,11 +267,10 @@ class SceneInspector(QWidget):
         lbl_bd = QLabel(label("sceneinsp.backdrop"))
         lbl_bd.setFont(QFont(T.UI, T.SM)); lbl_bd.setStyleSheet(f"color:{C.TEXT_DIM};")
         lbl_bd.setFixedWidth(70)
-        self._btn_backdrop = QPushButton()
-        self._btn_backdrop.setFixedSize(40, 22)
-        self._btn_backdrop.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_backdrop.clicked.connect(self._pick_backdrop)
-        self._btn_backdrop.setToolTip(tooltip(
+        # Quantifiée en BGR555 : la valeur stockée est celle que la console affichera.
+        self._backdrop = ColorField(gba=True)
+        self._backdrop.committed.connect(self._pick_backdrop)
+        self._backdrop.setToolTip(tooltip(
             title=label("sceneinsp.backdrop_title"),
             body=label("sceneinsp.backdrop_tip"),
             note=label("sceneinsp.backdrop_note"),
@@ -285,7 +285,7 @@ class SceneInspector(QWidget):
         ))
         self._btn_backdrop_reset.clicked.connect(self._reset_backdrop)
         bd_row.addWidget(lbl_bd)
-        bd_row.addWidget(self._btn_backdrop)
+        bd_row.addWidget(self._backdrop)
         bd_row.addWidget(self._lbl_backdrop)
         bd_row.addStretch(1)
         param_inner.addLayout(bd_row)
@@ -1470,37 +1470,15 @@ class SceneInspector(QWidget):
         return self._project.settings.backdrop_color if self._project else 0
 
     def _refresh_backdrop(self):
-        from core.models.gba_color import bgr555_to_rgb888
-        v = self._effective_backdrop()
-        r, g, b = bgr555_to_rgb888(v)
-        self._btn_backdrop.setStyleSheet(
-            f"QPushButton{{background:rgb({r},{g},{b});"
-            f"border:1px solid {C.BORDER_MID};border-radius:3px;}}"
-            f"QPushButton:hover{{border-color:{C.ACCENT};}}"
-        )
+        self._backdrop.set_value(self._effective_backdrop())
         overridden = getattr(self._scene, "backdrop_color", None) is not None
-        self._lbl_backdrop.setText(
-            f"0x{v:04X}" + ("" if overridden else label("sceneinsp.backdrop_project_suffix")))
+        self._lbl_backdrop.setText("" if overridden else label("sceneinsp.backdrop_project_suffix"))
         self._btn_backdrop_reset.set_modified(overridden)
 
-    def _pick_backdrop(self):
-        from PyQt6.QtWidgets import QColorDialog
-        from core.models.gba_color import bgr555_to_rgb888, rgb888_to_bgr555
+    def _pick_backdrop(self, value: int):
         if not self._scene:
             return
-        r, g, b = bgr555_to_rgb888(self._effective_backdrop())
-        col = QColorDialog.getColor(
-            QColor(r, g, b), self, label("sceneinsp.backdrop_dialog"),
-            QColorDialog.ColorDialogOption.DontUseNativeDialog,
-        )
-        if not col.isValid():
-            return
-        # Quantification BGR555 : la valeur stockée est celle que la console
-        # affichera réellement, pas la couleur 8 bits choisie dans le dialogue.
-        self._set_scene_field(
-            "backdrop_color", rgb888_to_bgr555(col.red(), col.green(), col.blue()),
-            extra_persist=self._notify_backdrop,
-        )
+        self._set_scene_field("backdrop_color", value, extra_persist=self._notify_backdrop)
         self.changed.emit()
 
     def _reset_backdrop(self):

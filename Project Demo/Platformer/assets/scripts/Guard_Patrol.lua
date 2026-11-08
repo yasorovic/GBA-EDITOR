@@ -3,13 +3,21 @@ exports = {
     dir = { type = "int", default = 1, label = "Sens", min = -1, max = 1 },
 }
 
-function on_update()
-    self.velocity = vec2(dir * speed * 256, 0)
-    self:apply_velocity()
+local started = false -- no move yet on the first frame: a zero speed means nothing
+
+function on_start()
+    self:play_anim("moving")
 end
 
-function on_tile_collide(normal_x, normal_y) -- check if there is a wall
-    if normal_x ~= 0 then
-        dir = -dir -- change direction automaticaly when meeting a wall
+function on_update()
+    local body = self:physics_body()
+
+    -- the engine cancels the horizontal speed when a wall of the map or a Block shape stops the guard
+    if started and body.velocity.x == 0 then
+        dir = -dir -- turn back
     end
+    started = true
+
+    body.velocity = vec2(dir * speed * 256, body.velocity.y) -- keep the fall given by the scene gravity
+    body:apply_velocity()
 end

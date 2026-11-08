@@ -732,8 +732,7 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: 
         return f"""
 QFrame#{object_name} {{
     background: {C.BG_RAISED};
-    border: none;
-    border-radius: 6px;
+    border: 1px solid {C.BORDER_MID};
 }}
 QFrame#{object_name} QFrame {{
     background: transparent;

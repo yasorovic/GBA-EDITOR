@@ -8,7 +8,7 @@ Flux :
   → grit Actor → grit_out/actor_{name}.h
   → main.c     → src/main.c (+ scripts C copiés)
   → make       → obj/*.o → rom.elf → rom.gba
-  → mgba
+  → mGBA ou export web
 """
 
 import os
@@ -143,12 +143,14 @@ class BuildWorker(EventEmitter, threading.Thread):
     # processus mGBA en cours (partagé entre toutes les instances)
     _mgba_proc: "subprocess.Popen | None" = None
 
-    def __init__(self, project: Project, toolchain: Toolchain, language_code=None):
+    def __init__(self, project: Project, toolchain: Toolchain, language_code=None,
+                 *, web_export: bool = False):
         EventEmitter.__init__(self)
         threading.Thread.__init__(self, daemon=True)
         from codegen.language_build import language_build_project
         self.project   = language_build_project(project, language_code)
         self.toolchain = toolchain
+        self.web_export = web_export
         self._build_log = None
         self._counts = {"error": 0, "warning": 0}
 
@@ -532,7 +534,18 @@ class BuildWorker(EventEmitter, threading.Thread):
             if ok:
                 self._step_rom_report(p, sound_assets)
             if ok:
-                ok = self._step_launch_mgba(p)
+                if self.web_export:
+                    from codegen.web_build import WebTemplateError, export_web
+                    destination = p.build_dir / f"{p.project_file.stem}-web.zip"
+                    try:
+                        export_web(p.rom_path, destination, p.settings, p.root, p.project_file.stem)
+                    except WebTemplateError as e:
+                        self._emit("diagnostic", build_error(str(e), "build"))
+                        ok = False
+                    else:
+                        self._emit("log_line", f"[web] Archive generated: {destination}")
+                else:
+                    ok = self._step_launch_mgba(p)
             if ok: self._emit("progress", 1.0)
 
             self._emit("log_line", f"[time] build total: {time.monotonic() - build_started:.1f} s")

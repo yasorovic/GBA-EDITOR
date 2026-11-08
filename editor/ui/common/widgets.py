@@ -1276,7 +1276,7 @@ class CollapsibleCard(QFrame):
         W.row("Priority", spin, card.body_layout)
         layout.addWidget(card)
 
-    `color` teinte le titre (périwinkle par défaut, via title_section) —
+    `color` teinte le titre (TEXT_NORM par défaut, via title_section) —
     réservé aux cartes dont le contexte donne une signification à cette
     couleur. `add_header_widget()` ajoute
     un bouton (+, −...) à droite du titre, en dehors de la zone cliquable
@@ -1310,36 +1310,50 @@ class CollapsibleCard(QFrame):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── En-tête : zone cliquable (chevron + titre) + boutons à part ──
+        # ── En-tête : zone cliquable (titre + flèche à droite) + boutons à part ──
+        # La carte a le fond du corps (QSS.card) ; l'en-tête se peint plus
+        # sombre par-dessus, le filet sépare les deux. La règle sans sélecteur
+        # rend les enfants transparents (ils ne repeignent pas le fond global
+        # des QWidget par-dessus l'en-tête).
         hdr = QWidget()
-        hdr.setStyleSheet("background:transparent;")
+        hdr.setObjectName("cardHeader")
+        hdr.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        hdr.setStyleSheet("QWidget { background:transparent; }"
+                          f"QWidget#cardHeader {{ background:{C.BG_PANEL}; }}")
         hl = QHBoxLayout(hdr)
-        hl.setContentsMargins(8, 6, 6, 6)
+        hl.setContentsMargins(4, 6, 8, 6)
         hl.setSpacing(4)
+
+        # Poignée : réordonne les cartes voisines du même layout (card_order).
+        from ui.common.drag_grip import DragGrip
+        from ui.common.tooltip import tooltip
+        self._grip = DragGrip()
+        self._grip.setToolTip(tooltip(title=label("common.card_drag")))
+        self._grip.set_ghost_source(lambda: self)
+        self._grip.released.connect(self._drop_at)
+        hl.addWidget(self._grip)
 
         toggle_area = QWidget()
         toggle_area.setObjectName("cardToggle")
         toggle_area.setCursor(Qt.CursorShape.PointingHandCursor)
         toggle_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        toggle_area.setStyleSheet(
-            "QWidget#cardToggle { background:transparent; border:none; }"
-            f"QWidget#cardToggle:hover {{ background:{C.BG_HOVER}; }}"
-        )
+        toggle_area.setStyleSheet("QWidget#cardToggle { background:transparent; border:none; }")
         ta_layout = QHBoxLayout(toggle_area)
         ta_layout.setContentsMargins(0, 0, 0, 0)
         ta_layout.setSpacing(6)
 
-        self._arrow = QLabel("▾" if expanded else "▸")
-        self._arrow.setFixedWidth(12)
-        self._arrow.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent; border:none;")
+        self._arrow = QLabel()
+        self._arrow.setFixedWidth(T.MD)
+        self._arrow.setStyleSheet("background:transparent; border:none;")
         self._title_lbl = QLabel(title)
         self._title_lbl.setFont(_FONT_UI_SM)
-        self._title_lbl.setStyleSheet(QSS.title_section(color))
-        # Sans ça, survoler chevron/titre enverrait un Leave à toggle_area.
+        self._title_lbl.setStyleSheet(QSS.title_section(color or C.TEXT_NORM))
+        # Sans ça, survoler flèche/titre enverrait un Leave à toggle_area.
         for w in (self._arrow, self._title_lbl):
             w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        ta_layout.addWidget(self._arrow)
         ta_layout.addWidget(self._title_lbl, 1)
+        ta_layout.addWidget(self._arrow)
+        self._set_arrow()
         toggle_area.mousePressEvent = lambda e: self.set_expanded(not self._expanded)
 
         hl.addWidget(toggle_area, 1)
@@ -1347,7 +1361,7 @@ class CollapsibleCard(QFrame):
         root.addWidget(hdr)
 
         self._sep = QFrame(); self._sep.setFrameShape(QFrame.Shape.HLine)
-        self._sep.setStyleSheet(f"color:{C.BORDER}; margin:0;")
+        self._sep.setStyleSheet(f"color:{C.BORDER_MID}; margin:0;")
         root.addWidget(self._sep)
 
         self._body = QWidget()
@@ -1381,6 +1395,80 @@ class CollapsibleCard(QFrame):
         if event.oldSize().width() != event.size().width():
             self.updateGeometry()
 
+    # ── Ordre des cartes ──────────────────────────────────────────
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        layout, cards = self._sibling_cards()
+        self._grip.setVisible(len(cards) > 1)
+        if len(cards) > 1:
+            self._restore_order(layout, cards)
+
+    def _panel_key(self) -> str | None:
+        """La première classe de l'appli (pas Qt) qui contient la carte."""
+        w = self.parentWidget()
+        while w is not None:
+            cls = type(w)
+            if not cls.__module__.startswith("PyQt6") and not isinstance(w, CollapsibleCard):
+                return f"{cls.__module__}.{cls.__qualname__}"
+            w = w.parentWidget()
+        return None
+
+    def _sibling_cards(self):
+        """Le QBoxLayout qui porte directement la carte, et ses cartes dans l'ordre."""
+        parent = self.parentWidget()
+        stack = [parent.layout()] if parent is not None and parent.layout() else []
+        while stack:
+            layout = stack.pop()
+            if layout.indexOf(self) >= 0:
+                if not isinstance(layout, QBoxLayout):
+                    return None, []
+                cards = [layout.itemAt(i).widget() for i in range(layout.count())]
+                return layout, [c for c in cards if isinstance(c, CollapsibleCard)]
+            stack.extend(layout.itemAt(i).layout() for i in range(layout.count())
+                         if layout.itemAt(i).layout() is not None)
+        return None, []
+
+    @staticmethod
+    def _place(layout, cards, ordered):
+        """Range `ordered` dans les places qu'occupent `cards`, le reste du layout intact."""
+        if ordered == cards:
+            return
+        slots = sorted(layout.indexOf(c) for c in cards)
+        stretch = {id(c): layout.stretch(layout.indexOf(c)) for c in cards}
+        for c in cards:
+            layout.removeWidget(c)
+        for slot, c in zip(slots, ordered):
+            layout.insertWidget(slot, c, stretch[id(c)])
+
+    def _restore_order(self, layout, cards):
+        from ui.common import card_order
+        key = self._panel_key()
+        saved = card_order.load(key) if key else []
+        rank = {t: i for i, t in enumerate(saved)}
+        known = [c for c in cards if c._title_lbl.text() in rank]
+        if len(known) < 2:
+            return
+        # Les cartes retenues reprennent leur ordre dans les places qu'elles
+        # occupent ; une carte inconnue (nouvelle) garde la sienne.
+        known_sorted = iter(sorted(known, key=lambda c: rank[c._title_lbl.text()]))
+        ordered = [next(known_sorted) if c in known else c for c in cards]
+        self._place(layout, cards, ordered)
+
+    def _drop_at(self, global_y: int):
+        layout, cards = self._sibling_cards()
+        if len(cards) < 2:
+            return
+        others = [c for c in cards if c is not self]
+        index = sum(1 for c in others
+                    if c.mapToGlobal(QPoint(0, c.height() // 2)).y() < global_y)
+        ordered = others[:index] + [self] + others[index:]
+        self._place(layout, cards, ordered)
+        key = self._panel_key()
+        if key:
+            from ui.common import card_order
+            card_order.save(key, [c._title_lbl.text() for c in ordered])
+
     def add_header_widget(self, w: QWidget):
         """Bouton (+ / −...) à droite du titre, hors zone de bascule."""
         self._header_row.addWidget(w)
@@ -1389,7 +1477,7 @@ class CollapsibleCard(QFrame):
         self._expanded = expanded
         self._body.setVisible(expanded)
         self._sep.setVisible(expanded)
-        self._arrow.setText("▾" if expanded else "▸")
+        self._set_arrow()
         self._apply_size_policy()
         # Sans ça, la carte garde parfois sa hauteur d'avant le temps d'un
         # cycle d'affichage : masquer _body invalide le layout de la carte
@@ -1414,6 +1502,13 @@ class CollapsibleCard(QFrame):
             QSizePolicy.Policy.Expanding if grow else QSizePolicy.Policy.Fixed,
         )
 
+    def _set_arrow(self):
+        """Triangle partagé (icons.arrow_icon) : pointe vers le haut quand la
+        carte est dépliée (un clic la replie), vers le bas quand elle est repliée."""
+        from ui.common import icons
+        icon = icons.arrow_icon("up" if self._expanded else "down", C.TEXT_DIM)
+        self._arrow.setPixmap(icon.pixmap(QSize(T.MD, T.MD)))
+
     def is_expanded(self) -> bool:
         return self._expanded
 
@@ -1422,7 +1517,36 @@ class CollapsibleCard(QFrame):
 
     def set_color(self, color: str | None):
         self._color = color
-        self._title_lbl.setStyleSheet(QSS.title_section(color))
+        self._title_lbl.setStyleSheet(QSS.title_section(color or C.TEXT_NORM))
+
+
+class CardInset(QWidget):
+    """
+    Bloc en retrait dans le corps d'une CollapsibleCard : un fond plus sombre
+    que la carte (celui de son en-tête) et un padding interne, sans cadre.
+    Il regroupe un ensemble qui se lit comme une unité (une liste de lignes,
+    une colonne de réglages à côté d'un aperçu) ; il n'encadre pas un champ
+    seul et ne s'imbrique pas dans un autre bloc. Les notes de la carte
+    restent hors du bloc.
+
+        inset = CardInset()
+        inset.inset_layout.addWidget(...)
+        card.body_layout.addWidget(inset)
+    """
+
+    PADDING = 8
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("cardInset")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        # La règle sans sélecteur rend les enfants transparents : sans elle,
+        # ceux qui n'ont pas de style à eux repeignent le fond global des QWidget.
+        self.setStyleSheet("QWidget { background:transparent; }"
+                           f"QWidget#cardInset {{ background:{C.BG_PANEL}; }}")
+        self.inset_layout = QVBoxLayout(self)
+        self.inset_layout.setContentsMargins(*(self.PADDING,) * 4)
+        self.inset_layout.setSpacing(6)
 
 
 # ──────────────────────────────────────────────────────────────────
