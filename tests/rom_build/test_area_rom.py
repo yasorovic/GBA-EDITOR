@@ -1,5 +1,6 @@
 """Les Areas à déclencheur, de bout en bout : un projet qui en pose une et dont un script répond à `on_area_*` se compile en
-ROM avec le vrai gcc, et le C émis contient la table `g_areas`, les contacts des emplacements posés et nés."""
+ROM avec le vrai gcc, et le C émis contient la table `g_areas`, les contacts des emplacements posés et nés. Une Area peut aussi
+porter son propre script (`on_start`, `on_update`, `on_actor_*`), compilé dans son fichier."""
 from __future__ import annotations
 
 import pytest
@@ -100,7 +101,7 @@ def test_un_projet_avec_areas_se_compile_et_emet_les_contacts_poses_et_pool(tmp_
     # déclencheur n'entre dans aucun test).
     assert "static const AreaFn _ar_on[" in main_c
     assert "_Hero_on_area_enter,0,Scene_01_Hero_on_area_exit}" in main_c
-    assert "area_contact_step(&g_areas[0],_a,_ar_allowed[_i][0],_ar_on[_i],&g_area_prev[_k][0]);" in main_c
+    assert "area_contact_step(&g_areas[0],_a,_ar_allowed[_i][0],_ar_on[_i],0,&g_area_prev[_k][0]);" in main_c
     assert "g_area_gen[_k]!=_a->gen" in main_c
     assert "area_contact_step(&g_areas[1]" not in main_c            # l'Area muette n'est pas testée
     # Le module `area` : les noms deviennent les références (rang + 1), et le script du héros les cite.
@@ -157,3 +158,71 @@ def test_une_zone_d_effet_se_compile_et_agit_sur_le_pose_et_le_spawne(tmp_path):
     assert "static const u8 _fx_rank[" in main_c                     # les rangs de boîte, par type d'emplacement
     assert "area_effects_apply(_fx,1,_a,_r," in main_c               # un seul pas pour le posé et le spawné
     assert "g_fx_rng=1;" in main_c                                   # la suite de la turbulence repart à chaque scène
+
+
+TRAP = """local hits = 0
+
+function on_start()
+  self.size = vec2(24, 24)
+end
+
+function on_update()
+  if hits > 3 then
+    self:deactivate()
+  end
+end
+
+function on_actor_enter(other, other_box)
+  if other_box.tag == "body" and self:overlaps(other) then
+    hits = hits + 1
+    other:hide()
+  end
+end
+
+function on_actor_exit(other)
+  other:show()
+end
+"""
+
+
+def test_une_area_scriptee_se_compile_et_recoit_les_contacts_des_poses_et_des_nes(tmp_path):
+    """Une Area qui porte un script : son fichier `<Scène>_<Area>_area.c` compile avec le vrai gcc, `on_start` et `on_update`
+    sont appelés par la scène, et ses `on_actor_*` passent par le même pas que les crochets des acteurs, pour le héros posé
+    comme pour la balle née du pool (aucun des deux n'a de crochet d'Area)."""
+    projet = Project.create(tmp_path / "Game", "Game")
+    scripts = projet.user_library_dir / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    (scripts / "Trap.lua").write_text(TRAP, encoding="utf-8")
+    (scripts / "Spawner.lua").write_text(SPAWNER, encoding="utf-8")
+    heros = Actor(name="Hero", x=40, y=56, is_player=True)
+    heros.components = [CollisionShapeComponent(id="body", tag="body", solid=True)]
+    balle = Prefab(name="Bullet", actor=Actor(name="Bullet"))
+    balle.actor.components = [CollisionShapeComponent(id="body", tag="body", solid=False)]
+    projet.prefabs.append(balle)
+    projet.prefabs.save(balle, None)
+    piege = Area(name="Trap", x=40, y=56)
+    piege.components.append(ScriptComponent(script="assets/scripts/Trap.lua"))
+    projet.scenes[0].actors.append(heros)
+    projet.scenes[0].areas.append(piege)
+    projet.scenes[0].script = "assets/scripts/Spawner.lua"
+    projet.save()
+
+    worker = BuildWorker(Project.open(projet.root), Toolchain())
+    worker._step_launch_mgba = lambda _p: True
+    diagnostics, verdict = [], []
+    worker.on("diagnostic", diagnostics.append)
+    worker.on("finished", verdict.append)
+    worker.run()
+    assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
+
+    build = projet.root / "build"
+    main_c = next(build.rglob("main.c")).read_text(encoding="utf-8")
+    trap_c = next(build.rglob("Scene_01_Trap_area.c")).read_text(encoding="utf-8")
+    assert "static const int self __attribute__((unused)) = 1;" in trap_c
+    assert "area_set_size(self," in trap_c and "area_overlaps_actor(self, other)" in trap_c
+    assert "Scene_01_Trap_area_on_start();" in main_c
+    assert "if(g_areas[0].active && !g_areas[0].held) Scene_01_Trap_area_on_update();" in main_c
+    # Les deux types (héros posé, balle née) entrent dans la passe sans crochet propre : le script de l'Area les écoute.
+    assert "static const AreaActorFn _ar_own[1][3]={{Scene_01_Trap_area_on_actor_enter,0,Scene_01_Trap_area_on_actor_exit}};" in main_c
+    assert "_ar_on[_i],_ar_own[0],&g_area_prev[_k][0]" in main_c
+    assert main_c.count("{0,0,0}") >= 2                               # une ligne de crochets d'acteur vide par type

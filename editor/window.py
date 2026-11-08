@@ -1904,13 +1904,14 @@ class MainWindow(QMainWindow):
 
     def _show_script_user(self, target):
         """Clic sur une ligne de « Voir les utilisations » d'un script : ouvrir le Scene Manager et y
-        sélectionner l'acteur, le prefab ou la scène qui le pointe. La sélection vient APRÈS le
+        sélectionner l'acteur, l'Area, le prefab ou la scène qui le pointe. La sélection vient APRÈS le
         changement d'écran — _show_screen vide le bus."""
-        from core.models.scene import Actor
+        from core.models.scene import Actor, Area
         if not self.project:
             return
-        if isinstance(target, Actor):
-            index = next((i for i, s in enumerate(self.project.scenes) if target in s.actors), None)
+        if isinstance(target, (Actor, Area)):
+            index = next((i for i, s in enumerate(self.project.scenes) if target in s.actors or target in s.areas),
+                         None)
             if index is None:
                 return
             self._switch_screen("Scenes")

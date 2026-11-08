@@ -8,6 +8,7 @@ propriétaire :
     "actor"   un acteur de scène ou un prefab (ils partagent `self` et les événements)
     "scene"   une scène
     "camera"  une caméra
+    "area"    une Area de scène (`self` est la référence de l'Area, jamais un acteur)
 
 Cette lecture est la source unique de la question « de quelle famille est ce
 script ? » : le validateur s'en sert pour refuser un fichier attaché à deux
@@ -18,7 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # famille → mot dit à l'auteur
-FAMILY_LABELS = {"actor": "acteur/prefab", "scene": "scène", "camera": "caméra"}
+FAMILY_LABELS = {"actor": "acteur/prefab", "scene": "scène", "camera": "caméra", "area": "Area"}
 
 
 def script_attachments(project) -> dict[str, dict[str, list[str]]]:
@@ -39,6 +40,10 @@ def script_attachments(project) -> dict[str, dict[str, list[str]]]:
                 attach(comp.script, "actor", f"actor \"{actor.name}\" ({scene.name})")
         for cam in scene.cameras:
             attach(getattr(cam, "script", ""), "camera", f"camera \"{cam.name}\"")
+        for area in scene.areas:
+            comp = area.get_component("script")
+            if comp and comp.active:
+                attach(comp.script, "area", f"area \"{area.name}\" ({scene.name})")
     for prefab in project.prefabs:
         comp = prefab.get_component("script")
         if comp and comp.active:

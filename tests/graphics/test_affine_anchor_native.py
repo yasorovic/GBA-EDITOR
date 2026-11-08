@@ -1,4 +1,5 @@
-"""L'ancrage d'un sprite affine, mesuré sur le VRAI C émis par `affine_oam_lines`.
+"""L'ancrage d'un sprite affine, mesuré sur le VRAI C émis par `affine_oam_lines` et sur la fonction du moteur qu'il
+appelle (`oam_write_affine`).
 
 Le cadre du sprite est un corps rigide accroché à l'actor : son centre vaut
 `position + R(rotation)·S(scale)·(offset + demi-cadre)`. Avec l'offset posé au
@@ -43,19 +44,36 @@ def _sinus_du_moteur() -> str:
     return texte[debut:fin]
 
 
+def _ecriture_affine_du_moteur() -> str:
+    """`oam_write_affine` telle que le moteur l'écrit (le C émis l'appelle), à compiler contre les structures de la sonde."""
+    texte = RUNTIME.read_text(encoding="utf-8")
+    debut = texte.index("BS_ATTR_IWRAM\nstatic int __attribute__((unused)) oam_write_affine(")
+    fin = texte.index("\n}\n", debut) + 3
+    return texte[debut:fin]
+
+
+# Les structures réduites des sondes, sous les noms du moteur, et ce que `oam_write_affine` lit autour d'elles.
+STRUCTURES = """
+typedef struct { int x, y, rotation, scale_x, scale_y; } A;
+typedef struct { int rotation, scale_x, scale_y, flip_h, flip_v, offset_x, offset_y,
+                 pivot_x, pivot_y, frame, obj_mode, priority, pal_bank, affine_slot; } O;
+typedef struct { u16 attr0, attr1, attr2, dummy; } S;
+typedef A Actor; typedef O OamEntry;
+A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0; AffCache g_aff_cache[1];
+int g_oam_dropped = 0;
+#define BS_ATTR_IWRAM
+"""
+
+
 def _source_sonde() -> str:
-    lignes = "\n".join(affine_oam_lines(0, _Forme(), bt=0, priority_expr="0"))
+    lignes = "\n".join(affine_oam_lines(0, _Forme(), bt=0))
     return f"""
 #include <stdio.h>
 #include <stdlib.h>
 typedef short s16; typedef unsigned short u16; typedef signed char s8; typedef unsigned char u8;
 {_sinus_du_moteur()}
-typedef struct {{ int x, y, rotation, scale_x, scale_y; }} A;
-typedef struct {{ int rotation, scale_x, scale_y, flip_h, flip_v, offset_x, offset_y,
-                  pivot_x, pivot_y, frame, obj_mode, priority, pal_bank, affine_slot; }} O;
-typedef struct {{ u16 attr0, attr1, attr2, dummy; }} S;
-A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0; AffCache g_aff_cache[1];
-int g_oam_dropped = 0;
+{STRUCTURES}
+{_ecriture_affine_du_moteur()}
 int main(int c, char** v) {{
     int _oamn = 0, _affn = 0;
     g_actors[0].x = atoi(v[1]) << 8;  g_actors[0].y = atoi(v[2]) << 8;
@@ -66,6 +84,7 @@ int main(int c, char** v) {{
     g_oam_entries[0].scale_x = g_oam_entries[0].scale_y = 256;
     {{
 {lignes}
+        int sx = (int)((unsigned)shadow_oam[0].attr1 << 23) >> 23, sy = (signed char)shadow_oam[0].attr0;   /* coin de la boîte */
         printf("%d %d\\n", sx + {FRAME}, sy + {FRAME});   /* centre de la texture */
     }}
     return 0;

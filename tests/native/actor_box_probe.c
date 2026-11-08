@@ -127,6 +127,15 @@ static void ap_exit(Actor *s, Area *a, u8 t)    { (void)s; (void)a; (void)t; s_a
 static void as_enter(Actor *s, Area *a, u8 t)   { (void)s; (void)a; s_area_ev[1][0]++; s_area_tag[1] = t; }
 static void as_collide(Actor *s, Area *a, u8 t) { (void)s; (void)a; (void)t; s_area_ev[1][1]++; }
 static void as_exit(Actor *s, Area *a, u8 t)    { (void)s; (void)a; (void)t; s_area_ev[1][2]++; }
+/* Le script de l'Area (`on_actor_*`) : il reçoit l'acteur et le tag de sa boîte. Ligne 0 pour le posé, 1 pour le né. */
+static int s_own_ev[2][3];
+static u8 s_own_tag[2];
+static int own_row(Actor *o) { return o == &g_actors[4] ? 0 : 1; }
+static void own_enter(Actor *o, u8 t)   { s_own_ev[own_row(o)][0]++; s_own_tag[own_row(o)] = t; }
+static void own_collide(Actor *o, u8 t) { (void)t; s_own_ev[own_row(o)][1]++; }
+static void own_exit(Actor *o, u8 t)    { (void)t; s_own_ev[own_row(o)][2]++; }
+/* Un crochet d'acteur qui détruit l'acteur : le script de l'Area ne doit pas recevoir un acteur mort. */
+static void ap_enter_destroy(Actor *s, Area *a, u8 t) { (void)a; (void)t; s->alive = 0; s->active = 0; }
 
 int main(void) {
     for (int i = 0; i < 64; i++) g_slot_link[i].parent = -1;   /* chaque emplacement est une racine */
@@ -666,18 +675,23 @@ int main(void) {
         /* Seul le rang 1 (les pieds) rencontre le tag de l'Area : le masque cuit au build vaut 0b10. */
         static const AreaFn sur_posee[3] = { ap_enter, ap_collide, ap_exit };
         static const AreaFn sur_pool[3] = { as_enter, as_collide, as_exit };
+        static const AreaActorFn script_area[3] = { own_enter, own_collide, own_exit };
         u16 prev_posee = 0, prev_pool = 0;
+        /* Chaque ligne : les crochets de l'acteur (posé puis né), puis ceux du script de l'Area pour chacun d'eux. */
         #define AREA_FRAME(nom, px, py) do {                                                            \
             g_actors[4].x = g_actors[5].x = (px) << 8; g_actors[4].y = g_actors[5].y = (py) << 8;       \
-            area_contact_step(&g_areas[0], &g_actors[4], 2, sur_posee, &prev_posee);                    \
-            area_contact_step(&g_areas[0], &g_actors[5], 2, sur_pool, &prev_pool);                      \
-            printf("%s %d %d %d %d %d %d\n", nom, s_area_ev[0][0], s_area_ev[0][1], s_area_ev[0][2],    \
-                   s_area_ev[1][0], s_area_ev[1][1], s_area_ev[1][2]);                                  \
+            area_contact_step(&g_areas[0], &g_actors[4], 2, sur_posee, script_area, &prev_posee);       \
+            area_contact_step(&g_areas[0], &g_actors[5], 2, sur_pool, script_area, &prev_pool);         \
+            printf("%s %d %d %d %d %d %d %d %d %d %d %d %d\n", nom,                                      \
+                   s_area_ev[0][0], s_area_ev[0][1], s_area_ev[0][2],                                   \
+                   s_area_ev[1][0], s_area_ev[1][1], s_area_ev[1][2],                                   \
+                   s_own_ev[0][0], s_own_ev[0][1], s_own_ev[0][2],                                      \
+                   s_own_ev[1][0], s_own_ev[1][1], s_own_ev[1][2]);                                     \
         } while (0)
         printf("area_refs %d %d %d %d\n", area_ref(&g_areas[0]), area_get_tag(1), area_get_active(1), area_get_tag(0));
         AREA_FRAME("area_1_loin", 0, 0);
         AREA_FRAME("area_2_entre", 100, 34);       /* les pieds (y 50..54) recouvrent l'Area ; le corps la touche à peine : rien */
-        printf("area_tag %d %d\n", s_area_tag[0], s_area_tag[1]);
+        printf("area_tag %d %d %d %d\n", s_area_tag[0], s_area_tag[1], s_own_tag[0], s_own_tag[1]);
         AREA_FRAME("area_3_dure", 100, 34);
         AREA_FRAME("area_4_corps_exclu", 100, 45);  /* le corps recouvre aussi, mais son tag n'est pas permis : un seul contact */
         AREA_FRAME("area_5_sort", 200, 34);
@@ -693,6 +707,21 @@ int main(void) {
         g_actors[4].active = g_actors[5].active = 0; g_actors[4].alive = g_actors[5].alive = 0;
         AREA_FRAME("area_11_detruit", 100, 34);        /* détruire est terminal : aucune sortie */
         #undef AREA_FRAME
+        {   /* Sans script d'Area (`own` NULL) : seul l'acteur apprend le contact. Puis un crochet d'acteur qui le détruit :
+               le script de l'Area ne reçoit pas cet acteur mort. */
+            Actor sauve = g_actors[4];
+            g_actors[4].active = 1; g_actors[4].alive = 1;
+            g_actors[4].x = 100 << 8; g_actors[4].y = 34 << 8;
+            for (int k = 0; k < 3; k++) s_own_ev[0][k] = 0;
+            u16 prev = 0;
+            area_contact_step(&g_areas[0], &g_actors[4], 2, sur_posee, 0, &prev);
+            printf("area_sans_script %d\n", s_own_ev[0][0]);
+            static const AreaFn detruit[3] = { ap_enter_destroy, 0, 0 };
+            prev = 0;
+            area_contact_step(&g_areas[0], &g_actors[4], 2, detruit, script_area, &prev);
+            printf("area_acteur_detruit_par_son_crochet %d %d\n", g_actors[4].alive, s_own_ev[0][0]);
+            g_actors[4] = sauve;
+        }
         /* Le masque : un bit par RANG de boîte de l'acteur, filtré par `allowed` ; une Area ou une boîte inactive ne touche rien. */
         g_actors[4].alive = 1; g_actors[4].active = 1; g_actors[4].x = 100 << 8; g_actors[4].y = 45 << 8;
         printf("area_masque %d %d %d\n", area_overlap_mask(&g_areas[0], &g_actors[4], 0xFFFF),

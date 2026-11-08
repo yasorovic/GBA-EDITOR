@@ -1,13 +1,13 @@
 # Zones de jeu (Area)
 
 Ce guide pose une **Area** : une zone de jeu sans sprite, qui prévient le script d'un acteur quand
-celui-ci y entre, y reste ou en sort. Elle sert à une porte, un piège, une sortie de niveau ou un
+celui-ci y entre, y reste ou en sort, et peut porter son propre script. Elle sert à une porte, un piège, une sortie de niveau ou un
 déclencheur de cinématique.
 
-Une Area est un volume pur : pas de sprite, pas d'OAM, pas de script à elle, et aucune place dans le
-pool d'acteurs. Elle porte une **forme** de collision (un rectangle) et, si elle doit prévenir des
-scripts, un **déclencheur**. Ce sont les **acteurs** qui reçoivent les événements : l'Area, elle, ne
-réagit à rien.
+Une Area est un volume léger : pas de sprite, pas d'OAM, et aucune place dans le pool d'acteurs. Elle
+porte une **forme** de collision (un rectangle) et, si elle doit prévenir des scripts, un
+**déclencheur**. Les **acteurs** qui la touchent reçoivent les événements ; un **script d'Area**, s'il
+existe, les reçoit aussi (voir la section 4).
 
 **Ce qu'il vous faut :** une scène avec un acteur qui se déplace et qui porte une boîte **Collision**
 et un script (voir [Déplacer un acteur](../acteurs/deplacer-acteur.md)).
@@ -102,13 +102,63 @@ end
   au projet permet de retrouver le même usage dans chaque scène avec `area.tag`.
 - `my_box` désigne la boîte de l'acteur qui touche la zone. Chaque boîte autorisée reçoit ses propres
   événements. Filtrez sur `my_box.tag` si une seule boîte doit déclencher l'action.
-- Les événements ne sont envoyés qu'à l'acteur qui touche l'Area. Un acteur **détruit** dans la zone
-  n'apprend aucune sortie ; une Area **désactivée** envoie `on_area_exit` aux acteurs encore en jeu.
+- Les événements sont envoyés à l'acteur qui touche l'Area, et au script de l'Area s'il en a un. Un
+  acteur **détruit** dans la zone n'apprend aucune sortie ; une Area **désactivée** envoie `on_area_exit`
+  aux acteurs encore en jeu.
 
 Un acteur né pendant la partie (`actor:spawn`) reçoit les mêmes événements qu'un acteur posé dans
 l'éditeur : il n'y a qu'un seul chemin pour les deux.
 
-## 4. Retrouver une Area depuis n'importe où
+## 4. Donner un script à l'Area
+
+La carte **Script** de l'inspecteur attache un script à l'Area, comme pour un acteur. Dans ce script,
+`self` désigne **l'Area elle-même** : ses propriétés et ses actions sont celles du tableau de la
+section suivante (`self.name`, `self.position`, `self:deactivate()`…). `self` n'est jamais un acteur.
+
+```lua
+local passages = 0
+
+function on_start()
+    self.size = vec2(32, 16)
+end
+
+function on_update()
+    if passages >= 3 then
+        self:deactivate()                     -- le piège ne sert que trois fois
+    end
+end
+
+function on_actor_enter(other, other_box)
+    if other_box.tag == "body" then
+        passages = passages + 1
+        other:hide()
+    end
+end
+
+function on_actor_exit(other, other_box)
+    other:show()
+end
+```
+
+| Événement | Quand |
+|---|---|
+| `on_start()` | à l'entrée de la scène, même si l'Area est inactive |
+| `on_update()` | à chaque frame, après les acteurs, tant que l'Area est active et que son parent est en jeu |
+| `on_actor_enter(other, other_box)` | première frame de contact d'un acteur |
+| `on_actor_collide(other, other_box)` | chaque frame suivante du contact |
+| `on_actor_exit(other, other_box)` | première frame sans contact |
+
+- `other` est l'acteur qui touche l'Area, `other_box` sa boîte en contact (`other_box.tag`).
+- Les contacts demandent la case **Trigger**, et suivent la même matrice de tags que ceux des acteurs.
+- L'acteur et l'Area sont prévenus par le **même** test : l'acteur d'abord (`on_area_*`), puis l'Area
+  (`on_actor_*`). Un acteur que son propre `on_area_enter` détruit n'arrive pas jusqu'au script de
+  l'Area.
+- Un acteur posé et un acteur créé par `actor:spawn` déclenchent les mêmes événements.
+- Un script d'Area est compilé pour **son** Area : le même fichier attaché à deux Areas donne deux
+  copies indépendantes, chacune avec ses variables. Un fichier ne peut pas servir à la fois à une Area
+  et à un acteur, une scène ou une caméra.
+
+## 5. Retrouver une Area depuis n'importe où
 
 Un script (d'acteur ou de scène) obtient une Area par son nom, comme `actor:get` pour un acteur :
 
@@ -145,7 +195,7 @@ end
 Renommer une Area dans l'éditeur réécrit aussi les `area:get("…")` et les `area.name == "…"` des
 scripts, et l'annulation les remet.
 
-## 5. Faire agir la zone sur la physique
+## 6. Faire agir la zone sur la physique
 
 Une Area peut aussi pousser les corps qui la traversent, sans script ni événement. Dans la carte **Physics
 effects** de l'inspecteur, cochez l'effet voulu :
@@ -170,7 +220,7 @@ Règles :
 - Le coût se lit dans le journal de débogage : le compteur `fx=` donne le nombre de couples (zone, corps) testés
   par frame.
 
-## 6. Faire sonner la zone
+## 7. Faire sonner la zone
 
 Une Area peut aussi jouer un son d'ambiance (une cascade, un moteur, le vent dans un couloir) sans script. Dans la carte
 **Physics effects**, cochez **Sound emitter** et choisissez un **Sound effect** du projet.
@@ -213,9 +263,9 @@ La piste continue à jouer pendant le changement de volume.
 
 ## Choisir entre une Area et un acteur sensor
 
-Un **acteur** avec une boîte capteur convient à un déclencheur qui a besoin d'un sprite, d'un script
-propre ou d'être créé pendant le jeu. Une **Area** convient à un volume posé dans la scène qui
-prévient les acteurs qui le touchent, modifie la physique ou émet un son.
+Un **acteur** avec une boîte capteur convient à un déclencheur qui a besoin d'un sprite ou d'être
+créé pendant le jeu. Une **Area** convient à un volume posé dans la scène qui prévient les acteurs qui
+le touchent, réagit par son propre script, modifie la physique ou émet un son.
 
 Une Area suit la scène : elle ne naît pas pendant la partie et ne se détruit pas. Elle ne bouge que
 si un script écrit `area.position` (sans parent), ou si son parent bouge.

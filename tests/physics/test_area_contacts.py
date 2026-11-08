@@ -57,7 +57,7 @@ def test_c_le_pose_et_le_spawne_suivent_la_meme_sequence(sortie_sonde):
     frames = ["area_1_loin", "area_2_entre", "area_3_dure", "area_4_corps_exclu", "area_5_sort", "area_6_rentre",
               "area_7_area_inactive", "area_8_reactive", "area_9_acteur_inactif", "area_10_reactive", "area_11_detruit"]
     for nom in frames:
-        pose, spawne = sortie_sonde[nom][:3], sortie_sonde[nom][3:]
+        pose, spawne = sortie_sonde[nom][:3], sortie_sonde[nom][3:6]
         assert pose == spawne, nom
     assert [sortie_sonde[n][:3] for n in frames] == [
         [0, 0, 0],     # loin : rien
@@ -75,7 +75,27 @@ def test_c_le_pose_et_le_spawne_suivent_la_meme_sequence(sortie_sonde):
 
 
 def test_c_le_tag_arrive_au_script_celui_de_la_boite_de_l_acteur(sortie_sonde):
-    assert sortie_sonde["area_tag"] == [1, 1]
+    assert sortie_sonde["area_tag"] == [1, 1, 1, 1]      # l'acteur posé, le né, puis le script de l'Area pour chacun
+
+
+def test_c_le_script_de_l_area_recoit_les_memes_contacts_que_l_acteur(sortie_sonde):
+    """Un seul test de recouvrement prévient les deux côtés : à chaque frame, le script de l'Area a compté pour l'acteur posé et
+    pour l'acteur né exactement ce que leurs propres crochets ont compté (posé = spawné, côté Area aussi)."""
+    frames = ["area_1_loin", "area_2_entre", "area_3_dure", "area_4_corps_exclu", "area_5_sort", "area_6_rentre",
+              "area_7_area_inactive", "area_8_reactive", "area_9_acteur_inactif", "area_10_reactive", "area_11_detruit"]
+    for nom in frames:
+        ligne = sortie_sonde[nom]
+        assert ligne[6:9] == ligne[:3], nom          # script de l'Area pour le posé = crochets du posé
+        assert ligne[9:12] == ligne[3:6], nom        # script de l'Area pour le né = crochets du né
+    assert sortie_sonde["area_11_detruit"][6:9] == [4, 2, 2]
+
+
+def test_c_sans_script_d_area_seul_l_acteur_est_prevenu(sortie_sonde):
+    assert sortie_sonde["area_sans_script"] == [0]
+
+
+def test_c_le_script_de_l_area_ne_recoit_pas_un_acteur_que_son_crochet_a_detruit(sortie_sonde):
+    assert sortie_sonde["area_acteur_detruit_par_son_crochet"] == [0, 0]
 
 
 def test_c_le_masque_compte_un_bit_par_rang_de_boite_filtre_par_les_tags_permis(sortie_sonde):
@@ -180,10 +200,55 @@ def test_la_passe_ne_garde_que_les_types_dont_le_script_repond(tmp_path):
     assert "static const AreaFn _ar_on[1][3]={{Hero_on_area_enter,0,Hero_on_area_exit}};" in code
     assert "static const u16 _ar_allowed[1][1]={{1}};" in code
     assert "SLOT_EACH(_k)" in code and "debug_physics_area_test();" in code
-    assert "area_contact_step(&g_areas[0],_a,_ar_allowed[_i][0],_ar_on[_i],&g_area_prev[_k][0]);" in code
+    assert "area_contact_step(&g_areas[0],_a,_ar_allowed[_i][0],_ar_on[_i],0,&g_area_prev[_k][0]);" in code
+    assert "_ar_own" not in code                                     # aucune Area n'a de script : aucune table de plus
     assert "g_area_gen[_k]!=_a->gen" in code                         # la mémoire repart de zéro quand l'occupant change
     # Rien à émettre sans aucun crochet : pas de table, pas de test par frame.
     assert area_contact_lines(p, scene, actors, [], ["Hero", "Rock"], lambda s, ev: False) == []
+
+
+def _scripted(tmp_path, scene, area_name: str, source: str = "function on_actor_enter(other)\nend\n"):
+    """Donne un script Lua à l'Area `area_name`, écrit dans le projet de la scène."""
+    from core.models.components import ScriptComponent
+    p = _projet(tmp_path, scene)
+    path = tmp_path / "assets" / f"{area_name}.lua"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8")
+    area = next(a for a in scene.areas if a.name == area_name)
+    area.components.append(ScriptComponent(script=p.asset_rel(path)))
+    return p
+
+
+def test_le_script_d_une_area_est_prevenu_meme_si_aucun_acteur_n_ecoute(tmp_path):
+    """Un type sans crochet d'Area entre dans la passe dès qu'une Area scriptée l'écoute ; seule cette Area est testée pour lui."""
+    from codegen.runtime_codegen.physics.areas import area_contact_lines
+    scene = Scene(name="S", areas=[_area("Door"), _area("Quiet", x=90)])
+    hero = _actor("Hero")
+    scene.actors = [hero]
+    p = _scripted(tmp_path, scene, "Door")
+    code = "\n".join(area_contact_lines(p, scene, [(hero, None)], [], ["Hero"],
+                                        lambda s, ev: s == "S_Door_area" and ev == "on_actor_enter"))
+    assert "static const AreaFn _ar_on[1][3]={{0,0,0}};" in code      # l'acteur n'écoute rien
+    assert "static const AreaActorFn _ar_own[2][3]={{S_Door_area_on_actor_enter,0,0},{0,0,0}};" in code
+    assert "_ar_allowed[1][2]={{1,0}}" in code                       # Quiet : personne n'écoute, jamais testée
+    assert "_ar_on[_i],_ar_own[0],&g_area_prev[_k][0]" in code
+
+
+def test_les_points_d_entree_d_un_script_d_area(tmp_path):
+    """`on_start` à l'entrée de la scène, `on_update` chaque frame si l'Area est active et non tenue, et les `extern` de tous
+    ses points d'entrée (le codegen pose un corps vide pour ceux que le script n'écrit pas)."""
+    from codegen.runtime_codegen.physics.areas import area_extern_lines, area_start_lines, area_update_lines
+    scene = Scene(name="S", areas=[_area("Quiet"), _area("Door")])
+    p = _scripted(tmp_path, scene, "Door", "function on_update()\nend\n")
+    defined = {"S_Door_area": {"on_update"}}
+    has = lambda s, ev: ev in defined.get(s, ())
+    assert area_update_lines(p, scene, has) == [
+        "    if(g_areas[1].active && !g_areas[1].held) S_Door_area_on_update();"]
+    assert area_start_lines(p, scene, has) == []                     # pas d'on_start écrit : pas d'appel
+    externs = area_extern_lines(p, scene)
+    assert "extern void S_Door_area_on_update(void);" in externs
+    assert any(e.startswith("extern void S_Door_area_on_actor_exit(Actor* other") for e in externs)
+    assert not any("Quiet" in e for e in externs)                    # une Area sans script n'a rien à déclarer
 
 
 def test_un_modele_ne_passe_par_le_meme_parcours_que_les_poses(tmp_path):

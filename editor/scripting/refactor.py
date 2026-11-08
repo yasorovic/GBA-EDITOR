@@ -425,7 +425,7 @@ def _cached_values(path: Path, domain: str) -> list[str]:
 
 def _scene_spawn_closure(project, scene) -> tuple[set[Path], set[str]]:
     """(scripts compilés pour cette scène, prefabs qu'ils spawnent) : point fixe :
-    le script de la scène, ceux de ses acteurs et de leurs prefabs, ceux des
+    le script de la scène, ceux de ses Areas, de ses acteurs et de leurs prefabs, ceux des
     prefabs de son pool DÉCLARÉ, puis ceux des prefabs que ces scripts spawnent
     à leur tour. Seuls les noms littéraux sont vus."""
     prefab_by_name = {pf.name: pf for pf in project.prefabs}
@@ -438,6 +438,8 @@ def _scene_spawn_closure(project, scene) -> tuple[set[Path], set[str]]:
             scripts.add(project.asset_abs(rel).resolve())
 
     add_script(scene)
+    for area in scene.areas:
+        add_script(area)
     for a in scene.actors:
         add_script(a)
         if getattr(a, "prefab_name", "") in prefab_by_name:

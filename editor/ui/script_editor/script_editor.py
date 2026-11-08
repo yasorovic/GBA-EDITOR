@@ -29,7 +29,7 @@ class ScriptEditorScreen(QWidget):
     """Écran complet d'édition de script Lua."""
 
     back_requested = pyqtSignal()
-    script_user_requested = pyqtSignal(object)   # Actor | Prefab | Scene qui utilise le script ouvert en consultation
+    script_user_requested = pyqtSignal(object)   # Actor | Area | Prefab | Scene qui utilise le script ouvert en consultation
 
     def __init__(self, parent=None):
         super().__init__(parent)

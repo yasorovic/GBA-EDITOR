@@ -524,8 +524,17 @@ def _check_audio_emitters(ctx: ValidationContext, scene):
 
 def _check_area_handlers(ctx: ValidationContext, scene):
     """Un acteur posé dont le script répond à `on_area_*` n'a rien à entendre si la scène n'a aucune Area à déclencheur : le
-    handler ne sera jamais appelé. (Les scripts des modèles du pool ne sont pas lus ici : leur scène n'est pas connue.)"""
-    from scripting.api import AREA_EVENTS
+    handler ne sera jamais appelé. (Les scripts des modèles du pool ne sont pas lus ici : leur scène n'est pas connue.)
+    De même, le script d'une Area qui répond à `on_actor_*` n'entend rien si cette Area n'a pas de déclencheur actif."""
+    from scripting.api import AREA_EVENTS, AREA_SCRIPT_CONTACT_EVENTS
+    for area in scene.areas:
+        comp = area.get_component("script")
+        path = ctx.project.asset_abs(comp.script) if comp and comp.active and comp.script else None
+        if path and path.suffix.lower() == ".lua" and not (area.is_trigger() and area.shape() is not None):
+            handled = [ev for ev in AREA_SCRIPT_CONTACT_EVENTS if ev in ctx.script_functions(path)]
+            if handled:
+                ctx.warn(area, f"{', '.join(handled)} will never be called: Area \"{area.name}\" has no active Trigger "
+                               "with a shape. Tick Trigger on the Area, or remove the handler.")
     if any(a.is_trigger() and a.shape() is not None for a in scene.areas):
         return
     for actor in scene.actors:

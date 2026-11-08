@@ -1,7 +1,8 @@
-"""AreaInspector : une Area de la scène (position, forme de collision, note).
+"""AreaInspector : une Area de la scène (position, forme de collision, effets, script, note).
 
 La forme est celle d'un acteur : le même éditeur (`CollisionEditor`) l'affiche, avec les réglages qui n'ont pas de sens
-pour une Area en moins (cf. `Area.conform_shapes`). Le nom se change dans l'en-tête partagé, comme pour un acteur."""
+pour une Area en moins (cf. `Area.conform_shapes`). Le script aussi : l'éditeur du `ScriptComponent` des acteurs
+(`ScriptEditor`). Le nom se change dans l'en-tête partagé, comme pour un acteur."""
 from __future__ import annotations
 
 from typing import Optional
@@ -13,7 +14,8 @@ from PyQt6.QtWidgets import QCheckBox, QComboBox, QSpinBox, QVBoxLayout, QWidget
 from core.command_dispatcher import get_dispatcher
 from core.history import AddListItemCmd, SetFieldCmd, get_history
 from core.models.components import (
-    AudioEmitterComponent, CollisionShapeComponent, ForceFieldComponent, GravityOverrideComponent, TriggerComponent,
+    AudioEmitterComponent, CollisionShapeComponent, ForceFieldComponent, GravityOverrideComponent, ScriptComponent,
+    TriggerComponent,
 )
 from core.models.scene import Area, Scene
 from core.project import Project
@@ -24,6 +26,7 @@ from ui.common.theme import C, T
 from ui.common.tooltip import tooltip
 from ui.common.widgets import CollapsibleCard, NotesEdit, W
 from .component_editors.collision import CollisionEditor
+from .component_editors.script import ScriptEditor
 
 _COORD_RANGE = 32767
 
@@ -42,8 +45,9 @@ _EFFECT_NAMES = {GravityOverrideComponent: "gravity_override", ForceFieldCompone
 
 
 class AreaInspector(QWidget):
-    """Édite l'Area sélectionnée. `_actor`, `_scene`, `_project`, `_set_comp` et `_field_syncers` sont ce que
-    `CollisionEditor` attend de son inspecteur (c'est le contrat de `BaseComponentEditor`)."""
+    """Édite l'Area sélectionnée. `_actor`, `_scene`, `_project`, `_set_comp`, `_field_syncers`, `_save_component_change`
+    et `_script_open_fn` sont ce que `CollisionEditor` et `ScriptEditor` attendent de leur inspecteur (c'est le contrat de
+    `BaseComponentEditor`)."""
     changed = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -53,6 +57,8 @@ class AreaInspector(QWidget):
         self._actor: Optional[Area] = None      # l'Area : nom exigé par le contrat des éditeurs de composants
         self._blocking = False
         self._field_syncers: dict = {}
+        self._script_open_fn = None      # injecté par l'inspecteur dynamique (ouvre un script dans l'éditeur)
+        self._script_comp: Optional[ScriptComponent] = None
 
         scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
@@ -105,6 +111,10 @@ class AreaInspector(QWidget):
         self._layout.addWidget(self._shape_card)
         self._shape_container: Optional[QWidget] = None
         self._build_effects_card()
+        # Le script : reconstruit à chaque chargement, comme la forme.
+        self._script_card = CollapsibleCard(label('areainsp.script'))
+        self._layout.addWidget(self._script_card)
+        self._script_container: Optional[QWidget] = None
         self._layout.addStretch()
 
     # ── Effets physiques ──────────────────────────────────────────
@@ -248,6 +258,7 @@ class AreaInspector(QWidget):
         finally:
             self._blocking = False
         self._build_shape(area)
+        self._build_script(area)
 
     def _refresh_parent_choices(self) -> None:
         """Les acteurs posés de la scène, et « (none) ». Un parent disparu reste visible plutôt que réécrit en silence : le build
@@ -283,6 +294,37 @@ class AreaInspector(QWidget):
             CollisionEditor(self).build(shape, None, layout)
         self._shape_card.body_layout.addWidget(container)
         self._shape_container = container
+
+    def _build_script(self, area: Area) -> None:
+        """Le `ScriptComponent` de l'Area, ou un composant neuf, pas encore rangé : il n'entre dans l'Area qu'au premier
+        script choisi (cf. `_save_component_change`), pour qu'une Area sans script ne gagne pas de composant vide."""
+        if self._script_container is not None:
+            self._script_card.body_layout.removeWidget(self._script_container)
+            self._script_container.deleteLater()
+        self._script_comp = area.get_component("script") or ScriptComponent()
+        container = QWidget()
+        container.setStyleSheet(f"background:{C.BG_BASE};")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(8, 6, 8, 8)
+        layout.setSpacing(6)
+        ScriptEditor(self).build(self._script_comp, None, layout)
+        self._script_card.body_layout.addWidget(container)
+        self._script_container = container
+
+    def _save_component_change(self, _comp=None) -> None:
+        """Appelé par `ScriptEditor` après qu'il a écrit `script` sur le composant. Le premier script choisi range le
+        composant dans l'Area (une entrée d'historique) ; ensuite, il suffit d'enregistrer."""
+        area, comp = self._actor, self._script_comp
+        if area is None or comp is None:
+            return
+        if comp not in area.components and comp.script:
+            get_history().push(AddListItemCmd(area.components, comp, persist_fn=self._persist,
+                                              label=f"{area.name}.script"))
+            return
+        self._persist()
+
+    def set_script_open_fn(self, fn) -> None:
+        self._script_open_fn = fn
 
     def _shape(self) -> Optional[CollisionShapeComponent]:
         """La forme que l'inspecteur édite : la première de l'Area."""

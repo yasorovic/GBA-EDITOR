@@ -45,6 +45,7 @@ from codegen.runtime_codegen.headers import generate_actor_types, generate_runti
 from codegen.runtime_codegen.lua_compiler import transpile_all
 from codegen.runtime_codegen.main_gen import generate_main
 from codegen.runtime_codegen.physics.body import without_scene_physics
+from codegen.runtime_codegen.physics.areas import area_hook_prefix, scripted_areas
 from codegen.runtime_codegen.gen_scene_query import ui_image_sprites
 from core.models.palette import OWN_PAL_BANK
 from core.models.components import SpriteComponent
@@ -1033,6 +1034,9 @@ class BuildWorker(EventEmitter, threading.Thread):
             scene_script = getattr(scene, "script", "")
             if scene_script:
                 _collect_events(c_sym(scene.name) + "_scene", p.asset_abs(scene_script))
+            # Les scripts d'Area : la clé est le préfixe de leurs points d'entrée (`<Scène>_<Area>_area`).
+            for _rank, area, area_sp in scripted_areas(p, scene):
+                _collect_events(area_hook_prefix(scene, area), area_sp)
 
         # Prefabs poolés : les fonctions émises sont PER-SCÈNE (`<Scène>_<Prefab>`),
         # donc les events se collectent sous cette même clé,

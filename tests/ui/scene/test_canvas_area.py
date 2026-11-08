@@ -572,6 +572,32 @@ def test_l_emetteur_sonore_s_ajoute_choisit_son_effet_et_s_annule(qapp, editor):
     insp.deleteLater()
 
 
+def test_la_carte_script_range_le_composant_au_premier_script_et_s_annule(qapp, editor):
+    """Une Area sans script ne gagne pas de composant vide à l'ouverture de l'inspecteur ; le premier script choisi l'y range
+    (une entrée d'historique), et le script devient de la famille « area »."""
+    from core.models.components import ScriptComponent
+    from core.script_owners import family_of_script
+    from ui.scene_manager.inspectors.area_inspector import AreaInspector
+    project = editor._project
+    area = project.active_scene.areas[0]
+    insp = AreaInspector()
+    opened = []
+    insp.set_script_open_fn(opened.append)
+    insp.load(area, project, project.active_scene)
+    assert area.get_component("script") is None and insp._script_comp is not None
+    path = project.root / "assets" / "Door.lua"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("function on_actor_enter(other)\nend\n", encoding="utf-8")
+    insp._script_comp.script = project.asset_rel(path)        # ce que fait `ScriptEditor` quand un script est choisi
+    insp._save_component_change(None)
+    comp = area.get_component("script")
+    assert isinstance(comp, ScriptComponent) and comp.script == project.asset_rel(path)
+    assert family_of_script(project, path) == "area"
+    get_history().undo()                                       # le composant ressort de l'Area
+    assert area.get_component("script") is None
+    insp.deleteLater()
+
+
 def test_l_inspecteur_masque_ce_qui_n_a_pas_de_sens_pour_une_area_et_ses_edits_sont_annulables(qapp, editor):
     from ui.scene_manager.inspectors.area_inspector import AreaInspector
     project = editor._project

@@ -12,24 +12,20 @@ from codegen.runtime_codegen.gen_affine import affine_oam_lines
 from core.models.components import SpriteComponent
 from core.models.scene import Actor
 from native_toolchain import compilateur_hote, environnement
-from test_affine_anchor_native import _Forme, _sinus_du_moteur
+from test_affine_anchor_native import STRUCTURES, _Forme, _ecriture_affine_du_moteur, _sinus_du_moteur
 
 
 def _source() -> str:
     sc = SpriteComponent()
     sc.affine_transform = True
-    lignes = "\n".join(affine_oam_lines(0, _Forme(), bt=0, priority_expr="0"))
+    lignes = "\n".join(affine_oam_lines(0, _Forme(), bt=0))
     return f"""
 #include <stdio.h>
 #include <string.h>
 typedef short s16; typedef unsigned short u16; typedef signed char s8; typedef unsigned char u8;
 {_sinus_du_moteur()}
-typedef struct {{ int x, y, rotation, scale_x, scale_y; }} A;
-typedef struct {{ int rotation, scale_x, scale_y, flip_h, flip_v, offset_x, offset_y,
-                  pivot_x, pivot_y, frame, obj_mode, priority, pal_bank, affine_slot; }} O;
-typedef struct {{ u16 attr0, attr1, attr2, dummy; }} S;
-A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0; AffCache g_aff_cache[1];
-int g_oam_dropped = 0;
+{STRUCTURES}
+{_ecriture_affine_du_moteur()}
 
 /* Les entrées de la clé, dans l'ordre : rotation, rotation locale, échelles (acteur x y, sprite x y), décalage x y,
    pivot x y, flips h v. */

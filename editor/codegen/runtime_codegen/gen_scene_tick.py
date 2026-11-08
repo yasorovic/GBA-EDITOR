@@ -18,7 +18,7 @@ from codegen.runtime_codegen.gen_scene_query import (
 from codegen.runtime_codegen.gen_sprite import anim_oam_pass_lines, resolve_initial_appearance
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.model_desc import hook_pass_lines, model_desc_lines, sfx_input_pass_lines
-from codegen.runtime_codegen.physics.areas import area_contact_lines, area_parent_lines
+from codegen.runtime_codegen.physics.areas import area_contact_lines, area_parent_lines, area_update_lines
 from codegen.runtime_codegen.physics.audio_emitters import emitter_tick_lines
 from codegen.runtime_codegen.physics.contacts import contact_tick_lines
 from codegen.runtime_codegen.physics.body import project_has_one_way, project_sets_gravity
@@ -85,6 +85,8 @@ def gen_scene_tick(
 
     # on_update des acteurs, posés puis nés : le crochet se lit au descripteur de modèle.
     L += hook_pass_lines(scene, pi, placed_scripts, _def, "on_update")
+    # on_update des scripts d'Area, après ceux des acteurs.
+    L += area_update_lines(p, scene, _def)
 
     # Hiérarchie : APRÈS les scripts — un `on_update` peut avoir déplacé le
     # parent, et l'enfant doit suivre DANS la même frame — et AVANT la

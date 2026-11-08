@@ -1,16 +1,21 @@
 """Émission des Areas d'une scène : la table `g_areas` posée à l'entrée de la scène, et les contacts avec les acteurs qui les
 touchent.
 
-Une Area n'a pas de script : seul l'acteur qui la touche apprend le contact (`on_area_enter/collide/exit`). Un seul parcours des
-emplacements (`SLOT_EACH`), posés ou nés, lit par type d'emplacement (`Actor.type_id`) les crochets et les rangs de boîtes que la
-matrice des tags laisse toucher chaque Area, et appelle `area_contact_step` avec la mémoire du recouvrement de la frame précédente,
-rangée par emplacement (règle « posé = spawné »).
+L'acteur qui touche une Area apprend le contact (`on_area_enter/collide/exit`) ; le script de l'Area, si elle en a un, l'apprend
+aussi (`on_actor_enter/collide/exit`), par le même test. Un seul parcours des emplacements (`SLOT_EACH`), posés ou nés, lit par
+type d'emplacement (`Actor.type_id`) les crochets et les rangs de boîtes que la matrice des tags laisse toucher chaque Area, et
+appelle `area_contact_step` avec la mémoire du recouvrement de la frame précédente, rangée par emplacement (règle « posé = spawné »).
+
+Le script d'une Area est compilé une fois par Area (`<Scène>_<Area>_area.c`, cf. `lua_compiler`) : ses points d'entrée sont
+appelés ici par leur nom, `on_start` à l'entrée de la scène et `on_update` à chaque frame.
 
 Une Area sans déclencheur (`TriggerComponent`) n'entre dans aucun test : elle est dans `g_areas` pour ce qui la lira, et ne coûte
 rien par frame."""
 from __future__ import annotations
 
-from codegen.c_names import sym as c_sym
+from pathlib import Path
+
+from codegen.c_names import sym as c_sym, area_script_sym
 from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.gen_actor_hierarchy import local_transform
 from codegen.runtime_codegen.gen_scene_query import actor_collision_shapes
@@ -20,12 +25,51 @@ from codegen.runtime_codegen.shared_pool_gen import owners as model_owners, shar
 from core.models.components import ForceFieldComponent, GravityOverrideComponent
 from core.models.field_value import FieldValue as _FV, var_names_from_project
 from core.models.settings import tags_collide
-from scripting.api import AREA_EVENTS
+from scripting.api import AREA_EVENTS, AREA_SCRIPT_CONTACT_EVENTS, KNOWN_AREA_EVENTS, scene_event_sig
 
 
 def trigger_areas(scene) -> list[tuple[int, object]]:
     """(rang dans `g_areas`, Area) des Areas qui préviennent les scripts : un déclencheur actif ET une forme."""
     return [(i, a) for i, a in enumerate(scene.areas) if a.is_trigger() and a.shape() is not None]
+
+
+def scripted_areas(p, scene) -> list[tuple[int, object, Path]]:
+    """(rang dans `g_areas`, Area, fichier) des Areas qui ont un script Lua : un `ScriptComponent` actif dont le fichier existe."""
+    out = []
+    for i, area in enumerate(scene.areas):
+        comp = area.get_component("script")
+        if not (comp and comp.active and comp.script):
+            continue
+        sp = p.asset_abs(comp.script)
+        if sp is not None and sp.exists() and sp.suffix.lower() == ".lua":
+            out.append((i, area, sp))
+    return out
+
+
+def area_hook_prefix(scene, area) -> str:
+    """Le préfixe des points d'entrée du script d'une Area (`<Scène>_<Area>_area`, suivi de `_on_update`…) : aussi la clé
+    de ses événements définis (`actor_defined_events`)."""
+    return f"{area_script_sym(scene.name, area.name)}_area"
+
+
+def area_extern_lines(p, scene) -> list[str]:
+    """Les `extern` des points d'entrée des scripts d'Area de la scène. Tous existent : le codegen pose un corps vide pour
+    ceux que le script n'écrit pas."""
+    return [f"extern {scene_event_sig(area_script_sym(scene.name, area.name), ev, 'area')};"
+            for _i, area, _sp in scripted_areas(p, scene) for ev in KNOWN_AREA_EVENTS]
+
+
+def area_start_lines(p, scene, has_event) -> list[str]:
+    """`on_start` des scripts d'Area, à l'entrée de la scène (une Area inactive démarre aussi, comme un acteur)."""
+    return [f"    {area_hook_prefix(scene, area)}_on_start();" for _i, area, _sp in scripted_areas(p, scene)
+            if has_event(area_hook_prefix(scene, area), "on_start")]
+
+
+def area_update_lines(p, scene, has_event) -> list[str]:
+    """`on_update` des scripts d'Area, chaque frame, après ceux des acteurs. Une Area inactive, ou tenue par un parent inactif
+    ou détruit (`held`), ne l'exécute pas : comme un acteur inactif."""
+    return [f"    if(g_areas[{i}].active && !g_areas[{i}].held) {area_hook_prefix(scene, area)}_on_update();"
+            for i, area, _sp in scripted_areas(p, scene) if has_event(area_hook_prefix(scene, area), "on_update")]
 
 
 def area_mask(area, owner, settings) -> int:
@@ -188,21 +232,29 @@ def area_parent_lines(scene, scene_actors: list, actor_offset: int) -> list[str]
 
 
 def area_contact_lines(p, scene, scene_actors: list, pi: list[dict], placed_scripts: list, has_event) -> list[str]:
-    """Les contacts des Areas à déclencheur avec les emplacements dont le script répond, posés ou nés : un parcours des
-    emplacements, et par type une ligne de crochets et les rangs de boîtes que la matrice des tags laisse toucher chaque Area
-    (cuits au build). Un type sans crochet d'Area, ou dont aucun tag ne rencontre celui d'une Area, n'est pas émis du tout.
+    """Les contacts des Areas à déclencheur avec les emplacements, posés ou nés : un parcours des emplacements, et par type une
+    ligne de crochets et les rangs de boîtes que la matrice des tags laisse toucher chaque Area (cuits au build). Un couple
+    (type, Area) n'est testé que si quelqu'un l'écoute : le script du type (`on_area_*`) ou celui de l'Area (`on_actor_*`).
+    Un type qu'aucun couple n'intéresse n'est pas émis du tout.
 
     `placed_scripts` : le symbole du code Lua de chaque posé (None sans script), aligné sur `scene_actors` ; un modèle du pool a
     le sien. `has_event(symbole, événement)` dit si le script définit le crochet."""
     areas = trigger_areas(scene)
     if not areas:
         return []
+    scripted = {i for i, _a, _sp in scripted_areas(p, scene)}
+    own = []        # par Area à déclencheur : la ligne de ses propres crochets (`on_actor_*`), ou None
+    for ai, area in areas:
+        prefix = area_hook_prefix(scene, area)
+        row = [f"{prefix}_{ev}" if ai in scripted and has_event(prefix, ev) else "0" for ev in AREA_SCRIPT_CONTACT_EVENTS]
+        own.append(row if any(h != "0" for h in row) else None)
     lay = scene_oam_layout(p, scene)
     kinds, handlers, allowed = [], [], []
     for kind, (owner, script) in sorted(type_owners(lay, scene_actors, pi, placed_scripts).items()):
         on = [f"{script}_{ev}" if script and has_event(script, ev) else "0" for ev in AREA_EVENTS]
-        masks = [area_mask(area, owner, p.settings) for _ai, area in areas]
-        if any(h != "0" for h in on) and any(masks):
+        listens = any(h != "0" for h in on)
+        masks = [area_mask(area, owner, p.settings) if listens or own[c] else 0 for c, (_ai, area) in enumerate(areas)]
+        if any(masks):
             kinds.append(kind)
             handlers.append("{" + ",".join(on) + "}")
             allowed.append("{" + ",".join(map(str, masks)) + "}")
@@ -210,13 +262,18 @@ def area_contact_lines(p, scene, scene_actors: list, pi: list[dict], placed_scri
         return []
     index = {k: i for i, k in enumerate(kinds)}
     by_kind = ",".join(str(index.get(k, 255)) for k in range(lay.type_table_size))
+    has_own = any(own)
     steps = [f"            if(_ar_allowed[_i][{c}]){{ debug_physics_area_test(); "
-             f"area_contact_step(&g_areas[{ai}],_a,_ar_allowed[_i][{c}],_ar_on[_i],&g_area_prev[_k][{c}]); }}"
+             f"area_contact_step(&g_areas[{ai}],_a,_ar_allowed[_i][{c}],_ar_on[_i],"
+             f"{f'_ar_own[{c}]' if own[c] else '0'},&g_area_prev[_k][{c}]); }}"
              for c, (ai, _area) in enumerate(areas)]
+    own_table = ([f"        static const AreaActorFn _ar_own[{len(areas)}][3]="
+                  f"{{{','.join('{' + ','.join(row or ['0', '0', '0']) + '}' for row in own)}}};"] if has_own else [])
     return ["    /* Areas à déclencheur : un parcours des emplacements, posés ou nés, crochets et masques lus par type */",
             "    {",
             f"        static const u8 _ar_type[{lay.type_table_size}]={{{by_kind}}};",
             f"        static const AreaFn _ar_on[{len(kinds)}][3]={{{','.join(handlers)}}};",
+            *own_table,
             f"        static const u16 _ar_allowed[{len(kinds)}][{len(areas)}]={{{','.join(allowed)}}};",
             "        SLOT_EACH(_k){",
             "            Actor* _a=&g_actors[_k]; u8 _i=_ar_type[_a->type_id];",

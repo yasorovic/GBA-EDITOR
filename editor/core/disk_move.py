@@ -177,13 +177,13 @@ def _rewritten(project, value, moved: list[tuple[Path, Path]], root: Path) -> st
 
 
 def _repoint_scripts(project, moved: list[tuple[Path, Path]], root: Path) -> None:
-    """Un script se désigne par son chemin dans les scènes (la scène, ses caméras, ses acteurs) et les
+    """Un script se désigne par son chemin dans les scènes (la scène, ses caméras, ses acteurs, ses Areas) et les
     prefabs : un script déplacé, ou rangé dans un dossier déplacé, ne doit pas perdre son attache."""
     for scene in project.scenes:
         touched = False
         owners = [(scene, "script"), *((cam, "script") for cam in scene.cameras)]
-        for actor in scene.actors:
-            comp = actor.get_component("script")
+        for member in (*scene.actors, *scene.areas):
+            comp = member.get_component("script")
             if comp is not None:
                 owners.append((comp, "script"))
         for owner, field in owners:

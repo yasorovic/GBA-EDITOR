@@ -273,6 +273,8 @@ class DynamicInspector(QWidget):
     def _make_area(self) -> QWidget:
         insp = AreaInspector()
         insp.changed.connect(self.changed)
+        if self._script_open_fn:
+            insp.set_script_open_fn(self._script_open_fn)
         self._area_insp = insp
         return insp
 
@@ -592,7 +594,7 @@ class DynamicInspector(QWidget):
 
         Mémorisé, puis appliqué aux inspecteurs concernés — à ceux DÉJÀ
         construits maintenant, et aux autres par leur fabrique le jour où ils
-        naissent (démarrage paresseux). Couvre scene/actor/camera : au démarrage
+        naissent (démarrage paresseux). Couvre scene/actor/camera/area : au démarrage
         aucun n'existe encore, tout passe donc par les fabriques."""
         self._script_open_fn = fn
         if self._actor_insp is not None:
@@ -601,6 +603,8 @@ class DynamicInspector(QWidget):
             self._camera_insp.set_script_open_fn(fn)
         if self._scene_insp is not None:
             self._scene_insp.set_script_open_fn(fn)
+        if self._area_insp is not None:
+            self._area_insp.set_script_open_fn(fn)
 
     def update_actor_position(self, x: int, y: int):
         # Un drag canvas peut précéder toute ouverture de l'inspecteur d'acteur :

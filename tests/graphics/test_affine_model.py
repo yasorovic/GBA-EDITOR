@@ -107,29 +107,13 @@ def test_oam_dynamic_compose_monde_local_et_offset():
         oam_shape, oam_size = 1, 0     # 8×8 affine
         tiles_per_frame = 1
 
-    lines = "\n".join(affine_oam_lines(7, SpriteShape(), bt=0, priority_expr="0"))
-    # Lecture des champs, plus de globals par slot : le transform MONDE est sur
-    # l'Actor, le transform LOCAL sur son entrée OAM.
-    assert "g_actors[7].rotation" in lines
-    assert "g_oam_entries[7].rotation" in lines
-    assert "g_oam_entries[7].offset_x" in lines
-    assert "g_affine" not in lines
-    # Composition : la rotation effective est la SOMME monde+local
-    assert "int _ang=_arot+_srot;" in lines
-    # Offset transformé par la matrice de l'ACTOR (hérarchie)
-    assert "_ofx=(_acos*_asx*" in lines
-    assert "_ofy=(_asin*_asx*" in lines
-    # L'offset ne s'inverse pas avec le flip du sprite (le flip retourne la
-    # texture, il ne déplace pas le cadre).
-    assert "_asxs" not in lines
-    # Point de pivot depuis le centre du cadre : P reste fixe, le centre se place
-    # à P - M·pivot. Pivot (0,0) = le centre ne bouge pas (GBA native).
-    assert "int _px=g_oam_entries[7].pivot_x; int _py=g_oam_entries[7].pivot_y;" in lines
-    assert "_u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;" in lines
-    # Le demi-cadre (offset + 4 + pivot) passe DANS la matrice de l'actor ; la boîte
-    # OAM est en double taille, donc son coin est le centre moins la taille du cadre.
-    assert "int _lx=g_oam_entries[7].offset_x+4+_px;" in lines
-    assert "int sx=_ocx-8-_u; int sy=_ocy-8-_v;" in lines
+    lines = "\n".join(affine_oam_lines(7, SpriteShape(), bt=0))
+    # Le calcul vit dans le moteur (`oam_write_affine`, un seul exemplaire en IWRAM) : le C émis lui passe l'acteur, son
+    # entrée d'affichage et son cache, la caméra, puis les constantes du sprite (cadre 8x8, tuile 0, 1 tuile par frame,
+    # forme 1, taille 0). La composition elle-même est mesurée par les sondes natives (test_affine_anchor_native).
+    assert lines.strip() == ("_oamn=oam_write_affine(&g_actors[7],&g_oam_entries[7],&g_aff_cache[7],_oamn,&_affn,"
+                             "cam_x,cam_y,8,8,0,1,1,0);")
+    assert "cam_x" not in "\n".join(affine_oam_lines(7, SpriteShape(), bt=0, screen_space=True))
 
 
 def test_le_pivot_est_seme_depuis_le_composant_sprite():

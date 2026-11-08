@@ -6,6 +6,7 @@ Sorties  : fichiers actor_*.c et scene.c écrits dans p.src_dir/
 """
 from __future__ import annotations
 import shutil
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -25,7 +26,8 @@ from scripting.constants import write_constants
 from scripting.project_names import ui_ref_kinds, data_column_kinds
 from scripting.api import LAYERS_BY_MODE, LAYER_NUMBERS, SpriteLibrary
 
-from codegen.c_names import sym as c_sym, scene_actor_sym
+from codegen.c_names import sym as c_sym, scene_actor_sym, area_script_sym
+from codegen.runtime_codegen.physics.areas import scripted_areas
 import codegen.build_output as build_output
 from codegen.oam_alloc import scene_has_model, scene_oam_layout
 from codegen.runtime_codegen.input_layout import compute_input_layout
@@ -678,73 +680,83 @@ def transpile_all(
 
         parsed_scripts.append((actor, sprite, script, sp))
 
-    # Script de scène — parse
+    # Script de scène — parse. Le contexte du checker sert aussi aux scripts d'Area (même scène, sans `self` d'acteur).
+    scene_ctx_check = BuildContext(
+        actor_name   = scene.name,
+        owner_kind   = "scene",
+        input_names  = input_names,
+        input_sequence_names = input_layout.sequence_names,
+        axis_names   = input_layout.axis_names,
+        sfx_names    = sfx_names,
+        music_names  = music_names,
+        jingle_names = jingle_names,
+        music_section_names = music_section_list,
+        scene_names  = _scene_names,
+        camera_names = _camera_names,
+        box_tag_names = _box_tag_names,
+        window_names = _window_names,
+        sound_box_state_names   = _snd_names,
+        jingle_box_state_names  = _jgl_names,
+        music_box_trigger_names = _snd_triggers,
+        actor_names  = _actor_names,
+        area_names   = _area_names,
+        prefab_names = _prefab_names,
+        pooled_prefab_names = _pooled_prefab_names,
+        global_names = list(global_names) if global_names else None,
+        global_types = {g.name: g.type for g in p.globals},
+        # sert le checker de save:read('nom') — un nom
+        # qui existe mais n'est pas persist ne sera jamais dans un fichier
+        # de sauvegarde.
+        global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
+        # 1 = scalaire, au-delà = tableau indexable par
+        # `global.nom[i]`. C'est ce que le checker lit pour distinguer un
+        # tableau d'un scalaire et borner un index écrit en clair.
+        global_counts = {g.name: max(1, int(getattr(g, "count", 1) or 1))
+                     for g in p.globals},
+        const_names  = list(const_names),
+        # Un script de SCÈNE cite textes et polices autant qu'un script
+        # d'actor : sans ces deux-là le checker se tait, et une clé
+        # inconnue n'échoue qu'au `make`, sur un `TEXT_*` indéfini.
+        text_keys    = text_keys,
+        font_names   = font_names,
+        lang_codes   = lang_codes,
+        palette_names = palette_names,
+        element_names = element_names,
+        image_states = image_states,
+        ref_kinds    = ref_kinds,
+        layer_numbers = layer_numbers,
+        save_slots   = _save_slots,
+        has_persistent = _has_persist,
+        data_tables  = _data_tables,
+        spawn_exports = _spawn_meta,
+        actor_sprites = _actor_libs,
+        prefab_sprites = _prefab_libs,
+        prefab_children = _prefab_child_ranks,
+        prefab_child_sprites = _prefab_child_libs,
+        actor_children = _actor_children,
+        actor_child_sprites = _actor_child_libs,
+        actor_exports = _actor_exports,
+    )
     scene_script_ast  = None
     scene_script_file = None
     scene_script_path = getattr(scene, "script", "")
     if scene_script_path:
         sp = p.asset_abs(scene_script_path)
         if sp and sp.exists() and sp.suffix.lower() == ".lua":
-            ctx_check = BuildContext(
-                actor_name   = scene.name,
-                owner_kind   = "scene",
-                input_names  = input_names,
-            input_sequence_names = input_layout.sequence_names,
-            axis_names   = input_layout.axis_names,
-                sfx_names    = sfx_names,
-                music_names  = music_names,
-                jingle_names = jingle_names,
-                music_section_names = music_section_list,
-                scene_names  = _scene_names,
-                camera_names = _camera_names,
-                box_tag_names = _box_tag_names,
-                window_names = _window_names,
-                sound_box_state_names   = _snd_names,
-                jingle_box_state_names  = _jgl_names,
-                music_box_trigger_names = _snd_triggers,
-                actor_names  = _actor_names,
-                area_names   = _area_names,
-            prefab_names = _prefab_names,
-            pooled_prefab_names = _pooled_prefab_names,
-                global_names = list(global_names) if global_names else None,
-            global_types = {g.name: g.type for g in p.globals},
-            # sert le checker de save:read('nom') — un nom
-            # qui existe mais n'est pas persist ne sera jamais dans un fichier
-            # de sauvegarde.
-            global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
-            # 1 = scalaire, au-delà = tableau indexable par
-            # `global.nom[i]`. C'est ce que le checker lit pour distinguer un
-            # tableau d'un scalaire et borner un index écrit en clair.
-            global_counts = {g.name: max(1, int(getattr(g, "count", 1) or 1))
-                             for g in p.globals},
-                const_names  = list(const_names),
-                # Un script de SCÈNE cite textes et polices autant qu'un script
-                # d'actor : sans ces deux-là le checker se tait, et une clé
-                # inconnue n'échoue qu'au `make`, sur un `TEXT_*` indéfini.
-                text_keys    = text_keys,
-                font_names   = font_names,
-                lang_codes   = lang_codes,
-                palette_names = palette_names,
-                element_names = element_names,
-                image_states = image_states,
-                ref_kinds    = ref_kinds,
-                layer_numbers = layer_numbers,
-                save_slots   = _save_slots,
-                has_persistent = _has_persist,
-                data_tables  = _data_tables,
-                spawn_exports = _spawn_meta,
-                actor_sprites = _actor_libs,
-                prefab_sprites = _prefab_libs,
-                prefab_children = _prefab_child_ranks,
-                prefab_child_sprites = _prefab_child_libs,
-                actor_children = _actor_children,
-                actor_child_sprites = _actor_child_libs,
-                actor_exports = _actor_exports,
-            )
-            scene_script_ast, ok = _compile_script(sp, ctx_check, emit)
+            scene_script_ast, ok = _compile_script(sp, scene_ctx_check, emit)
             if not ok:
                 return False
             scene_script_file = sp
+
+    # Scripts d'Area — parse. Une Area appartient à une scène : son script est compilé une fois par Area, dans le contexte
+    # de la scène, `self` étant sa référence (cf. `KNOWN_AREA_EVENTS`).
+    area_scripts = []
+    for area_rank, area, sp in scripted_areas(p, scene):
+        area_ast, ok = _compile_script(sp, replace(scene_ctx_check, actor_name=area.name, owner_kind="area"), emit,
+                                       f"area {area.name}")
+        if not ok:
+            return False
+        area_scripts.append((area_rank, area, area_ast, sp))
 
     # Génération C — actors de scène
     for actor, sprite, script, sp in parsed_scripts:
@@ -984,66 +996,78 @@ def transpile_all(
 
     write_state_sizes(p, scene, state_sizes)
 
-    # Génération C — script de scène
+    # Génération C — script de scène. Son contexte sert aussi aux scripts d'Area de la scène.
+    scene_s = c_sym(scene.name)
+    scene_ctx_gen = CodegenContext(
+        lua_file      = scene_script_file.name if scene_script_file else "",
+        c_file        = f"{scene_s}_scene.c",
+        actor_name    = scene.name,
+        actor_sym     = scene_s,
+        scene_sym     = scene_s,
+        input_masks   = input_layout.masks,
+        input_sequences = input_layout.sequences,
+        input_buffered_bits = input_layout.buffered_bits,
+        input_axes    = input_layout.axes,
+        anim_names    = [],
+        sfx_names     = sfx_names,
+        music_names   = music_names,
+        jingle_names = jingle_names,
+        music_section_names = music_section_list,
+        global_names  = set(global_names),
+        string_globals = _string_globals,
+        const_names   = set(const_names),
+        all_actor_syms= all_syms,
+        owner_kind    = "scene",
+        scene_names   = _scene_names,
+        sfx_volumes   = sfx_volumes,
+        music_info    = music_info,
+        jingle_policy = jingle_policy,
+        sound_box_states   = _snd_index,
+        jingle_box_states  = _jgl_index,
+        music_box_triggers = _trigger_index,
+        text_keys     = text_keys,
+        font_names    = font_names,
+        lang_codes   = lang_codes,
+        palette_names = palette_names,
+        region_names  = region_names,
+        ui_list_names = [pn.name for _l, pn in _project_lists(p)],
+        image_names   = image_names,
+        element_names = element_names,
+        image_states  = image_states,
+        ref_kinds     = ref_kinds,
+        save_slots    = _save_slots,
+        has_persistent = _has_persist,
+        data_tables   = _data_tables,
+        spawn_exports = _spawn_meta,
+        actor_sprites = _actor_libs,
+        prefab_sprites = _prefab_libs,
+        prefab_children = _prefab_child_ranks,
+        prefab_child_sprites = _prefab_child_libs,
+        actor_children = _actor_children,
+        actor_child_sprites = _actor_child_libs,
+        actor_exports = _actor_exports,
+        actor_models = _actor_models,
+    )
     if scene_script_ast and scene_script_file:
-        scene_s = c_sym(scene.name)
-        ctx_sc  = CodegenContext(
-            lua_file      = scene_script_file.name,
-            c_file        = f"{scene_s}_scene.c",
-            actor_name    = scene.name,
-            actor_sym     = scene_s,
-            scene_sym     = scene_s,
-            input_masks   = input_layout.masks,
-            input_sequences = input_layout.sequences,
-            input_buffered_bits = input_layout.buffered_bits,
-            input_axes    = input_layout.axes,
-            anim_names    = [],
-            sfx_names     = sfx_names,
-            music_names   = music_names,
-            jingle_names = jingle_names,
-            music_section_names = music_section_list,
-            global_names  = set(global_names),
-            string_globals = _string_globals,
-            const_names   = set(const_names),
-            all_actor_syms= all_syms,
-            owner_kind    = "scene",
-            scene_names   = _scene_names,
-            sfx_volumes   = sfx_volumes,
-            music_info    = music_info,
-            jingle_policy = jingle_policy,
-            sound_box_states   = _snd_index,
-            jingle_box_states  = _jgl_index,
-            music_box_triggers = _trigger_index,
-            text_keys     = text_keys,
-            font_names    = font_names,
-            lang_codes   = lang_codes,
-            palette_names = palette_names,
-            region_names  = region_names,
-            ui_list_names = [pn.name for _l, pn in _project_lists(p)],
-            image_names   = image_names,
-            element_names = element_names,
-            image_states  = image_states,
-            ref_kinds     = ref_kinds,
-            save_slots    = _save_slots,
-            has_persistent = _has_persist,
-            data_tables   = _data_tables,
-            spawn_exports = _spawn_meta,
-            actor_sprites = _actor_libs,
-            prefab_sprites = _prefab_libs,
-            prefab_children = _prefab_child_ranks,
-            prefab_child_sprites = _prefab_child_libs,
-            actor_children = _actor_children,
-            actor_child_sprites = _actor_child_libs,
-            actor_exports = _actor_exports,
-            actor_models = _actor_models,
-        )
-        c_code, sc_warnings, _ = lua_generate(scene_script_ast, ctx_sc)
+        c_code, sc_warnings, _ = lua_generate(scene_script_ast, scene_ctx_gen)
         for w in sc_warnings:
             emit("diagnostic", build_warning(w, "codegen", scene_script_file.name))
         out_name = f"{scene_s}_scene.c"
         out = p.src_dir / out_name
         build_output.write(out, c_code)
         emit("log_line", f"[lua->c] {scene_script_file.name} -> {out_name}")
+
+    # Génération C — scripts d'Area : un fichier par Area, `<Scène>_<Area>_area.c`, `self` = sa référence (rang + 1).
+    for area_rank, area, area_ast, sp in area_scripts:
+        area_s = area_script_sym(scene.name, area.name)
+        ctx_area = replace(scene_ctx_gen, lua_file=sp.name, c_file=f"{area_s}_area.c", actor_name=area.name,
+                           actor_sym=area_s, owner_kind="area", area_ref=area_rank + 1)
+        area_c, area_warnings, _ = lua_generate(area_ast, ctx_area)
+        for w in area_warnings:
+            emit("diagnostic", build_warning(w, "codegen", sp.name, actor=f"area {area.name}"))
+        out_area = p.src_dir / f"{area_s}_area.c"
+        build_output.write(out_area, area_c)
+        emit("log_line", f"[lua->c] {sp.name} -> {out_area.name}")
 
     # Génération C — scripts de CAMÉRA
     #

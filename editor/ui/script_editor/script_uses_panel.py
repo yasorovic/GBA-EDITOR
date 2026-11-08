@@ -70,6 +70,21 @@ class ScriptUsesPanel(UsesListBase):
             for actor in linked:
                 self._add_leaf_row(actor.name, lambda a=actor: self.target_requested.emit(a))
 
+        # ── Areas d'une scène (leur script a sa propre famille, cf. core/script_owners) ──
+        for scene in project.scenes:
+            linked_areas = [
+                a for a in scene.areas
+                if a.get_component("script") is not None
+                and Path(a.get_component("script").script or "").name == name
+            ]
+            if not linked_areas:
+                continue
+            found_any = True
+            self._add_group_row("▢", f"{scene.name} · {label('uses.areas')}", icons.COLOR_SCENE,
+                                count=len(linked_areas))
+            for area in linked_areas:
+                self._add_leaf_row(area.name, lambda a=area: self.target_requested.emit(a))
+
         # ── Prefabs (template — inclut les prefabs spawnés par script, jamais
         #    placés dans scene.actors, donc invisibles à la boucle ci-dessus) ──
         linked_prefabs = [

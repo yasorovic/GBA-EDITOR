@@ -34,6 +34,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32; typedef
 typedef struct { u16 attr0, attr1, attr2, dummy; } OBJATTR;
 OBJATTR shadow_oam[128];
 int cam_x = 0, cam_y = 0, g_oam_dropped = 0, g_affine_dropped = 0;
+#define GBA_ENGINE_H   /* la sonde joue main.c : `shadow_oam` et `g_oam_dropped` ci-dessus (cf. `oam_write_affine`) */
 Actor g_actors[2]; OamEntry g_oam_entries[2];
 int g_spool_start = 1, g_spool_end = 2, g_actor_slot_end = 1, g_spool_free = 1, g_spool_entry = 1, g_scene_placed = 0;
 const u8 *g_spool_part = 0;

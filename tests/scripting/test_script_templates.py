@@ -43,13 +43,14 @@ def test_empty_template_is_empty():
     assert generate_script_template(ScriptTemplateContext()) == ""
 
 
-def test_event_stubs_are_minimal_and_valid_for_an_actor():
+def test_event_stubs_are_minimal_and_valid_for_their_owner():
+    """Chaque stub est valide pour la famille qui reçoit l'événement : un acteur, sauf `owner` (les `on_actor_*` d'une Area)."""
     for name, meta in EVENT_REGISTRY.items():
         source = meta["stub"]
         assert "    \n" not in source
         assert source.startswith(f"function {name}(")
         assert not [error for error in check(parse(source), BuildContext(
-            actor_name="Actor", owner_kind="actor",
+            actor_name="Owner", owner_kind=meta.get("owner", "actor"),
         )) if error.level == "error"]
 
 

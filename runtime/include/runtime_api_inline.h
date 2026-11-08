@@ -1064,6 +1064,69 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
 #else
 #define BS_ATTR_IWRAM __attribute__((noinline))
 #endif
+/* L'écriture OAM d'un sprite affine : matrice composée (acteur puis sprite), mémoïsée dans `ac` (cf. `AffCache`), position
+   autour du pivot, puis une matrice prise à la frame (une identique déjà écrite est reprise) et l'emplacement `oamn`.
+   Une seule copie pour tous les types affines : déroulée dans chaque cas du rendu, elle coûtait près de 3 Ko d'IWRAM par
+   type. Ce qui diffère d'un sprite à l'autre arrive en argument : la caméra (0 pour un acteur en espace écran), le cadre
+   `w` x `h`, la base de tuiles, les tuiles par frame, la forme et la taille OAM. Rend le prochain emplacement libre.
+   L'appelant a vérifié qu'il reste une matrice (`*affn` < 32). Formules et repères : cf. `gen_affine.affine_oam_lines`.
+   Elle écrit `shadow_oam` et `g_oam_dropped`, qui n'existent qu'avec `gba_engine.h` (dans main.c) : les fichiers des
+   scripts, qui incluent aussi ce header, ne la voient pas. */
+#ifdef GBA_ENGINE_H
+BS_ATTR_IWRAM
+static int __attribute__((unused)) oam_write_affine(const Actor* a, OamEntry* o, AffCache* ac, int oamn, int* affn,
+        int cx, int cy, int w, int h, int base_tile, int tiles_per_frame, int shape, int size) {
+    int arot=a->rotation, srot=o->rotation;
+    int asx=a->scale_x, asy=a->scale_y, ssx=o->scale_x, ssy=o->scale_y;
+    int fh=o->flip_h, fv=o->flip_v;
+    int px=o->pivot_x, py=o->pivot_y;
+    int lx=o->offset_x+w/2+px, ly=o->offset_y+h/2+py;
+    int fl=0x80|fh|(fv<<1);
+    int stb=(ac->vrot==arot&&ac->vsx==asx&&ac->vsy==asy);
+    ac->vrot=arot; ac->vsx=asx; ac->vsy=asy;
+    int pa,pb,pc,pd,ofx,ofy,u,v;
+    if(stb&&ac->rot==arot&&ac->srot==srot&&ac->asx==asx&&ac->asy==asy&&ac->ssx==ssx&&ac->ssy==ssy
+            &&ac->lx==lx&&ac->ly==ly&&ac->px==px&&ac->py==py&&ac->fl==fl){
+        pa=ac->pa; pb=ac->pb; pc=ac->pc; pd=ac->pd;
+        ofx=ac->ofx; ofy=ac->ofy; u=ac->u; v=ac->v;
+    } else {
+        int sinA,cosA; gba_sincos(arot+srot,&sinA,&cosA);
+        int asin_,acos_; if(!srot){asin_=sinA;acos_=cosA;} else gba_sincos(arot,&asin_,&acos_);
+        int sxq=asx*ssx/256, syq=asy*ssy/256;
+        int sxs=fh?-sxq:sxq, sys=fv?-syq:syq;
+        gba_affine_matrix(cosA,sinA,sxq,syq,&pa,&pb,&pc,&pd);
+        ofx=(acos_*asx*lx - asin_*asy*ly)/65536;
+        ofy=(asin_*asx*lx + acos_*asy*ly)/65536;
+        u=(cosA*sxs*px)/65536-(sinA*sys*py)/65536;
+        v=(sinA*sxs*px)/65536+(cosA*sys*py)/65536;
+        if(stb){
+            ac->rot=arot; ac->srot=srot; ac->asx=asx; ac->asy=asy; ac->ssx=ssx; ac->ssy=ssy;
+            ac->lx=lx; ac->ly=ly; ac->px=px; ac->py=py; ac->fl=fl;
+            ac->pa=pa; ac->pb=pb; ac->pc=pc; ac->pd=pd;
+            ac->ofx=ofx; ac->ofy=ofy; ac->u=u; ac->v=v;
+        }
+    }
+    int sx=((a->x>>8)-cx)+ofx-w-u, sy=((a->y>>8)-cy)+ofy-h-v;
+    u16 ti=(u16)(base_tile+o->frame*tiles_per_frame);
+    if(!(sx+2*w>0&&sx<240&&sy+2*h>0&&sy<160)) return oamn;     /* boîte OAM en double taille : 2w x 2h */
+    if(oamn>=128){ g_oam_dropped++; return oamn; }
+    u16 m0=(u16)(s16)(fh?-pa:pa), m1=(u16)(s16)(fh?-pb:pb);
+    u16 m2=(u16)(s16)(fv?-pc:pc), m3=(u16)(s16)(fv?-pd:pd);
+    int as=0, n=*affn;
+    while(as<n&&!(shadow_oam[as*4+0].dummy==m0&&shadow_oam[as*4+1].dummy==m1
+                 &&shadow_oam[as*4+2].dummy==m2&&shadow_oam[as*4+3].dummy==m3)) as++;
+    if(as==n){
+        *affn=n+1;
+        shadow_oam[as*4+0].dummy=m0; shadow_oam[as*4+1].dummy=m1;
+        shadow_oam[as*4+2].dummy=m2; shadow_oam[as*4+3].dummy=m3;
+    }
+    o->affine_slot=as;
+    shadow_oam[oamn].attr0=(sy&0xFF)|(1<<8)|(1<<9)|(o->obj_mode<<10)|(shape<<14);
+    shadow_oam[oamn].attr1=(sx&0x1FF)|(as<<9)|(size<<14);
+    shadow_oam[oamn].attr2=(ti&0x3FF)|(o->priority<<10)|(o->pal_bank<<12);
+    return oamn+1;
+}
+#endif
 _Static_assert(MAX_BOXES * MAX_BOXES <= 16, "actors_overlap_mask tient sur 16 bits");
 static inline int _box_canonical(const Actor*a, int i) {
     for (int k=0; k<i; k++)
@@ -1087,7 +1150,7 @@ static u16 __attribute__((unused)) actors_overlap_mask(const Actor*a, const Acto
 }
 
 /* ── Areas ────────────────────────────────────────────────────────────────────
-   Une Area n'a qu'une boîte et pas de script : seul l'acteur qui la touche apprend le contact. Le test est celui des
+   Une Area n'a qu'une boîte. L'acteur qui la touche apprend le contact, et le script de l'Area aussi s'il en a un. Le test est celui des
    acteurs (`box_overlap`), la mémoire d'une frame à l'autre aussi ; le masque compte un bit par RANG de boîte de
    l'acteur (canonique, comme `actors_overlap_mask`), puisqu'il n'y a qu'une boîte de l'autre côté. `allowed` : les rangs
    dont le tag rencontre celui de l'Area (la matrice des tags, cuite au build). */
@@ -1104,15 +1167,20 @@ static u16 area_overlap_mask(const Area* ar, const Actor* a, u16 allowed) {
     return m;
 }
 
-/* Un crochet d'Area : enter, collide, exit, dans cet ordre ; NULL si le script n'y répond pas. */
+/* Un crochet d'Area : enter, collide, exit, dans cet ordre ; NULL si le script n'y répond pas. `AreaFn` est celui de
+   l'acteur (`on_area_*`), `AreaActorFn` celui du script de l'Area (`on_actor_*`, l'Area est une constante de son fichier). */
 typedef void (*AreaFn)(Actor*, Area*, u8);
+typedef void (*AreaActorFn)(Actor*, u8);
 
 /* Les acteurs posés et nés passent par le MÊME code : `area_contact_step` est le pas d'un couple (Area, emplacement),
    appelé par le parcours des emplacements avec la mémoire de chacun. Un contact qui naît appelle enter, un qui
    dure collide, un qui se défait exit — avec le tag de la boîte de l'acteur. Un acteur détruit n'apprend rien (terminal) ;
-   désactivé, il l'apprend à sa réactivation seulement : le seul `exit` utile est celui d'un acteur encore en jeu. */
+   désactivé, il l'apprend à sa réactivation seulement : le seul `exit` utile est celui d'un acteur encore en jeu.
+   Les deux côtés sont prévenus par le MÊME test : l'acteur d'abord (`on`), puis l'Area (`own`, NULL sans script), qui ne
+   reçoit pas un acteur que son propre crochet vient de détruire. */
 BS_ATTR_IWRAM
-static void __attribute__((unused)) area_contact_step(Area* ar, Actor* a, u16 allowed, const AreaFn* on, u16* prev) {
+static void __attribute__((unused)) area_contact_step(Area* ar, Actor* a, u16 allowed, const AreaFn* on,
+                                                      const AreaActorFn* own, u16* prev) {
     u16 cur = a->active ? area_overlap_mask(ar, a, allowed) : 0;
     u16 prv = *prev;
     if (cur | prv)
@@ -1122,7 +1190,9 @@ static void __attribute__((unused)) area_contact_step(Area* ar, Actor* a, u16 al
             if (!now && !was) continue;
             u8 event = now ? (was ? 1 : 0) : 2;           /* enter : naît ; collide : dure ; exit : se défait */
             if (event == 2 && !(a->active && a->alive)) continue;
-            if (on[event]) on[event](a, ar, a->collision.boxes[b].tag);
+            u8 tag = a->collision.boxes[b].tag;
+            if (on[event]) on[event](a, ar, tag);
+            if (own && own[event] && a->alive) own[event](a, tag);
         }
     *prev = cur;
 }

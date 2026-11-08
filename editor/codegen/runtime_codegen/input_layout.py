@@ -55,7 +55,7 @@ class InputLayout:
 def _iter_script_paths(p):
     """Même couverture que la collecte d'events de `rom_build.py`
     (`_write_project_globals._collect_events`) : acteurs de scène, script de
-    scène, prefabs poolés. Les behaviors et caméras n'y sont pas non plus —
+    scène, scripts d'Area, prefabs poolés. Les behaviors et caméras n'y sont pas non plus —
     limitation partagée, pas une nouvelle."""
     from core.models.components import ScriptComponent
 
@@ -67,6 +67,10 @@ def _iter_script_paths(p):
         scene_script = getattr(scene, "script", "")
         if scene_script:
             yield p.asset_abs(scene_script)
+        for area in getattr(scene, "areas", []) or []:
+            comp = area.get_component("script")
+            if comp and comp.active and comp.script:
+                yield p.asset_abs(comp.script)
     for pf in getattr(p, "prefabs", []) or []:
         sc = next((c for c in getattr(pf, "components", []) or []
                   if isinstance(c, ScriptComponent)), None)

@@ -392,8 +392,7 @@ def _oam_body_lines(idx, e, ap: Appearance, affine: bool, screen_space: bool) ->
     échelle, et le tick le dit une fois par seconde."""
     if affine:
         return [f"        if(g_oam_entries[{e}].affine_slot>=0&&_affn<32) {{",
-                *affine_oam_lines(idx, ap.sprite, ap.base_tile, f"g_oam_entries[{e}].priority",
-                                  screen_space=screen_space, entry=e),
+                *affine_oam_lines(idx, ap.sprite, ap.base_tile, screen_space=screen_space, entry=e),
                 "        } else {",
                 f"            if(g_oam_entries[{e}].affine_slot>=0) g_affine_dropped++;",
                 *_oam_body_lines(idx, e, ap, False, screen_space),
@@ -541,7 +540,9 @@ def anim_oam_pass_lines(p, scene_actors, actor_offset: int, pi, layout, placed_s
         if entry >= 0:
             add(kind, actor, sym, actor_offset + j in placed_affine)
 
-    cases: list[str] = []
+    # Des types distincts peuvent avoir le même code (des singletons posés au même sprite) : un seul corps, plusieurs
+    # étiquettes. Le corps est en IWRAM, une copie par type y coûterait environ 1 Ko.
+    bodies: dict[tuple[str, ...], list[int]] = {}
     for kind in sorted(types):
         variants, apps, affine, screen_space = types[kind]
         body: list[str] = []
@@ -551,7 +552,11 @@ def anim_oam_pass_lines(p, scene_actors, actor_offset: int, pi, layout, placed_s
             body += ["        {", *oam_write_lines("_pk", "_pe", apps, affine=affine, screen_space=screen_space),
                      "        }"]
         if body:
-            cases += [f"        case {kind}: {{", *body, "        } break;"]
+            bodies.setdefault(tuple(body), []).append(kind)
+    cases: list[str] = []
+    for body, kinds in bodies.items():
+        cases += [*(f"        case {kind}:" for kind in kinds[:-1]), f"        case {kinds[-1]}: {{", *body,
+                  "        } break;"]
     if not cases:
         return []
     return [*(["    int _affn = 0;"] if any(t[2] for t in types.values()) else []),

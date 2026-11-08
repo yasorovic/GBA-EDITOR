@@ -16,7 +16,7 @@ from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
 from codegen.runtime_codegen.gen_actor_hierarchy import link_depth, placed_link_lines
 from codegen.runtime_codegen.gen_pool import dispatch_sym
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
-from codegen.runtime_codegen.physics.areas import area_init_lines
+from codegen.runtime_codegen.physics.areas import area_init_lines, area_start_lines
 from codegen.runtime_codegen.physics.audio_emitters import emitter_init_lines
 from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
 from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scene_has_cmap, scene_world_size
@@ -394,4 +394,6 @@ def _start_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, lua_
     # on_start scene
     if getattr(scene, "script", ""):
         L.append(f"    {sym}_scene_on_start();")
+    # on_start des scripts d'Area, après celui de la scène.
+    L += area_start_lines(p, scene, lambda s, ev: actor_defined_events is None or ev in actor_defined_events.get(s, ()))
     return L

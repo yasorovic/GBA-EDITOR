@@ -285,12 +285,15 @@ class CodegenContext:
     # sprite de l'apparence `a` (255 = cet état n'existe pas dans ce sprite). Vide
     # pour un porteur à une apparence : `anim_names` est alors ses états, tels quels.
     anim_maps: list[list[int]] = field(default_factory=list)
-    # Famille du PROPRIÉTAIRE du script : "actor" | "prefab" | "scene" | "camera". Elle
+    # Famille du PROPRIÉTAIRE du script : "actor" | "prefab" | "scene" | "camera" | "area". Elle
     # décide de tout ce qui dépend d'où le script est attaché : l'existence de `self`
     # (`has_self`), les événements admis (`KNOWN_EVENTS_BY_KIND`) et, sans `self`, le mot
     # du symbole C émis (`<sym>_scene_on_update` / `<sym>_camera_on_update`). Une caméra a
     # les mêmes points d'entrée qu'une scène et emprunte donc le même chemin.
     owner_kind: str = "actor"
+    # Script d'une Area (`owner_kind == "area"`) : la référence de CETTE Area (son rang dans `g_areas` plus un). `self` y est
+    # une constante du fichier, puisque le script est compilé une fois par Area.
+    area_ref: int = 0
     behavior_paths: dict | None = None  # {nom: fichier} des behaviors du projet, pour résoudre les require()
     # Prefab : les variables de tête que le script ÉCRIT deviennent un champ de sa structure d'état,
     # rangée dans le bloc de l'emplacement de chaque instance (cf. _emit_pool_state).
@@ -483,6 +486,9 @@ class CodeGen:
         # Locals qui tiennent une référence : nom → type (cf. expr_types).
         self._ref_types: dict[str, str] = RefEnv()
         self._ref_types.child_of = lambda expr: self._child_of(expr) is not None
+        # Le script d'une Area : `self` est l'Area elle-même, une référence `area` (jamais un acteur).
+        if self.ctx.owner_kind == "area":
+            self._ref_types["self"] = REF_AREA
         # Sprites de l'acteur que tient une variable locale (`local b = actor:get("X")`).
         self._ref_libs: dict[str, object] = {}
         # Idem pour l'identité de cet acteur : ("get" | "spawn", nom), qui donne ses exports.
@@ -1046,6 +1052,9 @@ class CodeGen:
         # Toujours inclus, même sans table : l'en-tête est toujours généré, et
         # un include conditionnel serait un second chemin pour un cas vide.
         self._w('#include "data_tables.h"')
+        if self.ctx.owner_kind == "area":
+            # `self` : l'Area à laquelle ce script est attaché, une référence `area` comme celle d'`area:get`.
+            self._w(f"static const int self __attribute__((unused)) = {self.ctx.area_ref};")
         # Setters d'exports des prefabs que CE script spawne avec une table de
         # valeurs (tranche poolé D2) : ils sont définis dans le `.c` du prefab
         # visé, on les forward-déclare ici pour compiler l'appel.
@@ -1503,7 +1512,8 @@ class CodeGen:
                 sig = f"void {self.ctx.actor_sym}_{fn.name}(Actor* self)"
             else:
                 sig = sig_tpl.format(prefix=self.ctx.actor_sym)
-        box_params = self.ctx.has_self and fn.name in COLLISION_EVENTS
+        # Un acteur reçoit ses boîtes en tag ; le script d'une Area aussi, pour l'acteur qui la touche (`on_actor_*`).
+        box_params = (self.ctx.has_self or self.ctx.owner_kind == "area") and fn.name in COLLISION_EVENTS
         # `area` d'un événement d'Area : le C passe un `Area*`, le script tient une référence (le rang plus un).
         area_param = self.ctx.has_self and fn.name in AREA_EVENTS and AREA_PARAM in fn.params
         if box_params:

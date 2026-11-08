@@ -585,7 +585,7 @@ def default_area_components() -> list:
 
 @dataclass
 class Area(SceneMember, ComponentOwnerMixin):
-    """Un volume de jeu sans sprite, sans OAM et sans script : un acteur dont il ne reste que la boîte.
+    """Un volume de jeu sans sprite et sans OAM : un acteur dont il ne reste que la boîte, et éventuellement un script.
 
     L'Area n'a pas de rectangle à elle : elle porte une `CollisionShapeComponent` (comme un acteur), dont le
     décalage, la taille et le tag sont lus par les mêmes fonctions que celles des acteurs. `x`/`y` posent
@@ -593,7 +593,8 @@ class Area(SceneMember, ComponentOwnerMixin):
     carte : `conform_shapes` le force sur ses formes, quelle que soit la façon dont elles sont arrivées.
 
     Posée dans la scène, jamais un asset : elle se réutilise d'une scène à l'autre par le copier/coller du canvas. Elle peut
-    SUIVRE un acteur posé (`parent`) ; elle n'a jamais d'enfant. Elle peut porter des effets physiques (`GravityOverrideComponent`, `ForceFieldComponent`) qui agissent sur les corps qu'elle recouvre."""
+    SUIVRE un acteur posé (`parent`) ; elle n'a jamais d'enfant. Elle peut porter des effets physiques (`GravityOverrideComponent`, `ForceFieldComponent`) qui agissent sur les corps qu'elle recouvre.
+    Un `ScriptComponent` lui donne son propre script (famille « area » : `self` est la référence de l'Area, cf. `script_owners`)."""
     name: str = "Area"
     active: bool = True
     components: list = field(default_factory=default_area_components)

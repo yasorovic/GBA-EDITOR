@@ -149,6 +149,19 @@ def test_l_ecriture_oam_garde_les_constantes_de_chaque_type(tmp_path, monkeypatc
     assert "g_actors[_pk]" in code
 
 
+def test_deux_types_au_meme_code_partagent_un_seul_cas(tmp_path, monkeypatch):
+    """Deux types dont l'animation et l'écriture OAM sont identiques n'émettent qu'un corps, sous deux étiquettes : le
+    rendu est en IWRAM, une copie par type y coûtait environ 1 Ko."""
+    from codegen.runtime_codegen.gen_sprite import Appearance
+    from core.models.sprite import SpriteAsset
+    p, scene = _scene_qui_spawne(tmp_path, prefabs=("Bullet", "Coin"))
+    sprite = SpriteAsset(name="Coin", asset="a.png")
+    code = _passe_rendu(p, scene, monkeypatch, variants=lambda nom: [dict(sym="sprite_Coin")],
+                        apps=lambda nom: [Appearance(sprite, 0)])
+    assert "        case 1:\n        case 2:" in code
+    assert code.count("shadow_oam[_o].attr0") == 1 and code.count("} break;") == 1
+
+
 def test_la_scene_pose_le_pool_et_une_scene_sans_pool_le_vide(tmp_path):
     from codegen.runtime_codegen.gen_pool import scene_pi
     p, scene = _scene_qui_spawne(tmp_path, actors=3)
@@ -180,9 +193,9 @@ def test_l_animation_et_l_ecriture_oam_tiennent_dans_une_seule_boucle(tmp_path, 
                         apps=lambda nom: [Appearance(SpriteAsset(name=nom, asset="a.png"), 0)])
     assert code.count("SLOT_EACH(_pk){") == 1 and "POOL_EACH(" not in code
     assert "if(!_a->active) continue;" in code
-    bullet = code[code.index("case 1: {"):code.index("case 2: {")]
+    bullet = code[code.index("case 1: {"):code.index("case 2:")]
     assert bullet.index("g_oam_entries[_pe].timer++;") < bullet.index("shadow_oam[_o].attr0")   # animer, puis écrire
-    coin = code[code.index("case 2: {"):code.index("case 3: {")]
+    coin = code[code.index("case 2:"):code.index("} break;", code.index("case 2:"))]
     assert "timer++" not in coin and "shadow_oam[_o].attr0" in coin                              # sprite fixe : écrit seulement
 
 
@@ -381,7 +394,7 @@ def test_chaque_type_d_emplacement_a_son_cas_d_affichage_et_ses_collisions(tmp_p
     pi = scene_pi(p, scene)
     code = _passe_rendu(p, scene, monkeypatch, variants=lambda nom: [None],
                         apps=lambda nom: [Appearance(SpriteAsset(name=nom, asset="a.png"), 0)])
-    assert "case 1: {" in code and "case 2: {" in code and "case 3: {" in code and "case 4:" not in code   # le marqueur n'affiche rien
+    assert "case 1:" in code and "case 2:" in code and "case 3:" in code and "case 4:" not in code   # le marqueur n'affiche rien
     # Une partie réagit aux contacts avec le script de sa racine : sa ligne du descripteur porte les crochets de la
     # racine (types 3 et 4, racine 2), lus par la passe de contacts comme pour tout emplacement.
     from codegen.runtime_codegen.model_desc import model_desc_lines

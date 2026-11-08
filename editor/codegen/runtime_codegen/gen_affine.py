@@ -165,8 +165,7 @@ def oam_window_close() -> list[str]:
     return ["          }", "        }"]
 
 
-def affine_oam_lines(idx, sprite, bt: int, priority_expr: str, screen_space: bool = False,
-                     entry=None) -> list[str]:
+def affine_oam_lines(idx, sprite, bt: int, screen_space: bool = False, entry=None) -> list[str]:
     """Lignes C (intérieur du if actif) pour un sprite affine : PA/PB/PC/PD et
     position recalculés CHAQUE FRAME depuis les champs transform de la struct
     Actor via gba_sin/gba_cos (cf. runtime_api_inline.h), même formule que la
@@ -194,99 +193,15 @@ def affine_oam_lines(idx, sprite, bt: int, priority_expr: str, screen_space: boo
     frame, quand il est dessiné, comme il prend le prochain emplacement d'OAM. Une matrice IDENTIQUE déjà écrite dans
     cette frame est reprise (un enfant sans transform propre tourne avec son parent : un boss à six parties coûte une
     matrice, pas sept) ; sinon la suivante (`_affn`) est prise. `OamEntry.affine_slot` retient celle de cette frame.
-    L'appelant a déjà vérifié qu'il en reste (cf. `gen_sprite._oam_body_lines`)."""
-    W, H   = sprite.frame_w, sprite.frame_h
-    sh, sz = sprite.oam_shape, sprite.oam_size
-    tpf    = sprite.tiles_per_frame
+    L'appelant a déjà vérifié qu'il en reste (cf. `gen_sprite._oam_body_lines`).
 
-    # x/y sont en Q8 en interne (256 = 1 px) ; l'émission OAM
-    # est UN des deux seuls points d'arrondi du chantier (l'autre est l'entrée
-    # de la collision, cf. resolve_actor_tiles). >>8 tronque vers -inf sur un
-    # entier signé avec ce compilateur (ARM/GCC, décalage arithmétique) —
-    # cohérent, pas de saut à la traversée de 0.
+    Le calcul vit dans le runtime (`oam_write_affine`, `runtime_api_inline.h`), en un seul exemplaire en IWRAM : ces
+    lignes ne font que l'appeler avec les constantes du sprite. Déroulé dans chaque cas du rendu, il coûtait près de
+    3 Ko par type affine."""
     e = idx if entry is None else entry   # entrée OAM ; `idx` reste l'acteur
-    base_x = f"(g_actors[{idx}].x>>8)" + ("" if screen_space else "-cam_x")
-    base_y = f"(g_actors[{idx}].y>>8)" + ("" if screen_space else "-cam_y")
-
-    same = "&&".join(f"shadow_oam[_as*4+{k}].dummy==_m{k}" for k in range(4))
-    matrix = [
-        "            u16 _m0=(u16)(s16)(_fh?-_pa:_pa), _m1=(u16)(s16)(_fh?-_pb:_pb);",
-        "            u16 _m2=(u16)(s16)(_fv?-_pc:_pc), _m3=(u16)(s16)(_fv?-_pd:_pd);",
-        "            int _as=0;",
-        f"            while(_as<_affn&&!({same})) _as++;",
-        "            if(_as==_affn){",
-        "                _affn++;",
-        *[f"                shadow_oam[_as*4+{k}].dummy=_m{k};" for k in range(4)],
-        "            }",
-        f"            g_oam_entries[{e}].affine_slot=_as;",
-    ]
-    key = ["_ac->rot==_arot", "_ac->srot==_srot", "_ac->asx==_asx", "_ac->asy==_asy", "_ac->ssx==_ssx",
-           "_ac->ssy==_ssy", "_ac->lx==_lx", "_ac->ly==_ly", "_ac->px==_px", "_ac->py==_py", "_ac->fl==_fl"]
-    return [
-        # Transform monde + local composés
-        f"        int _arot=g_actors[{idx}].rotation;",
-        f"        int _srot=g_oam_entries[{e}].rotation;",
-        f"        int _asx=g_actors[{idx}].scale_x; int _asy=g_actors[{idx}].scale_y;",
-        f"        int _ssx=g_oam_entries[{e}].scale_x; int _ssy=g_oam_entries[{e}].scale_y;",
-        f"        int _fh=g_oam_entries[{e}].flip_h; int _fv=g_oam_entries[{e}].flip_v;",
-        # Le cadre est un corps RIGIDE accroché à l'actor : le point P du cadre
-        # (offset + demi-cadre + pivot, repère local de l'actor) est transformé par
-        # la matrice de l'ACTOR en entier, demi-cadre compris :
-        #   P = actor.position + R(rotation)·S(scale)·(offset + (W/2, H/2) + pivot).
-        # Ne tourner que `offset` puis ajouter le demi-cadre à plat décalait le
-        # sprite dès que l'actor tournait ou changeait d'échelle (offset par défaut
-        # (-W/2,-H/2) : le centre décrivait un cercle autour de la position).
-        # Le flip du SPRITE n'y entre pas : il retourne la texture sur place.
-        f"        int _px=g_oam_entries[{e}].pivot_x; int _py=g_oam_entries[{e}].pivot_y;",
-        f"        int _lx=g_oam_entries[{e}].offset_x+{W // 2}+_px; int _ly=g_oam_entries[{e}].offset_y+{H // 2}+_py;",
-        # Tout ce qui suit jusqu'à la position ne dépend que de ces entrées : si aucune n'a changé depuis l'image
-        # précédente, les résultats sont relus (cf. `AffCache`). Un sprite dont la rotation ou l'échelle bouge à chaque
-        # image ne range rien (`_stb` faux) : ranger coûterait plus que ce que la relecture ne rend jamais.
-        f"        AffCache* _ac=&g_aff_cache[{e}]; int _fl=0x80|_fh|(_fv<<1);",
-        "        int _stb=(_ac->vrot==_arot&&_ac->vsx==_asx&&_ac->vsy==_asy);",
-        "        _ac->vrot=_arot; _ac->vsx=_asx; _ac->vsy=_asy;",
-        "        int _pa,_pb,_pc,_pd,_ofx,_ofy,_u,_v;",
-        f"        if(_stb&&{'&&'.join(key)}){{",
-        "            _pa=_ac->pa; _pb=_ac->pb; _pc=_ac->pc; _pd=_ac->pd;",
-        "            _ofx=_ac->ofx; _ofy=_ac->ofy; _u=_ac->u; _v=_ac->v;",
-        "        } else {",
-        "            int _ang=_arot+_srot; int _sinA,_cosA; gba_sincos(_ang,&_sinA,&_cosA);",
-        # Sans rotation locale, l'angle de l'actor est l'angle total : un seul sinus/cosinus.
-        "            int _asin,_acos; if(!_srot){_asin=_sinA;_acos=_cosA;} else gba_sincos(_arot,&_asin,&_acos);",
-        "            int _sxq=_asx*_ssx/256; int _syq=_asy*_ssy/256;",
-        "            int _sxs=_fh?-_sxq:_sxq; int _sys=_fv?-_syq:_syq;",
-        # Matrice 8.8 (base, sans flip)
-        "            gba_affine_matrix(_cosA,_sinA,_sxq,_syq,&_pa,&_pb,&_pc,&_pd);",
-        "            _ofx=(_acos*_asx*_lx - _asin*_asy*_ly)/65536;",
-        "            _ofy=(_asin*_asx*_lx + _acos*_asy*_ly)/65536;",
-        # Le POINT DE PIVOT de l'auteur (`pivot`, depuis le centre du cadre) : P reste FIXE à l'écran et le centre se
-        # place à P - M·pivot (M = rotation·échelle·flip).
-        "            _u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;",
-        "            _v=(_sinA*_sxs*_px)/65536+(_cosA*_sys*_py)/65536;",
-        "            if(_stb){",
-        "                _ac->rot=_arot; _ac->srot=_srot; _ac->asx=_asx; _ac->asy=_asy; _ac->ssx=_ssx; _ac->ssy=_ssy;",
-        "                _ac->lx=_lx; _ac->ly=_ly; _ac->px=_px; _ac->py=_py; _ac->fl=_fl;",
-        "                _ac->pa=_pa; _ac->pb=_pb; _ac->pc=_pc; _ac->pd=_pd;",
-        "                _ac->ofx=_ofx; _ac->ofy=_ofy; _ac->u=_u; _ac->v=_v;",
-        "            }",
-        "        }",
-        # Position. Le matériel pivote toujours sur le CENTRE de la texture
-        # (Tonc, obj_aff_*) : la boîte OAM (double taille) est centrée dessus. Le
-        # POINT DE PIVOT de l'auteur (`pivot`, depuis le centre du cadre) est
-        # donc obtenu par calcul : P reste FIXE à l'écran et le centre se place
-        # à P - M·pivot (M = rotation·échelle·flip). Pivot (0,0) : le centre est
-        # en `actor + R·S·(offset + demi-cadre)`, le comportement natif.
-        f"        int _ocx=({base_x})+_ofx; int _ocy=({base_y})+_ofy;",
-        f"        int sx=_ocx-{W}-_u; int sy=_ocy-{H}-_v;",
-        f"        u16 ti=(u16)({bt}+g_oam_entries[{e}].frame*{tpf});",
-        # Boîte OAM en double taille : 2W x 2H.
-        *oam_window_open(2 * W, 2 * H),
-        *matrix,
-        f"            shadow_oam[_o].attr0=(sy&0xFF)|(1<<8)|(1<<9)|(g_oam_entries[{e}].obj_mode<<10)|({sh}<<14);",
-        f"            shadow_oam[_o].attr1=(sx&0x1FF)|(_as<<9)|({sz}<<14);",
-        f"            shadow_oam[_o].attr2=(ti&0x3FF)|({priority_expr}<<10)|(g_oam_entries[{e}].pal_bank<<12);",
-        *oam_window_close(),
-    ]
+    cam = "0,0" if screen_space else "cam_x,cam_y"
+    return [f"        _oamn=oam_write_affine(&g_actors[{idx}],&g_oam_entries[{e}],&g_aff_cache[{e}],_oamn,&_affn,{cam},"
+            f"{sprite.frame_w},{sprite.frame_h},{bt},{sprite.tiles_per_frame},{sprite.oam_shape},{sprite.oam_size});"]
 
 
 def pool_affine(p, root, owner):

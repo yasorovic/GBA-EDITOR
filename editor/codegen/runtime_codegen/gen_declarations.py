@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from codegen.c_names import sym as c_sym, scene_actor_sym
 from codegen.runtime_codegen.gen_scene_query import actor_script, ui_image_sprites
+from codegen.runtime_codegen.physics.areas import area_extern_lines
 from scripting.api import AREA_EVENTS
 
 
@@ -60,7 +61,8 @@ def include_lines(p, all_scene_data: list[dict], scene_bgi: list[list[dict]], pr
 
 def extern_lines(p, all_scene_data: list[dict], scene_pis: list, actor_defined_events: dict[str, set[str]] | None
                  ) -> list[str]:
-    """Externs actors + scènes (filtrés sur les events réellement implémentés)."""
+    """Externs actors + scènes + scripts d'Area (filtrés sur les events réellement implémentés, sauf ceux d'une scène ou d'une
+    Area, dont le codegen pose tous les corps)."""
     L: list[str] = []
     def _def(sym, ev):
         """True si l'event est défini dans le script Lua de cet actor."""
@@ -100,5 +102,6 @@ def extern_lines(p, all_scene_data: list[dict], scene_pis: list, actor_defined_e
                 f"extern void {sc_sym}_scene_on_update(void);",
                 f"extern void {sc_sym}_scene_on_late_update(void);",
             ]
+        L += area_extern_lines(p, sc)
     L.append("")
     return L

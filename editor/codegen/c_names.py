@@ -51,6 +51,13 @@ def scene_actor_sym(scene_name: str, actor_name: str) -> str:
     return f"{sym(scene_name)}_{sym(actor_name)}"
 
 
+def area_script_sym(scene_name: str, area_name: str) -> str:
+    """Préfixe C du script d'une Area : ``<Scène>_<Area>``. Ses points d'entrée portent le mot de leur famille
+    (``<Scène>_<Area>_area_on_update``), comme ceux d'une scène (``<Scène>_scene_on_update``) : une Area et un acteur
+    de même nom ne se confondent pas. Son fichier C est ``<Scène>_<Area>_area.c``."""
+    return f"{sym(scene_name)}_{sym(area_name)}"
+
+
 def module_constant(music_name: str) -> str:
     """La constante `MOD_*` d'un module (musique, jingle) dans `soundbank.h` : celle que `main.c` et les tables de boîtes
     citent. Elle vient du NOM DE L'ASSET — le build réécrit le header de mmutil pour qu'il en soit ainsi

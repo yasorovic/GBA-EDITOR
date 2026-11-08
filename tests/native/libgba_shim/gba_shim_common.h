@@ -51,10 +51,11 @@ extern vu16 gba_shim_registers[16];
 #define REG_WININ     (gba_shim_registers[9])
 #define REG_WINOUT    (gba_shim_registers[10])
 
-/* Attributs d'un sprite, tels que la console les range en OAM. */
+/* Attributs d'un sprite, tels que la console les range en OAM. Le 4e champ porte, par groupes de quatre entrées, une
+   matrice affine ; il s'appelle `dummy` comme dans libgba (`gba_sprites.h`), que `oam_write_affine` lit. */
 typedef struct {
     u16 attr0, attr1, attr2;
-    s16 fill;
+    u16 dummy;
 } OBJATTR;
 
 extern OBJATTR gba_shim_oam[128];

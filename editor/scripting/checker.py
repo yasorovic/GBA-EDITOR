@@ -73,7 +73,7 @@ _ACTOR_FIELD_NAMES = frozenset(k.split(".", 1)[1] for k in RUNTIME_PROPS if k.st
 
 # Libellé du type de propriétaire du script.
 _OWNER_LABELS = {"actor": "actor", "prefab": "prefab",
-                 "scene": "scene", "camera": "camera", "behavior": "behavior"}
+                 "scene": "scene", "camera": "camera", "area": "Area", "behavior": "behavior"}
 
 
 @dataclass
@@ -225,6 +225,9 @@ class Checker:
         # Types de référence des variables locales, pour valider leurs méthodes.
         self._ref_types: dict[str, str] = RefEnv()
         self._ref_types.child_of = lambda expr: self._child_of(expr) is not None
+        # Le script d'une Area : `self` est l'Area elle-même, une référence `area` (jamais un acteur).
+        if self.ctx.owner_kind == "area":
+            self._ref_types["self"] = REF_AREA
         # Sprites de l'acteur que tient une variable locale (`local b = actor:get("X")`).
         # `None` : plusieurs acteurs possibles, ou on ne sait pas lequel.
         self._ref_libs: dict[str, object] = {}
@@ -311,12 +314,12 @@ class Checker:
 
     def _check_self_owner(self, script: LuaScript) -> None:
         """`self` désigne l'instance à laquelle le script est attaché : il n'existe
-        que pour un acteur ou un prefab. Une scène et une caméra n'ont pas
+        que pour un acteur, un prefab ou une Area. Une scène et une caméra n'ont pas
         d'instance, donc `self` y serait sans référent : erreur au build, une
         seule fois par script, plutôt qu'un C qui ne compile pas."""
         kind = self.ctx.owner_kind
-        if not kind or kind in OWNER_KINDS_WITH_SELF:
-            return
+        if not kind or kind in OWNER_KINDS_WITH_SELF or kind == "area":
+            return          # une Area a un `self` : sa propre référence (cf. `_ref_types`)
         if not uses_self(script):
             return
         if kind == "behavior":
@@ -328,7 +331,7 @@ class Checker:
         self.errors.append(CheckError(
             "error",
             f"`self` does not exist in a {_OWNER_LABELS.get(kind, kind)} script: it designates the instance the "
-            f"script is attached to, and only an actor or a prefab has one. {conseil}"))
+            f"script is attached to, and only an actor, a prefab or an Area has one. {conseil}"))
 
     def _check_export_names(self, script: LuaScript) -> None:
         """Un export est émis comme variable C à NOM NU (chantier « Les exports de

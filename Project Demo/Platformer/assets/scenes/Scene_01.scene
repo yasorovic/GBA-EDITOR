@@ -51,7 +51,7 @@
           "sprite_name": "Player",
           "initial_state": "Idle",
           "facing_auto": true,
-          "affine_transform": true,
+          "affine_transform": false,
           "scale_x": 1.0,
           "scale_y": 1.0,
           "rotation": 0,
@@ -69,10 +69,10 @@
           "tag": "player",
           "material_id": "",
           "one_way": "off",
-          "x": -13,
-          "y": -13,
-          "w": 26,
-          "h": 23
+          "x": 4,
+          "y": 4,
+          "w": 24,
+          "h": 22
         },
         {
           "component_type": "script",
@@ -92,10 +92,10 @@
           "tag": "Feet",
           "material_id": "",
           "one_way": "off",
-          "x": -7,
-          "y": 11,
+          "x": 8,
+          "y": 26,
           "w": 17,
-          "h": 4
+          "h": 6
         },
         {
           "component_type": "physics_body",
@@ -109,8 +109,8 @@
           "use_scene_gravity": true
         }
       ],
-      "x": 32,
-      "y": 160,
+      "x": 17,
+      "y": 146,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,

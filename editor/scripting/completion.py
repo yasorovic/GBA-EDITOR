@@ -375,6 +375,11 @@ def _member_candidates(qual: str, sep: str, project_names: dict | None,
         # caméra n'en ont pas, le build le refuserait : on ne le propose donc pas.
         if context in ("scene", "camera"):
             return []
+        if context == "area":
+            # Dans le script d'une Area, `self` est l'Area : les membres du type `area`.
+            pfx = f"{REF_AREA}:" if sep == ":" else f"{REF_AREA}."
+            catalog = RUNTIME_API if sep == ":" else RUNTIME_PROPS
+            return [_catalog_candidate(k) for k in catalog if k.startswith(pfx)]
         members = _SELF_METHODS if sep == ":" else _SELF_PROPS
         pfx = "actor:" if sep == ":" else "actor."       # clés du catalogue ; s'écrit `self`
         return [_catalog_candidate(pfx + m) for m in members]

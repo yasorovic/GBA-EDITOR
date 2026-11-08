@@ -87,7 +87,7 @@ REF_TYPE_TABLE: dict[str, RefType] = {
     REF_SFX: RefType(c_type="mm_sfxhand", prefix="sfx"),
     REF_COLLISION_SHAPE: RefType(c_type="int", prefix="collision_shape"),
     REF_AREA: RefType(c_type="int", prefix="area",
-                      hint="An Area is received by the `on_area_*` events: `function on_area_enter(area, my_box)`."),
+                      hint="An Area is received by the `on_area_*` events (`function on_area_enter(area, my_box)`), and is `self` in the script of an Area."),
     REF_PHYSICS_BODY: RefType(
         c_type="Actor*", prefix="body",
         hint="A PhysicsBody is acquired from its actor: `local body = self:physics_body()`."),
@@ -658,7 +658,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
             "self:collision_shape(\"hitbox\")",
     ),
     # ── Les Areas : un module `area` pour l'acquisition, une référence `area` pour ses états et ses actions. Une Area
-    # n'a ni sprite, ni vélocité, ni script, ni `destroy` : elle est posée dans la scène et n'en bouge que par sa position.
+    # n'a ni sprite, ni vélocité, ni `destroy` : elle est posée dans la scène et n'en bouge que par sa position. Dans son propre
+    # script, `self` est cette référence.
     "area.get": ApiFunc(
         lua_name="area.get", c_func="area_by_name",
         params=[Param("name", PARAM_STR, DOMAIN_AREA_NAME, doc="Name of an Area of the scene")], ret=REF_AREA,
@@ -2368,8 +2369,8 @@ EVENT_REGISTRY: dict[str, dict] = {
         ],
         "c_sig": "void {prefix}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box)",
     },
-    # Les événements d'Area : reçus par l'acteur qui TOUCHE une Area à déclencheur (TriggerComponent), jamais par l'Area,
-    # qui n'a pas de script. `area` est une référence `area`, `my_box` la boîte de `self` en contact.
+    # Les événements d'Area : reçus par l'acteur qui TOUCHE une Area à déclencheur (TriggerComponent). Le script de l'Area,
+    # s'il existe, reçoit en plus `on_actor_*` (plus bas). `area` est une référence `area`, `my_box` la boîte de `self` en contact.
     "on_area_enter": {
         "icon": "→",
         "icon_key": "ev_collision_enter",
@@ -2404,6 +2405,43 @@ EVENT_REGISTRY: dict[str, dict] = {
         ],
         "c_sig": "void {prefix}_on_area_exit(Actor* self, Area* area, u8 my_box)",
     },
+    # Le revers des précédents : reçus par le script de l'AREA (famille « area », `owner`), pour l'acteur qui la touche.
+    # Un seul test de recouvrement prévient les deux côtés. `other` est l'acteur, `other_box` sa boîte en contact. Pas de
+    # `self` dans la signature C : `self` est l'Area elle-même, une constante du fichier (cf. codegen).
+    "on_actor_enter": {
+        "owner": "area",
+        "icon": "→",
+        "icon_key": "ev_collision_enter",
+        "stub": "function on_actor_enter(other, other_box)\n\nend\n",
+        "desc": "First frame in which an actor touches this trigger Area.",
+        "params": [
+            {"name": "other",     "type": "actor", "description": "The actor that enters the Area"},
+            {"name": "other_box", "type": "int",   "description": "The collision shape of the actor involved"},
+        ],
+    },
+    "on_actor_collide": {
+        "owner": "area",
+        "icon": "⬡",
+        "icon_key": "ev_collide",
+        "stub": "function on_actor_collide(other, other_box)\n\nend\n",
+        "desc": "Called every frame in which an actor touches this trigger Area.",
+        "params": [
+            {"name": "other",     "type": "actor", "description": "The actor in contact"},
+            {"name": "other_box", "type": "int",   "description": "The collision shape of the actor involved"},
+        ],
+    },
+    "on_actor_exit": {
+        "owner": "area",
+        "icon": "←",
+        "icon_key": "ev_collision_exit",
+        "stub": "function on_actor_exit(other, other_box)\n\nend\n",
+        "desc": "First frame without contact after an actor touched this trigger Area. Sent when the Area is "
+                "deactivated; a destroyed actor cancels its contacts silently.",
+        "params": [
+            {"name": "other",     "type": "actor", "description": "The actor that leaves the Area"},
+            {"name": "other_box", "type": "int",   "description": "The collision shape of the actor involved"},
+        ],
+    },
     "on_interact": {
         "icon": "☞",
         "icon_key": "ev_interact",
@@ -2427,8 +2465,10 @@ EVENT_REGISTRY: dict[str, dict] = {
 }
 
 # Aliases dérivés : ne plus éditer, générés depuis EVENT_REGISTRY
-KNOWN_EVENTS: list[str] = list(EVENT_REGISTRY.keys())
-EVENT_C_SIGNATURES: dict[str, str] = {k: v["c_sig"] for k, v in EVENT_REGISTRY.items()}
+KNOWN_EVENTS: list[str] = [k for k, v in EVENT_REGISTRY.items() if "owner" not in v]
+EVENT_C_SIGNATURES: dict[str, str] = {k: v["c_sig"] for k, v in EVENT_REGISTRY.items() if "c_sig" in v}
+# Les contacts reçus par le script d'une Area (famille « area ») : `other` et sa boîte `other_box`.
+AREA_SCRIPT_CONTACT_EVENTS = tuple(k for k, v in EVENT_REGISTRY.items() if v.get("owner") == "area")
 
 # Les événements de contact reçoivent DEUX boîtes : `my_box` (sur `self`) et `other_box` (sur
 # `other`). Le C les passe en tag (`u8`) ; le script les tient comme des références
@@ -2437,7 +2477,7 @@ EVENT_C_SIGNATURES: dict[str, str] = {k: v["c_sig"] for k, v in EVENT_REGISTRY.i
 AREA_EVENTS = ("on_area_enter", "on_area_collide", "on_area_exit")
 # Les événements d'Area reçoivent `my_box` seulement (une Area n'a pas de boîte-acteur) : le paramètre `other_box` n'y
 # figure pas, et `BOX_PARAMS` ne s'applique qu'aux paramètres que le handler déclare.
-COLLISION_EVENTS = ("on_collide", "on_collision_enter", "on_collision_exit", *AREA_EVENTS)
+COLLISION_EVENTS = ("on_collide", "on_collision_enter", "on_collision_exit", *AREA_EVENTS, *AREA_SCRIPT_CONTACT_EVENTS)
 BOX_PARAMS = (("my_box", "self"), ("other_box", "other"))   # (nom du paramètre, acteur qui la porte)
 AREA_PARAM = "area"   # le paramètre `area` des événements d'Area : une référence REF_AREA
 
@@ -2730,6 +2770,10 @@ KNOWN_CAMERA_EVENTS: list[str] = [
     "on_update",
 ]
 
+# Points d'entrée d'une AREA : ceux d'une caméra, plus les contacts des acteurs qui la touchent (le revers des
+# `on_area_*` de l'acteur). `self` y est la référence de l'Area, jamais un acteur.
+KNOWN_AREA_EVENTS: list[str] = ["on_start", "on_update", *AREA_SCRIPT_CONTACT_EVENTS]
+
 # Les événements ADMIS par famille de propriétaire. Un script n'a pas de type : c'est
 # ce à quoi il est attaché qui décide de ce qu'il peut écrire. Un acteur et un prefab
 # partagent la famille (mêmes événements, même `self`).
@@ -2738,6 +2782,7 @@ KNOWN_EVENTS_BY_KIND: dict[str, list[str]] = {
     "prefab": KNOWN_EVENTS,
     "scene":  KNOWN_SCENE_EVENTS,
     "camera": KNOWN_CAMERA_EVENTS,
+    "area":   KNOWN_AREA_EVENTS,
 }
 
 # Un événement de N'IMPORTE quelle famille : ce qui n'en est pas un est une fonction privée.
@@ -2753,7 +2798,13 @@ def scene_event_sig(scene_sym: str, event: str, kind: str = "scene") -> str:
     `kind` nomme la famille de propriétaire : une CAMÉRA a exactement les mêmes
     points d'entrée qu'une scène et emprunte donc toute
     cette machinerie : seul le mot dans le symbole change, pour qu'un
-    `camera_Boss_camera_on_update` ne prétende pas être une scène."""
+    `camera_Boss_camera_on_update` ne prétende pas être une scène.
+
+    Les contacts d'une Area reçoivent l'acteur et le TAG de sa boîte (`other_box`, que le codegen renomme et convertit en
+    référence de boîte, comme pour un acteur)."""
+    if kind == "area" and event in AREA_SCRIPT_CONTACT_EVENTS:
+        return (f"void {scene_sym}_{kind}_{event}(Actor* other __attribute__((unused)), "
+                f"u8 other_box __attribute__((unused)))")
     return f"void {scene_sym}_{kind}_{event}(void)"
 
 

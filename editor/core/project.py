@@ -930,7 +930,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def scene_scripts(self, scene) -> tuple[list, bool]:
         """(scripts Lua qu'une scène peut exécuter, en reste-t-il d'opaques ?).
 
-        Le script de la scène, celui de chacun de ses actors, et ceux de TOUS
+        Le script de la scène, celui de chacun de ses actors et de ses Areas, et ceux de TOUS
         les prefabs : un prefab est poolé au niveau projet et `actor:spawn()`
         s'appelle de n'importe où, donc rien ne dit qu'il ne tournera pas ici.
 
@@ -956,7 +956,8 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
                 opaque = True      # .c natif : hors de portée de l'analyse
 
         add(getattr(scene, "script", ""))
-        owners = list(getattr(scene, "actors", [])) + list(getattr(self, "prefabs", []))
+        owners = (list(getattr(scene, "actors", [])) + list(getattr(scene, "areas", []))
+                  + list(getattr(self, "prefabs", [])))
         for owner in owners:
             comp = owner.get_component("script") if hasattr(owner, "get_component") else None
             if comp and getattr(comp, "active", True):
