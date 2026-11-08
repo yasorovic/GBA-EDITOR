@@ -419,9 +419,9 @@ SCREEN_CONSTANTS: dict[str, int] = {
 
 RUNTIME_API: dict[str, ApiFunc] = {
 
-    # ── Transform : position, rotation, échelle ──────────────────────
-    # Ce sont des ÉTATS de l'actor : des PROPRIÉTÉS (self.position,
-    # self.rotation, self.scale : cf. RUNTIME_PROPS), pas des appels get/set.
+    # ── Transform : position ─────────────────────────────────────────
+    # Ce sont des ÉTATS de l'actor : des PROPRIÉTÉS (self.position, et
+    # self.sprite_rotation, self.sprite_scale pour son sprite : cf. RUNTIME_PROPS), pas des appels get/set.
     # Le déplacement étalé (`self:move*`) reste un appel : une action, pas un
     # état stocké.
     "actor:move": ApiFunc(
@@ -1312,8 +1312,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="math.atan2", c_func="math_atan2",
         params=[Param("y", PARAM_INT, doc="Vertical component of the vector"), Param("x", PARAM_INT, doc="Horizontal component of the vector")], ret="int",
         doc="Angle in degrees (0-359) of the vector (x, y), same axis convention as "
-            "self.rotation, so self.rotation = math.atan2(vel.y, vel.x) orients the "
-            "actor along its velocity.",
+            "self.sprite_rotation, so self.sprite_rotation = math.atan2(vel.y, vel.x) orients the "
+            "sprite along its velocity.",
     ),
 
     # ── Scène ──────────────────────────────────────────────────────
@@ -1633,7 +1633,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
 # L'autre versant de l'API : ce qui est un ÉTAT d'objet se lit/s'écrit par accès
 # pointé (`self.position`, `camera.bound`) au lieu d'un appel get/set. La
 # frontière est celle de la grammaire :
-#   - position, vélocité, rotation, échelle d'un actor → self.*
+#   - position, vélocité d'un actor, rotation et échelle de son sprite → self.*
 #   - position et zone scrollable de la caméra → camera.*
 #   - taille du monde de la scène → scene.size (lecture seule, .w/.h)
 # Les propriétés d'actor s'accèdent sur n'importe quel Actor* nommé (self,
@@ -1654,49 +1654,26 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             "self.position = vec2(x, y) teleports it instantly and clears the "
             "accumulated sub-pixel.",
     ),
-    "actor.rotation": ApiProp(
-        lua_name="actor.rotation", c_getter="actor_get_rotation",
-        c_setter="actor_set_rotation", ptype=PARAM_INT, self_first=True,
-        doc="WORLD rotation of this actor in degrees (0-359), inherited by its "
-            "sprite. Always readable and writable; only DISPLAYED if the "
-            "SpriteComponent has \"Affine transform\" ticked (it reserves one of the "
-            "GBA's 32 affine slots). The sprite has its own local rotation: "
-            "self.sprite_rotation (sum of both on screen).",
-    ),
-    "actor.scale": ApiProp(
-        lua_name="actor.scale", c_getter="actor_get_scale",
-        c_setter="actor_set_scale", ptype=PARAM_VEC2, self_first=True,
-        doc="WORLD scale of this actor in percent (100 = normal, 50 = half), a vec2 "
-            "(.x, .y), inherited by its sprite. Always readable and writable; only "
-            "DISPLAYED if the SpriteComponent has \"Affine transform\" ticked. The "
-            "sprite has its own local scale: self.sprite_scale (product of both on "
-            "screen).",
-    ),
-
-    # ── Actor : transform LOCAL du sprite ─────────────────────────
-    # Le sprite n'a pas de position monde : sa position, son échelle et sa rotation
-    # sont RELATIVES à son actor, dans le repère local de l'actor (l'offset tourne/
-    # scale avec lui). Ne s'affichent que si le SpriteComponent a "Affine transform"
-    # coché : sans slot de matrice, aucune de ces valeurs n'atteint l'écran.
+    # ── Actor : transform du sprite ───────────────────────────────
+    # Un acteur n'a ni rotation ni échelle (retirées le 2026-11-08) : sur GBA, c'est un sprite affine qui tourne ou
+    # change d'échelle. Le sprite n'a pas de position monde : son offset se compte depuis la position de l'acteur.
+    # Ne s'affichent que si le SpriteComponent a "Affine transform" coché : sans matrice, rien n'atteint l'écran.
     "actor.sprite_rotation": ApiProp(
         lua_name="actor.sprite_rotation", c_getter="actor_get_sprite_rotation",
         c_setter="actor_set_sprite_rotation", ptype=PARAM_INT, self_first=True,
-        doc="LOCAL rotation of the sprite in degrees (0-359), composed ON TOP OF the "
-            "actor's world rotation (the sum of both is displayed). Only displayed if"
+        doc="Rotation of the sprite in degrees (0-359), around its pivot. Only displayed if"
             " this sprite has \"Affine transform\" ticked.",
     ),
     "actor.sprite_scale": ApiProp(
         lua_name="actor.sprite_scale", c_getter="actor_get_sprite_scale",
         c_setter="actor_set_sprite_scale", ptype=PARAM_VEC2, self_first=True,
-        doc="LOCAL scale of the sprite in percent (100 = normal), a vec2 (.x, .y), "
-            "MULTIPLIED by the actor's world scale. Only displayed if this sprite has"
-            " \"Affine transform\" ticked.",
+        doc="Scale of the sprite in percent (100 = normal), a vec2 (.x, .y), around its pivot. "
+            "Only displayed if this sprite has \"Affine transform\" ticked.",
     ),
     "actor.sprite_offset": ApiProp(
         lua_name="actor.sprite_offset", c_getter="actor_get_sprite_offset",
         c_setter="actor_set_sprite_offset", ptype=PARAM_VEC2, self_first=True,
-        doc="Offset of the sprite relative to its actor, in pixels, in the actor's "
-            "LOCAL frame: it rotates and scales with it (parent→child hierarchy). The"
+        doc="Offset of the sprite from its actor's position, in pixels. The"
             " sprite has no world position: the world position is self.position. "
             "Only applies if this sprite has \"Affine transform\" ticked.",
     ),
@@ -2133,7 +2110,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="actor.affine", c_getter="actor_get_affine",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
         doc="True if this actor's sprite has an affine matrix slot (\"Affine "
-            "transform\" box of the SpriteComponent), hence if its rotation and scale"
+            "transform\" box of the SpriteComponent), hence if its sprite rotation and scale"
             " are SEEN. Read-only: the slot is reserved at build.",
     ),
 
@@ -2241,6 +2218,15 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
 # suppression retrouvera son sens, sur une surface qu'on promet stable.
 
 REMOVED_API: dict[str, str] = {}
+
+# Les propriétés d'acteur retirées, par nom de champ, avec ce qui les remplace. Sans ce message, un `self.rotation`
+# deviendrait une variable du script et compilerait sans rien faire (un champ inconnu de `self` est un état de script).
+REMOVED_ACTOR_PROPS: dict[str, str] = {
+    "rotation": "an actor no longer has a rotation: turn its sprite with `self.sprite_rotation` "
+                "(the sprite needs \"Affine transform\" ticked).",
+    "scale": "an actor no longer has a scale: scale its sprite with `self.sprite_scale` "
+             "(the sprite needs \"Affine transform\" ticked).",
+}
 
 
 # Les dix `on_button_*` sont un cas à part : ce ne sont pas des appels d'API

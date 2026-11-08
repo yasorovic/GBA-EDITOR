@@ -447,7 +447,7 @@ int main(void) {
             g_alive_bits[0] = 0;
             for (int i = 2; i < 5; i++) { g_actors[i].alive = 1; g_actors[i].active = 1; g_actors[i].type_id = i; alive_bit_set(i); }
             /* la partie 1 (emplacement 3) a pour parent la racine, la partie 2 (emplacement 4) la partie 1 */
-            actor_link_slot(3, 2, 1, 1, 0, 0, 0, 256, 256); actor_link_slot(4, 3, 2, 1, 0, 0, 0, 256, 256); g_slot_depth = 2;
+            actor_link_slot(3, 2, 1, 1, 0, 0); actor_link_slot(4, 3, 2, 1, 0, 0); g_slot_depth = 2;
             printf("grp_occupe %d %d %d %d\n", spool_slot_free(2), spool_slot_free(3), spool_slot_free(4), spool_slot_free(5));
             /* Les accès de groupe : la racine d'une partie, d'une racine et d'un modèle plat ; la partie k d'une racine. */
             printf("grp_acces %d %d %d %d %d %d\n", group_root_slot(3), group_root_slot(4), group_root_slot(2), group_root_slot(5),
@@ -535,8 +535,8 @@ int main(void) {
     {
         g_spool_part = 0; g_scene_placed = 5; g_spool_start = g_spool_end = g_spool_free = 0; g_actor_slot_end = 5;
         for (int i = 0; i < 5; i++) { g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; g_actors[i].alive = 1; g_actors[i].active = 1; }
-        actor_link_slot(1, 0, 1, 1, 0, 0, 0, 256, 256); actor_link_slot(2, 1, 2, 1, 0, 0, 0, 256, 256);
-        actor_link_slot(4, 3, 1, 1, 0, 0, 0, 256, 256); g_slot_depth = 2;
+        actor_link_slot(1, 0, 1, 1, 0, 0); actor_link_slot(2, 1, 2, 1, 0, 0);
+        actor_link_slot(4, 3, 1, 1, 0, 0); g_slot_depth = 2;
         printf("pose_parent %d %d %d %d %d\n", actor_parent(&g_actors[1]) == &g_actors[0], actor_parent(&g_actors[2]) == &g_actors[1],
                actor_parent(&g_actors[0]) == 0, actor_parent(&g_actors[4]) == &g_actors[3], actor_parent(0) == 0);
         printf("pose_racine %d %d %d %d %d\n", actor_root(&g_actors[2]) == &g_actors[0], actor_root(&g_actors[1]) == &g_actors[0],

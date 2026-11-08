@@ -364,14 +364,13 @@ def test_fonction_absente_du_module_refusee():
 def test_transform_affine_avertit_sans_la_case_cochee():
     """Sans « Affine transform » sur le sprite,
     aucun slot de matrice n'est réservé au build, et rien n'affiche
-    self.rotation/scale. Un AVERTISSEMENT et non un refus — la valeur, elle,
+    self.sprite_rotation/sprite_scale. Un AVERTISSEMENT et non un refus — la valeur, elle,
     s'écrit et se relit (les accesseurs runtime ne consultent plus le slot).
     Le message nomme la case à cocher, pas le matériel."""
     from scripting.parser import parse
     from scripting.checker import check, BuildContext
 
-    for prop in ("rotation", "scale", "sprite_rotation", "sprite_scale",
-                 "sprite_offset"):
+    for prop in ("sprite_rotation", "sprite_scale", "sprite_offset"):
         src = _in_handler(f"local v = self.{prop}")
         found = check(parse(src), BuildContext(actor_name="Ball"))
         assert any("Affine transform" in e.message and e.level == "warning"
@@ -379,6 +378,14 @@ def test_transform_affine_avertit_sans_la_case_cochee():
         assert _errors(src) == [], prop
         assert check(parse(src),
                      BuildContext(actor_name="Ball", affine_transform=True)) == []
+
+
+def test_rotation_et_echelle_d_acteur_sont_refusees_avec_le_remplacant():
+    """Un acteur n'a plus ni rotation ni échelle. Sans refus explicite, `self.rotation` deviendrait une variable du
+    script et compilerait sans rien faire : le checker le refuse et nomme la propriété du sprite qui le remplace."""
+    for prop, remplacant in (("rotation", "self.sprite_rotation"), ("scale", "self.sprite_scale")):
+        for src in (_in_handler(f"local v = self.{prop}"), _in_handler(f"self.{prop} = self.{prop}")):
+            assert any(remplacant in e for e in _errors(src)), (prop, _errors(src))
 
 
 # ── 6. Les deux listes qui ne doivent pas diverger ─────────────────

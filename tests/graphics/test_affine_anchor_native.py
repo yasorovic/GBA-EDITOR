@@ -1,14 +1,9 @@
 """L'ancrage d'un sprite affine, mesuré sur le VRAI C émis par `affine_oam_lines` et sur la fonction du moteur qu'il
 appelle (`oam_write_affine`).
 
-Le cadre du sprite est un corps rigide accroché à l'actor : son centre vaut
-`position + R(rotation)·S(scale)·(offset + demi-cadre)`. Avec l'offset posé au
-cochage de la case Affine (-W/2, -H/2), le centre reste donc SUR la position de
-l'actor, quelle que soit la rotation ou l'échelle de l'actor.
-
-Régression : le C faisait tourner `offset` seul puis ajoutait le demi-cadre à plat ;
-le centre décrivait alors un cercle autour de la position dès que l'actor tournait
-(jusqu'à 22,6 px pour un cadre 16×16 à 180°), et glissait de même avec l'échelle."""
+Un acteur n'a ni rotation ni échelle : le centre du cadre vaut `position + offset + demi-cadre`, et le sprite tourne
+et change d'échelle autour de son pivot. Avec l'offset posé au cochage de la case Affine (-W/2, -H/2), le centre reste
+donc SUR la position de l'actor, quelle que soit la rotation ou l'échelle du sprite."""
 from __future__ import annotations
 
 import math
@@ -54,7 +49,7 @@ def _ecriture_affine_du_moteur() -> str:
 
 # Les structures réduites des sondes, sous les noms du moteur, et ce que `oam_write_affine` lit autour d'elles.
 STRUCTURES = """
-typedef struct { int x, y, rotation, scale_x, scale_y; } A;
+typedef struct { int x, y; } A;
 typedef struct { int rotation, scale_x, scale_y, flip_h, flip_v, offset_x, offset_y,
                  pivot_x, pivot_y, frame, obj_mode, priority, pal_bank, affine_slot; } O;
 typedef struct { u16 attr0, attr1, attr2, dummy; } S;
@@ -77,11 +72,9 @@ typedef short s16; typedef unsigned short u16; typedef signed char s8; typedef u
 int main(int c, char** v) {{
     int _oamn = 0, _affn = 0;
     g_actors[0].x = atoi(v[1]) << 8;  g_actors[0].y = atoi(v[2]) << 8;
-    g_actors[0].rotation = atoi(v[3]); g_actors[0].scale_x = g_actors[0].scale_y = atoi(v[4]);
+    g_oam_entries[0].rotation = atoi(v[3]); g_oam_entries[0].scale_x = g_oam_entries[0].scale_y = atoi(v[4]);
     g_oam_entries[0].offset_x = atoi(v[5]); g_oam_entries[0].offset_y = atoi(v[6]);
     g_oam_entries[0].pivot_x = atoi(v[7]);  g_oam_entries[0].pivot_y = atoi(v[8]);
-    g_oam_entries[0].rotation = atoi(v[9]);
-    g_oam_entries[0].scale_x = g_oam_entries[0].scale_y = 256;
     {{
 {lignes}
         int sx = (int)((unsigned)shadow_oam[0].attr1 << 23) >> 23, sy = (signed char)shadow_oam[0].attr0;   /* coin de la boîte */
@@ -112,8 +105,8 @@ def sonde(tmp_path_factory):
                        capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
 
-    def mesurer(rotation=0, echelle=256, offset=(-FRAME // 2, -FRAME // 2), pivot=(0, 0), sprite_rot=0):
-        args = [str(a) for a in (*POS, rotation, echelle, *offset, *pivot, sprite_rot)]
+    def mesurer(rotation=0, echelle=256, offset=(-FRAME // 2, -FRAME // 2), pivot=(0, 0)):
+        args = [str(a) for a in (*POS, rotation, echelle, *offset, *pivot)]
         sortie = subprocess.run([str(binaire), *args], capture_output=True, text=True, env=env, check=True)
         x, y = map(int, re.findall(r"-?\d+", sortie.stdout))
         return x, y
@@ -126,32 +119,30 @@ def _proche(mesure, attendu):
 
 
 @pytest.mark.parametrize("rotation", [0, 30, 45, 90, 135, 180, 270])
-def test_le_centre_reste_sur_la_position_quand_l_actor_tourne(sonde, rotation):
+def test_le_centre_reste_sur_la_position_quand_le_sprite_tourne(sonde, rotation):
     _proche(sonde(rotation=rotation), POS)
 
 
 @pytest.mark.parametrize("echelle", [128, 256, 512])
-def test_le_centre_reste_sur_la_position_quand_l_actor_change_d_echelle(sonde, echelle):
+def test_le_centre_reste_sur_la_position_quand_le_sprite_change_d_echelle(sonde, echelle):
     _proche(sonde(rotation=60, echelle=echelle), POS)
 
 
 @pytest.mark.parametrize("rotation", [0, 90, 180])
-def test_un_offset_quelconque_tourne_avec_le_cadre(sonde, rotation):
-    """Offset (0,0) : le centre est à (W/2, H/2) de la position, dans le repère de l'actor."""
-    r = math.radians(rotation)
+def test_l_offset_ne_tourne_pas_avec_le_sprite(sonde, rotation):
+    """Offset (0,0) : le centre est à (W/2, H/2) de la position, quelle que soit la rotation du sprite (un acteur n'a
+    pas de rotation qui ferait tourner le cadre)."""
     demi = FRAME / 2
-    attendu = (POS[0] + math.cos(r) * demi - math.sin(r) * demi,
-               POS[1] + math.sin(r) * demi + math.cos(r) * demi)
-    _proche(sonde(rotation=rotation, offset=(0, 0)), attendu)
+    _proche(sonde(rotation=rotation, offset=(0, 0)), (POS[0] + demi, POS[1] + demi))
 
 
 def test_le_pivot_reste_fixe_quand_le_sprite_tourne(sonde):
-    """P = centre + M·pivot ne bouge pas quand seule la rotation LOCALE du sprite change."""
+    """P = centre + M·pivot ne bouge pas quand la rotation du sprite change."""
     pivot = (6, 0)
 
     def point_fixe(sprite_rot):
-        cx, cy = sonde(rotation=40, pivot=pivot, sprite_rot=sprite_rot)
-        a = math.radians(40 + sprite_rot)
+        cx, cy = sonde(rotation=sprite_rot, pivot=pivot)
+        a = math.radians(sprite_rot)
         return (cx + math.cos(a) * pivot[0] - math.sin(a) * pivot[1],
                 cy + math.sin(a) * pivot[0] + math.cos(a) * pivot[1])
 

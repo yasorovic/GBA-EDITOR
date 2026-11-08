@@ -66,17 +66,17 @@ extern Actor* runtime_get_actor(int name_id);
 /* Nombre d'acteurs POSÉS de la scène active — la borne de get_actor(i). */
 extern int g_scene_placed;
 /* La HIÉRARCHIE, posés comme nés : pour chaque emplacement, l'emplacement de son parent (-1 pour une racine), sa
-   profondeur (0 pour une racine : l'ordre de la composition, parents avant enfants), sa visibilité propre et son
-   transform LOCAL dans le repère du parent (position Q8, degrés, échelle Q8). Le constructeur remet le lien à zéro ;
+   profondeur (0 pour une racine : l'ordre de la composition, parents avant enfants), sa visibilité propre et sa
+   position LOCALE, décalage depuis le parent en Q8. Le constructeur remet le lien à zéro ;
    `actor_link_slot` le pose : `scene_init` pour un posé qui a un parent de scène, le spawn pour une partie d'un modèle.
    `g_slot_depth` est la profondeur maximale de la scène (0 : aucune hiérarchie, ni composition ni cascade). */
 extern SlotLink g_slot_link[];
 extern int g_slot_depth;
 static inline int slot_parent(int slot) { return g_slot_link[slot].parent; }
-static inline void actor_link_slot(int slot, int parent, int depth, int visible, int ox, int oy, int rot, int sx, int sy) {
+static inline void actor_link_slot(int slot, int parent, int depth, int visible, int ox, int oy) {
     SlotLink* l = &g_slot_link[slot];
     l->parent = parent; l->depth = depth; l->visible = visible;
-    l->ox = ox; l->oy = oy; l->rot = rot; l->sx = sx; l->sy = sy;
+    l->ox = ox; l->oy = oy;
 }
 extern u32   _g_keys_held;
 extern u32   _g_keys_pressed;
@@ -639,12 +639,9 @@ static inline int  actor_get_flip_v(const Actor* s)  { return actor_oam_entry(s)
 static inline void actor_set_flip_v(Actor* s, int v) { actor_oam_entry(s)->flip_v = v ? 1 : 0; }
 
 /* ── Transform affine au runtime ──────────────────────────────────────────
-   Champs PAR-ACTOR de la struct Actor (cf. actor_types_static.h), et non des
-   globaux par slot : un script de prefab poolé est UNE fonction C partagée par
-   toutes ses instances, mais chaque instance a sa propre struct Actor et un
-   slot différent (OamEntry.affine_slot). Des globaux dans ce header `static`
-   créaient une COPIE par unité de compilation (main.c vs actor_*.c) — les
-   écritures self.rotation/self.scale n'atteignaient jamais le rendu.
+   Champs de l'entrée d'affichage (`OamEntry.rotation/scale_x/scale_y`, cf. actor_types_static.h), et non des globaux
+   par slot : un script de prefab poolé est UNE fonction C partagée par toutes ses instances, mais chaque instance a sa
+   propre entrée. Des globaux dans ce header `static` créeraient une COPIE par unité de compilation (main.c vs actor_*.c).
    Pas de FPU sur GBA : SIN_LUT est une table degrés→Q8 (×256) écrite en dur.
    gba_cos se déduit d'un déphasage de 90° plutôt qu'une seconde table. */
 static const s16 SIN_LUT[91] = {
@@ -700,53 +697,32 @@ static inline void gba_affine_matrix(int cosA, int sinA, int sxq, int syq, int* 
     if (!*pc && !*pd) *pd = 1;
 }
 /* Le calcul affine d'un sprite, mémoïsé PAR ENTRÉE D'AFFICHAGE (`g_aff_cache[entrée]`, défini dans main.c quand le projet a
-   un sprite affine). La clé est ce dont le résultat dépend, tel que le C de rendu le lit : rotation et échelle de l'acteur,
-   rotation et échelle locales du sprite, centre du cadre (`lx`, `ly` = décalage + demi-cadre + pivot), pivot et flips. Un sprite
-   dont rien de cela n'a bougé depuis l'image précédente relit les huit résultats au lieu de refaire sinus, cosinus, inverses
-   et produits. La clé est comparée en entier, jamais résumée : un résultat périmé ne peut pas sortir. `fl` vaut 0 tant que
-   l'entrée n'a rien rangé, 0x80 plus les flips ensuite.
+   un sprite affine). La clé est ce dont le résultat dépend, tel que le C de rendu le lit : rotation et échelle du sprite,
+   pivot et flips. Un sprite dont rien de cela n'a bougé depuis l'image précédente relit les six résultats au lieu de refaire
+   sinus, cosinus, inverses et produits. La clé est comparée en entier, jamais résumée : un résultat périmé ne peut pas
+   sortir. `fl` vaut 0 tant que l'entrée n'a rien rangé, 0x80 plus les flips ensuite.
 
-   Ranger coûte (une vingtaine d'écritures) : un sprite dont la rotation ou l'échelle change à CHAQUE image ne le fait donc
+   Ranger coûte (une quinzaine d'écritures) : un sprite dont la rotation ou l'échelle change à CHAQUE image ne le fait donc
    pas. `vrot`, `vsx`, `vsy` retiennent ces trois valeurs de l'image précédente (trois écritures, toujours) ; on ne range
    et on ne relit qu'à partir de la deuxième image où elles sont restées les mêmes. */
 typedef struct AffCache {
-    s16 vrot, vsx, vsy;                 /* rotation et échelle de l'acteur à l'image précédente */
-    s16 rot, srot, asx, asy, ssx, ssy, lx, ly;
+    s16 vrot, vsx, vsy;                 /* rotation et échelle du sprite à l'image précédente */
+    s16 rot, sx, sy;
     s8 px, py;
     u8 fl;
     s16 pa, pb, pc, pd;                 /* la matrice, avant le flip */
-    s16 ofx, ofy, u, v;                 /* le décalage du cadre tourné et le recentrage sur le pivot */
+    s16 u, v;                           /* le recentrage sur le pivot */
 } AffCache;
 /* fin de la trigonométrie du moteur */
 
 /* Un sprite dont « Affine transform » est coché a `affine_slot` >= 0 (cf.
    gen_affine.compute_affine_info) ; le rendu lui prend alors une matrice à la frame.
 
-   Ces accesseurs ne le CONSULTENT PAS. Ils l'ont fait — setter no-op et getter
-   identité sans slot — et c'était un piège : `self.rotation = self.rotation + 1`
-   n'incrémentait rien, la valeur ne faisait même pas l'aller-retour. Ces champs
-   occupent leur place dans chaque Actor de toute façon ; ils sont donc de
-   l'ÉTAT DE JEU, toujours lisible et écrivable. Sans slot, ils ne s'affichent
-   simplement pas — le build le signale par un avertissement du checker. */
+   Ces accesseurs ne le CONSULTENT PAS : la valeur est de l'état de jeu, toujours lisible et écrivable. Sans slot,
+   elle ne s'affiche simplement pas, et le build le signale par un avertissement du checker.
 
-/* Transform MONDE (self.rotation / self.scale). */
-static inline void actor_set_rotation(Actor* s, int deg) {
-    s->rotation = deg;
-}
-static inline void actor_set_scale(Actor* s, Vec2 v) {
-    s->scale_x = v.x * 256 / 100;
-    s->scale_y = v.y * 256 / 100;
-}
-static inline int  actor_get_rotation(const Actor* s) {
-    return s->rotation;
-}
-static inline Vec2 actor_get_scale(const Actor* s) {
-    return (Vec2){ s->scale_x * 100 / 256, s->scale_y * 100 / 256 };
-}
-
-/* Transform LOCAL du sprite (self.sprite_rotation / self.sprite_scale /
-   self.sprite_offset), composé par-dessus le monde : la rotation s'AJOUTE,
-   le scale se MULTIPLIE, l'offset déplace le sprite dans le repère de l'actor. */
+   Transform du sprite (self.sprite_rotation / self.sprite_scale / self.sprite_offset) : rotation et échelle autour
+   du pivot, l'offset déplace le cadre depuis la position de l'acteur. */
 static inline void actor_set_sprite_rotation(Actor* s, int deg) {
     actor_oam_entry(s)->rotation = deg;
 }
@@ -852,9 +828,9 @@ static inline void actor_destroy_internal(Actor* s)  {
     if (g_slot_depth) slot_destroy_children(s->slot_index, release);
 }
 
-/* La composition d'un enfant, chaque image, posé ou né : son transform monde est celui de son parent composé avec son
-   local (rotation = somme des degrés, échelle = produit Q8, position = parent + R(rotation)·S(échelle)·local), sa
-   visibilité celle de son parent ET la sienne. Un parent ÉTEINT éteint l'enfant (désactiver la racine désactive le
+/* La composition d'un enfant, chaque image, posé ou né : sa position monde est celle de son parent plus son décalage
+   local (un acteur n'a ni rotation ni échelle, l'enfant suit en translation), sa visibilité celle de son parent ET la
+   sienne. Un parent ÉTEINT éteint l'enfant (désactiver la racine désactive le
    sous-arbre) ; un enfant éteint ne se compose pas, et la racine ne le rallume pas. Appelée profondeur par
    profondeur (`slot_compose_all`) : le parent est toujours composé avant. */
 static inline void slot_compose(int s) {
@@ -863,13 +839,8 @@ static inline void slot_compose(int s) {
     const Actor* p = &g_actors[l->parent];
     if (!p->active) { c->active = 0; return; }
     if (!c->active) return;
-    int si, co; gba_sincos(p->rotation, &si, &co);
-    int lx = (l->ox * p->scale_x) >> 8, ly = (l->oy * p->scale_y) >> 8;
-    c->x = p->x + ((lx * co - ly * si) >> 8);
-    c->y = p->y + ((lx * si + ly * co) >> 8);
-    c->rotation = p->rotation + l->rot;
-    c->scale_x = (p->scale_x * l->sx) >> 8;
-    c->scale_y = (p->scale_y * l->sy) >> 8;
+    c->x = p->x + l->ox;
+    c->y = p->y + l->oy;
     if (c->oam_entry >= 0)
         g_oam_entries[c->oam_entry].visible = l->visible && (p->oam_entry < 0 || g_oam_entries[p->oam_entry].visible);
 }
@@ -1064,7 +1035,7 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
 #else
 #define BS_ATTR_IWRAM __attribute__((noinline))
 #endif
-/* L'écriture OAM d'un sprite affine : matrice composée (acteur puis sprite), mémoïsée dans `ac` (cf. `AffCache`), position
+/* L'écriture OAM d'un sprite affine : matrice du sprite (rotation, échelle), mémoïsée dans `ac` (cf. `AffCache`), position
    autour du pivot, puis une matrice prise à la frame (une identique déjà écrite est reprise) et l'emplacement `oamn`.
    Une seule copie pour tous les types affines : déroulée dans chaque cas du rendu, elle coûtait près de 3 Ko d'IWRAM par
    type. Ce qui diffère d'un sprite à l'autre arrive en argument : la caméra (0 pour un acteur en espace écran), le cadre
@@ -1076,37 +1047,30 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
 BS_ATTR_IWRAM
 static int __attribute__((unused)) oam_write_affine(const Actor* a, OamEntry* o, AffCache* ac, int oamn, int* affn,
         int cx, int cy, int w, int h, int base_tile, int tiles_per_frame, int shape, int size) {
-    int arot=a->rotation, srot=o->rotation;
-    int asx=a->scale_x, asy=a->scale_y, ssx=o->scale_x, ssy=o->scale_y;
+    int rot=o->rotation, sx_q=o->scale_x, sy_q=o->scale_y;
     int fh=o->flip_h, fv=o->flip_v;
     int px=o->pivot_x, py=o->pivot_y;
-    int lx=o->offset_x+w/2+px, ly=o->offset_y+h/2+py;
+    int lx=o->offset_x+w/2+px, ly=o->offset_y+h/2+py;     /* le centre du cadre, depuis la position de l'acteur */
     int fl=0x80|fh|(fv<<1);
-    int stb=(ac->vrot==arot&&ac->vsx==asx&&ac->vsy==asy);
-    ac->vrot=arot; ac->vsx=asx; ac->vsy=asy;
-    int pa,pb,pc,pd,ofx,ofy,u,v;
-    if(stb&&ac->rot==arot&&ac->srot==srot&&ac->asx==asx&&ac->asy==asy&&ac->ssx==ssx&&ac->ssy==ssy
-            &&ac->lx==lx&&ac->ly==ly&&ac->px==px&&ac->py==py&&ac->fl==fl){
+    int stb=(ac->vrot==rot&&ac->vsx==sx_q&&ac->vsy==sy_q);
+    ac->vrot=rot; ac->vsx=sx_q; ac->vsy=sy_q;
+    int pa,pb,pc,pd,u,v;
+    if(stb&&ac->rot==rot&&ac->sx==sx_q&&ac->sy==sy_q&&ac->px==px&&ac->py==py&&ac->fl==fl){
         pa=ac->pa; pb=ac->pb; pc=ac->pc; pd=ac->pd;
-        ofx=ac->ofx; ofy=ac->ofy; u=ac->u; v=ac->v;
+        u=ac->u; v=ac->v;
     } else {
-        int sinA,cosA; gba_sincos(arot+srot,&sinA,&cosA);
-        int asin_,acos_; if(!srot){asin_=sinA;acos_=cosA;} else gba_sincos(arot,&asin_,&acos_);
-        int sxq=asx*ssx/256, syq=asy*ssy/256;
-        int sxs=fh?-sxq:sxq, sys=fv?-syq:syq;
-        gba_affine_matrix(cosA,sinA,sxq,syq,&pa,&pb,&pc,&pd);
-        ofx=(acos_*asx*lx - asin_*asy*ly)/65536;
-        ofy=(asin_*asx*lx + acos_*asy*ly)/65536;
+        int sinA,cosA; gba_sincos(rot,&sinA,&cosA);
+        int sxs=fh?-sx_q:sx_q, sys=fv?-sy_q:sy_q;
+        gba_affine_matrix(cosA,sinA,sx_q,sy_q,&pa,&pb,&pc,&pd);
         u=(cosA*sxs*px)/65536-(sinA*sys*py)/65536;
         v=(sinA*sxs*px)/65536+(cosA*sys*py)/65536;
         if(stb){
-            ac->rot=arot; ac->srot=srot; ac->asx=asx; ac->asy=asy; ac->ssx=ssx; ac->ssy=ssy;
-            ac->lx=lx; ac->ly=ly; ac->px=px; ac->py=py; ac->fl=fl;
+            ac->rot=rot; ac->sx=sx_q; ac->sy=sy_q; ac->px=px; ac->py=py; ac->fl=fl;
             ac->pa=pa; ac->pb=pb; ac->pc=pc; ac->pd=pd;
-            ac->ofx=ofx; ac->ofy=ofy; ac->u=u; ac->v=v;
+            ac->u=u; ac->v=v;
         }
     }
-    int sx=((a->x>>8)-cx)+ofx-w-u, sy=((a->y>>8)-cy)+ofy-h-v;
+    int sx=((a->x>>8)-cx)+lx-w-u, sy=((a->y>>8)-cy)+ly-h-v;
     u16 ti=(u16)(base_tile+o->frame*tiles_per_frame);
     if(!(sx+2*w>0&&sx<240&&sy+2*h>0&&sy<160)) return oamn;     /* boîte OAM en double taille : 2w x 2h */
     if(oamn>=128){ g_oam_dropped++; return oamn; }

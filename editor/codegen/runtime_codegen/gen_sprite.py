@@ -534,7 +534,7 @@ def anim_oam_pass_lines(p, scene_actors, actor_offset: int, pi, layout, placed_s
     for m in shared:
         for k, owner in enumerate(owners(m)):
             if m["member_entries"][k] >= 0:            # un porteur sans entrée n'anime ni n'affiche rien
-                add(m["root_type_id"] + k, owner, m["sym"], pool_affine(p, m["prefab"], owner) is not None)
+                add(m["root_type_id"] + k, owner, m["sym"], pool_affine(p, owner) is not None)
     for j, ((actor, _sprite), kind, entry, sym) in enumerate(
             zip(scene_actors, layout.placed_type_ids, layout.placed_entry, placed_syms)):
         if entry >= 0:

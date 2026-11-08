@@ -47,7 +47,7 @@ enfant. Quelques règles :
 
 - La position se pose en coordonnées **monde** dans l'éditeur : attacher une Area ne la déplace pas.
   C'est le build qui en tire sa position par rapport au parent, et la recompose à chaque frame
-  (position, rotation et échelle du parent comprises). L'éditeur montre donc exactement ce
+  (elle suit la position du parent). L'éditeur montre donc exactement ce
   qu'affiche la première frame du jeu.
 - Déplacer le parent au canvas, à la souris ou aux flèches, **entraîne ses Areas** ; une Area n'a pas
   d'enfant, et un acteur ne peut pas avoir une Area pour parent.

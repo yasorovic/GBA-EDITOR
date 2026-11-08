@@ -245,7 +245,7 @@ class Prefab(Resource, ComponentOwnerMixin):
     # défini plus bas dans ce fichier ; le default_factory ne le résout qu'à
     # la construction, pas à la définition de la classe.
     #
-    # x/y/rotation/parent/etc de cet actor n'ont pas de sens pour un
+    # x/y/parent/etc de cet actor n'ont pas de sens pour un
     # template — jamais posé nulle part — et ne sont jamais sérialisés ici
     # (cf. to_dict) : c'est le TYPE qui est réutilisé, pas le sens de la pose.
     actor: "Actor" = field(default_factory=lambda: Actor(name="Prefab"))
@@ -370,18 +370,9 @@ class Actor(SceneMember, ComponentOwnerMixin):
     # window.OBJ (forme libre, animable). Mode 1 (semi-transparent) suppose le
     # blending, pas encore câblé. Modifiable au runtime par self.obj_mode.
     obj_mode: int = 0
-    # Transformation affine MONDE.
-    # C'est de l'ÉTAT DE JEU : un script les lit, les écrit et les relit qu'il y
-    # ait un sprite ou non. Ce qui décide si ça se VOIT est ailleurs — la case
-    # `affine_transform` du SpriteComponent, qui réserve un des 32 slots de
-    # matrice affine OAM. Sans elle, l'actor tourne pour la logique, pas pour
-    # l'écran ; le SpriteComponent compose alors son propre scale/rotation/offset
-    # locaux par-dessus ceux-ci, mais rien ne les affiche.
-    # int/float, ou référence de variable (cf. field_value.number_value) :
-    # une variable de rotation est en degrés, une d'échelle en POURCENT.
-    rotation: Raw = 0            # degrés 0-359 — rotation monde de l'actor
-    scale_x: Raw = 1.0           # scale monde de l'actor (1.0 = normal)
-    scale_y: Raw = 1.0
+    # Pas de rotation ni d'échelle d'acteur (retirées le 2026-11-08) : sur GBA, tourner ou zoomer est l'affaire d'un
+    # sprite affine, donc du SpriteComponent (`rotation`, `scale_x`, `scale_y`, case `affine_transform`). Les clés
+    # d'un ancien fichier sont ignorées par `from_dict`.
     # Ancrage ÉCRAN : x/y ne sont plus des coordonnées de monde mais des pixels
     # d'écran, et l'émission OAM ne retranche pas la caméra — l'acteur ne
     # défile pas. C'est l'UI en sprite (score, cœurs, curseur) avec tout le
@@ -401,8 +392,8 @@ class Actor(SceneMember, ComponentOwnerMixin):
     # existe déjà dans ce logiciel et s'appelle un prefab ; laisser les deux sens
     # du même mot cohabiter coûterait plus cher que la fonctionnalité.
     #
-    # x/y/rotation/scale gardent leur sens de POSE AUTHORÉE dans l'éditeur ;
-    # au build, ils deviennent le transform LOCAL, et la position monde de
+    # x/y gardent leur sens de POSE AUTHORÉE dans l'éditeur ;
+    # au build, ils deviennent le décalage LOCAL, et la position monde de
     # l'acteur est recomposée chaque frame depuis celle du parent (cf.
     # `runtime_api_inline.h`, `slot_compose`). La parenté est authorée et jamais
     # assignée au runtime : c'est ce qui rend le tri de profondeur possible au
@@ -431,9 +422,6 @@ class Actor(SceneMember, ComponentOwnerMixin):
             "pal_bank":    self.pal_bank,
             "visible":     self.visible,
             "obj_mode":    self.obj_mode,
-            "rotation":    self.rotation,
-            "scale_x":     self.scale_x,
-            "scale_y":     self.scale_y,
             "screen_space": self.screen_space,
             # Écrit seulement s'il y a un parent : un acteur ordinaire — c'est
             # à dire tous ceux d'avant la v0.23 — ne gagne pas une clé.
@@ -461,9 +449,6 @@ class Actor(SceneMember, ComponentOwnerMixin):
             pal_bank    = d.get("pal_bank", OWN_PAL_BANK),
             visible     = d.get("visible", True),
             obj_mode    = d.get("obj_mode", 0),
-            rotation    = number_raw(d.get("rotation", 0), int),
-            scale_x     = number_raw(d.get("scale_x", 1.0), float),
-            scale_y     = number_raw(d.get("scale_y", 1.0), float),
             screen_space = d.get("screen_space", False),
             parent       = (d.get("parent") or None),
             dir_x       = d.get("dir_x", 0),

@@ -39,15 +39,15 @@ def scene_writes(project, monkeypatch):
 
 def test_turning_an_actor_field_writes_the_scene_once_after_the_gesture(qapp, history, project, scene_writes):
     scene = project.active_scene
-    actor = Actor(name="Hero", rotation=0)
+    actor = Actor(name="Hero", priority=0)
     scene.actors.append(actor)
     inspector = ActorInspector()
     inspector.load(actor, project, scene)
 
-    for value in range(1, 11):
-        inspector._trotation._spin.setValue(value)
+    for value in range(1, 4):
+        inspector._tpriority._spin.setValue(value)
 
-    assert actor.rotation == 10                      # le modèle suit chaque cran
+    assert actor.priority == 3                       # le modèle suit chaque cran
     assert scene_writes == [] and get_deferred_writes().has_pending()
 
     get_deferred_writes().flush()
@@ -82,17 +82,17 @@ def test_turning_an_interface_field_writes_only_its_layout_not_the_whole_project
 
 def test_an_undo_is_written_too(qapp, history, project, scene_writes):
     scene = project.active_scene
-    actor = Actor(name="Hero", rotation=0)
+    actor = Actor(name="Hero", priority=0)
     scene.actors.append(actor)
     inspector = ActorInspector()
     inspector.load(actor, project, scene)
-    inspector._trotation._spin.setValue(5)
+    inspector._tpriority._spin.setValue(2)
     get_deferred_writes().flush()
     scene_writes.clear()
 
     history.undo()
 
-    assert actor.rotation == 0 and get_deferred_writes().has_pending()
+    assert actor.priority == 0 and get_deferred_writes().has_pending()
     get_deferred_writes().flush()
     assert scene_writes == [scene]
 

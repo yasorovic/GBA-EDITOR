@@ -308,7 +308,7 @@ def _anim_union(p, owner, sprite) -> tuple[list[str], list[list[int]]]:
 def _affine_reserved(owner) -> bool:
     """Cet actor/prefab réserve-t-il un slot de matrice affine ? La case vit sur
     le SpriteComponent ; sans sprite,
-    rien n'est réservé. Le checker s'en sert pour avertir qu'un `self.rotation`
+    rien n'est réservé. Le checker s'en sert pour avertir qu'un `self.sprite_rotation`
     ne se verra pas — il ne refuse plus le build : la valeur, elle, s'écrit et
     se relit."""
     comp = affine_sprite_component(owner)

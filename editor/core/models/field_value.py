@@ -231,7 +231,7 @@ def make_resolver(project) -> Resolver:
 # `{"var": <id>, "src": …}` que ci-dessus). Pas de forme tile.
 #
 # Unité d'une variable : le NOMBRE du champ tel que le script le lit
-# (`self.rotation` en degrés, `self.priority` 0-3, `self.scale` en POURCENT —
+# (`self.sprite_rotation` en degrés, `self.priority` 0-3, `self.sprite_scale` en POURCENT —
 # 100 = normal, comme l'API Lua), jamais l'unité interne Q8 du moteur.
 
 def is_ref_raw(raw) -> bool:

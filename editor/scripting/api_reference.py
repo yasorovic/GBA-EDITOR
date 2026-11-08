@@ -123,8 +123,6 @@ _DISPLAY_LABELS: dict[str, str] = {
 # le JSON restant lui completé automatiquement (cf. `_reconcile`).
 _PROP_HOME: dict[str, str] = {
     "actor.position":  "Transform",
-    "actor.rotation":  "Transform",
-    "actor.scale":     "Transform",
     "actor.velocity":  "Physics",
     "physics_body.velocity": "Physics",
     "physics_body.grounded": "Physics",

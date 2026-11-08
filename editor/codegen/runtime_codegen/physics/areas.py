@@ -208,7 +208,7 @@ def area_init_lines(p, scene, scene_actors: list, actor_offset: int) -> list[str
 
 def area_parent_lines(scene, scene_actors: list, actor_offset: int) -> list[str]:
     """Recompose, chaque frame, la position des Areas qui suivent un acteur : la formule des acteurs enfants
-    (`slot_compose` : position = parent + R(rotation)·S(échelle)·local), sans rotation ni échelle propres. Appelée APRÈS
+    (`slot_compose` : position = parent + décalage local, une translation). Appelée APRÈS
     la composition des acteurs (`slot_compose_all`), qui a mis à jour les parents (et les parents de parents). Une Area dont le parent est inactif ou
     détruit est tenue (`held`) : elle ne touche personne. Le local est une constante du build, tirée de la pose authorée."""
     parents = _parent_slots(scene, scene_actors, actor_offset)
@@ -218,14 +218,10 @@ def area_parent_lines(scene, scene_actors: list, actor_offset: int) -> list[str]
     L = ["    /* Areas that follow an actor — after the actors' own composition. */"]
     for i, slot in sorted(parents.items()):
         area, par = scene.areas[i], by_slot[slot]
-        ox, oy, *_ = local_transform(area, par, int(par.x), int(par.y))
+        ox, oy = local_transform(area, int(par.x), int(par.y))
         L += [f"    {{   /* {area.name} in the frame of {par.name} */",
-              f"        int _pr = g_actors[{slot}].rotation;",
-              f"        int _px = g_actors[{slot}].scale_x, _py = g_actors[{slot}].scale_y;",
-              f"        int _co, _si; gba_sincos(_pr, &_si, &_co);",
-              f"        int _lx = ({ox} * _px) >> 8, _ly = ({oy} * _py) >> 8;",
-              f"        g_areas[{i}].x = g_actors[{slot}].x + ((_lx * _co - _ly * _si) >> 8);",
-              f"        g_areas[{i}].y = g_actors[{slot}].y + ((_lx * _si + _ly * _co) >> 8);",
+              f"        g_areas[{i}].x = g_actors[{slot}].x + ({ox});",
+              f"        g_areas[{i}].y = g_actors[{slot}].y + ({oy});",
               f"        g_areas[{i}].held = !(g_actors[{slot}].active && g_actors[{slot}].alive);",
               "    }"]
     return L

@@ -1,12 +1,9 @@
 """runtime_codegen/main_checks.py : les contrôles bloquants de `generate_main`, avant d'écrire une ligne de C.
 
-Ce qui ne se verrait qu'à l'exécution, chez le joueur, fait échouer le build ici : tuiles OBJ, SRAM, parenté.
-L'avertissement sur l'affine d'un enfant ne bloque pas."""
+Ce qui ne se verrait qu'à l'exécution, chez le joueur, fait échouer le build ici : tuiles OBJ, SRAM, parenté."""
 from __future__ import annotations
 
-from core.diagnostic import build_error, build_warning
-from core.models.components import affine_sprite_component
-from codegen.runtime_codegen.gen_affine import compute_affine_info
+from core.diagnostic import build_error
 from codegen.runtime_codegen.gen_save import save_fatal
 from codegen.runtime_codegen.gen_scene_query import parent_depths
 
@@ -44,30 +41,6 @@ def check_main(p, all_scene_data: list[dict], obj_alloc: dict, obj_text_tile: in
     # budget de tuiles, et pour la même raison — ça ne se verrait qu'en jouant.
     for _d in all_scene_data:
         _fatal += parent_depths(_d["scene_actors"])[1]
-    # Un enfant hérite de la rotation et de l'échelle de son parent — mais il
-    # ne peut les AFFICHER que s'il a un slot affine, le sien ou celui du
-    # parent partagé. Il n'en partage pas quand il a un transform propre, et
-    # il n'en réserve pas sans « Affine transform » : la composition serait
-    # alors calculée puis ignorée à l'écran. Un avertissement et non une
-    # erreur — le jeu tourne, c'est l'affichage qui ment.
-    if emit:
-        for _d in all_scene_data:
-            _sa = _d["scene_actors"]
-            _aff = compute_affine_info(0, _sa)
-            _by = {a.name: a for a, _ in _sa}
-            for _j, (_a, _sp) in enumerate(_sa):
-                _par = _by.get(getattr(_a, "parent", None) or "")
-                if not _par or _j in _aff or not affine_sprite_component(_a):
-                    continue
-                _par_sc = affine_sprite_component(_par)
-                if not bool(getattr(_par_sc, "affine_transform", False)):
-                    continue
-                emit("diagnostic", build_warning(
-                    f"its parent '{_par.name}' can rotate or scale, but "
-                    f"'{_a.name}' has no affine slot — it does not share the parent's (it "
-                    "has its own rotation or scale) and reserves none. Tick \"Affine "
-                    f"transform\" on the sprite of '{_a.name}' to make it follow.",
-                    "scene", actor=_a.name))
     if _fatal:
         for _m in _fatal:
             if emit:

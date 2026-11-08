@@ -82,7 +82,7 @@ static void seul(const char* chemin, int s){
     assert(g_oam_entries[s].anim_state == @MOVING@ && g_oam_entries[s].affine_slot == 0);
     g_actors[s].vx = 256;
     for(int f = 0; f < @FRAMES@; f++){
-        g_actors[s].rotation = f * 7; g_actors[s].x += g_actors[s].vx;
+        g_oam_entries[g_actors[s].oam_entry].rotation = f * 7; g_actors[s].x += g_actors[s].vx;
         int n = rendre();
         printf("%s %d %d %d %d %d %d %d %d %d %d\n", chemin, f, g_oam_entries[s].frame, shadow_oam[0].attr0,
                shadow_oam[0].attr1, shadow_oam[0].attr2, shadow_oam[0].dummy, shadow_oam[1].dummy,
@@ -97,10 +97,10 @@ int main(void){
     memset(g_aff_cache, 0, sizeof g_aff_cache);
     place();
     g_actors[1].x = 120 * 256;
-    g_actors[0].rotation = g_actors[1].rotation = 30;
+    g_oam_entries[g_actors[0].oam_entry].rotation = g_oam_entries[g_actors[1].oam_entry].rotation = 30;
     int n = rendre();
     printf("ensemble_egal %d %d %d\n", n, g_oam_entries[0].affine_slot, g_oam_entries[1].affine_slot);
-    g_actors[1].rotation = 45;
+    g_oam_entries[g_actors[1].oam_entry].rotation = 45;
     n = rendre();
     printf("ensemble_different %d %d %d\n", n, g_oam_entries[0].affine_slot, g_oam_entries[1].affine_slot);
 

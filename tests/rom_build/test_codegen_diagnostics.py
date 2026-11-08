@@ -322,18 +322,6 @@ def test_un_parent_inconnu_bloque_la_generation_du_main(project):
     assert journal.says("error", "Ghost")
 
 
-def test_un_enfant_sans_slot_affine_sous_un_parent_qui_tourne_avertit(project):
-    from codegen.runtime_codegen import main_gen
-    from core.models.components import SpriteComponent
-    parent = Actor(name="Parent")
-    parent.components = [SpriteComponent(sprite_name="Hero", affine_transform=True)]
-    child = Actor(name="Child", parent="Parent", rotation=45)
-    child.components = [SpriteComponent(sprite_name="Hero")]
-    journal = Journal()
-    main_gen.generate_main(project, _scene_data(project, parent, child), None, [], [], journal)
-    assert journal.says("warning", "has no affine slot")
-
-
 def test_le_main_demarre_sur_la_scene_choisie_et_en_liste_deux(project):
     from codegen.runtime_codegen import main_gen
     from core.models.scene import Scene

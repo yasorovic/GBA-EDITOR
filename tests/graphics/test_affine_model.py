@@ -1,15 +1,14 @@
 """Le modèle affine : la décision vit sur
 le SPRITE (`SpriteComponent.affine_transform` — réserver un slot de matrice OAM
-est une capacité de rendu), et le rendu compose au runtime le transform MONDE de
-l'actor avec le transform LOCAL du sprite (rotation somme, scale produit, offset
-dans le repère local de l'actor).
+est une capacité de rendu), et le rendu lit au runtime le transform du sprite
+(rotation et échelle autour du pivot, offset depuis la position de l'acteur). Un
+acteur n'a ni rotation ni échelle (retirées le 2026-11-08).
 
 Deux régressions sont scellées ici, toutes deux découvertes en refondant ce
 modèle :
   * l'ancien `g_affine_*[]` était `static` dans un header multi-inclus → une
-    COPIE par unité de compilation ; les écritures self.rotation/self.scale
-    d'un script n'atteignaient jamais le rendu. Le stockage est maintenant
-    PAR-ACTOR, dans la struct Actor ;
+    COPIE par unité de compilation ; les écritures d'un script n'atteignaient
+    jamais le rendu. Le stockage est maintenant par entrée d'affichage (OamEntry) ;
   * l'ancien seed scène lisait `flip_h` sur le SpriteComponent (champ
     inexistant → toujours faux) au lieu de l'Actor.
 """
@@ -39,44 +38,31 @@ def _sc(**kw) -> SpriteComponent:
 # ── L'allocation est pilotée par le SPRITE ──────────────────────────
 
 def test_non_affine_ne_reserve_aucun_slot():
-    a = _actor()
-    sc = _sc()
-    assert affine_entry(a, sc) is None
+    assert affine_entry(_sc()) is None
+    assert affine_entry(None) is None                 # pas de sprite
 
 
 def test_affine_est_affine_meme_a_identite():
     """`affine_transform` coché rend le sprite affine même si scale/rotation valent
     leur défaut : c'est ce qui laisse le rendu écrire une matrice (prise à la frame)."""
-    e = affine_entry(_actor(), _sc(affine_transform=True))
+    e = affine_entry(_sc(affine_transform=True))
     assert e is not None and "slot" not in e
-    assert e["scale_x"] == 256 and e["scale_y"] == 256   # Q8, 100%
-
-
-def test_la_case_sur_l_actor_ne_reserve_plus_rien():
-    """(régression) La case a quitté l'Actor pour le SpriteComponent. Un attribut
-    du même nom posé à la main sur l'actor ne doit RIEN réserver — sinon les deux
-    emplacements cohabiteraient et le C émis dépendrait de l'ordre de lecture."""
-    a = _actor()
-    a.affine_transform = True           # n'est plus un champ du modèle
-    assert affine_entry(a, _sc()) is None
+    assert e["sprite_scale_x"] == 256 and e["sprite_scale_y"] == 256   # Q8, 100%
 
 
 def test_le_scale_rotation_sans_affine_sont_ignores():
     """Un scale/rotation sur le sprite SANS « Affine transform » ne crée pas de
     slot : sans réservation, aucune matrice n'est écrite."""
     sc = _sc(scale_x=2.0, rotation=45)
-    assert affine_entry(_actor(), sc) is None
+    assert affine_entry(sc) is None
 
 
-def test_monde_et_local_finissent_en_champs_actor():
-    a = _actor(rotation=90, scale_x=2.0, scale_y=0.5)
+def test_le_transform_du_sprite_finit_dans_l_entree():
     sc = _sc(affine_transform=True,
              rotation=45, scale_x=1.5, scale_y=0.25, offset_x=-8, offset_y=12)
-    e = affine_entry(a, sc)
-    assert e["rotation"] == 90            # monde
-    assert e["scale_x"] == 512            # Q8 : 2.0×256
-    assert e["scale_y"] == 128            # Q8 : 0.5×256
-    assert e["sprite_rotation"] == 45     # local
+    e = affine_entry(sc)
+    assert "rotation" not in e and "scale_x" not in e   # un acteur n'a ni rotation ni échelle
+    assert e["sprite_rotation"] == 45
     assert e["sprite_scale_x"] == 384     # Q8 : 1.5×256
     assert e["sprite_scale_y"] == 64      # Q8 : 0.25×256
     assert (e["offset_x"], e["offset_y"]) == (-8, 12)
@@ -97,11 +83,7 @@ def test_compute_affine_info_designe_les_poses_affines():
 
 # ── Le C émis reflète la composition ────────────────────────────────
 
-def test_oam_dynamic_compose_monde_local_et_offset():
-    a = _actor(rotation=30, scale_x=1.0, scale_y=1.0)
-    sc = _sc(affine_transform=True,
-             rotation=0, scale_x=1.0, scale_y=1.0, offset_x=10, offset_y=5)
-
+def test_oam_dynamic_appelle_le_moteur():
     class SpriteShape:
         frame_w, frame_h = 8, 8
         oam_shape, oam_size = 1, 0     # 8×8 affine
@@ -118,9 +100,9 @@ def test_oam_dynamic_compose_monde_local_et_offset():
 
 def test_le_pivot_est_seme_depuis_le_composant_sprite():
     sc = _sc(affine_transform=True, pivot_x=3, pivot_y={"unit": "t", "n": 1})
-    e = affine_entry(_actor(), sc)
+    e = affine_entry(sc)
     assert (e["pivot_x"], e["pivot_y"]) == (3, 8)
-    assert (affine_entry(_actor(), _sc(affine_transform=True))["pivot_x"]) == 0
+    assert (affine_entry(_sc(affine_transform=True))["pivot_x"]) == 0
 
 
 def test_centrer_sur_le_cadre_a_la_case_affine():
@@ -149,16 +131,15 @@ def test_centrer_sur_le_cadre_a_la_case_affine():
 
 
 def test_script_lua_compile_avec_les_props_affine():
-    """(end-to-end) parse → check → C : un script qui lit/écrit les props monde
-    et locaux passe quand l'actor a « Affine transform », et le C émis appelle
-    bien les setters/getters par-Actor."""
+    """(end-to-end) parse → check → C : un script qui lit/écrit les props du sprite
+    passe quand l'actor a « Affine transform », et le C émis appelle bien les setters/getters."""
     from scripting.parser import parse as lua_parse
     from scripting.checker import check as lua_check, BuildContext
     from scripting.codegen import generate as lua_generate, CodegenContext
 
     src = """
     function on_update(self)
-        self.rotation = self.rotation + 1
+        self.sprite_rotation = self.sprite_rotation + 1
         self.sprite_rotation = 45
         self.sprite_scale = vec2(150, 150)
         self.sprite_offset = vec2(-10, 6)
@@ -175,7 +156,7 @@ def test_script_lua_compile_avec_les_props_affine():
                         const_names=set(), all_actor_syms=["Ball"])
     code, _, _ = lua_generate(script, cg)
     for needle in (
-        "actor_set_rotation(self", "actor_get_rotation(self",
+        "actor_get_sprite_rotation(self",
         "actor_set_sprite_rotation(self, 45",
         "actor_set_sprite_scale(self,", "actor_set_sprite_offset(self,",
         "Vec2 s = actor_get_sprite_scale(self);",
@@ -188,14 +169,14 @@ def test_script_lua_sans_affine_avertit_sans_bloquer():
     """Un sprite sans « Affine transform » n'a aucun slot : le checker le dit,
     mais en AVERTISSEMENT. La valeur, elle, s'écrit et se relit — les accesseurs
     ne consultent plus le slot ; c'est l'affichage qui manque, pas le stockage.
-    Un refus de build ferait mentir `self.rotation = self.rotation + 1`."""
+    Un refus de build ferait mentir `self.sprite_rotation = self.sprite_rotation + 1`."""
     from scripting.parser import parse as lua_parse
     from scripting.checker import check as lua_check, BuildContext
 
-    src = "function on_update(self)\n    self.rotation = 1\nend\n"
+    src = "function on_update(self)\n    self.sprite_rotation = 1\nend\n"
     script = lua_parse(src)
     found = lua_check(script, BuildContext(actor_name="Ball", affine_transform=False))
-    assert found, "le checker doit signaler un self.rotation sans slot affine"
+    assert found, "le checker doit signaler un self.sprite_rotation sans slot affine"
     assert [e.level for e in found] == ["warning"] * len(found)
 
 
@@ -206,7 +187,7 @@ def test_accesseurs_affine_non_gardes_par_le_slot():
     from pathlib import Path
     api = (Path(__file__).resolve().parents[2]
            / "runtime" / "include" / "runtime_api_inline.h").read_text(encoding="utf-8")
-    body = api[api.index("static inline void actor_set_rotation"):
+    body = api[api.index("static inline void actor_set_sprite_rotation"):
                api.index("static inline int  actor_get_dir")]
     assert "affine_slot" not in body
 
@@ -276,23 +257,21 @@ def test_offset_du_sprite_peut_etre_une_variable():
     names = {("global", "000000000003"): "shake"}
     sc = _sc(affine_transform=True, offset_x={"unit": "t", "n": 2},
              offset_y={"var": "000000000003", "src": "global"})
-    e = affine_entry(_actor(), sc, names=names)
+    e = affine_entry(sc, names=names)
     assert e["offset_x"] == 16
     assert e["offset_y"] == "g_shake"
 
 
 def test_rotation_echelle_variables_dans_le_c():
-    """Rotation/échelle en variable : expression C ; l'échelle d'une variable
+    """Rotation/échelle du sprite en variable : expression C ; l'échelle d'une variable
     est en POURCENT (100 = normal), ramenée au Q8 du moteur."""
     names = {("global", "000000000005"): "spin", ("global", "000000000006"): "zoom"}
-    a = _actor()
-    a.rotation = {"var": "000000000005", "src": "global"}
-    a.scale_x = {"var": "000000000006", "src": "global"}
-    sc = _sc(affine_transform=True, rotation=90, scale_y=2.0)
-    e = affine_entry(a, sc, names=names)
-    assert e["rotation"] == "g_spin"
-    assert e["scale_x"] == "((g_zoom)*256/100)"
-    assert e["sprite_rotation"] == 90
+    sc = _sc(affine_transform=True, scale_y=2.0)
+    sc.rotation = {"var": "000000000005", "src": "global"}
+    sc.scale_x = {"var": "000000000006", "src": "global"}
+    e = affine_entry(sc, names=names)
+    assert e["sprite_rotation"] == "g_spin"
+    assert e["sprite_scale_x"] == "((g_zoom)*256/100)"
     assert e["sprite_scale_y"] == 512
 
 

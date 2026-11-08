@@ -1,31 +1,17 @@
 """Liens parent-enfant des acteurs posés et des parties de prefabs spawnés."""
 from __future__ import annotations
 
-import math
-
 from codegen.runtime_codegen.gen_scene_query import parent_depths
-from core.models.field_value import number_value as _number_value
 
 
-def local_transform(child, ref, ref_x: int, ref_y: int) -> tuple[int, int, int, int, int]:
-    """Le transform LOCAL de `child` dans le repère de `ref` : (ox, oy Q8, rotation en degrés, sx, sy Q8).
+def local_transform(child, ref_x: int, ref_y: int) -> tuple[int, int]:
+    """La position LOCALE de `child` depuis son parent posé en (`ref_x`, `ref_y`) : (ox, oy) en Q8.
 
-    L'auteur pose en coordonnées MONDE ; le build en tire le local, et la composition du runtime (`slot_compose`), appliquée
-    à la pose authorée du parent, redonne exactement la pose authorée de l'enfant : la scène de l'éditeur est la frame 0 du
-    jeu. C'est l'inverse de la composition : on défait la rotation du parent, puis son échelle. `ref_x`, `ref_y` : la
-    position du parent (0, 0 pour la racine d'un prefab, posée à l'origine du template). Tout reste en Q8 jusqu'à l'OAM :
-    un arrondi par niveau ferait dériver un bras d'un pixel par cran de profondeur."""
-    p_rot = float(_number_value(getattr(ref, "rotation", 0)) or 0)
-    p_sx = float(_number_value(getattr(ref, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
-    p_sy = float(_number_value(getattr(ref, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
-    dx, dy = float(int(child.x) - ref_x), float(int(child.y) - ref_y)
-    th = math.radians(-p_rot)
-    ux = dx * math.cos(th) - dy * math.sin(th)
-    uy = dx * math.sin(th) + dy * math.cos(th)
-    rot = int(_number_value(getattr(child, "rotation", 0)) or 0) - int(round(p_rot))
-    sx = int(round(float(_number_value(getattr(child, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
-    sy = int(round(float(_number_value(getattr(child, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
-    return int(round(ux / p_sx * 256)), int(round(uy / p_sy * 256)), rot, sx, sy
+    L'auteur pose en coordonnées MONDE ; le build en tire le décalage, et la composition du runtime (`slot_compose`),
+    appliquée à la pose authorée du parent, redonne la pose authorée de l'enfant : la scène de l'éditeur est la frame 0
+    du jeu. Un acteur n'a ni rotation ni échelle, l'enfant suit donc son parent en translation. `ref_x`, `ref_y` : 0, 0
+    pour la racine d'un prefab, posée à l'origine du template."""
+    return (int(child.x) - ref_x) * 256, (int(child.y) - ref_y) * 256
 
 
 def _link_line(indent: str, slot, parent, depth: int, child, local) -> str:
@@ -57,7 +43,7 @@ def part_link_lines(pf, root: str, indent: str) -> list[str]:
         ref = by_rank.get(p_off, pf)
         ref_xy = (int(ref.x), int(ref.y)) if p_off else (0, 0)
         L.append(_link_line(indent, f"group_slot({root}, {k})", f"group_slot({root}, {p_off})" if p_off else root,
-                            depth, part, local_transform(part, ref, *ref_xy)))
+                            depth, part, local_transform(part, *ref_xy)))
     return L
 
 
@@ -85,5 +71,5 @@ def placed_link_lines(scene_actors: list, actor_offset: int) -> list[str]:
         if par is None or a.name not in depths:
             continue
         L.append(_link_line("    ", actor_offset + j, idx_of[par.name], depths[a.name], a,
-                            local_transform(a, par, int(par.x), int(par.y))))
+                            local_transform(a, int(par.x), int(par.y))))
     return L

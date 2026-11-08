@@ -270,8 +270,8 @@ def test_un_modele_ne_passe_par_le_meme_parcours_que_les_poses(tmp_path):
     assert "&g_area_prev[_k][0]" in code and "&g_area_prev[_k][1]" in code
 
 
-def _scene_with_follower(**boss):
-    scene = Scene(name="S", actors=[Actor(name="Boss", x=100, y=50, **boss)], areas=[_area("Door", x=140, y=70)])
+def _scene_with_follower():
+    scene = Scene(name="S", actors=[Actor(name="Boss", x=100, y=50)], areas=[_area("Door", x=140, y=70)])
     scene.areas[0].parent = "Boss"
     return scene
 
@@ -289,41 +289,29 @@ def test_une_area_qui_suit_un_acteur_est_recomposee_apres_lui_et_tenue_si_il_s_e
     assert area_parent_lines(scene, actors, 0) == []                  # sans parent : aucune ligne, aucun coût
 
 
-def _recompose(par, local, rotation, scale):
-    """Ce que le C émis calcule (Q8, `gba_sincos`) pour la position d'une Area enfant, rendue en pixels."""
-    import math
-    ox, oy = local
-    px = py = int(round(scale * 256))
-    co, si = round(math.cos(math.radians(rotation)) * 256), round(math.sin(math.radians(rotation)) * 256)
-    lx, ly = (ox * px) >> 8, (oy * py) >> 8
-    return ((par.x << 8) + ((lx * co - ly * si) >> 8)) >> 8, ((par.y << 8) + ((lx * si + ly * co) >> 8)) >> 8
-
-
 def test_la_frame_0_recompose_la_position_vue_dans_l_editeur():
-    """Le local est tiré de la pose authorée du parent : recomposé avec cette même pose, il redonne la position du canvas."""
+    """Le local est tiré de la pose authorée du parent : ajouté à cette même pose (translation, comme le C émis), il
+    redonne la position du canvas."""
     from codegen.runtime_codegen.gen_actor_hierarchy import local_transform
-    for boss in ({}, {"rotation": 90, "scale_x": 2.0, "scale_y": 2.0}, {"rotation": 37, "scale_x": 0.5, "scale_y": 0.5}):
-        scene = _scene_with_follower(**boss)
-        par, area = scene.actors[0], scene.areas[0]
-        got = _recompose(par, local_transform(area, par, par.x, par.y)[:2], boss.get("rotation", 0), boss.get("scale_x", 1.0))
-        assert abs(got[0] - area.x) <= 1 and abs(got[1] - area.y) <= 1, (boss, got)
+    scene = _scene_with_follower()
+    par, area = scene.actors[0], scene.areas[0]
+    ox, oy = local_transform(area, par.x, par.y)
+    assert (((par.x << 8) + ox) >> 8, ((par.y << 8) + oy) >> 8) == (area.x, area.y)
 
 
 def test_une_seule_conversion_monde_vers_local_pour_acteurs_parties_et_areas():
     """Les parties d'un prefab passent par la conversion des acteurs, avec la racine du prefab (sans pose) pour origine."""
     from codegen.runtime_codegen.gen_actor_hierarchy import local_transform, part_link_lines
     from core.models.scene import Prefab
-    arm = Actor(name="Arm", x=0, y=0, rotation=90, scale_x=2.0, scale_y=2.0)
-    # (30, 10) vu depuis un parent tourné de 90° et doublé : on défait la rotation, puis l'échelle (Q8).
-    assert local_transform(Actor(name="C", x=30, y=10), arm, 0, 0)[:2] == (1280, -3840)
-    assert local_transform(Actor(name="C", x=30, y=10), arm, 30, 10)[:2] == (0, 0)           # l'origine donnée remplace la pose
-    assert local_transform(Actor(name="C", x=30, y=10), Actor(name="P", x=10, y=0), 10, 0)[:2] == (20 * 256, 10 * 256)
-    # La racine d'un prefab n'a pas de pose : ses parties s'expriment depuis l'origine, sans rotation ni échelle.
+    arm = Actor(name="Arm", x=20, y=-5)
+    assert local_transform(Actor(name="C", x=30, y=10), 0, 0) == (30 * 256, 10 * 256)
+    assert local_transform(Actor(name="C", x=30, y=10), 30, 10) == (0, 0)           # l'origine donnée remplace la pose
+    # La racine d'un prefab n'a pas de pose : ses parties s'expriment depuis l'origine.
     pf = Prefab(name="Boss", actor=Actor(name="Boss"),
                 children=[arm, Actor(name="Hand", x=30, y=10, parent="Arm"), Actor(name="Leg", x=7, y=-3)])
     text = "\n".join(part_link_lines(pf, "_b", ""))
-    assert "group_slot(_b, 2), group_slot(_b, 1), 2, 1, 1280, -3840," in text                  # Hand, dans le repère d'Arm
-    assert "group_slot(_b, 3), _b, 1, 1, 1792, -768," in text                                  # Leg, depuis la racine (7, -3) × 256
+    assert "group_slot(_b, 2), group_slot(_b, 1), 2, 1, 2560, 3840);" in text          # Hand, depuis Arm (10, 15) × 256
+    assert "group_slot(_b, 3), _b, 1, 1, 1792, -768);" in text                         # Leg, depuis la racine (7, -3) × 256
 
 
 def test_l_entree_de_scene_pose_les_areas_et_remet_les_contacts_a_zero():

@@ -13,7 +13,6 @@ Layers (z-order) :
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 import copy
-import math
 from typing import Optional
 
 from core.command_dispatcher import get_dispatcher
@@ -1180,25 +1179,19 @@ class SceneEditor(QWidget):
             save_fn = lambda _s=self: _s.scene_changed.emit()
             ox  = getattr(sprite_comp, "origin_x", 0)   if sprite_comp else 0
             oy  = getattr(sprite_comp, "origin_y", 0)   if sprite_comp else 0
-            # Transform affine MONDE (Actor) × LOCAL (SpriteComponent), comme au
-            # runtime : le sprite hérite scale (produit) et rotation (somme) de
-            # son actor, et se place en offset dans le repère local de l'actor.
-            # Sans "Affine transform" sur le SPRITE, aucun slot n'est réservé au
-            # build : rien de tout ça ne s'affiche, ni le transform de l'actor ni
-            # celui du sprite — le canvas montre donc l'identité (0°/100%), comme
-            # la ROM.
+            # Transform affine du sprite (SpriteComponent), comme au runtime : un acteur n'a ni rotation ni
+            # échelle, le sprite tourne et change d'échelle autour de son pivot et se place en offset depuis la
+            # position de l'acteur. Sans "Affine transform" sur le SPRITE, aucun slot n'est réservé au build : rien
+            # de tout ça ne s'affiche — le canvas montre donc l'identité (0°/100%), comme la ROM.
             _aff = bool(getattr(sprite_comp, "affine_transform", False)) if sprite_comp else False
             from core.models.field_value import number_value, make_resolver
             _nres = make_resolver(self._project)
             def _n(o, name, default, pct=False):
                 return number_value(getattr(o, name, default), _nres, default,
                                     ref_divisor=100 if pct else 1)
-            asx = _n(actor, "scale_x", 1.0, True)  if _aff else 1.0
-            asy = _n(actor, "scale_y", 1.0, True)  if _aff else 1.0
-            arot = _n(actor, "rotation", 0)  if _aff else 0
-            sx  = (_n(sprite_comp, "scale_x", 1.0, True) if _aff else 1.0) * asx
-            sy  = (_n(sprite_comp, "scale_y", 1.0, True) if _aff else 1.0) * asy
-            rot = (_n(sprite_comp, "rotation", 0.0) if _aff else 0.0) + arot
+            sx  = _n(sprite_comp, "scale_x", 1.0, True) if _aff else 1.0
+            sy  = _n(sprite_comp, "scale_y", 1.0, True) if _aff else 1.0
+            rot = _n(sprite_comp, "rotation", 0.0) if _aff else 0.0
             # Offset px / tile / variable : une variable se dessine à la valeur
             # par défaut de sa variable, comme la position de l'actor.
             from core.models.field_value import FieldValue, make_resolver
@@ -1211,12 +1204,9 @@ class SceneEditor(QWidget):
                      if (sprite_comp and _aff) else 0)
             piv_y = (FieldValue.parse(getattr(sprite_comp, "pivot_y", 0)).px(_res)
                      if (sprite_comp and _aff) else 0)
-            # L'offset décale le cadre dans le repère de l'ACTOR (il tourne et
-            # change d'échelle avec lui, pas avec le sprite ni son flip) — comme
-            # `affine_oam_lines`. `origin_*` du SpriteItem = l'opposé.
-            _ra = math.radians(arot)
-            disp_x = math.cos(_ra) * asx * off_x - math.sin(_ra) * asy * off_y
-            disp_y = math.sin(_ra) * asx * off_x + math.cos(_ra) * asy * off_y
+            # L'offset décale le cadre depuis la position de l'acteur (il ne tourne pas avec le sprite ni ne
+            # s'inverse avec son flip) — comme `oam_write_affine`. `origin_*` du SpriteItem = l'opposé.
+            disp_x, disp_y = off_x, off_y
             # Flip effectif = flip du component XOR flip de la direction miroir
             # (ex. Ouest = miroir horizontal de l'Est).
             fh  = bool(getattr(sprite_comp, "flip_h", False) if sprite_comp else False) ^ dir_fh

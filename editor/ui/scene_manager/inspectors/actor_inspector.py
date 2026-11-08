@@ -424,27 +424,8 @@ class ActorInspector(QWidget):
         _W.pair(label("common.position"), "X", C.AXIS_X, self._tx,
                 "Y", C.AXIS_Y, self._ty, tl, label_width=_lbl_w)
 
-        # ── Rotation / Scale monde ────────────────────────────────
-        # Avec Position : c'est le triplet de pose de l'actor, et c'est de
-        # l'état de jeu — un script les lit et les écrit dans tous les cas.
-        # Ce qui décide s'ils se VOIENT est la case « Affine transform » du
-        # SpriteComponent : elle
-        # réserve le slot de matrice OAM. Ces champs ne sont donc pas grisés
-        # quand elle est décochée — ils marchent, ils ne s'affichent pas.
-        # int ou variable (degrés) — cf. NumberField.
-        self._trotation = self._fields.bind("rotation", _W.number_field(
-            0, project=self._project, kind="int", min_v=0, max_v=359,
-            suffix="°", wrapping=True))
-        _W.row(label("common.rotation"), self._trotation, tl, label_width=_lbl_w)
-
-        self._tscale_x = self._fields.bind(
-            "scale_x", _W.number_field(1.0, project=self._project, kind="float",
-                                       min_v=0.1, max_v=4.0, step=0.1))
-        self._tscale_y = self._fields.bind(
-            "scale_y", _W.number_field(1.0, project=self._project, kind="float",
-                                       min_v=0.1, max_v=4.0, step=0.1))
-        _W.pair(label("common.scale"), "X", C.AXIS_X, self._tscale_x,
-                "Y", C.AXIS_Y, self._tscale_y, tl, label_width=_lbl_w)
+        # Pas de rotation ni d'échelle d'acteur : elles vivent sur le sprite (composant Sprite, case « Affine
+        # transform »).
 
         # ── Direction initiale : sélecteur 3×3 ───────────────────
         dir_row = QHBoxLayout(); dir_row.setSpacing(8)
@@ -731,10 +712,9 @@ class ActorInspector(QWidget):
             from core.models.field_value import variables_from_project
             _vars = variables_from_project(self._project)
             self._tx.set_variables(_vars); self._ty.set_variables(_vars)
-            for _nf in (self._trotation, self._tscale_x, self._tscale_y, self._tpriority):
-                _nf.set_variables(_vars)
+            self._tpriority.set_variables(_vars)
             self._dir_picker.set_direction(getattr(actor, "dir_x", 0), getattr(actor, "dir_y", 0))
-            # x, y, rotation, scale_x, scale_y, priority, obj_mode, screen_space,
+            # x, y, priority, obj_mode, screen_space,
             # visible : repeuplés d'un coup par le binder (x/y après le
             # set_variables ci-dessus, qui doit précéder leur set_raw). Tous vivent
             # dans la carte Transform, cachée pour une racine de prefab — les
@@ -743,10 +723,6 @@ class ActorInspector(QWidget):
             self._fields.load(actor)
             self._refresh_parent_choices(actor)
         self._refresh_relations()
-        # rotation/scale_x/scale_y sont désormais repeuplés par `self._fields.load`
-        # ci-dessus (comme les autres champs de la carte Transform). L'ancien bloc
-        # ici ne s'exécutait jamais — `_blocking` était mis à True juste avant son
-        # `if ... and not self._blocking:` (cf. TodoTechnique, Correctifs).
         self._blocking = False
         self._refresh_component_list()
         if not is_prefab_root:

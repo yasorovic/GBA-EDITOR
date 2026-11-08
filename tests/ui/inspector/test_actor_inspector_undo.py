@@ -49,21 +49,21 @@ def test_une_edition_cree_une_entree_annulable(qapp, history):
 def test_undo_restaure_le_modele_et_linspecteur_le_reflete(qapp, history):
     """Le cœur de A1 : après undo, le modèle revient à l'ancienne valeur ET un
     `load()` la fait remonter dans le widget (l'inspecteur ne ment pas)."""
-    a = Actor(name="Hero", priority=0, rotation=0)
+    a = Actor(name="Hero", priority=0, visible=True)
     insp = _loaded(a)
 
     insp._tpriority._spin.setValue(3)
-    insp._trotation._spin.setValue(45)      # champ DIFFÉRENT → 2e entrée, pas de fusion
-    assert (a.priority, a.rotation) == (3, 45)
+    insp._tvisible.setChecked(False)  # champ DIFFÉRENT → 2e entrée, pas de fusion
+    assert (a.priority, a.visible) == (3, False)
 
-    history.undo()                    # défait la rotation
-    assert (a.priority, a.rotation) == (3, 0)
+    history.undo()                    # défait la visibilité
+    assert (a.priority, a.visible) == (3, True)
     history.undo()                    # défait la priorité
-    assert (a.priority, a.rotation) == (0, 0)
+    assert (a.priority, a.visible) == (0, True)
 
     insp.load(a, project=None, scene=None)
     assert insp._tpriority.raw() == 0
-    assert insp._trotation.raw() == 0
+    assert insp._tvisible.isChecked()
 
 
 def test_redo_rejoue(qapp, history):

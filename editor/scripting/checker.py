@@ -35,7 +35,7 @@ from .exports_parser import KNOWN_TYPES as KNOWN_EXPORT_TYPES
 # Boutons GBA : liste unique définie dans `core.models`.
 from core.models.settings import BUTTON_NAMES
 from codegen.c_names import c_ident
-from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND,
+from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_ACTOR_PROPS, REMOVED_EVENTS, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND,
                   ALL_KNOWN_EVENTS, OWNER_KINDS_WITH_SELF, DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX,
                   DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE,
                   DOMAIN_MUSIC_BOX_TRIGGER, DOMAIN_MUSIC_SECTION,
@@ -1392,7 +1392,7 @@ class Checker:
         _, p = prop
         if (p.lua_name.startswith(f"{REF_ACTOR}.")
                 and p.lua_name.split(".")[1] in
-                ("rotation", "scale", "sprite_rotation", "sprite_scale", "sprite_offset",
+                ("sprite_rotation", "sprite_scale", "sprite_offset",
                  "sprite_pivot")
                 and not self.ctx.affine_transform):
             self.errors.append(CheckError(
@@ -1892,6 +1892,13 @@ class Checker:
                         "error",
                         f"{e.obj.name}.tag: the identity of an actor is now `{e.obj.name}.name`. "
                         "`tag` is reserved for collision shapes (`other_box.tag`)."))
+                elif (e.field in REMOVED_ACTOR_PROPS
+                      and (self._ref_types.get(e.obj.name) or
+                           (REF_ACTOR if e.obj.name in ("self", "other", "who") else None)
+                           if isinstance(e.obj, ExprName)
+                           else infer_ref_type(e.obj, self._kinds, self._ref_types)) == REF_ACTOR):
+                    self.errors.append(CheckError(
+                        "error", f"{chain_label(e)}: {REMOVED_ACTOR_PROPS[e.field]}"))
                 elif ((isinstance(e.obj, ExprName)
                        and e.obj.name in self._ref_types)
                       or (isinstance(e.obj, (ExprCall, ExprInvoke, ExprIndex))

@@ -651,7 +651,7 @@ class CommandDispatcher(EventEmitter):
         composants, palette et notes reviennent à l'état du template
         (« remettre les valeurs par défaut »). La réservation affine suit dans
         les composants : elle vit sur le SpriteComponent. La POSE
-        (x/y/rotation/scale/parent/priorité/...) reste celle de l'instance :
+        (x/y/parent/priorité/...) reste celle de l'instance :
         elle n'a jamais appartenu au prefab (cf. core/models/scene.Prefab)."""
         if not self._project or not actor.prefab_name:
             return False

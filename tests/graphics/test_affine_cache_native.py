@@ -27,16 +27,15 @@ typedef short s16; typedef unsigned short u16; typedef signed char s8; typedef u
 {STRUCTURES}
 {_ecriture_affine_du_moteur()}
 
-/* Les entrées de la clé, dans l'ordre : rotation, rotation locale, échelles (acteur x y, sprite x y), décalage x y,
-   pivot x y, flips h v. */
-static void regler(const int p[12]) {{
+/* Les entrées de la clé, dans l'ordre : rotation du sprite, échelles x y, décalage x y, pivot x y, flips h v. Le
+   décalage n'entre pas dans la clé (il s'ajoute après le calcul) mais doit toujours se voir. */
+static void regler(const int p[9]) {{
     g_actors[0].x = 100 << 8; g_actors[0].y = 80 << 8;
-    g_actors[0].rotation = p[0]; g_oam_entries[0].rotation = p[1];
-    g_actors[0].scale_x = p[2]; g_actors[0].scale_y = p[3];
-    g_oam_entries[0].scale_x = p[4]; g_oam_entries[0].scale_y = p[5];
-    g_oam_entries[0].offset_x = p[6]; g_oam_entries[0].offset_y = p[7];
-    g_oam_entries[0].pivot_x = p[8]; g_oam_entries[0].pivot_y = p[9];
-    g_oam_entries[0].flip_h = p[10]; g_oam_entries[0].flip_v = p[11];
+    g_oam_entries[0].rotation = p[0];
+    g_oam_entries[0].scale_x = p[1]; g_oam_entries[0].scale_y = p[2];
+    g_oam_entries[0].offset_x = p[3]; g_oam_entries[0].offset_y = p[4];
+    g_oam_entries[0].pivot_x = p[5]; g_oam_entries[0].pivot_y = p[6];
+    g_oam_entries[0].flip_h = p[7]; g_oam_entries[0].flip_v = p[8];
 }}
 
 static void rendre(unsigned out[7]) {{
@@ -50,23 +49,21 @@ static void rendre(unsigned out[7]) {{
 }}
 
 int main(void) {{
-    const int base[12] = {{37, 11, 256, 256, 256, 256, 20, 30, 3, 5, 0, 0}};
-    /* une perturbation par entrée de la clé, plus deux paires dont la somme des champs ne bouge pas */
-    int pert[16][12] = {{{{0}}}};
-    int delta[16][12] = {{
-        {{1,0,0,0,0,0,0,0,0,0,0,0}}, {{0,7,0,0,0,0,0,0,0,0,0,0}}, {{0,0,16,0,0,0,0,0,0,0,0,0}}, {{0,0,0,16,0,0,0,0,0,0,0,0}},
-        {{0,0,0,0,16,0,0,0,0,0,0,0}}, {{0,0,0,0,0,16,0,0,0,0,0,0}}, {{0,0,0,0,0,0,8,0,0,0,0,0}}, {{0,0,0,0,0,0,0,8,0,0,0,0}},
-        {{0,0,0,0,0,0,0,0,8,0,0,0}}, {{0,0,0,0,0,0,0,0,0,8,0,0}}, {{0,0,0,0,0,0,0,0,0,0,1,0}}, {{0,0,0,0,0,0,0,0,0,0,0,1}},
-        {{0,0,0,0,0,0,8,0,-8,0,0,0}},      /* décalage +8, pivot -8 : `lx` ne change pas, `px` oui */
-        {{0,0,0,0,0,0,0,8,0,-8,0,0}},      /* idem en y */
-        {{0,0,16,0,-16,0,0,0,0,0,0,0}},    /* échelle acteur +16, échelle sprite -16 */
-        {{360,0,0,0,0,0,0,0,0,0,0,0}},     /* un tour de plus : même angle, autre champ */
+    const int base[9] = {{37, 256, 256, 20, 30, 3, 5, 0, 0}};
+    /* une perturbation par entrée, plus deux paires dont la somme des champs ne bouge pas, et un tour de plus */
+    int delta[12][9] = {{
+        {{1,0,0,0,0,0,0,0,0}}, {{0,16,0,0,0,0,0,0,0}}, {{0,0,16,0,0,0,0,0,0}}, {{0,0,0,8,0,0,0,0,0}},
+        {{0,0,0,0,8,0,0,0,0}}, {{0,0,0,0,0,8,0,0,0}}, {{0,0,0,0,0,0,8,0,0}}, {{0,0,0,0,0,0,0,1,0}},
+        {{0,0,0,0,0,0,0,0,1}},
+        {{0,0,0,8,0,-8,0,0,0}},      /* décalage +8, pivot -8 : `lx` ne change pas, `px` oui */
+        {{0,0,0,0,8,0,-8,0,0}},      /* idem en y */
+        {{360,0,0,0,0,0,0,0,0}},     /* un tour de plus : même angle, autre valeur */
     }};
-    long mauvais = 0, essais = 0, attendus_hits = 0;
+    long mauvais = 0, essais = 0;
     unsigned a[7], b[7], c[7];
-    for (int k = -1; k < 16; k++) {{
-        int p[12];
-        for (int i = 0; i < 12; i++) p[i] = base[i] + (k >= 0 ? delta[k][i] : 0);
+    for (int k = -1; k < 12; k++) {{
+        int p[9];
+        for (int i = 0; i < 9; i++) p[i] = base[i] + (k >= 0 ? delta[k][i] : 0);
         /* le cache chaud sur la base (deux images : la deuxième range) ... */
         regler(base); memset(g_aff_cache, 0, sizeof g_aff_cache); rendre(c); rendre(c);
         /* ...la référence : les entrées perturbées sans cache ... */
@@ -104,5 +101,5 @@ def sortie(tmp_path_factory):
 
 
 def test_le_cache_ne_rend_jamais_un_resultat_perime(sortie):
-    assert sortie["essais"] == 51            # la base et seize perturbations de la clé, trois images chacune
+    assert sortie["essais"] == 39            # la base et douze perturbations, trois images chacune
     assert sortie["mauvais"] == 0

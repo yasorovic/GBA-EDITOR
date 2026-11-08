@@ -1,8 +1,8 @@
 """La composition parent → enfant, posé ou né : une seule fonction runtime (`slot_compose_all`), deux façons d'avoir le lien.
 
 Une racine, un bras (enfant de la racine) et une main (enfant du bras), posés dans la scène (`placed_link_lines`) ou nés
-ensemble comme un prefab à parties (`part_link_lines`). Les deux dérivent le local de la pose authorée ; à une racine donnée
-(position, rotation, échelle), le bras et la main tombent au même endroit, avec la même rotation et la même échelle. Les
+ensemble comme un prefab à parties (`part_link_lines`). Les deux dérivent le local de la pose authorée ; à une position de
+racine donnée, le bras et la main tombent au même endroit (un acteur n'a ni rotation ni échelle : translation seule). Les
 deux règles du sous-arbre sont vérifiées : une racine éteinte éteint ses enfants, un enfant éteint ne se recompose pas (et
 éteint les siens). Les sprites sont absents : la propagation de `visible` n'est pas couverte.
 """
@@ -17,19 +17,16 @@ from native_toolchain import compilateur_hote, environnement
 
 INCLUDE = Path(__file__).resolve().parents[2] / "runtime" / "include"
 
-# Pose authorée de la hiérarchie, dans le MONDE d'un template posé à l'origine : (x, y, rotation, échelle %).
-BRAS = (16, 8, 0, 100)
-MAIN = (24, 8, 30, 200)
+# Pose authorée de la hiérarchie, dans le MONDE d'un template posé à l'origine : (x, y).
+BRAS = (16, 8)
+MAIN = (24, 8)
 RACINE_POSEE = (100, 50)         # où la racine est posée dans la scène; le prefab, lui, est à l'origine
 
-# (nom, x, y, rotation, échelle Q8) de la racine à l'exécution.
+# (nom, x, y) de la racine à l'exécution.
 SCENARIOS = [
-    ("neutre", 100, 50, 0, 256),
-    ("tournee_90", 100, 50, 90, 256),
-    ("tournee_45", 37, 12, 45, 256),
-    ("echelle_double", 100, 50, 0, 512),
-    ("tournee_et_echelle", 80, 20, 30, 384),
-    ("tournee_negative", 10, 10, -60, 256),
+    ("neutre", 100, 50),
+    ("deplacee", 37, 12),
+    ("negative", -10, -20),
 ]
 
 SONDE = r"""
@@ -49,34 +46,34 @@ void window_set(int id,int x,int y,int w,int h);
 void window_show(int id,int on);
 #include "runtime_api_inline.h"
 
-static void membre(int k, int x, int y, int rot, int sx, int sy, int actif){
+static void membre(int k, int x, int y, int actif){
     g_actors[k] = (Actor){0};
     g_actors[k].slot_index = k; g_actors[k].alive = 1; g_actors[k].active = actif; g_actors[k].oam_entry = -1;
-    g_actors[k].x = x; g_actors[k].y = y; g_actors[k].rotation = rot; g_actors[k].scale_x = sx; g_actors[k].scale_y = sy;
+    g_actors[k].x = x; g_actors[k].y = y;
     g_slot_link[k].parent = -1; g_slot_link[k].depth = 0;
 }
 static void rapporte(const char* chemin, const char* nom, int base){
     for(int k = 1; k <= 2; k++){
         const Actor* a = &g_actors[base + k];
-        printf("%s %s %d %d %d %d %d %d %d\n", chemin, nom, k, a->x, a->y, a->rotation, a->scale_x, a->scale_y, a->active);
+        printf("%s %s %d %d %d %d\n", chemin, nom, k, a->x, a->y, a->active);
     }
 }
 /* Posé : racine 0, bras 1, main 2. */
-static void joue_pose(const char* nom, int x, int y, int rot, int echelle, int racine_active, int bras_actif){
-    for(int k = 0; k < 8; k++) membre(k, 0, 0, 0, 256, 256, 0);
-    membre(0, x << 8, y << 8, rot, echelle, echelle, racine_active);
-    membre(1, 0, 0, 0, 256, 256, bras_actif);
-    membre(2, 0, 0, 0, 256, 256, 1);
+static void joue_pose(const char* nom, int x, int y, int racine_active, int bras_actif){
+    for(int k = 0; k < 8; k++) membre(k, 0, 0, 0);
+    membre(0, x << 8, y << 8, racine_active);
+    membre(1, 0, 0, bras_actif);
+    membre(2, 0, 0, 1);
 @PLACED@
     slot_compose_all();
     rapporte("pose", nom, 0);
 }
 /* Né : racine 4, bras 5, main 6 (un groupe contigu de 3 emplacements). */
-static void joue_pool(const char* nom, int x, int y, int rot, int echelle, int racine_active, int bras_actif){
-    for(int k = 0; k < 8; k++) membre(k, 0, 0, 0, 256, 256, 0);
-    membre(4, x << 8, y << 8, rot, echelle, echelle, racine_active);
-    membre(5, 0, 0, 0, 256, 256, bras_actif);
-    membre(6, 0, 0, 0, 256, 256, 1);
+static void joue_pool(const char* nom, int x, int y, int racine_active, int bras_actif){
+    for(int k = 0; k < 8; k++) membre(k, 0, 0, 0);
+    membre(4, x << 8, y << 8, racine_active);
+    membre(5, 0, 0, bras_actif);
+    membre(6, 0, 0, 1);
 @POOL@
     slot_compose_all();
     rapporte("pool", nom, 4);
@@ -94,9 +91,8 @@ def _hierarchie():
     from core.models.scene import Actor, Prefab
 
     def piece(nom, pose, parent=None, origine=(0, 0)):
-        x, y, rotation, echelle = pose
-        return Actor(name=nom, x=origine[0] + x, y=origine[1] + y, rotation=rotation,
-                     scale_x=echelle / 100, scale_y=echelle / 100, parent=parent)
+        x, y = pose
+        return Actor(name=nom, x=origine[0] + x, y=origine[1] + y, parent=parent)
 
     racine = Actor(name="Racine", x=RACINE_POSEE[0], y=RACINE_POSEE[1])
     posés = [racine, piece("Bras", BRAS, "Racine", RACINE_POSEE), piece("Main", MAIN, "Bras", RACINE_POSEE)]
@@ -122,10 +118,10 @@ def etats(tmp_path_factory):
     posé, pool, profondeur = _liens()
     assert len(posé) == 2 and len(pool) == 2, "un lien par enfant, de chaque côté"
     assert profondeur == 2
-    cas = [(nom, x, y, rot, e, 1, 1) for nom, x, y, rot, e in SCENARIOS]
-    cas += [("racine_eteinte", 100, 50, 0, 256, 0, 1), ("bras_eteint", 100, 50, 0, 256, 1, 0)]
-    runs = "\n".join(f'    joue_pose("{n}", {x}, {y}, {r}, {e}, {ra}, {ba}); joue_pool("{n}", {x}, {y}, {r}, {e}, {ra}, {ba});'
-                     for n, x, y, r, e, ra, ba in cas)
+    cas = [(nom, x, y, 1, 1) for nom, x, y in SCENARIOS]
+    cas += [("racine_eteinte", 100, 50, 0, 1), ("bras_eteint", 100, 50, 1, 0)]
+    runs = "\n".join(f'    joue_pose("{n}", {x}, {y}, {ra}, {ba}); joue_pool("{n}", {x}, {y}, {ra}, {ba});'
+                     for n, x, y, ra, ba in cas)
     runs = f"    g_slot_depth = {profondeur};\n" + runs
     dossier = tmp_path_factory.mktemp("composition")
     (dossier / "obj_state.h").write_text("#define OBJ_STATE_STRIDE 1\n", encoding="utf-8")
@@ -147,25 +143,24 @@ def etats(tmp_path_factory):
 
 @pytest.mark.parametrize("nom", [s[0] for s in SCENARIOS] + ["racine_eteinte", "bras_eteint"])
 def test_un_lien_pose_et_un_lien_ne_composent_pareil(etats, nom):
-    """(x, y, rotation, échelle x, échelle y, actif) du bras puis de la main, identiques quel que soit le lien."""
+    """(x, y, actif) du bras puis de la main, identiques quel que soit le lien."""
     assert len(etats[("pose", nom)]) == 2
     assert etats[("pool", nom)] == etats[("pose", nom)]
 
 
 def test_la_composition_place_les_enfants(etats):
     """Sans cela, des états égaux mais jamais recomposés passeraient pour une égalité."""
-    (bras_x, bras_y, bras_rot, bras_sx, _sy, _a), (main_x, main_y, main_rot, main_sx, _sy2, _a2) = etats[("pose", "neutre")]
-    assert (bras_x, bras_y, bras_rot, bras_sx) == ((100 + 16) << 8, (50 + 8) << 8, 0, 256)
-    assert (main_x, main_y) == ((100 + 24) << 8, (50 + 8) << 8)       # 8 px à droite du bras, sans rotation parente
-    assert (main_rot, main_sx) == (30, 512)
-    assert etats[("pose", "tournee_90")][0][2] == 90                  # le bras tourne avec la racine
+    (bras_x, bras_y, _a), (main_x, main_y, _a2) = etats[("pose", "neutre")]
+    assert (bras_x, bras_y) == ((100 + 16) << 8, (50 + 8) << 8)
+    assert (main_x, main_y) == ((100 + 24) << 8, (50 + 8) << 8)       # 8 px à droite du bras
+    assert etats[("pose", "negative")][1][:2] == ((-10 + 24) << 8, (-20 + 8) << 8)   # la main suit la racine
 
 
 def test_une_racine_eteinte_eteint_ses_enfants(etats):
     """Le bras et la main s'éteignent, sans être recomposés."""
-    assert etats[("pose", "racine_eteinte")] == [(0, 0, 0, 256, 256, 0), (0, 0, 0, 256, 256, 0)]
+    assert etats[("pose", "racine_eteinte")] == [(0, 0, 0), (0, 0, 0)]
 
 
 def test_un_enfant_eteint_n_est_pas_recompose_et_eteint_les_siens(etats):
     """Le bras éteint garde sa position ; la main, dont le parent est éteint, s'éteint à son tour."""
-    assert etats[("pose", "bras_eteint")] == [(0, 0, 0, 256, 256, 0), (0, 0, 0, 256, 256, 0)]
+    assert etats[("pose", "bras_eteint")] == [(0, 0, 0), (0, 0, 0)]

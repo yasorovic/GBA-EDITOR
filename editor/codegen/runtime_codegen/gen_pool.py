@@ -171,7 +171,7 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
         L += actor_init_lines(
             p, pf, obj_layout, slot="_i", entry="_e" if pi["member_entries"][0] >= 0 else -1,
             name=root_name, type_id=pi["root_type_id"], position=("x", "y"), active=True,
-            appearance_base=_alay.member_base.get((s, 0)), affine=pool_affine(p, pf, pf),
+            appearance_base=_alay.member_base.get((s, 0)), affine=pool_affine(p, pf),
             indent="            ",
         )
         # Les parties prennent leur transform monde à la première composition, par leur lien.
@@ -180,8 +180,8 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
             L += actor_init_lines(
                 p, part, obj_layout, slot=f"group_slot(_i, {k})", entry=entry,
                 name=identity, type_id=pi["root_type_id"] + k, position=(0, 0), active=True,
-                appearance_base=_alay.member_base.get((s, k)), affine=pool_affine(p, pf, part),
-                indent="            ", composed=True,
+                appearance_base=_alay.member_base.get((s, k)), affine=pool_affine(p, part),
+                indent="            ",
             )
         L += part_link_lines(pf, "_i", "            ")
         if has_script:

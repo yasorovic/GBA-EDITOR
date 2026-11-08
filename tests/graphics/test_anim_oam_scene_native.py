@@ -73,7 +73,7 @@ int main(void){
     assert(g_oam_entries[s].anim_state == @MOVING@ && g_oam_entries[s].affine_slot == 0);
     a->vx = 256;
     for(int f = 0; f < @FRAMES@; f++){
-        a->rotation = f * 7; a->x += a->vx;
+        g_oam_entries[a->oam_entry].rotation = f * 7; a->x += a->vx;
         int n = rendre();
         printf("seul %d %d %d %d %d %d %d %d %d %d\n", f, g_oam_entries[s].frame, shadow_oam[0].attr0,
                shadow_oam[0].attr1, shadow_oam[0].attr2, shadow_oam[0].dummy, shadow_oam[1].dummy,
@@ -83,10 +83,10 @@ int main(void){
     memset(g_aff_cache, 0, sizeof g_aff_cache);
     Actor* b = spawn_S_Hero(120, 60);
     int t = b->slot_index;
-    a->rotation = b->rotation = 30;
+    g_oam_entries[a->oam_entry].rotation = g_oam_entries[b->oam_entry].rotation = 30;
     int n = rendre();
     printf("ensemble_egal %d %d %d\n", n, g_oam_entries[s].affine_slot, g_oam_entries[t].affine_slot);
-    b->rotation = 45;
+    g_oam_entries[b->oam_entry].rotation = 45;
     n = rendre();
     printf("ensemble_different %d %d %d\n", n, g_oam_entries[s].affine_slot, g_oam_entries[t].affine_slot);
 

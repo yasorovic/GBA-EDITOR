@@ -10,7 +10,7 @@ voyant.
 
 Créez trois acteurs : `Tourelle` (le socle), `Canon` et `Voyant`, chacun avec son sprite. Dans
 l'arbre de la scène, faites glisser `Canon` et `Voyant` sur `Tourelle`. Ils deviennent ses
-**enfants** : ils suivent le déplacement, la rotation et l'échelle de leur parent.
+**enfants** : ils suivent le déplacement de leur parent.
 
 La parenté sert à :
 
@@ -60,7 +60,7 @@ if boss then
 end
 ```
 
-La partie vaut `nil` si `boss` a disparu ou si cette partie a été détruite, donc le test habituel suffit. Ses propriétés s'enchaînent (`boss.Canon.position`, `boss.Canon.rotation = 90`) : si la partie a disparu, la lecture rend 0 et l'écriture est sautée. Pour un acteur posé, c'est pareil : `actor:get("Chef").Bras` est l'enfant de scène `Bras` (et `bras.Pointe` son propre enfant). `actor:get(i)` et `other` ne désignent aucun acteur ou prefab connu au Build : leurs parties ne se nomment pas.
+La partie vaut `nil` si `boss` a disparu ou si cette partie a été détruite, donc le test habituel suffit. Ses propriétés s'enchaînent (`boss.Canon.position`, `boss.Canon.sprite_rotation = 90`) : si la partie a disparu, la lecture rend 0 et l'écriture est sautée. Pour un acteur posé, c'est pareil : `actor:get("Chef").Bras` est l'enfant de scène `Bras` (et `bras.Pointe` son propre enfant). `actor:get(i)` et `other` ne désignent aucun acteur ou prefab connu au Build : leurs parties ne se nomment pas.
 
 ### Remonter vers la racine
 

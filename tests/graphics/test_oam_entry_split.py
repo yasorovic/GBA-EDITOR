@@ -50,9 +50,9 @@ def test_l_acteur_garde_son_socle_et_le_lien():
     actor = _champs("Actor")
     assert {"x", "y", "vx", "vy", "name", "active", "dir_x", "dir_y",
             "oam_entry"} <= actor
-    # Le transform MONDE reste à l'acteur (état de jeu, lisible sans affichage) ;
-    # le LOCAL (`rotation`, `scale_*` de l'entrée) est un autre champ, d'un autre struct.
-    assert {"rotation", "scale_x", "scale_y"} <= actor
+    # Un acteur n'a ni rotation ni échelle : elles vivent sur l'entrée d'affichage (le sprite).
+    assert not {"rotation", "scale_x", "scale_y"} & actor
+    assert {"rotation", "scale_x", "scale_y"} <= _champs("OamEntry")
     assert "} collision;" in HEADER
 
 

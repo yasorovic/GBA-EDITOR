@@ -15,8 +15,8 @@ def _initial_values(fields: dict) -> str:
 
 
 def actor_init_lines(p, owner, obj_layout, *, slot, entry, name, type_id, position, active,
-                     appearance_base, affine, indent, composed=False) -> list[str]:
-    """Émet une commande d'initialisation. Une partie recomposée commence à l'origine."""
+                     appearance_base, affine, indent) -> list[str]:
+    """Émet une commande d'initialisation."""
     component, sprite = resolve_initial_appearance(p, owner)
     names = var_names_from_project(p)
     dx, dy = getattr(owner, "dir_x", 0), getattr(owner, "dir_y", 0)
@@ -31,9 +31,6 @@ def actor_init_lines(p, owner, obj_layout, *, slot, entry, name, type_id, positi
         "dir_y": dy,
         "facing_x": dx,
         "facing_y": dy,
-        "rotation": 0 if composed else number_c(getattr(owner, "rotation", 0), names),
-        "scale_x": 256 if composed else number_c(getattr(owner, "scale_x", 1.0), names, q8=True),
-        "scale_y": 256 if composed else number_c(getattr(owner, "scale_y", 1.0), names, q8=True),
     }
     boxes = []
     for box in owner_boxes(owner, sprite):

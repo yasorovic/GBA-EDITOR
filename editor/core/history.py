@@ -223,8 +223,7 @@ class MoveActorGroupCmd(Command):
     descendants du même delta pour garder leurs positions monde relatives —
     cf. Actor.parent dans core/models/scene.py : l'auteur pose en coordonnées
     monde, ce déplacement groupé est ce qui les garde cohérentes dans
-    l'éditeur tant que le canvas ne compose pas encore les transforms
-    (rotation/scale du parent, elles, ne sont visibles qu'au runtime).
+    l'éditeur (un enfant suit son parent en translation, comme au runtime).
 
     Structurellement un `MoveActorCmd` par acteur du groupe, réunis en une
     seule entrée d'historique : annuler doit tout ramener en un geste."""

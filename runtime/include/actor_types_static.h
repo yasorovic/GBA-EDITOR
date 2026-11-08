@@ -86,7 +86,7 @@ enum { BODY_MODE_NONE = 0, BODY_MODE_CHARACTER = 1, BODY_MODE_KINEMATIC = 2, BOD
 typedef struct PairRun { u16 first; u8 n; } PairRun;
 
 /* Le lien d'un emplacement à son parent (`g_slot_link`, runtime_api_inline.h). */
-typedef struct SlotLink { s16 parent; u8 depth; u8 visible; int ox, oy; s16 rot; u16 sx, sy; } SlotLink;
+typedef struct SlotLink { s16 parent; u8 depth; u8 visible; int ox, oy; } SlotLink;
 
 /* Deux tables, deux unités :
 
@@ -164,11 +164,9 @@ typedef struct OamEntry {
                          d'état, comme `collision.grounded` reste vrai tant
                          qu'on ne quitte pas le sol (self.anim_finished). */
     s16 anim_length;
-    /* Transform LOCAL, composé PAR-DESSUS le transform monde de l'Actor
-       (self.sprite_rotation / self.sprite_scale / self.sprite_offset) : la
-       rotation s'AJOUTE à la rotation monde, le scale se MULTIPLIE par le scale
-       monde, l'offset déplace le sprite dans le repère de l'actor (il tourne et
-       scale avec lui). Le sprite n'a pas de position monde : elle reste x/y. */
+    /* Transform du sprite par rapport à son acteur (self.sprite_rotation / self.sprite_scale / self.sprite_offset) :
+       rotation et échelle autour du pivot, offset qui déplace le cadre depuis la position de l'acteur. Le sprite n'a
+       pas de position monde : elle reste x/y. Seul un sprite affine affiche rotation et échelle. */
     s16 rotation;          /* local, degrés */
     s16 scale_x;           /* local, Q8 */
     s16 scale_y;           /* local, Q8 */
@@ -244,18 +242,8 @@ typedef struct Actor {
        l'autre. */
     int x, y;               /* position monde, Q8 */
     int vx, vy;             /* vélocité, Q8 */
-    /* Transform MONDE. C'est de
-       l'ÉTAT DE JEU : toujours lisible et écrivable, avec ou sans slot de
-       matrice affine. Ce qui décide s'il se VOIT est `OamEntry.affine_slot`.
-
-       Champs PAR-ACTOR et non par slot : un script de prefab poolé est une
-       fonction C partagée par toutes ses instances, mais chaque instance a sa
-       propre struct Actor (donc ses propres valeurs) et un slot différent.
-       Un global par slot aurait exigé de connaître le slot à l'écriture et
-       violait l'inclusion mono-texte des headers (copie `static` par TU). */
-    s16 rotation;          /* monde, degrés 0-359 (self.rotation) */
-    s16 scale_x;           /* monde, Q8 (256 = 100%) — self.scale */
-    s16 scale_y;           /* monde, Q8 */
+    /* Pas de rotation ni d'échelle d'acteur : sur GBA, tourner ou zoomer est l'affaire d'un sprite affine (une des 32
+       matrices), donc du transform du sprite (`OamEntry.rotation/scale_x/scale_y`). Retirées le 2026-11-08. */
 
     /* 16 bits, puis 8 bits (aucun remplissage) — cf. OamEntry pour la règle. */
     s16 name;              /* ACTOR_* — type de l'acteur (≥ 255 dès qu'un pool est grand) */

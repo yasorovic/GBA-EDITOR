@@ -323,7 +323,7 @@ def child_name(expr) -> Optional[str]:
 
 
 def _actor_prop_fields() -> dict[str, ApiProp]:
-    """Champ (`position`, `velocity`, `rotation`, `scale`) → ApiProp, pour les
+    """Champ (`position`, `velocity`, `sprite_rotation`...) → ApiProp, pour les
     propriétés d'actor consultées sur un récepteur autre que self."""
     out: dict[str, ApiProp] = {}
     for name, prop in RUNTIME_PROPS.items():

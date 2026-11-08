@@ -117,11 +117,13 @@ def _script_comp(path, active=True):
     return NS(script=path, active=active)
 
 
-def _project(scene_script="", actor_scripts=(), camera_scripts=(), prefab_scripts=()):
+def _project(scene_script="", actor_scripts=(), camera_scripts=(), prefab_scripts=(), area_scripts=()):
     actors = [NS(name=f"A{i}", get_component=lambda _n, c=_script_comp(s): c)
               for i, s in enumerate(actor_scripts)]
     cams = [NS(name=f"C{i}", script=s) for i, s in enumerate(camera_scripts)]
-    scene = NS(name="S", script=scene_script, actors=actors, cameras=cams)
+    areas = [NS(name=f"Z{i}", get_component=lambda _n, c=_script_comp(s): c)
+             for i, s in enumerate(area_scripts)]
+    scene = NS(name="S", script=scene_script, actors=actors, cameras=cams, areas=areas)
     prefabs = [NS(name=f"P{i}", get_component=lambda _n, c=_script_comp(s): c)
                for i, s in enumerate(prefab_scripts)]
     return NS(scenes=[scene], prefabs=prefabs)
@@ -149,4 +151,14 @@ def test_acteurs_et_prefab_partagent_une_famille():
 
 def test_scripts_distincts_par_famille_sans_refus():
     assert _refus(_project(scene_script="s/a.lua", actor_scripts=["s/b.lua"],
-                           camera_scripts=["s/c.lua"])) == []
+                           camera_scripts=["s/c.lua"], area_scripts=["s/d.lua"])) == []
+
+
+def test_meme_fichier_sur_acteur_et_area_refuse():
+    """Une Area a sa propre famille : `self` y est l'Area, pas un acteur."""
+    (msg,) = _refus(_project(actor_scripts=["s/x.lua"], area_scripts=["s/x.lua"]))
+    assert "Area" in msg and "several families" in msg
+
+
+def test_deux_areas_partagent_une_famille():
+    assert _refus(_project(area_scripts=["s/x.lua", "s/x.lua"])) == []
