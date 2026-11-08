@@ -38,7 +38,7 @@ def template(tmp_path, monkeypatch):
     for name in web_build._PLAYER_FILES + web_build._BUILTIN_FILES:
         (root / name).write_text(name, encoding="utf-8")
     (root / "shaders" / "lcd.shader" / "manifest.ini").write_text("[shader]", encoding="utf-8")
-    monkeypatch.setattr(web_build, "WEB_TEMPLATE", root)
+    monkeypatch.setattr(web_build, "WEB_PLAYER_DIR", root)
     return root
 
 
@@ -173,6 +173,15 @@ def test_project_json_n_ecrit_que_les_reglages_changes(tmp_path):
     assert project.settings.web_accent_color == "#ff0000"
     project.save_settings()
     assert '"web_page_color"' not in project.project_file.read_text(encoding="utf-8")
+
+
+def test_le_lecteur_livre_contient_chaque_fichier_du_paquet():
+    # Le dossier réel, pas le gabarit factice : un fichier oublié casserait chaque export.
+    names = ("index.html",) + web_build._PLAYER_FILES + web_build._BUILTIN_FILES
+    missing = [name for name in names if not (web_build.WEB_PLAYER_DIR / name).is_file()]
+    assert not missing
+    build = (Path(__file__).resolve().parents[2] / "packaging" / "nuitka_build.py").read_text(encoding="utf-8")
+    assert "'web_player'" in build
 
 
 def test_les_valeurs_hors_domaine_reviennent_au_defaut():

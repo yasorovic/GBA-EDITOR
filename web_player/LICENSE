@@ -1,0 +1,64 @@
+Licence du lecteur web (zlib)
+=============================
+
+Ce dossier (`web_player/`) n'est pas couvert par la GPL de l'éditeur.
+
+    Le fichier LICENSE à la racine du dépôt (GPL-3.0-only) couvre l'éditeur.
+    Il ne s'applique pas à ce dossier, ni à ce que l'éditeur génère.
+
+
+Pourquoi une licence distincte
+------------------------------
+
+Le lecteur web est recopié dans le ZIP de chaque jeu exporté par Build WEB, à
+côté de la ROM. Sous la licence de l'éditeur, tout jeu publié dans un navigateur
+distribuerait du code GPL. Ce n'est pas l'intention : le lecteur suit la même
+règle que le moteur (`runtime/LICENSE`).
+
+
+Ce que cela signifie pour les créateurs de jeux (note explicative, non contractuelle)
+--------------------------------------------------------------------------------------
+
+**Votre jeu vous appartient entièrement.** Vous pouvez le publier et le vendre,
+sur itch.io ou ailleurs, sans rien demander ni reverser, et sans publier vos
+sources.
+
+**Les notices voyagent toutes seules.** Le ZIP contient le code du lecteur en
+clair : la clause 3 ci-dessous demande que ce texte l'accompagne, et Build WEB
+l'y place. Il suffit de ne pas le retirer.
+
+**Les composants tiers ont leurs propres licences**, livrées avec eux dans le ZIP :
+l'émulateur mGBA et son SDK WebAssembly (`vendor/`, MPL-2.0, voir
+`vendor/NOTICE.txt`), les shaders d'affichage repris de mGBA (`shaders/`, MPL-2.0
+ou MIT selon l'en-tête de chaque fichier) et les
+polices Sniglet et Balsamiq Sans (SIL OFL 1.1). Ces licences autorisent un jeu
+commercial.
+
+Ces points sont l'intention ; le texte qui fait foi est celui qui suit.
+
+
+Texte de la licence
+-------------------
+
+Copyright (c) 2026 Yasorovic
+
+This software is provided 'as-is', without any express or implied warranty. In
+no event will the authors be held liable for any damages arising from the use of
+this software.
+
+Permission is granted to anyone to use this software for any purpose, including
+commercial applications, and to alter it and redistribute it freely, subject to
+the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not claim
+   that you wrote the original software. If you use this software in a product,
+   an acknowledgment in the product documentation would be appreciated but is
+   not required.
+
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
+
+This license covers the files written for Backstage in this folder. It does not
+cover `vendor/`, `shaders/` or the font files, which keep their own licenses.

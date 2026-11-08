@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
-from codegen.web_build import EJECTED_TEMPLATE, FRAME_SIZE, WEB_TEMPLATE, eject_template
+from codegen.web_build import EJECTED_TEMPLATE, FRAME_SIZE, eject_template
 from core.models.settings import WEB_BUTTON_BORDER_WIDTH_MAX
 from core.project import Project
 from ui.common.color_field import ColorField
@@ -92,13 +92,10 @@ class WebPlayerCard(CollapsibleCard):
         self._starting_preview = False
         body = self.body_layout
 
-        status = QLabel(label('projset.web_build_output' if WEB_TEMPLATE.is_dir()
-                              else 'projset.web_build_unavailable'))
+        status = QLabel(label('projset.web_build_output'))
         status.setWordWrap(True)
         status.setStyleSheet(f"color:{C.TEXT_DIM};")
         body.addWidget(status)
-        if not WEB_TEMPLATE.is_dir():
-            return
 
         # ── Mode : deux boutons côte à côte, exclusifs ────────────
         mode_box = QWidget()
@@ -369,8 +366,6 @@ class WebPlayerCard(CollapsibleCard):
     # ── Synchronisation ─────────────────────────────────────────
 
     def refresh(self):
-        if not WEB_TEMPLATE.is_dir():
-            return
         s = self._project.settings
         custom = s.web_player_mode == "custom"
         self._mode_buttons[s.web_player_mode].setChecked(True)

@@ -42,7 +42,6 @@ from core import crash_log
 from core.launch_target import parse_launch_arguments
 from core.app_info import APP_NAME, APP_VERSION
 from core.interface_preferences import interface_language, interface_scale_percent
-from codegen.web_build import WEB_TEMPLATE
 
 
 def dark_palette() -> QPalette:
@@ -129,8 +128,8 @@ if __name__ == "__main__":
     # Qt lit ce facteur à la création de la QApplication, pas après : d'où le
     # redémarrage demandé par le panneau Interface.
     os.environ["QT_SCALE_FACTOR"] = str(interface_scale_percent() / 100)
-    if WEB_TEMPLATE.is_dir():
-        QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+    # L'aperçu du lecteur web (WebEngine) exige ce partage avant la QApplication.
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
     # La trace s'écrit déjà (crash_log.install) ; la fenêtre, elle, a besoin de
     # la QApplication. Sans reporter (smoke test), une exception s'écrit dans le

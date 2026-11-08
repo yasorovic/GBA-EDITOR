@@ -1,8 +1,5 @@
 """La carte « WEB build » des paramètres du projet : deux modes exclusifs."""
-import pytest
-
 from core.project import Project
-from ui.scene_manager.inspectors import web_player_card
 from ui.scene_manager.inspectors.project_settings_dialog import BuildPanel
 
 
@@ -10,13 +7,6 @@ def _project(tmp_path):
     root = tmp_path / "projet"
     root.mkdir()
     return Project(root)
-
-
-@pytest.fixture(autouse=True)
-def template(tmp_path, monkeypatch):
-    root = tmp_path / "template"
-    root.mkdir()
-    monkeypatch.setattr(web_player_card, "WEB_TEMPLATE", root)
 
 
 def test_les_deux_modes_montrent_chacun_leur_panneau(qapp, tmp_path):

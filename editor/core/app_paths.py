@@ -50,6 +50,9 @@ APP_DIR = _app_dir()
 # runtime/ — sources C du moteur, copiées dans le projet à chaque build ROM.
 RUNTIME_DIR = APP_DIR / "runtime"
 
+# web_player/ — lecteur web (zlib), copié dans le ZIP de chaque Build WEB.
+WEB_PLAYER_DIR = APP_DIR / "web_player"
+
 
 def config_dir() -> Path:
     """

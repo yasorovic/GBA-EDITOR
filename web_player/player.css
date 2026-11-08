@@ -1,0 +1,60 @@
+/* Règles dont le lecteur a besoin pour fonctionner, quel que soit son habillage.
+   Le mode Built-in y ajoute style.css et theme.css ; le mode Custom y ajoute le
+   CSS personnalisé du projet (custom.css). Rien ici ne décide de l'apparence. */
+
+[hidden] {
+  display: none !important;
+}
+
+/* L'écran, le rideau de lancement et le canvas des shaders se superposent. */
+.screen-frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.screen-frame > :is(canvas, .curtain, .shader-name) {
+  grid-area: 1 / 1;
+}
+
+.screen-frame canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  align-self: center;
+  aspect-ratio: 3 / 2;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+#shader-screen {
+  pointer-events: none;
+  image-rendering: auto;
+}
+
+.curtain.hidden {
+  display: none;
+}
+
+/* Les bandes du contour n'apparaissent que si l'habillage les place. */
+.frame-caption,
+.frame-signature {
+  display: none;
+}
+
+/* Une seule icône visible par bouton, selon l'état que le script pose. */
+#shader-cycle[aria-pressed="false"] .shader-on,
+#shader-cycle[aria-pressed="true"] .shader-off {
+  display: none;
+}
+
+.sound-off,
+.fullscreen-exit,
+#mute[data-muted] .sound-on,
+.player:fullscreen .fullscreen-enter {
+  display: none;
+}
+
+#mute[data-muted] .sound-off,
+.player:fullscreen .fullscreen-exit {
+  display: inline;
+}

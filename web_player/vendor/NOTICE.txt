@@ -1,0 +1,11 @@
+@wasm-gaming/mgba-wasm 0.1.1 (MPL-2.0)
+Package and corresponding upstream source: https://registry.npmjs.org/@wasm-gaming/mgba-wasm/-/mgba-wasm-0.1.1.tgz
+Upstream project and WebAssembly build source: https://github.com/wasm-gaming/mGBA-wasm
+
+Backstage changes mgba.sdk.js to accept host controls and load/save battery-backed RAM.
+The corresponding modified source is included in mgba.sdk.ts.
+
+Backstage rebuilds mgba.js and mgba.wasm with scripts/build-mgba.sh from that project
+(mGBA c034660f007c543233f1cadeb0ca13c71afd8f41), with one change to scripts/shim/mgba_shim.c:
+a GBA save restored before the first frame is attached as the cartridge save file.
+The modified shim source is included in mgba_shim.c.

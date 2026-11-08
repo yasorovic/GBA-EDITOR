@@ -2196,7 +2196,6 @@
     "projset.web_preview_portrait": { "text": "Mobile vertical" },
     "projset.web_preview_landscape": { "text": "Mobile horizontal" },
     "projset.web_preview_unavailable": { "text": "Aperçu indisponible. L’éditeur lancé depuis les sources utilise PyQt6-WebEngine, fourni avec les dépendances de développement." },
-    "projset.web_build_unavailable": { "text": "La compilation Web nécessite le prototype de lecteur dans proto/web." },
     "projset.web_mode_builtin": { "text": "Intégré" },
     "projset.web_mode_builtin_tip": { "text": "Le lecteur fourni, habillé de couleurs, d’une texture, d’une ombre et d’un contour. Ces réglages ne changent que des variables CSS : la mise en page reste intacte." },
     "projset.web_mode_custom": { "text": "CSS personnalisé" },

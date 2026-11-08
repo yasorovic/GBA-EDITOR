@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Prototype de lecteur Backstage</title>
+    <link rel="stylesheet" href="player.css">
+    <link rel="stylesheet" href="style.css">
+    <!-- prototype -->
+    <style>body { background: #1e1e1e; }</style>
+    <!-- /prototype -->
+  </head>
+  <body>
+    <main class="web-prototype">
+      <!-- prototype -->
+      <header class="prototype-toolbar">
+        <div class="player-header">
+          <h1>Lecteur Backstage</h1>
+          <button id="mobile-preview" class="icon-button" type="button" aria-label="Vue mobile" title="Vue mobile" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          </button>
+          <label id="preview-orientation" hidden>Orientation
+            <select id="touch-layout">
+              <option value="portrait">Verticale</option>
+              <option value="landscape">Horizontale</option>
+            </select>
+          </label>
+        </div>
+        <section class="options" aria-label="Options du lecteur">
+          <label>Contour
+            <select id="frame-style">
+              <option value="backstage" selected>Made with Backstage</option>
+              <option value="backstage-light">Made with Backstage (blanc)</option>
+              <option value="none">Aucun</option>
+              <option value="image">Image personnalisée</option>
+            </select>
+          </label>
+          <div id="frame-picker" hidden>
+            <label for="frame-file">Image du contour</label>
+            <input id="frame-file" type="file" accept="image/png,image/webp,image/svg+xml" aria-describedby="frame-help">
+            <p id="frame-help" class="note">Utilise une image PNG ou WebP de 272 × 208 px (ou un multiple exact), ou un SVG aux mêmes proportions). Elle se pose par-dessus le jeu : laisse transparente la zone de l’écran (240 × 160 px, à 16 px du haut et des côtés ; la bande du bas mesure 32 px).</p>
+            <p id="frame-status" class="note" role="status"></p>
+          </div>
+        </section>
+      </header>
+      <!-- /prototype -->
+
+      <div class="player-slot">
+        <section class="player" data-frame="backstage" aria-label="Lecteur de jeu">
+          <div class="screen-slot">
+            <div class="screen-frame">
+              <span class="frame-caption" lang="en">Made with</span>
+              <canvas id="screen" width="240" height="160" tabindex="0" aria-label="Écran du jeu" inert></canvas>
+              <canvas id="shader-screen" aria-hidden="true" hidden></canvas>
+              <p id="shader-name" class="shader-name" role="status" hidden></p>
+              <div id="curtain" class="curtain">
+                <p id="status" role="status">Préparation de l’émulateur…</p>
+                <div class="launch-actions">
+                  <label class="file-picker" hidden>
+                    <span>Choisir une ROM</span>
+                    <input id="rom-file" type="file" accept=".gba,application/octet-stream">
+                  </label>
+                  <button id="play" type="button" data-rom="" disabled>Jouer</button>
+                </div>
+              </div>
+              <div class="frame-signature">
+                <img id="frame-wordmark" src="BackStage-logo-long-white.svg" width="120" height="26" alt="Backstage">
+              </div>
+            </div>
+          </div>
+          <div class="touch-controls" role="group" aria-label="Commandes tactiles">
+            <div class="touch-side touch-left">
+              <button type="button" class="touch-button shoulder" data-control="l">L</button>
+              <!-- Un seul pavé à glisser : les huit secteurs donnent aussi les diagonales. -->
+              <div class="touch-stick" role="img" aria-label="Croix directionnelle">
+                <svg class="stick-mark" data-direction="up" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
+                <svg class="stick-mark" data-direction="right" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
+                <svg class="stick-mark" data-direction="down" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
+                <svg class="stick-mark" data-direction="left" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
+                <span class="stick-knob"></span>
+              </div>
+            </div>
+            <div class="touch-side touch-right">
+              <button type="button" class="touch-button shoulder" data-control="r">R</button>
+              <div class="touch-actions">
+                <button type="button" class="touch-button b" data-control="b">B</button>
+                <button type="button" class="touch-button a" data-control="a">A</button>
+              </div>
+            </div>
+            <div class="touch-system">
+              <button type="button" class="touch-button select" data-control="select">Select</button>
+              <button type="button" class="touch-button start" data-control="start">Start</button>
+            </div>
+          </div>
+          <footer class="player-footer">
+            <button id="shader-cycle" class="icon-button" type="button" aria-pressed="false" aria-label="Shader : aucun" title="Shader : aucun">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="13" rx="2"/>
+                <path d="M8 21h8m-4-4v4"/>
+                <path class="shader-on" d="M7 8.5h10M7 12.5h10"/>
+                <path class="shader-off" d="m4 20 16-19"/>
+              </svg>
+            </button>
+            <div class="actions" role="group" aria-label="Réglages du jeu">
+              <button id="mute" class="icon-button" type="button" aria-label="Couper le son" title="Couper le son" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M11 5 6 9H3v6h3l5 4z"/>
+                  <path class="sound-on" d="M15 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/>
+                  <path class="sound-off" d="m16 9 5 6m0-6-5 6"/>
+                </svg>
+              </button>
+              <button id="fullscreen" class="icon-button" type="button" aria-label="Plein écran" title="Plein écran" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path class="fullscreen-enter" d="M9 4H4v5m11-5h5v5m0 6v5h-5m-6 0H4v-5"/>
+                  <path class="fullscreen-exit" d="M4 9h5V4m11 5h-5V4m5 11h-5v5M4 15h5v5"/>
+                </svg>
+              </button>
+              <button id="controls-toggle" class="icon-button" type="button" aria-label="Configurer les commandes" title="Configurer les commandes" aria-expanded="false" aria-controls="controls-panel">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 7h10a4 4 0 0 1 4 3.3l.8 4.4a2.5 2.5 0 0 1-4.2 2.2L15.5 15h-7l-2.1 1.9a2.5 2.5 0 0 1-4.2-2.2l.8-4.4A4 4 0 0 1 7 7zM8 9.5v4m-2-2h4m6-1h.01m2 2h.01"/>
+                </svg>
+              </button>
+            </div>
+          </footer>
+          <section class="controls-panel" id="controls-panel" aria-labelledby="controls-title" hidden>
+            <div class="controls-panel-content">
+              <h2 id="controls-title">Configurer les commandes</h2>
+              <p class="note">Clique sur une affectation puis appuie sur la touche ou le bouton voulu. Échap ou un second clic pour annuler.</p>
+              <p id="gamepad-status" class="note">Branche une manette ou appuie sur l’un de ses boutons.</p>
+              <div class="controls-mapping">
+                <section class="controls-group" aria-label="Directions GBA">
+                  <h3>Directions GBA</h3><span class="controls-device">Clavier</span><span class="controls-device">Manette</span>
+                  <span>Haut</span><button type="button" data-map-device="keyboard" data-map-control="up">—</button><button type="button" data-map-device="gamepad" data-map-control="up">—</button>
+                  <span>Bas</span><button type="button" data-map-device="keyboard" data-map-control="down">—</button><button type="button" data-map-device="gamepad" data-map-control="down">—</button>
+                  <span>Gauche</span><button type="button" data-map-device="keyboard" data-map-control="left">—</button><button type="button" data-map-device="gamepad" data-map-control="left">—</button>
+                  <span>Droite</span><button type="button" data-map-device="keyboard" data-map-control="right">—</button><button type="button" data-map-device="gamepad" data-map-control="right">—</button>
+                </section>
+                <section class="controls-group" aria-label="Boutons GBA">
+                  <h3>Boutons GBA</h3><span class="controls-device">Clavier</span><span class="controls-device">Manette</span>
+                  <span>A</span><button type="button" data-map-device="keyboard" data-map-control="a">—</button><button type="button" data-map-device="gamepad" data-map-control="a">—</button>
+                  <span>B</span><button type="button" data-map-device="keyboard" data-map-control="b">—</button><button type="button" data-map-device="gamepad" data-map-control="b">—</button>
+                  <span>L</span><button type="button" data-map-device="keyboard" data-map-control="l">—</button><button type="button" data-map-device="gamepad" data-map-control="l">—</button>
+                  <span>R</span><button type="button" data-map-device="keyboard" data-map-control="r">—</button><button type="button" data-map-device="gamepad" data-map-control="r">—</button>
+                  <span>Select</span><button type="button" data-map-device="keyboard" data-map-control="select">—</button><button type="button" data-map-device="gamepad" data-map-control="select">—</button>
+                  <span>Start</span><button type="button" data-map-device="keyboard" data-map-control="start">—</button><button type="button" data-map-device="gamepad" data-map-control="start">—</button>
+                </section>
+              </div>
+            </div>
+          </section>
+          <p id="compatibility" class="note" role="status"></p>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

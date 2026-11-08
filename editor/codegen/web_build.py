@@ -17,18 +17,17 @@ from tempfile import NamedTemporaryFile
 from urllib.parse import quote
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from core.app_paths import APP_DIR
+from core.app_paths import WEB_PLAYER_DIR
 from core.models.settings import ProjectSettings
 from core.resources.resource_store import replace_with_retry
 
 
-WEB_TEMPLATE = APP_DIR / "proto" / "web"
 EJECTED_TEMPLATE = "web_template"      # dossier du projet
 FRAME_SIZE = (272, 208)                # contour à la résolution native
 
 # Le lecteur vierge : tout ce qu'il faut pour jouer, sans habillage.
 _PLAYER_FILES = (
-    "main.js", "shaders.js", "player.css", "BackStage-logo-long-white.svg",
+    "LICENSE", "main.js", "shaders.js", "player.css", "BackStage-logo-long-white.svg",
     "save.js", "vendor/mgba.js", "vendor/mgba.wasm", "vendor/mgba.sdk.js",
     "vendor/mgba.config.js", "vendor/mgba.manifest.js", "vendor/mgba.options.js",
     "vendor/mgba.zip.js", "vendor/mgba.sdk.ts", "vendor/mgba_shim.c", "vendor/MPL-2.0.txt",
@@ -59,7 +58,7 @@ def _replace_once(page: str, old: str, new: str, what: str) -> str:
 
 def _page(mode: str, settings: ProjectSettings, title: str) -> str:
     """index.html du lecteur fourni, préparé pour l'habillage du mode."""
-    page = (WEB_TEMPLATE / "index.html").read_text(encoding="utf-8")
+    page = (WEB_PLAYER_DIR / "index.html").read_text(encoding="utf-8")
     page = _PROTOTYPE_BLOCK.sub("", page)
     page = _TITLE.sub(f"<title>{html.escape(title)}</title>", page, count=1)
     if mode == "builtin":
@@ -87,11 +86,11 @@ def eject_template(destination: Path, title: str) -> None:
 def _player_files():
     """(nom dans le paquet, fichier source) du lecteur vierge, shaders compris."""
     for name in _PLAYER_FILES:
-        yield name, WEB_TEMPLATE / name
+        yield name, WEB_PLAYER_DIR / name
     # Les shaders de mGBA (un dossier par shader, avec sa licence).
-    for path in sorted((WEB_TEMPLATE / "shaders").rglob("*")):
+    for path in sorted((WEB_PLAYER_DIR / "shaders").rglob("*")):
         if path.is_file():
-            yield path.relative_to(WEB_TEMPLATE).as_posix(), path
+            yield path.relative_to(WEB_PLAYER_DIR).as_posix(), path
 
 
 def _project_image(root: Path, relative: str, suffixes: tuple, what: str) -> Path:
@@ -157,7 +156,7 @@ def web_player_files(settings: ProjectSettings, project_root: Path, title: str, 
     if settings.web_player_mode == "custom":
         texts["custom.css"] = settings.web_custom_css
     else:
-        entries.extend((name, WEB_TEMPLATE / name) for name in _BUILTIN_FILES)
+        entries.extend((name, WEB_PLAYER_DIR / name) for name in _BUILTIN_FILES)
         frame_entry = ""
         if settings.web_frame == "image" and (settings.web_frame_image or not preview):
             if not settings.web_frame_image:

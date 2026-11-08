@@ -136,6 +136,10 @@ def build_command(version: str, output_dir: Path) -> list[str]:
     # répond à « ai-je le droit de vendre mon jeu ? ».
     cmd.append(f"--include-data-dir={REPO_ROOT / 'runtime'}=runtime")
 
+    # web_player/ — lecteur web copié dans le ZIP de chaque Build WEB, avec sa
+    # licence zlib et celles de mGBA (vendor/, shaders/) et des polices.
+    cmd.append(f"--include-data-dir={REPO_ROOT / 'web_player'}=web_player")
+
     # Licence et notices tierces. Ce n'est pas de la courtoisie : la GPL de
     # l'éditeur et la LGPL de Qt exigent toutes deux que ces textes ACCOMPAGNENT
     # le binaire distribué. Les laisser dans le dépôt ne remplit pas

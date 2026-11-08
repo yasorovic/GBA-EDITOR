@@ -13,6 +13,10 @@ une promesse qu'un même numéro de version sera présent dans chaque release.
 
 > Le moteur GBA (`runtime/`) n'est pas concerné par cette page : il est sous
 > licence zlib et n'embarque rien de tiers. Voir [runtime/LICENSE](runtime/LICENSE).
+>
+> Le lecteur web (`web_player/`) est lui aussi sous licence zlib, voir
+> [web_player/LICENSE](web_player/LICENSE). Les composants tiers qu'il recopie dans
+> chaque ZIP exporté sont listés dans la section « Lecteur web » ci-dessous.
 
 ## Bibliothèques Python
 
@@ -101,6 +105,18 @@ L'AppImage Linux embarque en plus des bibliothèques système nécessaires au pl
 Qt « xcb » (notamment xcb, xkbcommon, fontconfig et leurs dépendances). Elles
 restent sous leurs licences respectives ; la liste exacte dépend du runner de build
 et doit être contrôlée dans l'AppImage produite.
+
+## Lecteur web
+
+Build WEB recopie ces composants dans le ZIP de chaque jeu, avec leurs textes de
+licence.
+
+| Composant | Version | Licence | Où |
+| --- | --- | --- | --- |
+| [mGBA](https://mgba.io/) (Jeffrey Pfau) via [@wasm-gaming/mgba-wasm](https://github.com/wasm-gaming/mGBA-wasm) | 0.1.1, cœur recompilé (mGBA `c034660f`) | MPL-2.0 | `web_player/vendor/` ; modifications décrites dans `vendor/NOTICE.txt`, sources modifiées `mgba.sdk.ts` et `mgba_shim.c` livrées |
+| Shaders d'affichage de mGBA (endrift, Dominus Iniquitatis, singron, Pokefan531 et hunterk, Prof. 9) | | MPL-2.0 ou MIT selon l'en-tête de chaque fichier | `web_player/shaders/` |
+| Sniglet | Haley Fiege, Brenda Gallo, Pablo Impallari | SIL OFL 1.1 | `web_player/Sniglet-OFL.txt` |
+| Balsamiq Sans (Bold) | The Balsamiq Sans Project Authors | SIL OFL 1.1 | `web_player/BalsamiqSans-OFL.txt` |
 
 ## Fontes
 

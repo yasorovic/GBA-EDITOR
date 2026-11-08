@@ -28,7 +28,6 @@ from core.models.components import affine_sprite_component, displayed_sprite_com
 from codegen.oam_alloc import scene_oam_layout
 from codegen.oam_budget import project_obj_tiles, scene_affine_requests
 from codegen.rom_report import RomReport
-from codegen.web_build import WEB_TEMPLATE
 from ui.common.stack_gauge import StackGauge
 from ui.scene_manager.scene_canvas import SceneEditor
 from ui.scene_manager.canvas.canvas_workspace import CanvasWorkspace
@@ -973,7 +972,7 @@ class MainWindow(QMainWindow):
         a_web.triggered.connect(lambda: self._run_build(web_export=True))
         m_game.aboutToShow.connect(lambda: a_web.setEnabled(
             bool(self.project and self.project.active_scene)
-            and self._worker is None and WEB_TEMPLATE.is_dir()))
+            and self._worker is None))
         m_game.aboutToShow.connect(lambda: self._fill_language_build_menu(m_game, a_build))
         self._language_build_actions = []
         m_game.addSeparator()

@@ -1,0 +1,791 @@
+@font-face {
+  font-family: "Balsamiq Sans";
+  src: url("BalsamiqSans-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Sniglet";
+  src: url("Sniglet-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+
+/* Thème du lecteur. Le mode Built-in de l'éditeur réécrit ces variables dans
+   theme.css, chargé après ce fichier : la mise en page n'en dépend pas. */
+:root {
+  --player-color: #171717;
+  --player-shadow: none;
+  --text-color: #d5d5d5;
+  --button-color: #262626;
+  --button-border-color: #666;
+  --button-border-width: 2px;
+  --accent-color: #e7d642;
+  --frame-image: none;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.web-prototype {
+  --edge: #000;
+  color-scheme: dark;
+  color: var(--text-color);
+  font: 1rem/1.4 system-ui, sans-serif;
+  margin-inline: auto;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  container: web-viewport / inline-size;
+}
+
+.web-prototype:has(.prototype-toolbar) {
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: .5rem min(2%, 1rem) 1rem;
+  box-sizing: border-box;
+}
+
+.web-prototype.mobile-preview > .player-slot {
+  max-width: 360px;
+}
+
+.web-prototype.preview-landscape > .player-slot {
+  max-width: 640px;
+}
+
+.web-prototype *,
+.web-prototype *::before,
+.web-prototype *::after {
+  box-sizing: border-box;
+}
+
+.prototype-toolbar,
+.player-header,
+.actions,
+.launch-actions,
+.options > label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem .65rem;
+}
+
+.prototype-toolbar,
+.options > label {
+  justify-content: space-between;
+}
+
+.prototype-toolbar {
+  align-items: flex-start;
+  width: min(100%, 60rem);
+  margin: 0 auto .75rem;
+}
+
+/* Garde la place du sélecteur quand l'aperçu revient en vue navigateur. */
+#preview-orientation[hidden] {
+  display: block !important;
+  visibility: hidden;
+}
+
+.player-header h1 {
+  margin: 0;
+  font: 700 clamp(1.15rem, 5cqi, 1.65rem)/1.1 "Balsamiq Sans", system-ui, sans-serif;
+}
+
+.player-slot {
+  container-type: size;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  margin-inline: auto;
+}
+
+/* Le cadre hôte donne le budget. Le lecteur prend la taille de l'écran
+   au ratio voulu, augmentée uniquement de la place des commandes. */
+.player {
+  --screen-ratio: 1.5;
+  --controls-width: 0px;
+  --controls-height: 0px;
+  --vertical-padding: 0px;
+  --portrait-top: max(1.25rem, env(safe-area-inset-top, 0px));
+  --portrait-bottom: max(1.75rem, env(safe-area-inset-bottom, 0px));
+  --min-player-width: 0px;
+  --screen-width: min(
+    max(0px, 100cqw - var(--controls-width)),
+    max(0px, (100cqh - var(--controls-height) - var(--vertical-padding)) * var(--screen-ratio))
+  );
+  --setting-size: 2.125rem;
+  --touch-limit: clamp(8.5rem, 21cqh, 11rem);
+  --touch-size: clamp(3.5rem, min(28cqh, (100cqw - 2rem) / 2), var(--touch-limit));
+  --action-size: clamp(2.5rem, calc(var(--touch-size) * .48), 5rem);
+  --shoulder-height: clamp(2.25rem, min(12cqw, 12cqh), 3rem);
+  --system-height: clamp(1.75rem, calc(var(--shoulder-height) * .85), 2.5rem);
+  --system-width: clamp(3.75rem, calc(var(--system-height) * 1.65), 4.5rem);
+  /* Somme du pavé, des deux rangées de boutons et de leurs espacements. */
+  --portrait-controls-height: calc(var(--touch-size) + var(--shoulder-height) + var(--system-height) + 2.85rem);
+  --portrait-screen-height: calc(var(--screen-width) / var(--screen-ratio));
+  --portrait-extra: max(0px, 100cqh - var(--portrait-screen-height) - var(--controls-height) - var(--vertical-padding));
+  --portrait-padding: calc(var(--portrait-top) + var(--portrait-extra) * .22)
+                      calc(var(--portrait-bottom) + var(--portrait-extra) * .17);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) var(--controls-height);
+  width: min(100cqw, max(var(--min-player-width), var(--screen-width) + var(--controls-width)));
+  height: var(--player-height, min(100cqh, var(--screen-width) / var(--screen-ratio) + var(--controls-height)));
+  background: var(--player-color);
+  box-shadow: var(--player-shadow);
+}
+
+.player:is([data-frame^="backstage"], [data-frame="image"]):not(:fullscreen) {
+  --screen-ratio: calc(272 / 208);
+}
+
+.screen-slot {
+  grid-area: 1 / 1;
+  container-type: size;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.screen-frame {
+  container-type: inline-size;
+  width: min(100%, calc(100cqh * var(--screen-ratio)));
+  aspect-ratio: var(--screen-ratio);
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--edge);
+}
+
+/* Contour à la résolution native : 272 × 208 px, le jeu (240 × 160) placé à 16 px
+   du haut et des côtés, une bande de 32 px en bas. Le contour Backstage et l'image
+   personnalisée partagent cette grille. */
+.player:is([data-frame^="backstage"], [data-frame="image"]):not(:fullscreen) .screen-frame {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 15fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 10fr) minmax(0, 2fr);
+}
+
+.player[data-frame^="backstage"]:not(:fullscreen) .screen-frame {
+  background: var(--frame-background, #141414);
+  box-shadow: inset 0 0 0 1px var(--frame-outline, #363636);
+}
+
+.player[data-frame="backstage-light"] {
+  --frame-background: #fff;
+  --frame-outline: #d0d0d0;
+  --frame-ink: #000;
+}
+
+.player[data-frame="backstage-light"] #frame-wordmark {
+  filter: brightness(0);
+}
+
+/* L'image personnalisée est posée PAR-DESSUS le jeu, sur tout le cadre, mise à
+   l'échelle sans lissage : ses zones transparentes laissent voir l'écran, ses zones
+   opaques peuvent mordre dessus (coins arrondis, reflets). Elle ne capte aucun clic. */
+.player[data-frame="image"]:not(:fullscreen) .screen-frame::after {
+  content: "";
+  grid-row: 1 / 4;
+  grid-column: 1 / 4;
+  z-index: 2;
+  background: var(--frame-image) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.player:is([data-frame^="backstage"], [data-frame="image"]):not(:fullscreen) .screen-frame > :is(canvas, .curtain, .shader-name) {
+  grid-area: 2 / 2;
+}
+
+.player:is([data-frame^="backstage"], [data-frame="image"]):not(:fullscreen) :is(.frame-caption, .frame-signature) {
+  display: grid;
+  place-items: center;
+}
+
+/* Avec une image, les bandes gardent leur hauteur mais leur contenu est masqué. */
+.player[data-frame="image"]:not(:fullscreen) :is(.frame-caption, .frame-signature) {
+  visibility: hidden;
+}
+
+.player:is([data-frame^="backstage"], [data-frame="image"]):not(:fullscreen) .frame-caption {
+  grid-area: 1 / 2;
+  color: var(--frame-ink, #fff);
+  font: 400 max(8px, calc(100cqi * 8 / 272))/1 "Sniglet", system-ui, sans-serif;
+}
+
+.player:is([data-frame^="backstage"], [data-frame="image"]):not(:fullscreen) .frame-signature {
+  grid-area: 3 / 2;
+}
+
+#frame-wordmark {
+  display: block;
+  width: 44%;
+  height: auto;
+}
+
+.player:fullscreen {
+  width: 100%;
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
+  background: #000;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.player:fullscreen :is(.touch-controls, #compatibility) {
+  display: none;
+}
+
+.curtain {
+  z-index: 1;
+  display: grid;
+  place-content: safe center;
+  gap: .5rem;
+  padding: .75rem;
+  text-align: center;
+  background: var(--player-color);
+  overflow-wrap: anywhere;
+  overflow: auto;
+}
+
+.curtain p {
+  margin: 0;
+}
+
+.launch-actions,
+.actions {
+  justify-content: center;
+}
+
+/* Barre de réglages posée dans le bas de la surface de jeu. */
+.player-footer {
+  grid-area: 1 / 1;
+  align-self: end;
+  z-index: 3;
+  margin: .5rem;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: .3rem;
+  pointer-events: none;
+}
+
+.player-footer > * {
+  pointer-events: auto;
+}
+
+.player-footer .icon-button {
+  background: color-mix(in srgb, var(--player-color) 90%, transparent);
+}
+
+.actions {
+  gap: .3rem;
+}
+
+.mobile-preview :is(#fullscreen, #controls-toggle, .controls-panel) {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .web-prototype:not(.mobile-preview) :is(.actions, #shader-cycle) {
+    opacity: 0;
+  }
+
+  .web-prototype:not(.mobile-preview) :is(
+    .player:not(:fullscreen):hover :is(.actions, #shader-cycle),
+    .player:fullscreen:has(.screen-frame:hover, .player-footer:hover) :is(.actions, #shader-cycle),
+    .actions:has(:focus-visible, [aria-expanded="true"]),
+    #shader-cycle:focus-visible
+  ) {
+    opacity: 1;
+  }
+}
+
+.web-prototype :where(button, .file-picker span) {
+  display: inline-block;
+  border: var(--button-border-width) solid currentColor;
+  border-radius: 999px;
+  padding: .35rem .7rem;
+  color: inherit;
+  background: transparent;
+  font: 700 .875rem/1.25 "Balsamiq Sans", system-ui, sans-serif;
+  text-align: center;
+  cursor: pointer;
+}
+
+.web-prototype .icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: var(--setting-size, 2.125rem);
+  height: var(--setting-size, 2.125rem);
+  padding: 0;
+  border-width: calc(var(--button-border-width) / 2);
+}
+
+.icon-button svg {
+  width: calc(var(--setting-size, 2.125rem) * .53);
+  height: calc(var(--setting-size, 2.125rem) * .53);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Nom du shader, affiché un instant dans le coin de l'écran à chaque changement,
+   au-dessus d'un éventuel contour personnalisé. */
+.screen-frame > .shader-name {
+  z-index: 3;
+  place-self: start end;
+  margin: .4rem;
+  padding: .1rem .5rem;
+  border-radius: 999px;
+  background: #000c;
+  color: #fff;
+  font: 700 .75rem/1.4 "Balsamiq Sans", system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.web-prototype :is(#play, #mobile-preview[aria-pressed="true"], #shader-cycle[aria-pressed="true"], #controls-toggle[aria-expanded="true"]) {
+  background: var(--accent-color);
+  color: var(--edge);
+  border-color: var(--edge);
+}
+
+.web-prototype button:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.web-prototype :focus-visible,
+.file-picker:has(input:focus-visible) span {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.file-picker {
+  position: relative;
+}
+
+.file-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.note {
+  margin: .5rem 0;
+  font-size: .85rem;
+  overflow-wrap: anywhere;
+}
+
+#compatibility:not(:empty) {
+  position: absolute;
+  z-index: 3;
+  inset: 0 .5rem auto;
+  padding: .25rem .5rem;
+  text-align: center;
+  background: var(--player-color);
+}
+
+#compatibility:empty {
+  display: none;
+}
+
+.options {
+  max-width: 32rem;
+  padding: .75rem;
+  border: 2px solid var(--edge);
+  border-radius: .6rem;
+  background: var(--player-color);
+}
+
+.web-prototype select {
+  max-width: 100%;
+  border: 1px solid #777;
+  border-radius: .35rem;
+  padding: .35rem;
+  background: #1e1e1e;
+  color: inherit;
+  font: inherit;
+}
+
+#frame-picker {
+  margin-top: .65rem;
+}
+
+#frame-file {
+  display: block;
+  max-width: 100%;
+  margin-top: .25rem;
+  font: inherit;
+}
+
+#frame-status:empty {
+  display: none;
+}
+
+/* Le panneau des commandes s'ouvre dans la surface de jeu, au-dessus de la
+   barre de réglages qui reste accessible pour le refermer. */
+.controls-panel {
+  position: absolute;
+  z-index: 2;
+  inset: .5rem .5rem 3.25rem;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid #444;
+  border-radius: .5rem;
+  background: var(--player-color);
+}
+
+.controls-panel-content {
+  max-width: 42rem;
+  margin-inline: auto;
+}
+
+#gamepad-status {
+  color: #bdbdbd;
+}
+
+.controls-panel h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.controls-mapping {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: 1rem 1.75rem;
+  margin-top: .75rem;
+}
+
+/* Une ligne par commande GBA : son nom, la touche du clavier, le bouton de la manette. */
+.controls-group {
+  display: grid;
+  grid-template-columns: minmax(3.5rem, auto) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: .3rem .5rem;
+  align-content: start;
+  font-size: .875rem;
+}
+
+.controls-group h3 {
+  margin: 0;
+  font-size: .85rem;
+}
+
+.controls-device {
+  color: #bdbdbd;
+  font-size: .75rem;
+  text-align: center;
+}
+
+.controls-group button {
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: .25rem .55rem;
+  border: 1px solid #656565;
+  border-radius: .375rem;
+  background: #202020;
+  font: inherit;
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.controls-group button:hover {
+  border-color: #999;
+  background: #303030;
+}
+
+.controls-group button.listening {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+:is(.touch-controls, .touch-side, .touch-system) {
+  touch-action: none;
+}
+
+.touch-controls {
+  grid-area: 2 / 1;
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: .5rem;
+  padding: .6rem .75rem .75rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.touch-side {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  gap: .75rem;
+  min-width: 0;
+}
+
+.touch-stick {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(100%, var(--touch-size));
+  aspect-ratio: 1;
+  border: var(--button-border-width) solid var(--button-border-color);
+  border-radius: 50%;
+  background: var(--button-color);
+  touch-action: none;
+  cursor: grab;
+}
+
+.stick-mark {
+  position: absolute;
+  width: 18%;
+  height: 18%;
+  fill: none;
+  stroke: var(--text-color);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stick-mark[data-direction="up"] { top: 4%; }
+.stick-mark[data-direction="down"] { bottom: 4%; rotate: 180deg; }
+.stick-mark[data-direction="left"] { left: 4%; rotate: -90deg; }
+.stick-mark[data-direction="right"] { right: 4%; rotate: 90deg; }
+
+.stick-mark.lit {
+  stroke: var(--accent-color);
+}
+
+.stick-knob {
+  width: 44%;
+  aspect-ratio: 1;
+  border: var(--button-border-width) solid var(--button-border-color);
+  border-radius: 50%;
+  background: var(--button-color);
+  pointer-events: none;
+  transition: translate .08s ease-out;
+}
+
+.touch-stick.held .stick-knob {
+  border-color: var(--accent-color);
+  transition: none;
+}
+
+/* Disposition de la console : A et B côte à côte, légèrement inclinés (B plus
+   bas), dans une boîte de la taille du pavé pour que les deux centres s'alignent. */
+.touch-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: .5rem;
+  width: min(100%, var(--touch-size));
+  aspect-ratio: 1;
+}
+
+.touch-actions .b { translate: 0 .75rem; }
+.touch-actions .a { translate: 0 -.75rem; }
+
+/* La rangée a la hauteur des boutons de réglage, pour que Select et Start soient
+   centrés verticalement sur lui. */
+.touch-system {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  min-height: var(--setting-size);
+  gap: .75rem;
+  margin-top: .25rem;
+}
+
+.web-prototype .touch-button {
+  min-height: var(--shoulder-height);
+  padding: .2rem 0;
+  background: var(--button-color);
+  border-color: var(--button-border-color);
+  touch-action: none;
+}
+
+.web-prototype .shoulder {
+  width: min(100%, clamp(6.5rem, calc(var(--shoulder-height) * 2.9), 9rem));
+}
+
+.touch-left .shoulder { justify-self: start; }
+.touch-right .shoulder { justify-self: end; }
+
+.web-prototype .touch-button:is(.a, .b) {
+  flex: none;
+  width: min(var(--action-size), calc((100% - .5rem) / 2));
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 50%;
+  border-color: var(--button-color);
+  font-size: 1.1rem;
+}
+
+.web-prototype .touch-button:active {
+  background: var(--accent-color);
+  color: var(--edge);
+  border-color: var(--accent-color);
+}
+
+.web-prototype .touch-button:is(.start, .select) {
+  min-width: var(--system-width);
+  min-height: var(--system-height);
+  padding: .15rem .6rem;
+  font-size: .7rem;
+}
+
+.mobile-preview .touch-controls {
+  display: grid;
+}
+
+/* En vertical, le shader et le son encadrent la rangée Select/Start, dans les
+   coins bas de la zone de commandes (même marge que son padding). */
+.mobile-preview .player:not(:fullscreen) {
+  --setting-size: var(--system-height);
+  --controls-height: var(--portrait-controls-height);
+  --min-player-width: 14rem;
+  --player-height: 100cqh;
+  --vertical-padding: calc(var(--portrait-top) + var(--portrait-bottom));
+  grid-template-rows: var(--portrait-screen-height) minmax(0, 1fr);
+  row-gap: calc(var(--portrait-extra) * .08);
+  padding-block: var(--portrait-padding);
+}
+
+.mobile-preview .player:not(:fullscreen) .player-footer {
+  grid-area: 2 / 1;
+  margin: .75rem;
+  justify-content: space-between;
+}
+
+@media (pointer: coarse) {
+  :is(#fullscreen, #controls-toggle, .controls-panel) {
+    display: none;
+  }
+
+  .touch-controls {
+    display: grid;
+  }
+
+  .player:not(:fullscreen) {
+    --setting-size: var(--system-height);
+    --controls-height: var(--portrait-controls-height);
+    --min-player-width: 14rem;
+    --player-height: 100cqh;
+    --vertical-padding: calc(var(--portrait-top) + var(--portrait-bottom));
+    grid-template-rows: var(--portrait-screen-height) minmax(0, 1fr);
+    row-gap: calc(var(--portrait-extra) * .08);
+    padding-block: var(--portrait-padding);
+  }
+
+  .player:not(:fullscreen) .player-footer {
+    grid-area: 2 / 1;
+    margin: .75rem;
+    justify-content: space-between;
+  }
+}
+
+@container web-viewport (min-width: 20rem) {
+  .player.side-controls:not(:fullscreen) {
+    --side-width: clamp(5.5rem, min(21cqw, 42cqh), 11rem);
+    --side-padding: .5rem;
+    --touch-size: clamp(4.5rem, 39cqh, 10.5rem);
+    --setting-size: min(var(--system-height), calc(var(--side-width) * .35));
+    --controls-width: calc(2 * var(--side-width) + 1rem + 2 * var(--side-padding));
+    --controls-height: calc(2 * var(--side-padding));
+    --side-content-height: min(
+      max(0px, 100cqh - var(--controls-height)),
+      max(12rem, var(--screen-width) / var(--screen-ratio))
+    );
+    --player-height: min(100cqh, var(--side-content-height) + var(--controls-height));
+    --vertical-padding: 0px;
+    grid-template-columns: var(--side-width) minmax(0, 1fr) var(--side-width);
+    grid-template-rows: minmax(0, 1fr) auto;
+    row-gap: 0;
+    column-gap: .5rem;
+    padding: var(--side-padding);
+  }
+
+  .player.side-controls:not(:fullscreen) .touch-controls {
+    display: contents;
+  }
+
+  .player.side-controls:not(:fullscreen) .screen-slot {
+    grid-area: 1 / 2 / span 2;
+  }
+
+  .player.side-controls:not(:fullscreen) .touch-side {
+    grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: .5rem;
+  }
+
+  .player.side-controls:not(:fullscreen) .shoulder {
+    align-self: start;
+  }
+
+  .player.side-controls:not(:fullscreen) .touch-side > :is(.touch-stick, .touch-actions) {
+    /* Laisse la même place au-dessus et au-dessous pour les autres boutons. */
+    max-width: max(0px, var(--side-content-height) - 2 * (var(--shoulder-height) + .5rem));
+  }
+
+  .player.side-controls:not(:fullscreen) .touch-left {
+    grid-area: 1 / 1 / span 2;
+  }
+
+  .player.side-controls:not(:fullscreen) .touch-right {
+    grid-area: 1 / 3 / span 2;
+  }
+
+  .player.side-controls:not(:fullscreen) .touch-system {
+    display: contents;
+  }
+
+  /* Rangée du bas : Select et Start côté écran, le bouton son au bord droit,
+     tous centrés verticalement sur la même ligne. */
+  .player.side-controls:not(:fullscreen) .touch-system .select {
+    grid-area: 2 / 1;
+    place-self: end end;
+  }
+
+  .player.side-controls:not(:fullscreen) .touch-system .start {
+    grid-area: 2 / 3;
+    place-self: end start;
+  }
+
+  .player.side-controls:not(:fullscreen) :is(.touch-system .select, .touch-system .start) {
+    min-width: min(var(--system-width), calc(var(--side-width) - var(--setting-size) - .25rem));
+  }
+
+  .player.side-controls:not(:fullscreen) .player-footer {
+    display: contents;
+  }
+
+  .player.side-controls:not(:fullscreen) :is(#shader-cycle, .actions) {
+    margin-bottom: calc((var(--system-height) - var(--setting-size)) / 2);
+  }
+
+  .player.side-controls:not(:fullscreen) #shader-cycle {
+    grid-area: 2 / 1;
+    place-self: end start;
+  }
+
+  .player.side-controls:not(:fullscreen) .actions {
+    grid-area: 2 / 3;
+    place-self: end end;
+  }
+}
