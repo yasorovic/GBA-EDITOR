@@ -242,7 +242,7 @@ jobs:
           if (-not (Test-Path "C:\msys64\opt\devkitpro\devkitARM\bin\arm-none-eabi-gcc.exe")) { throw "devkitPro (GBA) n'est pas installé" }
 
       - name: Garder devkitPro en cache
-        if: steps.dkp-cache.outputs.cache-hit != 'true'
+        if: steps.dkp-cache.outputs.cache-hit != 'true' && github.event_name == 'release'
         uses: actions/cache/save@v5
         with:
           path: C:\msys64\opt\devkitpro
