@@ -36,5 +36,5 @@ const server = createServer(async (request, response) => {
     response.writeHead(404).end("Not found");
   }
 }).listen(port, "127.0.0.1", () => {
-  console.log(`Prototype HTML : http://localhost:${server.address().port}`);
+  console.log(`Web player: http://localhost:${server.address().port}`);
 });

@@ -2219,7 +2219,7 @@
     "projset.web_choose_image": { "text": "Choisir…" },
     "projset.web_clear_image": { "text": "Retirer l’image" },
     "projset.web_no_image": { "text": "Aucune image" },
-    "projset.web_image_filter": { "text": "Images" },
+    "projset.web_image_filter": { "text": "Images (*.png *.webp *.svg)" },
     "projset.web_custom_css": { "text": "CSS personnalisé" },
     "projset.web_custom_css_tip": { "text": "Écrit dans custom.css à chaque build. Ce champ est la seule source du CSS personnalisé : un custom.css posé dans le gabarit éjecté est ignoré." },
     "projset.web_eject": { "text": "Éjecter le gabarit web" },

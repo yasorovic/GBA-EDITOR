@@ -8,13 +8,20 @@ Un seul lecteur (index.html, main.js, player.css), deux habillages :
   et `custom.css`, écrit à chaque build depuis `web_custom_css`. Le champ du projet
   est la seule source de ce CSS : un `custom.css` posé dans le dossier éjecté est
   ignoré, ce qui évite d'écraser l'un par l'autre.
+
+Le ZIP doit aussi jouer ouvert depuis le disque (file://), où le navigateur refuse
+les modules ES et `fetch`. L'export réunit donc les modules en un script classique
+(`player.js`, shaders compris) et écrit la ROM et le moteur wasm en base64 dans des
+scripts (`rom.js`, `vendor/mgba.wasm.js`).
 """
 
+import base64
 import html
+import json
+import posixpath
 import re
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from urllib.parse import quote
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from core.app_paths import WEB_PLAYER_DIR
@@ -44,6 +51,16 @@ _ROM_MARKER = 'data-rom=""'
 _FRAME_MARKER = 'data-frame="backstage"'
 _TITLE = re.compile(r"<title>.*?</title>", re.S)
 _FRAME_SUFFIXES = (".png", ".webp", ".svg")
+_MODULE_SCRIPT = '<script type="module" src="main.js"></script>'
+_ENGINE_WASM = "vendor/mgba.wasm"
+_ENGINE_GLUE = "vendor/mgba.js"        # script classique, chargé par le SDK
+_SHADER_SOURCES = (".ini", ".fs", ".vs")
+_IMPORT = re.compile(r"""^import\s*\{([^}]*)\}\s*from\s*["'](\.{1,2}/[^"']+)["'];?[ \t]*$""", re.M)
+_EXPORT_DECLARATION = re.compile(
+    r"^export\s+((?:async\s+)?(?:function\*?|class|const|let)\s+([A-Za-z_$][\w$]*))", re.M)
+_EXPORT_LIST = re.compile(r"^export\s*\{([^}]*)\};?[ \t]*$", re.M)
+_EXPORT_DEFAULT = re.compile(r"^export\s+default\s+", re.M)
+_MODULE_SYNTAX_LEFT = re.compile(r"^\s*(?:import|export)\b|\bimport\s*\(|\bimport\.meta\b", re.M)
 
 
 class WebTemplateError(ValueError):
@@ -172,14 +189,85 @@ def web_player_files(settings: ProjectSettings, project_root: Path, title: str, 
     return texts, entries
 
 
+def _bundle_modules(sources: dict[str, Path], shader_files: dict[str, str]) -> str:
+    """Réunit les modules ES du lecteur, depuis `main.js`, en un script classique.
+    Chaque module garde sa portée dans une fonction ; ses exports deviennent un objet
+    que les modules suivants déstructurent. Seules les formes d'import et d'export
+    employées par le lecteur sont acceptées."""
+    visited: set[str] = set()
+    bodies: list[str] = []      # dépendances d'abord : un module s'écrit après ses imports
+
+    def visit(name: str) -> None:
+        if name in visited:
+            return
+        if name not in sources:
+            raise WebTemplateError(f"Web player module not found: {name}")
+        visited.add(name)
+        code = sources[name].read_text(encoding="utf-8").replace("\r\n", "\n")
+
+        def take_import(match: re.Match) -> str:
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(name), match[2]))
+            visit(target)
+            names = [part.strip().replace(" as ", ": ") for part in match[1].split(",") if part.strip()]
+            return f"const {{ {', '.join(names)} }} = modules[{json.dumps(target)}];"
+
+        code = _IMPORT.sub(take_import, code)
+        members = [match[2] for match in _EXPORT_DECLARATION.finditer(code)]
+        code = _EXPORT_DECLARATION.sub(r"\1", code)
+        for match in _EXPORT_LIST.finditer(code):
+            for part in filter(None, (part.strip() for part in match[1].split(","))):
+                local, _, exported = part.partition(" as ")
+                members.append(f"{exported.strip()}: {local.strip()}" if exported else local)
+        code = _EXPORT_LIST.sub("", code)
+        if _EXPORT_DEFAULT.search(code):
+            code = _EXPORT_DEFAULT.sub("const moduleDefault = ", code)
+            members.append("default: moduleDefault")
+        code = code.replace("import.meta.url", f"new URL({json.dumps(name)}, playerUrl).href")
+        if _MODULE_SYNTAX_LEFT.search(code):
+            raise WebTemplateError(f"Web player module uses an unsupported import or export form: {name}")
+        bodies.append(f"// {name}\nmodules[{json.dumps(name)}] = (() => {{\n{code}\n"
+                      f"return {{ {', '.join(members)} }};\n}})();\n")
+
+    visit("main.js")
+    return ("globalThis.BACKSTAGE_SHADER_FILES = "
+            f"{json.dumps(shader_files, ensure_ascii=False, sort_keys=True)};\n"
+            '(() => {\n"use strict";\nconst playerUrl = document.currentScript.src;\n'
+            "const modules = {};\n" + "".join(bodies) + "})();\n")
+
+
+def _for_local_files(texts: dict[str, str], entries: list[tuple[str, Path]],
+                     rom: Path, rom_name: str) -> list[tuple[str, Path]]:
+    """Rend le paquet jouable depuis le disque : modules réunis dans `player.js`,
+    ROM et moteur en base64. Renvoie les fichiers restants à copier tels quels."""
+    files = dict(entries)
+    if _ENGINE_WASM not in files:
+        raise WebTemplateError(f"Web player file not found: {_ENGINE_WASM}")
+    shader_files = {name.removeprefix("shaders/"): path.read_text(encoding="utf-8")
+                    for name, path in files.items()
+                    if name.startswith("shaders/") and path.suffix in _SHADER_SOURCES}
+    modules = {name: path for name, path in files.items()
+               if name.endswith(".js") and name != _ENGINE_GLUE}
+    texts["player.js"] = _bundle_modules(modules, shader_files)
+    wasm = base64.b64encode(files[_ENGINE_WASM].read_bytes()).decode()
+    texts[f"{_ENGINE_WASM}.js"] = f'globalThis.BACKSTAGE_MGBA_WASM = "{wasm}";\n'
+    texts["rom.js"] = f'globalThis.BACKSTAGE_ROM = "{base64.b64encode(rom.read_bytes()).decode()}";\n'
+    page = _replace_once(texts["index.html"], _ROM_MARKER,
+                         f'data-rom="{html.escape(rom_name)}"', "empty data-rom attribute")
+    texts["index.html"] = _replace_once(
+        page, _MODULE_SCRIPT,
+        f'<script src="rom.js"></script>\n    <script src="{_ENGINE_WASM}.js"></script>\n'
+        '    <script src="player.js"></script>', "main.js module script")
+    bundled = set(modules) | {_ENGINE_WASM} | {f"shaders/{name}" for name in shader_files}
+    return [(name, path) for name, path in entries if name not in bundled]
+
+
 def export_web(rom: Path, destination: Path, settings: ProjectSettings,
                project_root: Path, title: str) -> None:
     """Produit le ZIP du lecteur web et de la ROM, selon le mode du projet.
     `title` nomme la page et la ROM du paquet."""
     texts, entries = web_player_files(settings, project_root, title)
-    rom_entry = f"rom/{re.sub(r'[\\/]', '_', title)}.gba"
-    texts["index.html"] = _replace_once(texts["index.html"], _ROM_MARKER,
-                                        f'data-rom="{quote(rom_entry)}"', "empty data-rom attribute")
+    # Le nom de la ROM est aussi la clé de sa sauvegarde dans le navigateur.
+    entries = _for_local_files(texts, entries, rom, f"{re.sub(r'[\\/]', '_', title)}.gba")
 
     with NamedTemporaryFile(dir=destination.parent, delete=False) as temp:
         temp_path = Path(temp.name)
@@ -189,7 +277,6 @@ def export_web(rom: Path, destination: Path, settings: ProjectSettings,
                 archive.writestr(name, text)
             for name, source in entries:
                 archive.write(source, name)
-            archive.write(rom, rom_entry)
         try:
             replace_with_retry(temp_path, destination)
         except PermissionError as exc:

@@ -222,8 +222,17 @@ export async function load(config) {
     // ---------------------------------------------------------------- audio
     const audioCtx = new AudioContext();
     const workletUrl = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: 'application/javascript' }));
-    await audioCtx.audioWorklet.addModule(workletUrl);
-    URL.revokeObjectURL(workletUrl);
+    try {
+        await audioCtx.audioWorklet.addModule(workletUrl);
+    }
+    catch {
+        // Backstage : Chrome refuse un worklet blob: dans une page ouverte depuis
+        // le disque (file://), mais accepte la même source en URL data:.
+        await audioCtx.audioWorklet.addModule(`data:text/javascript,${encodeURIComponent(WORKLET_SOURCE)}`);
+    }
+    finally {
+        URL.revokeObjectURL(workletUrl);
+    }
     const sink = new AudioWorkletNode(audioCtx, 'mgba-sink', {
         numberOfInputs: 0,
         numberOfOutputs: 1,
@@ -251,6 +260,16 @@ export async function load(config) {
                 return wasmUrl;
             return new URL(path, jsUrl).href;
         },
+        // Backstage : le wasm peut arriver déjà en mémoire. Une page ouverte
+        // depuis le disque (file://) n'a pas le droit de le télécharger.
+        ...(config.wasmBinary ? {
+            instantiateWasm(imports, receive) {
+                WebAssembly.instantiate(config.wasmBinary, imports)
+                    .then(({ instance, module }) => receive(instance, module))
+                    .catch((error) => console.error('mgba: could not instantiate the WebAssembly module', error));
+                return {};
+            },
+        } : {}),
     });
     // ----------------------------------------------------------------- boot
     mod._mgbawasm_init();

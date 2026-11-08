@@ -24,6 +24,7 @@ _INDEX = """<!doctype html>
       <!-- /prototype -->
       <section class="player" data-frame="backstage"><button id="play" data-rom=""></button></section>
     </main>
+    <script type="module" src="main.js"></script>
   </body>
 </html>
 """
@@ -80,7 +81,7 @@ def test_le_remplacement_du_zip_resiste_aux_verrous(tmp_path, template, rom, mon
     else:
         export_web(rom, destination, ProjectSettings(), tmp_path, "Jeu")
         with ZipFile(destination) as archive:
-            assert archive.read("rom/Jeu.gba") == b"ROM"
+            assert archive.read("rom.js") == b'globalThis.BACKSTAGE_ROM = "Uk9N";\n'
     assert set(tmp_path.iterdir()) == {destination, rom, template}
 
 
@@ -94,15 +95,21 @@ def test_built_in_ecrit_le_theme_sans_la_page_de_prototype(tmp_path, template, r
     assert "<title>Jeu</title>" in index
     assert 'href="style.css">\n    <link rel="stylesheet" href="theme.css">' in index
     assert f'data-frame="{frame}"' in index
-    assert 'data-rom="rom/Jeu.gba"' in index
+    assert 'data-rom="Jeu.gba"' in index
     theme = files["theme.css"].decode()
     assert "--player-color: #102030;" in theme
     assert "--page-color" not in theme
     assert "--button-border-width: 3px;" in theme
     assert "--player-shadow: none;" not in theme
     assert "style.css" in files and "custom.css" not in files
-    assert "shaders/lcd.shader/manifest.ini" in files
-    assert files["rom/Jeu.gba"] == b"ROM"
+    # Jouable ouvert depuis le disque : ni module, ni fichier lu par fetch.
+    assert 'type="module"' not in index
+    assert index.index('src="rom.js"') < index.index('src="vendor/mgba.wasm.js"') < index.index('src="player.js"')
+    assert "shaders/lcd.shader/manifest.ini" not in files
+    assert '"lcd.shader/manifest.ini": "[shader]"' in files["player.js"].decode()
+    assert files["vendor/mgba.wasm.js"].startswith(b'globalThis.BACKSTAGE_MGBA_WASM = "')
+    assert "vendor/mgba.wasm" not in files and "main.js" not in files
+    assert "vendor/mgba.js" in files and "LICENSE" in files
 
 
 def test_le_contour_image_est_copie_et_verifie(tmp_path, template, rom):
@@ -127,7 +134,7 @@ def test_custom_sans_ejection_prend_le_lecteur_vierge_et_le_champ_css(tmp_path, 
     assert 'href="custom.css"' in index and 'href="style.css"' not in index
     assert files["custom.css"] == b"body { color: red; }"
     assert "style.css" not in files and "theme.css" not in files
-    assert {"player.css", "save.js", "vendor/mgba.sdk.js", "vendor/mgba.wasm"} <= files.keys()
+    assert {"player.css", "player.js", "vendor/mgba.js", "vendor/mgba.wasm.js", "vendor/mgba.sdk.ts"} <= files.keys()
 
 
 def test_custom_ejecte_garde_son_html_et_ignore_son_custom_css(tmp_path, template, rom):
@@ -156,6 +163,32 @@ def test_un_gabarit_ejecte_sans_marqueur_de_rom_est_refuse(tmp_path, template, r
         _export(tmp_path, rom, ProjectSettings(web_player_mode="custom"))
 
 
+def test_les_modules_sont_reunis_dependances_d_abord(tmp_path):
+    (tmp_path / "vendor").mkdir()
+    sources = {
+        "main.js": 'import { load, VERSION as version } from "./vendor/sdk.js";\nload(version);\n',
+        "vendor/sdk.js": ('import { helper } from "./util.js";\nexport const VERSION = 2;\n'
+                          "export async function load(v) { return helper(v, import.meta.url); }\n"
+                          "export default { load };\n"),
+        "vendor/util.js": "function helper(v, url) { return [v, url]; }\nexport { helper };\n",
+    }
+    for name, code in sources.items():
+        (tmp_path / name).write_text(code, encoding="utf-8")
+    bundle = web_build._bundle_modules({name: tmp_path / name for name in sources}, {})
+    order = [bundle.index(f'modules["{name}"] = ') for name in ("vendor/util.js", "vendor/sdk.js", "main.js")]
+    assert order == sorted(order)
+    assert 'const { load, VERSION: version } = modules["vendor/sdk.js"];' in bundle
+    assert "return { VERSION, load, default: moduleDefault };" in bundle
+    assert 'new URL("vendor/sdk.js", playerUrl).href' in bundle
+    assert "import " not in bundle and "export " not in bundle
+
+
+def test_une_forme_d_import_inconnue_est_refusee(tmp_path):
+    (tmp_path / "main.js").write_text('import sdk from "./sdk.js";\n', encoding="utf-8")
+    with pytest.raises(WebTemplateError, match="unsupported import"):
+        web_build._bundle_modules({"main.js": tmp_path / "main.js"}, {})
+
+
 def test_project_json_n_ecrit_que_les_reglages_changes(tmp_path):
     project = Project(tmp_path)
     project.settings.web_player_mode = "custom"
@@ -180,6 +213,10 @@ def test_le_lecteur_livre_contient_chaque_fichier_du_paquet():
     names = ("index.html",) + web_build._PLAYER_FILES + web_build._BUILTIN_FILES
     missing = [name for name in names if not (web_build.WEB_PLAYER_DIR / name).is_file()]
     assert not missing
+    # Les vrais modules du lecteur passent par l'assemblage sans forme inconnue.
+    modules = {name: web_build.WEB_PLAYER_DIR / name for name in names
+               if name.endswith(".js") and name != "vendor/mgba.js"}
+    assert 'modules["main.js"]' in web_build._bundle_modules(modules, {})
     build = (Path(__file__).resolve().parents[2] / "packaging" / "nuitka_build.py").read_text(encoding="utf-8")
     assert "'web_player'" in build
 

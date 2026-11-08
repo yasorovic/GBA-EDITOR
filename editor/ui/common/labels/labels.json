@@ -4363,7 +4363,7 @@
     "projset.web_choose_image": { "text": "Choose…" },
     "projset.web_clear_image": { "text": "Remove the image" },
     "projset.web_no_image": { "text": "No image" },
-    "projset.web_image_filter": { "text": "Images" },
+    "projset.web_image_filter": { "text": "Images (*.png *.webp *.svg)" },
     "projset.web_custom_css": { "text": "Custom CSS" },
     "projset.web_custom_css_tip": { "text": "Written to custom.css at each build. This field is the only source of the custom CSS: a custom.css placed in the ejected template is ignored." },
     "projset.web_eject": { "text": "Eject Web Template" },

@@ -41,6 +41,9 @@ function parseIni(text) {
 }
 
 async function fetchText(url) {
+  // Build WEB embarque les shaders dans player.js (file:// interdit fetch).
+  const embedded = globalThis.BACKSTAGE_SHADER_FILES?.[new URL(url).pathname.split("/shaders/").at(-1)];
+  if (embedded !== undefined) return embedded;
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
   return response.text();

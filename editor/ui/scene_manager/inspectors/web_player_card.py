@@ -22,7 +22,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QFileDialog, QHBoxLayout, QLabel,
-    QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
 from codegen.web_build import EJECTED_TEMPLATE, FRAME_SIZE, eject_template
@@ -33,6 +33,7 @@ from ui.common.labels import label
 from ui.common.notice import tip
 from ui.common.theme import C, T, QSS
 from ui.common.tooltip import tooltip
+from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import CardInset, CollapsibleCard, W
 from ui.scene_manager.inspectors.web_player_preview import WebPlayerPreview
 
@@ -233,12 +234,9 @@ class WebPlayerCard(CollapsibleCard):
             _fixed_row(label(key), color, lay)
             self._color_fields[field] = color
 
-        self._spin_border = QSpinBox()
+        self._spin_border = UnitSpin()
         self._spin_border.setRange(0, WEB_BUTTON_BORDER_WIDTH_MAX)
         self._spin_border.setSuffix(" px")
-        self._spin_border.setFixedWidth(64)
-        self._spin_border.setFont(QFont(T.MONO, T.MD))
-        self._spin_border.setStyleSheet(QSS.spinbox)
         self._spin_border.valueChanged.connect(
             lambda v: self._set_setting("web_button_border_width", int(v)))
         _fixed_row(label('projset.web_button_border_width'), self._spin_border, lay)
@@ -290,8 +288,7 @@ class WebPlayerCard(CollapsibleCard):
 
     def _pick_image(self, field: str, key: str):
         path, _ = QFileDialog.getOpenFileName(
-            self, label(key), str(self._project.root),
-            f"{label('projset.web_image_filter')} (*.png *.webp *.svg)")
+            self, label(key), str(self._project.root), label('projset.web_image_filter'))
         if path:
             self._set_setting(field, self._import_image(Path(path)))
 

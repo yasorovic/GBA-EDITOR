@@ -106,11 +106,6 @@
   },
   {
     "file": "editor/ui/scene_manager/inspectors/project_settings_dialog.py",
-    "text": "f'0x{v:04X}'",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/scene_manager/inspectors/project_settings_dialog.py",
     "text": "f'{mib} MiB'",
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },
@@ -118,11 +113,6 @@
     "file": "editor/ui/common/uses_list.py",
     "text": "v",
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/scene_manager/inspectors/scene_inspector.py",
-    "text": "f'0x{v:04X}'",
-    "reason": "Hardware register/bank notation, independent of the interface language."
   },
   {
     "file": "editor/ui/scene_manager/inspectors/ui_node_inspector.py",
@@ -158,5 +148,15 @@
     "file": "editor/ui/home/project_picker.py",
     "text": "f'''<a href=\"{APP_DOCS_URL}\" style=\"color:{C.TEXT_NORM};\">↗ {label('home.docs')}</a>'''",
     "reason": "HTML presentation only; the displayed prose is resolved by the catalogue."
+  },
+  {
+    "file": "editor/ui/common/color_field.py",
+    "text": "f'0x{value:04X}'",
+    "reason": "Hardware register/bank notation, independent of the interface language."
+  },
+  {
+    "file": "editor/ui/scene_manager/inspectors/web_player_card.py",
+    "text": ".player {\n  background: darkgreen;\n}",
+    "reason": "CSS code sample shown as a placeholder; code, not prose."
   }
 ]

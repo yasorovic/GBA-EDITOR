@@ -184,6 +184,17 @@ function pollGamepad() {
   requestAnimationFrame(pollGamepad);
 }
 
+// Build WEB embarque la ROM (rom.js) et le moteur (vendor/mgba.wasm.js) en base64 :
+// une page ouverte depuis le disque (file://) n'a pas le droit de les télécharger.
+function decodeBase64(text) {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+const engineWasm = globalThis.BACKSTAGE_MGBA_WASM ? decodeBase64(globalThis.BACKSTAGE_MGBA_WASM) : undefined;
+
 function reportSaveError(error) {
   console.warn("Cartridge save unavailable.", error);
   compatibility.textContent = "La sauvegarde du jeu n’est pas accessible dans ce navigateur.";
@@ -221,6 +232,7 @@ async function prepareRom(rom) {
     const engine = await load({
       canvasEl: canvas,
       assets: { rom: new Uint8Array(await rom.arrayBuffer()) },
+      wasmBinary: engineWasm,
       hostControls: true,
       persist: null,
       options: { system: "gba", gamepads: false, escMenu: false, volume: 1 },
@@ -257,10 +269,7 @@ async function boot() {
     return;
   }
   try {
-    const response = await fetch(bundledRom);
-    if (!response.ok) throw new Error(`ROM HTTP ${response.status}`);
-    const name = decodeURIComponent(bundledRom.split("/").at(-1));
-    await prepareRom(new File([await response.blob()], name));
+    await prepareRom(new File([decodeBase64(globalThis.BACKSTAGE_ROM)], bundledRom));
   } catch (error) {
     console.error(error);
     setStatus("Impossible de charger la ROM du paquet.");

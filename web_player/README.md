@@ -20,8 +20,15 @@ hébergement web.
 ## Essayer le ZIP de l'éditeur
 
 **Game > Build WEB** compile le projet et écrit `<nom du projet>-web.zip` dans son
-dossier `build/`. Le ZIP contient une copie du lecteur et la ROM du projet. Après
-avoir extrait le ZIP :
+dossier `build/`. Le ZIP contient une copie du lecteur et la ROM du projet. Une fois
+extrait, `index.html` se lance d'un double-clic : le navigateur refuse les modules ES
+et `fetch` depuis le disque (file://), donc l'export réunit les modules dans
+`player.js` (shaders compris) et écrit la ROM (`rom.js`) et le moteur
+(`vendor/mgba.wasm.js`) en base64, environ un tiers de plus que les fichiers bruts.
+Seules les formes `import { … } from "./…"` et `export` nommées ou par défaut sont
+acceptées par cet assemblage.
+
+Le même dossier peut aussi être servi en HTTP, comme sur itch.io :
 
 ```powershell
 node tools/web_player_server.mjs "chemin/du/ZIP/extrait"

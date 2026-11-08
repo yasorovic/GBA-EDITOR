@@ -278,7 +278,7 @@ export type MgbaInstance = EngineInstance & {
   system: 'gba' | 'gb';
 };
 
-export async function load(config: EngineConfig & { hostControls?: boolean }): Promise<MgbaInstance> {
+export async function load(config: EngineConfig & { hostControls?: boolean; wasmBinary?: Uint8Array }): Promise<MgbaInstance> {
   const { assets, onEvent } = config;
 
   const emit = (e: EngineEvent): void => {
@@ -334,8 +334,15 @@ export async function load(config: EngineConfig & { hostControls?: boolean }): P
   const workletUrl = URL.createObjectURL(
     new Blob([WORKLET_SOURCE], { type: 'application/javascript' }),
   );
-  await audioCtx.audioWorklet.addModule(workletUrl);
-  URL.revokeObjectURL(workletUrl);
+  try {
+    await audioCtx.audioWorklet.addModule(workletUrl);
+  } catch {
+    // Backstage : Chrome refuse un worklet blob: dans une page ouverte depuis
+    // le disque (file://), mais accepte la même source en URL data:.
+    await audioCtx.audioWorklet.addModule(`data:text/javascript,${encodeURIComponent(WORKLET_SOURCE)}`);
+  } finally {
+    URL.revokeObjectURL(workletUrl);
+  }
 
   const sink = new AudioWorkletNode(audioCtx, 'mgba-sink', {
     numberOfInputs: 0,
@@ -367,6 +374,19 @@ export async function load(config: EngineConfig & { hostControls?: boolean }): P
       if (path.endsWith('.wasm')) return wasmUrl;
       return new URL(path, jsUrl).href;
     },
+    // Backstage : le wasm peut arriver déjà en mémoire. Une page ouverte
+    // depuis le disque (file://) n'a pas le droit de le télécharger.
+    ...(config.wasmBinary ? {
+      instantiateWasm(
+        imports: WebAssembly.Imports,
+        receive: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void,
+      ): object {
+        WebAssembly.instantiate(config.wasmBinary as Uint8Array, imports)
+          .then(({ instance, module }) => receive(instance, module))
+          .catch((error) => console.error('mgba: could not instantiate the WebAssembly module', error));
+        return {};
+      },
+    } : {}),
   });
 
   // ----------------------------------------------------------------- boot

@@ -2,8 +2,14 @@
 Package and corresponding upstream source: https://registry.npmjs.org/@wasm-gaming/mgba-wasm/-/mgba-wasm-0.1.1.tgz
 Upstream project and WebAssembly build source: https://github.com/wasm-gaming/mGBA-wasm
 
-Backstage changes mgba.sdk.js to accept host controls and load/save battery-backed RAM.
+Backstage changes mgba.sdk.js to accept host controls, load/save battery-backed RAM,
+take the WebAssembly binary from memory, and fall back to a data: URL for its audio
+worklet when a blob: URL is refused (page opened from disk).
 The corresponding modified source is included in mgba.sdk.ts.
+
+In a game ZIP exported by Backstage, the JavaScript modules (mgba.sdk.js, mgba.config.js,
+mgba.manifest.js, mgba.options.js, mgba.zip.js) are combined unchanged into ../player.js,
+and mgba.wasm is stored base64-encoded in mgba.wasm.js, so the page also runs from disk.
 
 Backstage rebuilds mgba.js and mgba.wasm with scripts/build-mgba.sh from that project
 (mGBA c034660f007c543233f1cadeb0ca13c71afd8f41), with one change to scripts/shim/mgba_shim.c:
