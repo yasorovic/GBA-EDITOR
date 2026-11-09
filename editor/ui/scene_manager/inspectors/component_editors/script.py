@@ -7,7 +7,8 @@ from PyQt6.QtGui import QFont
 
 from . import BaseComponentEditor, register
 from ui.common.widgets import W
-from ui.common.pickers import attached_script_slot
+from ui.common import icons
+from ui.common.pickers import attached_script_slot, name_picker_slot
 from ui.common.labels import label
 from ui.common.theme import C, T, QSS
 
@@ -96,7 +97,7 @@ class ScriptEditor(BaseComponentEditor):
     def _build_var_row(self, comp, var: dict, layout):
         name    = var["name"]
         typ     = var["type"]
-        label   = var.get("label", name)
+        title   = var.get("label", name)
         current = comp.exports_values.get(name, var["default"])
         proj    = self.insp._project
 
@@ -106,7 +107,7 @@ class ScriptEditor(BaseComponentEditor):
 
         # ── bool ──────────────────────────────────────────────────
         if typ == "bool":
-            chk = W.checkbox_row(label, "", layout)
+            chk = W.checkbox_row(title, "", layout)
             chk.setChecked(bool(current))
             chk.toggled.connect(save)
 
@@ -116,9 +117,9 @@ class ScriptEditor(BaseComponentEditor):
             mx = int(var["max"]) if var["max"] is not None else  9999
             sp = W.spinbox(int(current) if current != "" else 0, mn, mx)
             if var["min"] is not None and var["max"] is not None:
-                self._row_with_slider(label, sp, sp.value(), mn, mx, int, layout)
+                self._row_with_slider(title, sp, sp.value(), mn, mx, int, layout)
             else:
-                W.row(label, sp, layout)
+                W.row(title, sp, layout)
             sp.valueChanged.connect(save)
 
         # ── float ─────────────────────────────────────────────────
@@ -129,9 +130,9 @@ class ScriptEditor(BaseComponentEditor):
             except: val = 0.0
             sp = W.double_spinbox(val, mn, mx)
             if var["min"] is not None and var["max"] is not None:
-                self._row_with_slider(label, sp, sp.value(), mn, mx, float, layout)
+                self._row_with_slider(title, sp, sp.value(), mn, mx, float, layout)
             else:
-                W.row(label, sp, layout)
+                W.row(title, sp, layout)
             sp.valueChanged.connect(save)
 
         # ── string ────────────────────────────────────────────────
@@ -139,7 +140,7 @@ class ScriptEditor(BaseComponentEditor):
             le = QLineEdit(str(current))
             le.setFont(QFont(T.UI, T.MD))
             le.setStyleSheet(QSS.lineedit)
-            W.row(label, le, layout)
+            W.row(title, le, layout)
             le.editingFinished.connect(lambda w=le: save(w.text()))
 
         # ── vec2 ──────────────────────────────────────────────────
@@ -147,7 +148,7 @@ class ScriptEditor(BaseComponentEditor):
             vals = current if isinstance(current, (list, tuple)) and len(current) >= 2 else [0, 0]
             sp_x = W.spinbox(int(vals[0]), -9999, 9999)
             sp_y = W.spinbox(int(vals[1]), -9999, 9999)
-            W.pair(label, "X", C.AXIS_X, sp_x, "Y", C.AXIS_Y, sp_y, layout)
+            W.pair(title, "X", C.AXIS_X, sp_x, "Y", C.AXIS_Y, sp_y, layout)
             sp_x.valueChanged.connect(lambda _, sx=sp_x, sy=sp_y: save([sx.value(), sy.value()]))
             sp_y.valueChanged.connect(lambda _, sx=sp_x, sy=sp_y: save([sx.value(), sy.value()]))
 
@@ -158,7 +159,7 @@ class ScriptEditor(BaseComponentEditor):
             sp_y = W.spinbox(int(vals[1]), -9999, 9999)
             sp_w = W.spinbox(int(vals[2]),     0, 9999)
             sp_h = W.spinbox(int(vals[3]),     0, 9999)
-            W.pair(label, "X", C.AXIS_X, sp_x, "Y", C.AXIS_Y, sp_y, layout)
+            W.pair(title, "X", C.AXIS_X, sp_x, "Y", C.AXIS_Y, sp_y, layout)
             W.pair("",    "W", C.TEXT_DIM, sp_w, "H", C.TEXT_DIM, sp_h, layout)
 
             def _save_rect(_, sx=sp_x, sy=sp_y, sw=sp_w, sh=sp_h):
@@ -170,34 +171,26 @@ class ScriptEditor(BaseComponentEditor):
         elif typ == "enum":
             values = var.get("values") or []
             cb = W.combobox(values, str(current))
-            W.row(label, cb, layout)
+            W.row(title, cb, layout)
             cb.currentTextChanged.connect(save)
 
-        # ── scene_ref ─────────────────────────────────────────────
-        elif typ == "scene_ref":
-            scenes = [""] + [s.name for s in proj.scenes] if proj else [""]
-            cb = W.combobox(scenes, str(current))
-            W.row(label, cb, layout)
-            cb.currentTextChanged.connect(save)
-
-        # ── sfx_ref ───────────────────────────────────────────────
-        elif typ == "sfx_ref":
-            if proj:
-                proj.load_audio()   # catalogue différé (v0.24)
-            sfx_list = [""] + [s.name for s in proj.sfx] if proj else [""]
-            cb = W.combobox(sfx_list, str(current))
-            W.row(label, cb, layout)
-            cb.currentTextChanged.connect(save)
-
-        # ── actor_ref ─────────────────────────────────────────────
-        elif typ == "actor_ref":
-            actors = [""]
-            if proj and proj.active_scene:
-                actors += [a.name for a in proj.active_scene.actors
-                           if a is not self.insp._actor]
-            cb = W.combobox(actors, str(current))
-            W.row(label, cb, layout)
-            cb.currentTextChanged.connect(save)
+        # ── scene_ref / sfx_ref / actor_ref : un nom parmi ceux du projet ──
+        elif typ in ("scene_ref", "sfx_ref", "actor_ref"):
+            if typ == "scene_ref":
+                names = [s.name for s in proj.scenes] if proj else []
+            elif typ == "sfx_ref":
+                if proj:
+                    proj.load_audio()   # catalogue différé (v0.24)
+                names = [s.name for s in proj.sfx] if proj else []
+            else:
+                names = ([a.name for a in proj.active_scene.actors if a is not self.insp._actor]
+                         if proj and proj.active_scene else [])
+            kind = typ[:-4]
+            slot = name_picker_slot(
+                lambda: names, str(current or ""), icons.COLOR_SCRIPT, on_picked=save,
+                add_label=title, icon=icons.get(kind, C.TEXT_DIM) if kind != "actor" else None,
+                none_label=label("common.none_dash"))
+            W.row(title, slot, layout)
 
     # ── Actions ───────────────────────────────────────────────────────
 

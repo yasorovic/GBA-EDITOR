@@ -6,7 +6,7 @@ from . import BaseComponentEditor, register
 from ui.common.widgets import W, PickerSlot, PickerEntry
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
-from ui.common.pickers import sprite_picker_slot, palette_picker_slot
+from ui.common.pickers import name_picker_slot, palette_picker_slot
 from ui.common.theme import C
 from ui.common.icons import COLOR_SPRITE
 from core.command_dispatcher import get_dispatcher
@@ -43,8 +43,9 @@ class SpriteEditor(BaseComponentEditor):
             self.insp._refresh_sprite_preview()
             self.insp._build_editor(comp)
 
-        slot = sprite_picker_slot(
-            [s.name for s in proj.sprites], sprite.name if sprite else None,
+        sprite_names = sorted(s.name for s in proj.sprites)
+        slot = name_picker_slot(
+            lambda: sprite_names, sprite.name if sprite else None,
             COLOR_SPRITE, on_picked=_on_sprite_picked, on_cleared=_on_sprite_cleared,
             add_label=label("comped.choose_sprite"), parent=self.insp,
         )

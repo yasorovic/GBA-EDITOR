@@ -4,6 +4,8 @@ from __future__ import annotations
 from PyQt6.QtWidgets import QComboBox
 
 from core.models.components import SFX_AUTO_TRIGGERS
+from ui.common import icons
+from ui.common.pickers import name_picker_slot
 from core.models.settings import BUTTON_NAMES
 from . import BaseComponentEditor, register
 from ui.common.labels import label
@@ -42,19 +44,15 @@ class SfxEditor(BaseComponentEditor):
             proj.load_audio()   # catalogue différé — sur sélection d'acteur, pas à l'ouverture
         names = [s.name for s in proj.sfx.items] if proj else []
 
-        sfx = QComboBox()
-        if names:
-            sfx.addItems(names)
-            if comp.sfx_name in names:
-                sfx.setCurrentText(comp.sfx_name)
-        else:
-            sfx.addItem(label("comped.sfx_none"))
-            sfx.setEnabled(False)
+        sfx = name_picker_slot(
+            lambda: names, comp.sfx_name, icons.COLOR_SFX,
+            on_picked=lambda v: self.set_field(comp, "sfx_name", v),
+            on_cleared=lambda: self.set_field(comp, "sfx_name", None),
+            add_label=label("comped.sfx_choose") if names else label("comped.sfx_none"),
+            icon=icons.get("sfx", icons.COLOR_SFX))
+        sfx.setEnabled(bool(names) or bool(comp.sfx_name))
         sfx.setToolTip(tooltip(
             title=label("comped.sfx"), note=label("comped.sfx_note")))
-        sfx.currentTextChanged.connect(
-            lambda v: self.set_field(comp, "sfx_name", v if v in names else None)
-        )
         row(label("comped.sfx"), sfx)
 
         # Le trigger vise un bouton ou une action déclarée (Project Settings →

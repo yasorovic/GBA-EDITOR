@@ -23,7 +23,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QScrollArea, QLineEdit, QComboBox,
+    QScrollArea, QLineEdit,
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import QSize
@@ -34,6 +34,7 @@ from ui.common.theme import C, T, QSS
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import CollapsibleCard
 from ui.common import icons
+from ui.common.pickers import name_picker_slot
 
 
 # Compteurs affichés dans la carte CONTENU : (attribut projet, icône, singulier, pluriel)
@@ -103,15 +104,15 @@ class ProjectInspector(QWidget):
             lambda: self._set_setting("version", self._ed_version.text().strip()))
         self._row(label('projinsp.version'), self._ed_version, id_inner, stretch=False)
 
-        self._combo_start = QComboBox()
-        self._combo_start.setFont(QFont(T.UI, T.MD))
-        self._combo_start.setStyleSheet(QSS.combobox)
-        self._combo_start.setToolTip(tooltip(
+        self._start_scene = name_picker_slot(
+            lambda: [s.name for s in self._project.scenes] if self._project else [], None,
+            icons.COLOR_SCENE, on_picked=self._on_start_scene_changed,
+            add_label=label('projinsp.start_choose'), icon=icons.get("scene", icons.COLOR_SCENE))
+        self._start_scene.setToolTip(tooltip(
             title=label('projinsp.start_scene_title'),
             body=label('projinsp.start_scene_tip'),
             note=label('projinsp.start_scene_note')))
-        self._combo_start.currentIndexChanged.connect(self._on_start_scene_changed)
-        self._row(label('projinsp.start'), self._combo_start, id_inner)
+        self._row(label('projinsp.start'), self._start_scene, id_inner)
 
         layout.addWidget(id_card)
 
@@ -188,7 +189,7 @@ class ProjectInspector(QWidget):
         self._blocking = True
         try:
             enabled = project is not None
-            for w in (self._ed_author, self._ed_version, self._combo_start):
+            for w in (self._ed_author, self._ed_version, self._start_scene):
                 w.setEnabled(enabled)
             self._refresh_fields()
             self._refresh_counts()
@@ -202,23 +203,9 @@ class ProjectInspector(QWidget):
         self._ed_author.setText(p.settings.author if p else "")
         self._ed_version.setText(p.settings.version if p else "")
 
-        self._combo_start.blockSignals(True)
-        self._combo_start.clear()
-        if p:
-            names = [s.name for s in p.scenes]
-            start = p.settings.start_scene
-            if start and start not in names:
-                # Scène de démarrage disparue (supprimée hors éditeur) : on la
-                # garde visible plutôt que de la réécrire silencieusement.
-                self._combo_start.addItem(label('projinsp.start_not_found', start=start), start)
-                names = [start] + names
-            for name in names:
-                if self._combo_start.findData(name) < 0:
-                    self._combo_start.addItem(name, name)
-            idx = self._combo_start.findData(start)
-            self._combo_start.setCurrentIndex(idx if idx >= 0 else 0)
-            self._combo_start.setEnabled(self._combo_start.count() > 0)
-        self._combo_start.blockSignals(False)
+        # Une scène de démarrage disparue (supprimée hors éditeur) reste montrée,
+        # signalée, plutôt que réécrite en silence.
+        self._start_scene.set_value(p.settings.start_scene if p else None)
 
     def _refresh_counts(self):
         p = self._project
@@ -248,7 +235,5 @@ class ProjectInspector(QWidget):
             label=f"Projet.{field}", persist_fn=self._persist,
         ))
 
-    def _on_start_scene_changed(self, _idx: int):
-        name = self._combo_start.currentData()
-        if name is not None:
-            self._set_setting("start_scene", name)
+    def _on_start_scene_changed(self, name: str):
+        self._set_setting("start_scene", name)

@@ -14,6 +14,8 @@ from ui.common.tooltip import tooltip
 from ui.common.theme import C
 from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import W
+from ui.common import icons
+from ui.common.pickers import name_picker_slot
 
 
 def _input_labels() -> dict:
@@ -75,12 +77,11 @@ class InteractiveEditor(BaseComponentEditor):
         # ── Zone : la boîte du composant, ou une boîte déjà posée ─────
         owner = getattr(self.insp, "_actor", None)
         existing = _owner_box_tags(owner)
-        box = QComboBox()
-        box.addItem(label("comped.interact_own_box", tag=INTERACTIVE_COLLISION_TAG), "")
-        for tag in existing:
-            box.addItem(tag, tag)
-        idx = box.findData(comp.box_tag)
-        box.setCurrentIndex(idx if idx >= 0 else 0)
+        box = name_picker_slot(
+            lambda: existing, comp.box_tag, C.ACCENT,
+            on_picked=lambda v: (self.set_field(comp, "box_tag", v or ""), _sync_visibility()),
+            add_label=label("comped.interact_box"), icon=icons.get("view_collision", C.TEXT_DIM),
+            none_label=label("comped.interact_own_box", tag=INTERACTIVE_COLLISION_TAG))
         box.setToolTip(tooltip(title=label("comped.interact_box"),
                                body=label("comped.interact_box_tip")))
         row(label("comped.interact_box"), box)
@@ -111,8 +112,6 @@ class InteractiveEditor(BaseComponentEditor):
         hold.valueChanged.connect(lambda v: self.set_field(comp, "hold_frames", int(v)))
         area.currentIndexChanged.connect(
             lambda i: self.set_field(comp, "interaction", area.itemData(i)))
-        box.currentIndexChanged.connect(lambda i: (
-            self.set_field(comp, "box_tag", box.itemData(i) or ""), _sync_visibility()))
         size_w.valueChanged.connect(lambda v: self.set_field(comp, "box_w", int(v)))
         size_h.valueChanged.connect(lambda v: self.set_field(comp, "box_h", int(v)))
         _sync_visibility()

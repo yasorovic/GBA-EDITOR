@@ -297,30 +297,39 @@ def collision_tag_slot(
     return slot
 
 
-def sprite_picker_slot(
-    sprite_names: list[str],
-    current_name: Optional[str],
+def name_picker_slot(
+    names: Callable[[], list[str]],
+    current: Optional[str],
     accent: str,
     on_picked: Callable[[str], None],
+    *,
+    add_label: str,
+    icon: QIcon | None = None,
+    none_label: str | None = None,
     on_cleared: Optional[Callable[[], None]] = None,
-    add_label: str = None,
     parent=None,
 ) -> PickerSlot:
-    """Slot pour choisir un SpriteAsset par nom, sans icône (pas d'aperçu bon
-    marché pour un sprite)."""
-    if add_label is None:
-        add_label = label('pick.choose_a_sprite')
+    """Slot pour choisir un NOM parmi `names()`, lue à chaque ouverture : un
+    sprite, un son, une scène, une caméra, un acteur, une boîte.
+
+    `none_label` fait de l'absence de choix une entrée nommée en tête (valeur
+    `""`), au lieu du « + ». Un nom posé qui n'est plus dans la liste reste
+    montré, signalé « (missing) »."""
 
     def describe(name):
         if not name:
-            return None
-        if name not in sprite_names:
+            return PickerEntry(none_label, "") if none_label else None
+        if name not in names():
             return PickerEntry(label('pick.name_missing', name=name), name, missing=True)
-        return PickerEntry(name, name)
+        return PickerEntry(name, name, icon)
 
-    slot = PickerSlot(add_label, accent, lambda: [PickerEntry(n, n) for n in sorted(sprite_names)],
-                      describe, on_picked, on_cleared=on_cleared, parent=parent)
-    slot.set_value(current_name)
+    def entries():
+        head = [PickerEntry(none_label, "")] if none_label else []
+        return head + [PickerEntry(n, n, icon) for n in names()]
+
+    slot = PickerSlot(add_label, accent, entries, describe, on_picked,
+                      on_cleared=on_cleared, parent=parent)
+    slot.set_value(current)
     return slot
 
 

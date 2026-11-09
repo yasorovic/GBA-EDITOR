@@ -54,6 +54,8 @@ from ui.common.deferred_writes import schedule_unwatched
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitDoubleSpin, UnitSpin
 from ui.common.widgets import CollapsibleCard, W
+from ui.common import icons
+from ui.common.pickers import name_picker_slot
 from ui.common.color_field import ColorField
 from ui.common.cartridge_preview import CartridgePreview, save_preview_profiles, save_capacity_text
 from ui.common.notice import note, tip
@@ -132,15 +134,14 @@ class GeneralPanel(QWidget):
             lambda: self._set_setting("version", self._ed_version.text().strip()))
         _row(label('projinsp.version'), self._ed_version, lay, stretch=False)
 
-        self._combo_start = QComboBox()
-        self._combo_start.setFont(QFont(T.UI, T.MD))
-        self._combo_start.setStyleSheet(QSS.combobox)
-        self._combo_start.setToolTip(tooltip(
+        self._start_scene = name_picker_slot(
+            lambda: [scene.name for scene in self._project.scenes], None, icons.COLOR_SCENE,
+            on_picked=lambda name: self._set_setting("start_scene", name),
+            add_label=label('projinsp.start_choose'), icon=icons.get("scene", icons.COLOR_SCENE))
+        self._start_scene.setToolTip(tooltip(
             title=label('projinsp.start_scene_title'), body=label('projinsp.start_scene_tip'),
             note=label('projinsp.start_scene_note')))
-        self._combo_start.currentIndexChanged.connect(
-            lambda: self._set_setting("start_scene", self._combo_start.currentData()))
-        _row(label('projinsp.start'), self._combo_start, lay)
+        _row(label('projinsp.start'), self._start_scene, lay)
 
         lay.addStretch()
         self._refresh_fields()
@@ -152,15 +153,8 @@ class GeneralPanel(QWidget):
             self._ed_name.setText(s.name)
             self._ed_author.setText(s.author)
             self._ed_version.setText(s.version)
-            self._combo_start.clear()
-            names = [scene.name for scene in self._project.scenes]
-            if s.start_scene and s.start_scene not in names:
-                # Scène de démarrage disparue : visible plutôt que réécrite en silence.
-                self._combo_start.addItem(
-                    label('projinsp.start_not_found', start=s.start_scene), s.start_scene)
-            for name in names:
-                self._combo_start.addItem(name, name)
-            self._combo_start.setCurrentIndex(max(0, self._combo_start.findData(s.start_scene)))
+            # Scène de démarrage disparue : visible, signalée, plutôt que réécrite en silence.
+            self._start_scene.set_value(s.start_scene)
         finally:
             self._blocking = False
 

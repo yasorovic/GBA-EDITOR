@@ -45,7 +45,8 @@ from core.project import Project
 from ui.common.theme import C, T, QSS
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import CollapsibleCard, NotesEdit, W
-from ui.common.pickers import attached_script_slot
+from ui.common.pickers import attached_script_slot, name_picker_slot
+from ui.common import icons
 from ui.common.notice import notice
 
 _MODES = [
@@ -97,15 +98,15 @@ class CameraInspector(QWidget):
         start_lbl.setFont(QFont(T.UI, T.XS))
         start_lbl.setStyleSheet(f"color:{C.TEXT_DIM};")
         start_row.addWidget(start_lbl)
-        self._combo_camera = QComboBox()
-        self._combo_camera.setFont(QFont(T.UI, T.MD))
-        self._combo_camera.setStyleSheet(QSS.combobox)
-        self._combo_camera.setToolTip(tooltip(
+        self._start_camera = name_picker_slot(
+            lambda: [c.name for c in self._scene.cameras] if self._scene else [], "", icons.COLOR_DEFAULT,
+            on_picked=self._on_camera_picked, add_label=label('caminsp.starting_camera'),
+            none_label=label(_DEFAULT_CAMERA))
+        self._start_camera.setToolTip(tooltip(
             title=label('caminsp.starting_camera_title'),
             body=label('caminsp.starting_camera_tip'),
             note=label('caminsp.starting_camera_note')))
-        self._combo_camera.currentIndexChanged.connect(self._on_camera_picked)
-        start_row.addWidget(self._combo_camera, 1)
+        start_row.addWidget(self._start_camera, 1)
         camera_card.body_layout.addLayout(start_row)
 
         layout.addWidget(camera_card)
@@ -283,12 +284,7 @@ class CameraInspector(QWidget):
             cam = self._camera
             scene = self._scene
 
-            self._combo_camera.clear()
-            self._combo_camera.addItem(label(_DEFAULT_CAMERA), "")
-            for c in (scene.cameras if scene else []):
-                self._combo_camera.addItem(c.name, c.name)
-            idx = self._combo_camera.findData(getattr(scene, "camera", "") or "")
-            self._combo_camera.setCurrentIndex(max(0, idx))
+            self._start_camera.set_value(getattr(scene, "camera", "") or "")
 
             mode = cam.mode if cam else CAM_FIXED
             self._mode_combo.setCurrentIndex(
@@ -395,13 +391,12 @@ class CameraInspector(QWidget):
             self._refresh()
         return True
 
-    def _on_camera_picked(self, idx: int):
-        """Choix de la caméra de DÉMARRAGE de la scène — indépendant de la
+    def _on_camera_picked(self, name: str):
+        """Choix de la caméra de DÉMARRAGE de la scène, indépendant de la
         caméra affichée/éditée par le reste de ce panneau."""
         if self._blocking or not self._scene:
             return
-        self._edit([(self._scene, "camera", self._combo_camera.itemData(idx) or "")],
-                   "Startup camera")
+        self._edit([(self._scene, "camera", name or "")], "Startup camera")
 
     def _on_notes_changed(self, text: str):
         if self._blocking:

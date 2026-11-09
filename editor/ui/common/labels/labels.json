@@ -1726,6 +1726,7 @@
     "comped.sfx_none": {
       "text": "No Sfx in the project"
     },
+    "comped.sfx_choose": { "text": "Choose a sound effect" },
     "comped.trigger": {
       "text": "Trigger"
     },
@@ -3035,9 +3036,7 @@
     "projinsp.empty": {
       "text": "Select a scene or an actor in the left panel to show its properties."
     },
-    "projinsp.start_not_found": {
-      "text": "{start}  (not found)"
-    },
+    "projinsp.start_choose": { "text": "Choose the start scene" },
     "projset.save_slots_tip": { "text": "Sets how many separate saves the game can hold in SRAM. Scripts address them by number: save:write(0)." },
     "projset.cartridge_tip": { "text": "Sets the capacity the build report compares the ROM against. The sizes are the ones actually manufactured for the GBA." },
     "projset.debug_build": {

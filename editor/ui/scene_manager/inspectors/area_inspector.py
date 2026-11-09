@@ -9,7 +9,7 @@ from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QSpinBox, QVBoxLayout, QWidget
 
 from core.command_dispatcher import get_dispatcher
 from core.history import AddListItemCmd, SetFieldCmd, get_history
@@ -24,7 +24,9 @@ from ui.common.labels import label
 from ui.common.responsive import InspectorScrollArea
 from ui.common.theme import C, T
 from ui.common.tooltip import tooltip
-from ui.common.widgets import CollapsibleCard, NotesEdit, W
+from ui.common import icons
+from ui.common.pickers import name_picker_slot
+from ui.common.widgets import CollapsibleCard, NotesEdit, PickerSlot, W
 from .component_editors.collision import CollisionEditor
 from .component_editors.script import ScriptEditor
 
@@ -155,9 +157,12 @@ class AreaInspector(QWidget):
     def _build_emitter_rows(self, card) -> None:
         """Les réglages de l'émetteur sonore : l'effet, son volume, la marge d'atténuation et le panoramique."""
         kind = AudioEmitterComponent
-        sfx = QComboBox()
+        sfx = name_picker_slot(
+            self._sfx_names, None, icons.COLOR_SFX,
+            on_picked=lambda v: self._set_effect_field(kind, "sfx_name", v or None),
+            add_label=label('comped.sfx_choose'), icon=icons.get("sfx", icons.COLOR_SFX),
+            none_label=label('common.none_dash'))
         sfx.setToolTip(tooltip(title=label('areainsp.fx.sfx'), body=label('areainsp.fx.sfx_tip')))
-        sfx.currentIndexChanged.connect(lambda _i: self._set_effect_field(kind, "sfx_name", sfx.currentData()))
         W.row(label('areainsp.fx.sfx'), sfx, card.body_layout)
         self._fx_inputs[(kind, "sfx_name")] = sfx
         for field_name, high in (("volume", 100), ("falloff", 255)):
@@ -174,20 +179,11 @@ class AreaInspector(QWidget):
         card.body_layout.addWidget(panning)
         self._fx_inputs[(kind, "panning")] = panning
 
-    def _fill_sfx_choices(self, combo: QComboBox, current) -> None:
-        """Les effets du projet, et l'effet cité s'il a disparu (visible plutôt que réécrit en silence)."""
+    def _sfx_names(self) -> list[str]:
+        """Les effets du projet ; l'effet cité s'il a disparu reste montré par le slot."""
         if self._project:
             self._project.load_audio()      # catalogue différé
-        names = [s.name for s in self._project.sfx.items] if self._project else []
-        combo.blockSignals(True)
-        combo.clear()
-        combo.addItem(label('common.none_dash'), None)
-        for name in names:
-            combo.addItem(name, name)
-        if current and current not in names:
-            combo.addItem(current, current)
-        combo.setCurrentIndex(max(0, combo.findData(current)))
-        combo.blockSignals(False)
+        return [s.name for s in self._project.sfx.items] if self._project else []
 
     def _effect(self, kind):
         return next((c for c in self._actor.components if isinstance(c, kind)), None) if self._actor else None
@@ -205,8 +201,8 @@ class AreaInspector(QWidget):
                 value = getattr(source, field_name)
                 if isinstance(widget, QCheckBox):
                     widget.setChecked(bool(value))
-                elif isinstance(widget, QComboBox):
-                    self._fill_sfx_choices(widget, value)
+                elif isinstance(widget, PickerSlot):
+                    widget.set_value(value)
                 elif isinstance(widget, QSpinBox):
                     widget.setValue(int(value))
                 else:

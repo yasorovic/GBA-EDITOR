@@ -560,11 +560,11 @@ def test_l_emetteur_sonore_s_ajoute_choisit_son_effet_et_s_annule(qapp, editor):
     insp.load(area, project, project.active_scene)
     combo = insp._fx_inputs[(AudioEmitterComponent, "sfx_name")]
     assert not insp._fx_checks[AudioEmitterComponent].isChecked() and not combo.isEnabled()
-    assert combo.findData("Wind") >= 0                                                    # les effets du projet
+    assert "Wind" in [e.value for e in combo.popup_entries()]                             # les effets du projet
     insp._fx_checks[AudioEmitterComponent].setChecked(True)
     comp = area.effect(AudioEmitterComponent)
     assert comp is not None and comp.sfx_name is None
-    combo.setCurrentIndex(combo.findData("Wind"))
+    combo.pick("Wind")
     insp._fx_inputs[(AudioEmitterComponent, "falloff")].setValue(48)
     insp._fx_inputs[(AudioEmitterComponent, "panning")].setChecked(True)
     assert (comp.sfx_name, comp.falloff, comp.panning) == ("Wind", 48, True)

@@ -114,3 +114,16 @@ def test_font_slot_lists_the_missing_font_of_the_current_value_not_the_first_one
     assert [e.value for e in slot.popup_entries()] == ["", "Main", "Gone"]
     slot.pick("Main")
     assert [e.value for e in slot.popup_entries()] == ["", "Main"]   # « Gone » n'est plus la valeur posée
+
+
+def test_name_slot_names_the_empty_choice_when_asked(qapp):
+    from ui.common.pickers import name_picker_slot
+    picked = []
+    slot = name_picker_slot(lambda: ["Intro", "Level"], "", "#ffffff", picked.append,
+                            add_label="Choose", none_label="(none)")
+    assert slot._lbl.text() == "(none)" and [e.value for e in slot.popup_entries()] == ["", "Intro", "Level"]
+    slot.pick("Level")
+    slot.pick("")
+    assert picked == ["Level", ""]
+    plain = name_picker_slot(lambda: ["Intro"], None, "#ffffff", picked.append, add_label="Choose")
+    assert not plain._btn_add.isHidden()                       # sans none_label, rien de choisi = le « + »

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from PyQt6.QtWidgets import QComboBox, QSpinBox, QVBoxLayout, QWidget
 
 from core.models.components import CollisionShapeComponent, InteractiveComponent
-from ui.common.widgets import W
+from ui.common.widgets import PickerSlot, W
 from ui.common.unit_spin import UnitSpin
 from ui.scene_manager.inspectors.component_editors.interactive import InteractiveEditor
 
@@ -41,7 +41,7 @@ def test_soundfx_propose_et_conserve_le_declencheur_interaction(qapp):
     host = QWidget()
     layout = QVBoxLayout(host)
     SfxEditor(insp).build(comp, lambda lab, widget: W.row(lab, widget, layout), layout)
-    trigger = _combos(host)[1]
+    trigger = _combos(host)[0]
     assert trigger.currentData() == "on_interact"
     trigger.setCurrentIndex(trigger.findData("manual"))
     trigger.setCurrentIndex(trigger.findData("on_interact"))
@@ -50,16 +50,17 @@ def test_soundfx_propose_et_conserve_le_declencheur_interaction(qapp):
 
 def test_l_editeur_propose_les_deux_selecteurs_et_la_zone(qapp):
     host, _ = _build(InteractiveComponent(), boxes=[CollisionShapeComponent(tag="reach")])
-    saisie, interaction, zone = _combos(host)
+    saisie, interaction = _combos(host)
+    zone = host.findChild(PickerSlot)
     assert [saisie.itemData(i) for i in range(saisie.count())] == ["pressed", "hold", "released"]
     assert [interaction.itemData(i) for i in range(interaction.count())] == ["hover", "facing"]
-    assert [zone.itemData(i) for i in range(zone.count())] == ["", "reach"]     # sa propre boîte, puis l'existante
+    assert [e.value for e in zone.popup_entries()] == ["", "reach"]     # sa propre boîte, puis l'existante
 
 
 def test_choisir_un_mode_ecrit_le_champ(qapp):
     comp = InteractiveComponent()
     host, written = _build(comp)
-    saisie, interaction, _ = _combos(host)
+    saisie, interaction = _combos(host)
     saisie.setCurrentIndex(saisie.findData("hold"))
     interaction.setCurrentIndex(interaction.findData("facing"))
     assert ("input_mode", "hold") in written and ("interaction", "facing") in written
@@ -79,10 +80,10 @@ def test_le_maintien_n_apparait_que_pour_hold(qapp):
 def test_la_taille_n_apparait_que_pour_la_boite_propre(qapp):
     comp = InteractiveComponent()
     host, _ = _build(comp, boxes=[CollisionShapeComponent(tag="reach")])
-    zone = _combos(host)[2]
+    zone = host.findChild(PickerSlot)
     largeur = host.findChildren(QSpinBox)[1]
     assert not largeur.isHidden()
-    zone.setCurrentIndex(zone.findData("reach"))
+    zone.pick("reach")
     assert comp.box_tag == "reach"
     assert largeur.isHidden() or not largeur.isVisibleTo(host)
 
@@ -138,3 +139,21 @@ def test_le_materiau_physique_ecrit_son_rebond_et_son_frottement(qapp):
     host.findChild(QDoubleSpinBox, "materialRestitution").setValue(0.75)
     host.findChild(QDoubleSpinBox, "materialFriction").setValue(0.25)
     assert ("restitution", 0.75) in written and ("friction", 0.25) in written
+
+
+def test_soundfx_garde_un_effet_disparu_visible_au_lieu_du_premier(qapp):
+    from core.models.components import SoundFxComponent
+    from ui.common.widgets import PickerSlot
+    from ui.scene_manager.inspectors.component_editors.sfx import SfxEditor
+    comp = SoundFxComponent(sfx_name="Gone")
+    written = []
+    proj = SimpleNamespace(load_audio=lambda: None, sfx=SimpleNamespace(items=[SimpleNamespace(name="Jump")]),
+                           settings=SimpleNamespace(inputs=[]))
+    insp = SimpleNamespace(_project=proj, _set_comp=lambda c, field, value: written.append((field, value)))
+    host = QWidget()
+    layout = QVBoxLayout(host)
+    SfxEditor(insp).build(comp, lambda lab, widget: W.row(lab, widget, layout), layout)
+    sfx = host.findChild(PickerSlot)
+    assert sfx.value() == "Gone" and sfx.popup_entries()[-1].missing and written == []
+    sfx.pick("Jump")
+    assert written == [("sfx_name", "Jump")]
