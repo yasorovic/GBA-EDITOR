@@ -6,7 +6,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal
 
 from ui.common.theme import C, T, QSS
-from ui.common.widgets import ScriptSlot, AssetPickerPopup
+from ui.common.widgets import PickerSlot, PickerEntry
 from ui.common import icons
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -25,7 +25,7 @@ def weight_label(weight: int, italic: bool = False) -> str:
 class FontAssetSelector(QWidget):
     """Asset searchable + poids natif, sans inventer de gras artificiel.
 
-    Le choix d'asset réemploie ``ScriptSlot``/``AssetPickerPopup`` : c'est le
+    Le choix d'asset réemploie ``PickerSlot`` : c'est le
     picker standard de l'éditeur, avec recherche, plutôt qu'une énième liste
     déroulante qui divergerait de l'expérience des autres assets.
     """
@@ -40,11 +40,11 @@ class FontAssetSelector(QWidget):
         self._allow_inherit = allow_inherit
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(6)
-        self.font_slot = ScriptSlot(label("fontselect.choose_asset"), C.ACCENT,
-                                    show_clear=allow_inherit)
-        self.font_slot.set_callbacks(on_add=self._open_picker,
-                                     on_open=self._open_picker,
-                                     on_clear=self._clear)
+        self._original_name = ""
+        self.font_slot = PickerSlot(label("fontselect.choose_asset"), C.ACCENT,
+                                    self._entries, self._describe, self._picked,
+                                    on_cleared=self._clear if allow_inherit else None,
+                                    cleared_value="")
         self.weight_box = QComboBox()
         self.weight_box.setFont(QFont(T.UI, T.MD)); self.weight_box.setStyleSheet(QSS.combobox)
         self.weight_box.setMinimumWidth(96)
@@ -106,13 +106,21 @@ class FontAssetSelector(QWidget):
                      if asset.name == self._name), None)
 
     def _show_name(self, original_name: str = ""):
-        if not self._name:
-            self.font_slot.set_script(label("uiinsp.text.font_scene"), icons.get("font", C.TEXT_DIM))
-        elif self._asset() is not None:
-            self.font_slot.set_script(self._name, icons.get("font", C.ACCENT))
-        else:
-            self.font_slot.set_script(label("fontselect.missing", name=original_name or self._name),
-                                      icons.get("font", C.ACCENT_YLW))
+        self._original_name = original_name
+        self.font_slot.set_value(self._name)
+
+    def _describe(self, name: str) -> PickerEntry:
+        if not name:
+            return PickerEntry(label("uiinsp.text.font_scene"), "", icons.get("font", C.TEXT_DIM))
+        if any(asset.name == name for asset in getattr(self._project, "font_assets", ())):
+            return PickerEntry(name, name, icons.get("font", C.ACCENT))
+        shown = self._original_name if name == self._name and self._original_name else name
+        return PickerEntry(label("fontselect.missing", name=shown), name,
+                           icons.get("font", C.ACCENT_YLW), missing=True)
+
+    def _entries(self) -> list[PickerEntry]:
+        inherit = [self._describe("")] if self._allow_inherit else []
+        return inherit + [self._describe(asset.name) for asset in getattr(self._project, "font_assets", ())]
 
     def _reload_weights(self, current: int, current_italic: bool = False):
         self.weight_box.clear()
@@ -185,19 +193,6 @@ class FontAssetSelector(QWidget):
             self._sync_style_buttons(not checked)
             return
         self._set_face(weight, checked)
-
-    def _open_picker(self):
-        entries = []
-        if self._allow_inherit:
-            entries.append((label("uiinsp.text.font_scene"), "", icons.get("font", C.TEXT_DIM)))
-        entries += [(asset.name, asset.name, icons.get("font", C.ACCENT))
-                    for asset in getattr(self._project, "font_assets", ())]
-        if self._name and self._asset() is None:
-            entries.append((label("fontselect.missing", name=self._name), self._name,
-                            icons.get("font", C.ACCENT_YLW)))
-        popup = AssetPickerPopup(entries, C.ACCENT, parent=self, new_label=None)
-        popup.picked.connect(self._picked)
-        popup.show_below(self.font_slot)
 
     def _picked(self, name: str):
         if name == self._name:

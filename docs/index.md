@@ -38,15 +38,12 @@ Découvrir Backstage
 :::
 ::::
 
-## Jouer au Platformer
-
 Essayez le jeu de démonstration de Backstage. Utilisez les flèches pour vous déplacer et **Z** pour sauter, ou les commandes tactiles sur téléphone.
 
 ```{raw} html
 <iframe class="backstage-home-demo" src="platformer/index.html"
         title="Platformer, jeu de démonstration de Backstage" loading="lazy"
         allow="autoplay; fullscreen; gamepad"></iframe>
-<p><a href="platformer/index.html">Ouvrir le jeu seul</a></p>
 ```
 
 Pour modifier le jeu dans Backstage, suivez le guide {doc}`Premiers pas <user-guide/first-steps>`.

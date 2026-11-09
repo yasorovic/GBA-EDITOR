@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QPushButton
 from core.history import CommandHistory
 from core.models.data_table import DataColumn, DataTable
 from core.project import Project
-from ui.common.widgets import AssetPickerPopup
+from ui.common.widgets import PickerPopup
 from ui.data_editor import data_grid_panel
 
 
@@ -32,9 +32,15 @@ def grid(qapp, tmp_path, monkeypatch):
 def _open(panel, qapp):
     panel._tbl.edit(panel._model.index(0, 0))
     qapp.processEvents()
-    popup = panel._tbl.findChild(AssetPickerPopup)
+    popup = panel._tbl.findChild(PickerPopup)
     assert popup is not None and popup.isVisible()
     return popup
+
+
+def _pick(popup, value):
+    """Un clic sur la ligne qui porte `value`."""
+    row = [e.value for e in popup._entries].index(value)
+    popup._list.itemClicked.emit(popup._list.item(row))
 
 
 def test_filtrer_et_choisir_passe_par_l_historique(grid, qapp):
@@ -43,11 +49,8 @@ def test_filtrer_et_choisir_passe_par_l_historique(grid, qapp):
     assert popup._search.hasFocus()
     popup._search.setText("ene")
     qapp.processEvents()
-    matches = [popup._list_layout.itemAt(i).widget()
-               for i in range(popup._list_layout.count())]
-    buttons = [w for w in matches if isinstance(w, QPushButton)]
-    assert [b.text() for b in buttons] == ["Enemy"]
-    buttons[0].click()
+    assert [e.label for e in popup.visible_entries()] == ["Enemy"]
+    _pick(popup, "Enemy")
     assert table.rows[0]["visual"] == "Enemy"
     history.undo()
     assert table.rows[0]["visual"] == "Missing"
@@ -64,7 +67,7 @@ def test_fermer_preserve_une_reference_absente(grid, qapp):
 def test_le_choix_vide_efface_la_reference(grid, qapp):
     panel, table, _ = grid
     popup = _open(panel, qapp)
-    popup._on_pick("")
+    _pick(popup, "")
     assert table.rows[0]["visual"] == ""
 
 
@@ -72,7 +75,7 @@ def test_un_popup_obsolete_n_ecrit_pas_apres_rechargement(grid, qapp):
     panel, table, _ = grid
     popup = _open(panel, qapp)
     panel.reload()
-    popup._on_pick("Enemy")
+    _pick(popup, "Enemy")
     assert table.rows[0]["visual"] == "Missing"
 
 
@@ -124,9 +127,9 @@ def _click(panel, qapp, row=0, column=0):
 def test_premier_clic_selectionne_second_clic_edite(grid, qapp):
     panel, _table, _history = grid
     _click(panel, qapp)
-    assert panel._tbl.currentIndex().row() == 0 and panel._tbl.findChild(AssetPickerPopup) is None
+    assert panel._tbl.currentIndex().row() == 0 and panel._tbl.findChild(PickerPopup) is None
     _click(panel, qapp)
-    popup = panel._tbl.findChild(AssetPickerPopup)
+    popup = panel._tbl.findChild(PickerPopup)
     assert popup is not None and popup.isVisible()
 
 
@@ -142,4 +145,4 @@ def test_double_clic_ouvre_un_seul_selecteur(grid, qapp):
                           (QEvent.Type.MouseButtonDblClick, left), (QEvent.Type.MouseButtonRelease, Qt.MouseButton.NoButton)):
         qapp.sendEvent(viewport, QMouseEvent(kind, position, viewport.mapToGlobal(position), left, buttons, none))
         qapp.processEvents()
-    assert len(panel._tbl.findChildren(AssetPickerPopup)) == 1
+    assert len(panel._tbl.findChildren(PickerPopup)) == 1

@@ -251,14 +251,14 @@ def _relink_action(family: str):
         from core import asset_relink
         from core.command_dispatcher import get_dispatcher
         from ui.common.theme import C
-        from ui.common.widgets import AssetPickerPopup
+        from ui.common.widgets import PickerPopup, PickerEntry
         title = label('akind.relink_source_title', name=asset.name)
         files = asset_relink.compatible_files(project, family)
         if not files:
             QMessageBox.information(None, title, label('akind.relink_none'))
             return
-        entries = [(p.relative_to(project.user_library_dir).as_posix(), str(p)) for p in files]
-        popup = AssetPickerPopup(entries, C.ACCENT, new_label=None)
+        entries = [PickerEntry(p.relative_to(project.user_library_dir).as_posix(), str(p)) for p in files]
+        popup = PickerPopup(entries, C.ACCENT)
 
         warning = {"backgrounds": "akind.relink_warn_background",
                    "sprites": "akind.relink_warn_image"}.get(family)

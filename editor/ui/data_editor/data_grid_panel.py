@@ -25,7 +25,7 @@ from PyQt6.QtGui import QColor, QBrush, QPen, QPalette
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QModelIndex, QPersistentModelIndex, QSize, QEvent, QTimer
 
 from ui.common.theme import C, T, S, QSS, ui_font
-from ui.common.widgets import W, AssetPickerPopup
+from ui.common.widgets import W, PickerPopup, PickerEntry
 from ui.common.palette_swatch import bank_icon
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -229,7 +229,7 @@ class _CellDelegate(QStyledItemDelegate):
         # Le popup écrit seulement au choix explicite. Le fermer (Échap ou
         # clic ailleurs) ne remplace donc jamais une référence manquante.
         target = QPersistentModelIndex(index)
-        entries = [(label("common.none_paren"), "", None)]
+        entries = [PickerEntry(label("common.none_paren"), "")]
         project = self._panel._project
         icon = (icons.get(column.type, C.TEXT_DIM) if column.type in
                 {"sprite", "background", "prefab", "palette", "scene", "camera", "font", "sfx", "music"}
@@ -240,10 +240,10 @@ class _CellDelegate(QStyledItemDelegate):
                 bank = project.palettes.get(name)
                 if bank:
                     entry_icon = bank_icon(bank)
-            entries.append((name, name, entry_icon))
+            entries.append(PickerEntry(name, name, entry_icon))
         creatable = column.type == "text" or column.type in CREATABLE_REFERENCES
-        popup = AssetPickerPopup(entries, C.ACCENT, parent=parent,
-                                  new_label=label("datagrid.create_reference") if creatable else None)
+        popup = PickerPopup(entries, C.ACCENT, parent=parent,
+                             new_label=label("datagrid.create_reference") if creatable else None)
         popup.setFixedWidth(max(260, min(420, option.rect.width())))
         popup.new_requested.connect(lambda: self._panel.create_reference(target, column))
 

@@ -1,13 +1,12 @@
 """Éditeur du ScriptComponent."""
 from __future__ import annotations
-from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QLineEdit, QSlider, QWidget
 from PyQt6.QtGui import QFont
 
 from . import BaseComponentEditor, register
-from ui.common.widgets import W, ScriptSlot
+from ui.common.widgets import W
 from ui.common.pickers import attached_script_slot
 from ui.common.labels import label
 from ui.common.theme import C, T, QSS
@@ -22,9 +21,8 @@ class ScriptEditor(BaseComponentEditor):
 
         slot = attached_script_slot(
             project     = lambda: self.insp._project,
-            current     = lambda: comp.script,
-            on_assigned = lambda rel: self._assign_script(comp, slot, rel),
-            on_cleared  = lambda: self._clear_script(comp, slot),
+            on_assigned = lambda rel: self._assign_script(comp, rel),
+            on_cleared  = lambda: self._clear_script(comp),
             open_file   = self._open_file,
             template    = "actor",
             add_label   = label("comped.script_add"),
@@ -32,8 +30,7 @@ class ScriptEditor(BaseComponentEditor):
             hint        = label("comped.script_hint"),
             parent      = self.insp,
         )
-        if sp and sp.exists():
-            slot.set_script(sp.name)
+        slot.set_value(comp.script)
         layout.addWidget(slot)
 
         # ── Variables exposées du script ───────────────────────────
@@ -209,14 +206,12 @@ class ScriptEditor(BaseComponentEditor):
         if fn:
             fn(path)
 
-    def _assign_script(self, comp, slot: ScriptSlot, rel: str):
+    def _assign_script(self, comp, rel: str):
         comp.script = rel
         comp.exports_values = {}   # les valeurs de l'ancien script ne valent pas pour le nouveau
-        slot.set_script(Path(rel).name)
         self.insp._save_component_change(None)
 
-    def _clear_script(self, comp, slot: ScriptSlot):
+    def _clear_script(self, comp):
         comp.script = None
         comp.exports_values = {}
-        slot.clear_script()
         self.insp._save_component_change(None)

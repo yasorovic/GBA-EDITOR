@@ -221,7 +221,6 @@ class CameraInspector(QWidget):
         script_card = CollapsibleCard(label('caminsp.camera_script'))
         self._script_slot = attached_script_slot(
             project     = lambda: self._project if self._camera is not None else None,
-            current     = lambda: self._camera.script if self._camera is not None else "",
             on_assigned = self._script_assign,
             on_cleared  = self._script_clear,
             open_file   = self._script_open_file,
@@ -324,11 +323,7 @@ class CameraInspector(QWidget):
             self._frame_h.set_raw(cam.frame_h if cam else 160)
             self._refresh_window_budget()
 
-            script = (cam.script if cam else "") or ""
-            if script:
-                self._script_slot.set_script(script.rsplit("/", 1)[-1])
-            else:
-                self._script_slot.clear_script()
+            self._script_slot.set_value((cam.script if cam else "") or None)
         finally:
             self._blocking = False
 

@@ -1,7 +1,7 @@
-"""editor/ui/common/pickers.py : Slots de sélection réutilisables, construits
-sur le même modèle que le "script selector" (ScriptSlot + AssetPickerPopup) :
-bouton "+ Choisir..." quand vide, nom + Changer + × quand assigné, popup
-recherche+liste au clic.
+"""editor/ui/common/pickers.py : Slots de sélection réutilisables, tous des
+`PickerSlot` (bouton « + Choisir... » quand vide, nom + × quand assigné, popup
+recherche+liste au clic). Chaque fabrique ne dit que ses données : les
+entrées, la description d'une valeur, ce que fait un choix.
 """
 from __future__ import annotations
 
@@ -13,14 +13,14 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QToolButton
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QColor, QPainter, QPen
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 
-from ui.common.widgets import ScriptSlot, AssetPickerPopup
+from ui.common.widgets import PickerSlot, PickerPopup, PickerEntry
 from ui.common.palette_swatch import bank_icon
 from ui.common.theme import C, T, QSS
 from ui.common import icons
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.palette import PaletteBank
 
-# Jeton renvoyé à on_picked quand l'utilisateur choisit « Sans palette » —
+# Jeton renvoyé à on_picked quand l'utilisateur choisit « Sans palette » :
 # l'appelant le mappe vers OWN_PAL_BANK (l'asset garde ses couleurs d'origine).
 PALETTE_NONE = "__none__"
 _NONE_LABEL = 'pick.no_palette_png_colors'
@@ -35,50 +35,38 @@ def palette_picker_slot(
     add_label: str = None,
     parent=None,
     allow_none: bool = True,
-) -> ScriptSlot:
+) -> PickerSlot:
     """Slot pour choisir une PaletteBank par nom parmi `banks`. Si
     `allow_none` (défaut), une entrée « Sans palette » en tête permet de
-    revenir aux couleurs d'origine du PNG — on_picked reçoit alors le jeton
-    PALETTE_NONE. `current_name` None + allow_none => affiche « Sans palette »."""
+    revenir aux couleurs d'origine du PNG : on_picked reçoit alors le jeton
+    PALETTE_NONE. `current_name` None + allow_none => affiche « Sans palette ».
+    Une palette posée qui n'est pas dans `banks` reste montrée, signalée."""
     if add_label is None:
         add_label = label('common.choose_palette')
-    slot = ScriptSlot(
-        add_label=add_label, accent_color=accent,
-        show_clear=on_cleared is not None,
-    )
+    none_entry = PickerEntry(label(_NONE_LABEL), PALETTE_NONE)
 
-    current = next((b for b in banks if b.name == current_name), None) if current_name else None
-    if current:
-        slot.set_script(current.name, icon=bank_icon(current))
-    elif allow_none:
-        slot.set_script(label(_NONE_LABEL))
+    def entries():
+        listed = [PickerEntry(bank.name, bank.name, bank_icon(bank)) for bank in banks]
+        return ([none_entry] if allow_none else []) + listed
 
-    def _open_picker():
-        entries = [(bank.name, bank.name, bank_icon(bank)) for bank in banks]
-        if allow_none:
-            entries.insert(0, (label(_NONE_LABEL), PALETTE_NONE, None))
-        popup = AssetPickerPopup(entries, accent, parent=parent, new_label=None)
+    def describe(name):
+        if name == PALETTE_NONE:
+            return none_entry
+        if not name:
+            return None
+        bank = next((b for b in banks if b.name == name), None)
+        if bank is None:
+            return PickerEntry(name, name, missing=True)
+        return PickerEntry(bank.name, bank.name, bank_icon(bank))
 
-        def _picked(name: str):
-            # Met à jour l'affichage du slot AVANT de notifier l'appelant.
-            if name == PALETTE_NONE:
-                slot.set_script(label(_NONE_LABEL))
-            else:
-                b = next((x for x in banks if x.name == name), None)
-                if b:
-                    slot.set_script(b.name, icon=bank_icon(b))
-            on_picked(name)
-
-        popup.picked.connect(_picked)
-        popup.show_below(slot)
-
-    slot.set_callbacks(on_add=_open_picker, on_open=_open_picker, on_clear=on_cleared)
+    slot = PickerSlot(add_label, accent, entries, describe, on_picked,
+                      on_cleared=on_cleared, parent=parent)
+    slot.set_value(current_name or (PALETTE_NONE if allow_none else None))
     return slot
 
 
 def attached_script_slot(
     project: Callable[[], object],
-    current: Callable[[], Optional[str]],
     on_assigned: Callable[[str], None],
     on_cleared: Callable[[], None],
     open_file: Callable[[str], None],
@@ -87,7 +75,7 @@ def attached_script_slot(
     new_title: str,
     hint: str = "",
     parent=None,
-) -> ScriptSlot:
+) -> PickerSlot:
     """Le slot du script attaché à un acteur, une Area, une scène ou une caméra : le même geste partout.
 
     « + » ouvre la liste des scripts attachables (pas les behaviors) et « Nouveau script » ; un script glissé
@@ -95,26 +83,26 @@ def attached_script_slot(
     comme *Create blank* (dossier affiché par l'onglet Disk, annulable, nom pris : suffixé), avec le modèle
     `template` (« actor », « scene », « camera »).
 
-    L'appelant range la valeur : `on_assigned(chemin relatif)` et `on_cleared()`, puis remet le slot d'accord
-    avec son modèle (`set_script` / `clear_script`). `project` et `current` sont lus au moment du geste."""
+    La valeur du slot est le chemin relatif du script. L'appelant range la valeur (`on_assigned(chemin)`,
+    `on_cleared()`) et repose le slot depuis son modèle (`set_value`). `project` est lu au moment du geste."""
     from pathlib import Path
     from PyQt6.QtWidgets import QInputDialog
 
-    slot = ScriptSlot(add_label=add_label, accent_color=icons.COLOR_SCRIPT, hint=hint)
-
-    def _open_picker():
+    def entries():
         proj = project()
         if proj is None:
-            return
-        scripts = [(f.name, proj.asset_rel(f)) for f in proj.script_files()]
-        popup = AssetPickerPopup(scripts, icons.COLOR_SCRIPT, parent=parent)
-        popup.picked.connect(_assign)
-        popup.new_requested.connect(_create)
-        popup.show_below(slot)
+            return []
+        return [PickerEntry(f.name, proj.asset_rel(f)) for f in proj.script_files()]
 
-    def _assign(rel: str):
-        if rel != current():
-            on_assigned(rel)
+    def describe(rel):
+        if not rel:
+            return None
+        proj = project()
+        path = proj.asset_abs(rel) if proj is not None else None
+        name = Path(rel).name
+        if path is None or not path.exists():
+            return PickerEntry(label('pick.name_missing', name=name), rel, missing=True)
+        return PickerEntry(name, rel)
 
     def _create():
         proj = project()
@@ -131,12 +119,12 @@ def attached_script_slot(
         gesture = asset_creation.create_blank(proj, "script", folder, name=name.strip(), template=template)
         get_history().push(RefreshAfterCmd(gesture.command, get_dispatcher().notify_disk_changed))
         path = folder / f"{gesture.names[0]}.lua"
-        on_assigned(proj.asset_rel(path))
+        slot.pick(proj.asset_rel(path))
         get_dispatcher().notify_scripts_changed()
         open_file(str(path))
 
     def _open():
-        proj, rel = project(), current()
+        proj, rel = project(), slot.value()
         path = proj.asset_abs(rel) if proj is not None and rel else None
         if path is not None and path.exists():
             open_file(str(path))
@@ -151,8 +139,10 @@ def attached_script_slot(
         path = next((f for f in proj.script_files() if f.resolve() == wanted), None)
         return proj.asset_rel(path) if path is not None else None
 
-    slot.set_callbacks(on_add=_open_picker, on_open=_open, on_clear=on_cleared)
-    slot.accept_drops(_dropped, _assign)
+    slot = PickerSlot(add_label, icons.COLOR_SCRIPT, entries, describe, on_assigned,
+                      on_cleared=on_cleared, on_open=_open,
+                      new_label=label('wdg.new_script'), on_new=_create, hint=hint, parent=parent)
+    slot.accept_drops(_dropped)
     return slot
 
 
@@ -167,13 +157,13 @@ def ui_pal_bank_slot(
     project=None,
     parent=None,
     compact: bool = False,
-) -> ScriptSlot | QToolButton:
-    """Slot pour choisir la banque d'encre de la police PAR DÉFAUT d'une scène —
+) -> PickerSlot | QToolButton:
+    """Slot pour choisir la banque d'encre de la police PAR DÉFAUT d'une scène :
     un INDEX dans `active` (jusqu'à 16 entrées, vides comprises), pas un nom.
 
     Même widget que `palette_picker_slot`, mais l'entrée à choisir est un
     SLOT de la scène (`Scene.active_bg_palettes[i]`), pas une banque du
-    catalogue : les slots vides sont listés quand même (« (empty) ») — la
+    catalogue : les slots vides sont listés quand même (« (empty) »), la
     sélection peut se remplir après coup, et les masquer ferait disparaître
     un choix déjà posé dans le JSON.
 
@@ -183,64 +173,53 @@ def ui_pal_bank_slot(
     imbriqué dans un conteneur à fond la prend automatiquement (cf. le chantier
     « la police, une palette d'asset »).
 
-    `AssetPickerPopup.picked` est typé `str` (chemins de script, son usage
-    d'origine) : l'index voyage donc en texte, comme dans `ColorIndexSlot`.
-    `compact` conserve le même sélecteur derrière un bouton de barre d'outils."""
-    if compact:
-        slot = QToolButton(parent)
-        slot.setFixedSize(32, 32)
-        slot.setIconSize(QSize(20, 20))
-        slot.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        slot.setStyleSheet(QSS.toolbutton_icon)
-    else:
-        slot = ScriptSlot(add_label=label('pick.choose_the_ui_bank'), accent_color=accent,
-                          show_clear=False)
+    `compact` conserve le même choix derrière un bouton de barre d'outils, qui
+    ouvre le même popup."""
 
-    def _label_and_icon(i: int):
-        name = active[i] if 0 <= i < len(active) else ""
+    def describe(i: int) -> PickerEntry:
+        if i < 0:
+            return PickerEntry(label(_UI_BANK_AUTO_LABEL), -1)
+        name = active[i] if i < len(active) else ""
         bank = project.get_palette(name) if (project and name) else None
-        return f"{i} — {name or label('pick.empty')}", (bank_icon(bank) if bank else None)
+        return PickerEntry(f"{i} — {name or label('pick.empty')}", i,
+                           bank_icon(bank) if bank else None)
+
+    def entries():
+        return [describe(i) for i in range(-1, 16)]
+
+    if not compact:
+        slot = PickerSlot(label('pick.choose_the_ui_bank'), accent, entries, describe, on_picked,
+                          parent=parent)
+        slot.set_value(current_index)
+        return slot
+
+    button = QToolButton(parent)
+    button.setFixedSize(32, 32)
+    button.setIconSize(QSize(20, 20))
+    button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+    button.setStyleSheet(QSS.toolbutton_icon)
 
     def _show(value: int):
-        if value < 0:
-            lab, icon = label(_UI_BANK_AUTO_LABEL), None
-        else:
-            lab, icon = _label_and_icon(value)
-        if compact:
-            slot.setIcon(icon or icons.toolbar_icon('bank', C.TEXT_DIM))
-            slot.setIconSize(QSize(18, 18) if icon is not None else QSize(26, 26))
-            slot.setToolTip(tooltip(
-                title=label('uiinsp.text.bank_title'),
-                body=lab, note=label('uiinsp.text.bank_tip')))
-            slot.setAccessibleName(f"{label('uiinsp.text.bank')}: {lab}")
-        else:
-            slot.set_script(lab, icon=icon)
+        entry = describe(value)
+        button.setIcon(entry.icon or icons.toolbar_icon('bank', C.TEXT_DIM))
+        button.setIconSize(QSize(18, 18) if entry.icon is not None else QSize(26, 26))
+        button.setToolTip(tooltip(
+            title=label('uiinsp.text.bank_title'),
+            body=entry.label, note=label('uiinsp.text.bank_tip')))
+        button.setAccessibleName(f"{label('uiinsp.text.bank')}: {entry.label}")
 
-    _show(current_index)
+    def _picked(value: int):
+        _show(value)
+        on_picked(value)
 
     def _open_picker():
-        entries = [(label(_UI_BANK_AUTO_LABEL), "-1", None)]
-        for i in range(16):
-            lab, icon = _label_and_icon(i)
-            entries.append((lab, str(i), icon))
-        popup = AssetPickerPopup(entries, accent, parent=parent, new_label=None)
-
-        def _picked(raw: str):
-            try:
-                value = int(raw)
-            except (TypeError, ValueError):
-                return
-            _show(value)
-            on_picked(value)
-
+        popup = PickerPopup(entries(), accent, parent=button)
         popup.picked.connect(_picked)
-        popup.show_below(slot)
+        popup.show_below(button)
 
-    if compact:
-        slot.clicked.connect(_open_picker)
-    else:
-        slot.set_callbacks(on_add=_open_picker, on_open=_open_picker)
-    return slot
+    _show(current_index)
+    button.clicked.connect(_open_picker)
+    return button
 
 
 _FONT_AUTO_LABEL_BASE = 'pick.automatic_first_font'
@@ -255,22 +234,20 @@ def font_picker_slot(
     add_label: str = None,
     parent=None,
     project_default: str = "",
-) -> ScriptSlot:
-    """Slot pour choisir la police par défaut d'une scène — un NOM de `Font`
+) -> PickerSlot:
+    """Slot pour choisir la police par défaut d'une scène : un NOM de `Font`
     du projet parmi `fonts`, ou `""` pour « Automatic » (comme
     `Scene.font_name`, cf. `main_gen.project_fonts`).
 
-    Deux nuances propres aux polices, absentes de `sprite_picker_slot` :
-    l'entrée « Automatic » affiche la police qu'elle résoudrait ; et une police
-    SANS planche exploitable reste listée, dite telle quelle — la masquer ferait
-    disparaître un choix déjà posé dans le JSON.
+    Deux nuances propres aux polices : l'entrée « Automatic » affiche la police
+    qu'elle résoudrait ; et une police SANS planche exploitable reste listée,
+    dite telle quelle, la masquer ferait disparaître un choix déjà posé dans le JSON.
 
     Ce que « Automatic » résout suit `font_emit.default_font_name` : la « Default
     Font » du projet (`project_default`) si elle est posée et utilisable, sinon la
-    seule police utilisable s'il n'y en a qu'une — sinon indécidable ici."""
+    seule police utilisable s'il n'y en a qu'une, sinon indécidable ici."""
     if add_label is None:
         add_label = label('pick.choose_the_scene_font')
-    slot = ScriptSlot(add_label=add_label, accent_color=accent, show_clear=False)
     icon = icons.get("font", C.TEXT_DIM)
 
     def _auto_label() -> str:
@@ -279,31 +256,19 @@ def font_picker_slot(
         first = sorted(usable_names)[0] if len(usable_names) == 1 else ""
         return label('pick.automatic_first', first=first) if first else label(_FONT_AUTO_LABEL_BASE)
 
-    def _label(name: str) -> str:
+    def describe(name: str) -> PickerEntry:
+        if not name:
+            return PickerEntry(_auto_label(), "", icon)
         if not any(f.name == name for f in fonts):
-            return label('pick.name_missing', name=name)
-        return name if name in usable_names else label('pick.name_no_usable_sheet', name=name)
+            return PickerEntry(label('pick.name_missing', name=name), name, missing=True)
+        shown = name if name in usable_names else label('pick.name_no_usable_sheet', name=name)
+        return PickerEntry(shown, name, icon)
 
-    def _show(name: str):
-        slot.set_script(_auto_label() if not name else _label(name), icon=icon)
+    def entries():
+        return [describe("")] + [describe(f.name) for f in fonts]
 
-    _show(current_name)
-
-    def _open_picker():
-        entries = [(_auto_label(), "", icon)]
-        entries += [(_label(f.name), f.name, icon) for f in fonts]
-        if current_name and not any(f.name == current_name for f in fonts):
-            entries.append((_label(current_name), current_name, icon))
-        popup = AssetPickerPopup(entries, accent, parent=parent, new_label=None)
-
-        def _picked(name: str):
-            _show(name)   # rafraîchit le label avant de notifier
-            on_picked(name)
-
-        popup.picked.connect(_picked)
-        popup.show_below(slot)
-
-    slot.set_callbacks(on_add=_open_picker, on_open=_open_picker)
+    slot = PickerSlot(add_label, accent, entries, describe, on_picked, parent=parent)
+    slot.set_value(current_name or "")
     return slot
 
 
@@ -314,37 +279,21 @@ def collision_tag_slot(
     on_picked: Callable[[str], None],
     on_created: Callable[[str], None],
     parent=None,
-) -> ScriptSlot:
-    """Slot pour choisir le tag de collision d'une boîte — même modèle que
-    `sprite_picker_slot`, avec la CRÉATION en plus : le texte tapé dans la
-    recherche devient un nouveau tag (`on_created`). Le slot ne déclare rien
-    lui-même ; l'appelant possède la déclaration au niveau projet."""
-    slot = ScriptSlot(add_label=label('pick.choose_a_tag'), accent_color=accent,
-                      show_clear=False)
+) -> PickerSlot:
+    """Slot pour choisir le tag de collision d'une boîte, avec la CRÉATION en
+    plus : le texte tapé dans la recherche devient un nouveau tag (`on_created`).
+    Le slot ne déclare rien lui-même ; l'appelant possède la déclaration au
+    niveau projet."""
     icon = icons.get("view_collision", C.TEXT_DIM)
-    slot.set_script(current_tag, icon=icon)
 
-    def _open_picker():
-        entries = [(t, t, icon) for t in tags]
-        if current_tag and current_tag not in tags:
-            entries.append((current_tag, current_tag, icon))
-        popup = AssetPickerPopup(entries, accent, parent=parent,
-                                  new_label=label('pick.create_tag_named', name='{name}'),
-                                  create_named=True)
+    def describe(tag: str) -> PickerEntry:
+        return PickerEntry(tag, tag, icon)
 
-        def _picked(name: str):
-            slot.set_script(name, icon=icon)
-            on_picked(name)
-
-        def _created(name: str):
-            slot.set_script(name, icon=icon)
-            on_created(name)
-
-        popup.picked.connect(_picked)
-        popup.created.connect(_created)
-        popup.show_below(slot)
-
-    slot.set_callbacks(on_add=_open_picker, on_open=_open_picker)
+    slot = PickerSlot(label('pick.choose_a_tag'), accent,
+                      lambda: [describe(t) for t in tags], describe, on_picked,
+                      new_label=label('pick.create_tag_named', name='{name}'),
+                      on_new=on_created, create_named=True, parent=parent)
+    slot.set_value(current_tag)
     return slot
 
 
@@ -356,30 +305,22 @@ def sprite_picker_slot(
     on_cleared: Optional[Callable[[], None]] = None,
     add_label: str = None,
     parent=None,
-) -> ScriptSlot:
-    """Slot pour choisir un SpriteAsset par nom — même modèle que
-    `palette_picker_slot`, sans icône (pas d'aperçu bon marché pour un sprite)."""
+) -> PickerSlot:
+    """Slot pour choisir un SpriteAsset par nom, sans icône (pas d'aperçu bon
+    marché pour un sprite)."""
     if add_label is None:
         add_label = label('pick.choose_a_sprite')
-    slot = ScriptSlot(
-        add_label=add_label, accent_color=accent,
-        show_clear=on_cleared is not None,
-    )
-    if current_name:
-        slot.set_script(current_name)
 
-    def _open_picker():
-        entries = [(n, n) for n in sorted(sprite_names)]
-        popup = AssetPickerPopup(entries, accent, parent=parent, new_label=None)
+    def describe(name):
+        if not name:
+            return None
+        if name not in sprite_names:
+            return PickerEntry(label('pick.name_missing', name=name), name, missing=True)
+        return PickerEntry(name, name)
 
-        def _picked(name: str):
-            slot.set_script(name)   # rafraîchit le label avant de notifier
-            on_picked(name)
-
-        popup.picked.connect(_picked)
-        popup.show_below(slot)
-
-    slot.set_callbacks(on_add=_open_picker, on_open=_open_picker, on_clear=on_cleared)
+    slot = PickerSlot(add_label, accent, lambda: [PickerEntry(n, n) for n in sorted(sprite_names)],
+                      describe, on_picked, on_cleared=on_cleared, parent=parent)
+    slot.set_value(current_name)
     return slot
 
 
@@ -541,35 +482,29 @@ class ColorIndexSlot(QWidget):
 
     # ── Choix ─────────────────────────────────────────────────────
 
-    def _entries(self) -> list:
-        """(libellé, valeur, icône) — l'index 0 nommé, puis ce que la banque
-        contient RÉELLEMENT."""
-        out = [(self._zero_label, "0", None)]
+    def _entries(self) -> list[PickerEntry]:
+        """L'index 0 nommé, puis ce que la banque contient RÉELLEMENT."""
+        out = [PickerEntry(self._zero_label, 0)]
         n = len(self._bank.colors) if self._bank else 0
         for idx in range(1, n):
             r, g, b = bgr555_to_rgb888(self._bank.colors[idx])
             pm = QPixmap(14, 14)
             pm.fill(QColor(r, g, b))
-            out.append((f"{idx}   #{r:02X}{g:02X}{b:02X}", str(idx), QIcon(pm)))
+            out.append(PickerEntry(f"{idx}   #{r:02X}{g:02X}{b:02X}", idx, QIcon(pm)))
         if not n:
             # Aucune banque désignée : l'index reste un choix valide (la scène
             # peut en désigner une plus tard), on ne peut simplement pas en
             # montrer la couleur.
-            out += [(f"{i} — {label('pick.empty')}", str(i), None)
+            out += [PickerEntry(f"{i} — {label('pick.empty')}", i)
                     for i in range(1, 16)]
         return out
 
     def _open(self):
-        popup = AssetPickerPopup(self._entries(), self._accent,
-                                  parent=self, new_label=None)
+        popup = PickerPopup(self._entries(), self._accent, parent=self)
         popup.picked.connect(self._on_picked)
         popup.show_below(self)
 
-    def _on_picked(self, value: str):
-        try:
-            idx = int(value)
-        except (TypeError, ValueError):
-            return
+    def _on_picked(self, idx: int):
         if idx == self._index:
             return
         self._index = idx

@@ -26,7 +26,7 @@ from core.command_dispatcher import get_dispatcher
 from ui.common.theme import C, T, QSS
 from ui.common.deferred_writes import schedule_save
 from ui.common.responsive import FlowLayout, InspectorScrollArea
-from ui.common.widgets import NotesEdit, CollapsibleCard, AssetPickerPopup
+from ui.common.widgets import NotesEdit, CollapsibleCard, PickerPopup, PickerEntry
 from ui.common.field_binder import FieldBinder
 from ui.common.notice import notice
 from ui.common.labels import label
@@ -1021,8 +1021,8 @@ class ActorInspector(QWidget):
 
         # Même sélecteur (recherche + liste) que les autres slots d'asset (cf. ui/common/pickers.py).
         # Première entrée « — » : remet l'apparence à zéro (nom de sprite vide).
-        entries = [(label("common.none"), "")] + [(name, name) for name in names]
-        popup = AssetPickerPopup(entries, icons.COLOR_ACTOR, parent=self, new_label=None)
+        entries = [PickerEntry(label("common.none"), "")] + [PickerEntry(name, name) for name in names]
+        popup = PickerPopup(entries, icons.COLOR_ACTOR, parent=self)
         popup.picked.connect(self._assign_sprite)
         popup.show_below(self._sprite_preview)
 

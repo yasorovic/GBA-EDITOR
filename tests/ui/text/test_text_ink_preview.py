@@ -18,14 +18,14 @@ def test_unresolved_color_entries_are_explicitly_empty(qapp):
     slot = ColorIndexSlot('Default', '#ffffff', compact_label='Ink')
     slot.set_value(None, 0)
     entries = slot._entries()
-    assert entries[0][:2] == ('Default', '0')
+    assert (entries[0].label, entries[0].value) == ('Default', 0)
     assert len(entries) == 16
-    assert all(label('pick.empty') in name for name, value, icon in entries[1:])
+    assert all(label('pick.empty') in entry.label for entry in entries[1:])
     slot.set_value(SimpleNamespace(colors=[]), 0)
     assert len(slot._entries()) == 16
-    assert label('pick.empty') in slot._entries()[1][0]
+    assert label('pick.empty') in slot._entries()[1].label
     slot.set_value(SimpleNamespace(colors=[0, 0]), 0)
-    assert label('pick.empty') not in slot._entries()[1][0]  # le noir existe
+    assert label('pick.empty') not in slot._entries()[1].label  # le noir existe
 
 
 @pytest.mark.parametrize('ink_index', [0, 1])

@@ -10,7 +10,7 @@ from ui.common.labels import label
 from ui.common.notice import note
 from ui.common.theme import C
 from ui.common.tooltip import tooltip
-from ui.common.widgets import AssetPickerPopup, ScriptSlot, W
+from ui.common.widgets import PickerEntry, PickerSlot, W
 from . import BaseComponentEditor, register, LABEL_WIDTH
 
 
@@ -35,35 +35,22 @@ class PhysicsBodyEditor(BaseComponentEditor):
         colliders = [c for c in getattr(owner, "components", [])
                      if isinstance(c, CollisionShapeComponent)]
         collider_icon = icons.get("view_collision", C.TEXT_DIM)
-        collider = ScriptSlot(add_label=label("comped.physics_choose_collider"),
-                              accent_color=C.ACCENT, show_clear=True)
-        collider.setToolTip(tooltip(title=label("comped.physics_collider"),
-                                    body=label("comped.physics_collider_tip")))
-
-        def collider_text(box):
-            return f"{box.id} [{box.tag}]" if box.tag else box.id
-
-        def show_collider(value):
+        def describe_collider(value):
             found = next((box for box in colliders if box.id == value), None)
             if found is not None:
-                collider.set_script(collider_text(found), icon=collider_icon)
-            elif value:
-                collider.set_script(label("comped.physics_collider_missing", name=value))
-            else:
-                collider.set_script(label("comped.physics_collider_legacy"), icon=collider_icon)
+                text = f"{found.id} [{found.tag}]" if found.tag else found.id
+                return PickerEntry(text, value, collider_icon)
+            if value:
+                return PickerEntry(label("comped.physics_collider_missing", name=value), value, missing=True)
+            return PickerEntry(label("comped.physics_collider_legacy"), "", collider_icon)
 
-        def open_collider_picker():
-            entries = [(collider_text(box), box.id, collider_icon) for box in colliders]
-            popup = AssetPickerPopup(entries, C.ACCENT, parent=collider, new_label=None)
-            popup.picked.connect(lambda value: (
-                self.set_field(comp, "collider_id", value), show_collider(value)))
-            popup.show_below(collider)
-
-        collider.set_callbacks(
-            on_add=open_collider_picker,
-            on_open=open_collider_picker,
-            on_clear=lambda: (self.set_field(comp, "collider_id", ""), show_collider("")),
-        )
+        collider = PickerSlot(
+            label("comped.physics_choose_collider"), C.ACCENT,
+            lambda: [describe_collider(box.id) for box in colliders], describe_collider,
+            lambda value: self.set_field(comp, "collider_id", value),
+            on_cleared=lambda: self.set_field(comp, "collider_id", ""), cleared_value="")
+        collider.setToolTip(tooltip(title=label("comped.physics_collider"),
+                                    body=label("comped.physics_collider_tip")))
         W.row(label("comped.physics_collider"), collider, layout, LABEL_WIDTH)
         static_note = note(layout, "physics.static_body")
         character_note = note(layout, "physics.character_body")
@@ -139,11 +126,11 @@ class PhysicsBodyEditor(BaseComponentEditor):
         use_gravity.toggled.connect(lambda value: (
             self.set_field(comp, "use_scene_gravity", bool(value)), show_mode(mode.currentData())))
         self.register_syncer("mode", show_value)
-        self.register_syncer("collider_id", show_collider)
+        self.register_syncer("collider_id", collider.set_value)
         self.register_syncer("mass", lambda value: sync_number(mass, value))
         self.register_syncer("gravity_scale", lambda value: sync_number(gravity_scale, value))
         self.register_syncer("can_sleep", lambda value: sync_check(can_sleep, value))
         self.register_syncer("use_scene_gravity", lambda value: (
             sync_check(use_gravity, value), show_mode(mode.currentData())))
-        show_collider(comp.collider_id)
+        collider.set_value(comp.collider_id)
         show_value(comp.mode)

@@ -53,7 +53,7 @@ from ui.common.deferred_writes import get_deferred_writes, schedule_save, schedu
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitSpin
 from ui.common.responsive import InspectorScrollArea
-from ui.common.widgets import W, CollapsibleCard, ScriptSlot, AssetPickerPopup
+from ui.common.widgets import W, CollapsibleCard, PickerSlot, PickerEntry
 from ui.common.notice import note, notice, text
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -289,17 +289,14 @@ class UIInspector(QWidget):
         # Le texte libre est la représentation de `text:draw`. Créer une
         # entrée est un choix EXPLICITE : le bouton mène à l'écran Texte ; le
         # menu voisin sert uniquement à retrouver une clé existante.
-        self._text_key = ScriptSlot(
-            add_label=label("uiinsp.text.create_entry"), accent_color=TEXT_ACCENT,
-            show_clear=True)
+        self._text_key = PickerSlot(
+            label("uiinsp.text.create_entry"), TEXT_ACCENT,
+            self._text_key_entries, self._describe_text_key, self._on_text_key,
+            on_cleared=self._clear_text_link, cleared_value="",
+            new_label=label("uiinsp.text.create_entry"), on_new=self.text_editor_requested.emit)
         self._text_key.setToolTip(tooltip(
             title=label("uiinsp.text.create_entry_title"),
             body=label("uiinsp.text.create_entry_tip")))
-        self._text_key.set_callbacks(
-            on_add=self._open_text_picker,
-            on_open=self._open_text_picker,
-            on_clear=self._clear_text_link,
-        )
         self._text_key_row = self._text_key
 
         self._content = QTextEdit()
@@ -798,7 +795,7 @@ class UIInspector(QWidget):
 
     def _reload_text_key(self):
         key = getattr(self._element, "text_key", "") or ""
-        self._text_key.set_script(key) if key else self._text_key.clear_script()
+        self._text_key.set_value(key)
 
     # ── Image (désigne un sprite et l'un de ses états) ────────────
     def _current_sprite(self):
@@ -1193,8 +1190,6 @@ class UIInspector(QWidget):
             banks, cur or None, _icons.COLOR_UI,
             on_picked=self._on_fill_palette,
             add_label=label("common.choose_palette"), parent=self, allow_none=False)
-        if cur and cur not in actifs:
-            self._fill_pal_slot.set_script(cur)
         self._fill_pal_box.addWidget(self._fill_pal_slot)
 
     def _reload_fill_sprite(self):
@@ -1726,17 +1721,17 @@ class UIInspector(QWidget):
             self._blocking = False
         self._refresh_diagnostics()
 
-    def _open_text_picker(self):
-        """Même popup de recherche que les sélecteurs d'assets (Bank, Font…)."""
-        if self._blocking or not self._project:
-            return
-        entries = [(t.key, t.key) for t in self._project.texts]
-        popup = AssetPickerPopup(
-            entries, TEXT_ACCENT, parent=self._text_key,
-            new_label=label("uiinsp.text.create_entry"))
-        popup.picked.connect(self._on_text_key)
-        popup.new_requested.connect(self.text_editor_requested.emit)
-        popup.show_below(self._text_key)
+    def _text_key_entries(self) -> list:
+        """Les entrées de texte existantes, à lier à l'élément."""
+        if not self._project:
+            return []
+        return [PickerEntry(t.key, t.key) for t in self._project.texts]
+
+    def _describe_text_key(self, key: str):
+        if not key:
+            return None
+        missing = self._project is not None and self._project.get_text(key) is None
+        return PickerEntry(key, key, missing=missing)
 
     def _on_sequence_chosen(self, prefix: str):
         """Lier la boîte à une séquence (ou la délier avec "")."""

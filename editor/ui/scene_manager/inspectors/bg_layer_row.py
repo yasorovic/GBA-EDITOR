@@ -24,7 +24,7 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal, QMimeData
 
 from ui.common.theme import C, T, QSS, tint
 from ui.common.responsive import FlowLayout
-from ui.common.widgets import W, AssetPickerPopup
+from ui.common.widgets import W, PickerPopup, PickerEntry
 from ui.common.palette_swatch import bank_icon
 
 LAYER_NAMES  = ["BG0", "BG1", "BG2", "BG3", "Sprite"]
@@ -138,8 +138,8 @@ class BgLayerRow(QFrame):
         )
         row.addWidget(self._speed)
 
-        # Icône palette — compacte (pas de ScriptSlot complet, pas la place
-        # dans une rangée de 40px). Ouvre le même AssetPickerPopup que
+        # Icône palette — compacte (pas de PickerSlot complet, pas la place
+        # dans une rangée de 40px). Ouvre le même PickerPopup que
         # palette_picker_slot, câblé sur BackgroundLayer.pal_bank.
         self._pal_btn = QToolButton()
         self._pal_btn.setFixedSize(30, 30)
@@ -298,11 +298,10 @@ class BgLayerRow(QFrame):
         s'importent via le Background Editor, plus de QFileDialog Windows ici.
         Entrée « Vide » en tête pour un layer sans image (même contrat que
         « Sans palette » côté pal_bank, cf. ui/common/pickers.py)."""
-        from ui.common.widgets import AssetPickerPopup
         names = self._bg_names() if callable(self._bg_names) else self._bg_names
-        entries = [(label('bglayer.empty_no_image'), "", None)]
-        entries += [(n, n, None) for n in (names or [])]
-        popup = AssetPickerPopup(entries, self._color, parent=self, new_label=None)
+        entries = [PickerEntry(label('bglayer.empty_no_image'), "")]
+        entries += [PickerEntry(n, n) for n in (names or [])]
+        popup = PickerPopup(entries, self._color, parent=self)
         popup.picked.connect(lambda name: self.asset_changed.emit(self.slot_index, name))
         popup.show_below(self._thumb)
 
@@ -372,9 +371,9 @@ class BgLayerRow(QFrame):
 
     def _open_pal_picker(self):
         from ui.common.pickers import PALETTE_NONE
-        entries = [(label('bglayer.no_palette_png_colors'), PALETTE_NONE, None)]
-        entries += [(bank.name, bank.name, bank_icon(bank)) for bank in self._pal_banks]
-        popup = AssetPickerPopup(entries, self._color, parent=self, new_label=None)
+        entries = [PickerEntry(label('bglayer.no_palette_png_colors'), PALETTE_NONE)]
+        entries += [PickerEntry(bank.name, bank.name, bank_icon(bank)) for bank in self._pal_banks]
+        popup = PickerPopup(entries, self._color, parent=self)
         popup.picked.connect(lambda name: self.pal_bank_changed.emit(self.slot_index, name))
         popup.show_below(self._pal_btn)
 

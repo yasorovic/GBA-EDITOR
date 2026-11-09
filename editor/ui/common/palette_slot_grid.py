@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import QWidget, QPushButton, QLayout
 from PyQt6.QtCore import Qt, QSize, QRect, QPoint, pyqtSignal
 
 from ui.common.theme import C
-from ui.common.widgets import AssetPickerPopup
+from ui.common.widgets import PickerPopup, PickerEntry
 from ui.common.palette_swatch import (
     bank_icon as _bank_icon, swatch_icon as _swatch_icon, plus_icon as _plus_icon,
 )
@@ -267,18 +267,16 @@ class PaletteSlotGridAsset(QWidget):
         return btn
 
     # ── Pickers ───────────────────────────────────────────────────
-    def _catalog_entries(self) -> list:
-        return [(b.name, b.name, _bank_icon(b)) for b in self._catalog]
+    def _catalog_entries(self) -> list[PickerEntry]:
+        return [PickerEntry(b.name, b.name, _bank_icon(b)) for b in self._catalog]
 
     def _pick_scene(self, anchor: QPushButton, slot: int):
-        popup = AssetPickerPopup(self._catalog_entries(), self._accent,
-                                  parent=self, new_label=None)
+        popup = PickerPopup(self._catalog_entries(), self._accent, parent=self)
         popup.picked.connect(lambda name, s=slot: self.scene_replace.emit(s, name))
         popup.show_below(anchor)
 
     def _pick_add(self, anchor: QPushButton):
-        popup = AssetPickerPopup(self._catalog_entries(), self._accent,
-                                  parent=self, new_label=None)
+        popup = PickerPopup(self._catalog_entries(), self._accent, parent=self)
         popup.picked.connect(lambda name: self.scene_add.emit(name))
         popup.show_below(anchor)
 
@@ -290,7 +288,6 @@ class PaletteSlotGridAsset(QWidget):
         premier slot libre : jamais deux slots pour la même palette."""
         if not self._catalog:
             return
-        popup = AssetPickerPopup(self._catalog_entries(), self._accent,
-                                  parent=self, new_label=None)
+        popup = PickerPopup(self._catalog_entries(), self._accent, parent=self)
         popup.picked.connect(lambda name, e=entry: self.asset_override.emit(e, name))
         popup.show_below(anchor)

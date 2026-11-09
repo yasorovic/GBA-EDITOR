@@ -36,7 +36,7 @@ from ui.common import icons
 from ui.common.theme import C
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
-from ui.common.widgets import AssetPickerPopup
+from ui.common.widgets import PickerPopup, PickerEntry
 from ui.text_editor.value_completion import value_names
 
 
@@ -160,11 +160,11 @@ class MarkupToolbar(QFrame):
         # qui grossit reste lisible et le clavier y trouve naturellement sa
         # place. Le footer garde la saisie libre, utile avant de créer l'asset
         # ou la variable que le texte va citer.
-        entries = [(choice, choice,
-                    icons.get("font", C.ACCENT) if name == "font" else None)
+        entries = [PickerEntry(choice, choice,
+                               icons.get("font", C.ACCENT) if name == "font" else None)
                    for choice in choices]
-        popup = AssetPickerPopup(entries, C.ACCENT, parent=self,
-                                  new_label=label("mktool.type_by_hand"))
+        popup = PickerPopup(entries, C.ACCENT, parent=self,
+                             new_label=label("mktool.type_by_hand"))
         popup.picked.connect(lambda value:
                              self._insert(name, value, preselect=False))
         popup.new_requested.connect(

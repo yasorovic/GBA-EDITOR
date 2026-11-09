@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QVBoxLayout, Q
 from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
 from core.models.scene import Actor
 from ui.common.notice import NoteLine
-from ui.common.widgets import ScriptSlot, W
+from ui.common.widgets import PickerSlot, W
 from ui.scene_manager.inspectors.component_editors.physics_body import PhysicsBodyEditor
 
 
@@ -36,7 +36,7 @@ def test_l_editeur_affiche_et_ecrit_les_quatre_noms_canoniques(qapp):
     gravity_scale = host.findChild(QDoubleSpinBox, "physicsGravityScale")
     can_sleep = host.findChild(QCheckBox, "physicsCanSleep")
     use_gravity = host.findChild(QCheckBox, "physicsUseSceneGravity")
-    collider = host.findChild(ScriptSlot)
+    collider = host.findChild(PickerSlot)
 
     expected = ["StaticBody", "CharacterBody", "KinematicBody", "RigidBody"]
     assert [combo.itemText(i) for i in range(combo.count())] == expected

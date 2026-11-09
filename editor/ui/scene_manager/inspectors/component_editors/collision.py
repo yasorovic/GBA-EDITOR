@@ -6,7 +6,7 @@ from PyQt6.QtGui import QFont
 
 from . import BaseComponentEditor, register, LABEL_WIDTH
 from ui.common import icons
-from ui.common.widgets import AssetPickerPopup, ScriptSlot, W
+from ui.common.widgets import PickerEntry, PickerSlot, W
 from ui.common.notice import notice
 from ui.common.tooltip import tooltip
 from ui.common.labels import label
@@ -53,7 +53,7 @@ class CollisionEditor(BaseComponentEditor):
         tag_slot = collision_tag_slot(
             proj.collision_tags(), current, COLOR_SPRITE, _commit_tag, _create_tag, parent=self.insp)
         notice("collision.tag", tag_slot, layout)
-        self.register_syncer("tag", lambda v, w=tag_slot: w.set_script(str(v) or "body"))
+        self.register_syncer("tag", lambda v, w=tag_slot: w.set_value(str(v) or "body"))
         W.row(label("comped.tag"), tag_slot, layout, LABEL_WIDTH)
 
         # La forme d'une Area est toujours un capteur que la carte n'arrête pas (cf. `Area.conform_shapes`) : ni mode,
@@ -140,32 +140,21 @@ class CollisionEditor(BaseComponentEditor):
         owner = getattr(self.insp, "_actor", None)
         materials = [c for c in getattr(owner, "components", []) if isinstance(c, PhysicMaterialComponent)]
         material_icon = icons.get("view_collision", C.TEXT_DIM)
-        material = ScriptSlot(add_label=label("comped.collision_choose_material"),
-                              accent_color=C.ACCENT, show_clear=True)
+        def describe_material(value):
+            if not value:
+                return PickerEntry(label("comped.collision_material_none"), "", material_icon)
+            if any(m.id == value for m in materials):
+                return PickerEntry(value, value, material_icon)
+            return PickerEntry(label("comped.collision_material_missing", name=value), value, missing=True)
+
+        material = PickerSlot(
+            label("comped.collision_choose_material"), C.ACCENT,
+            lambda: [describe_material(m.id) for m in materials], describe_material,
+            lambda value: self.set_field(comp, "material_id", value),
+            on_cleared=lambda: self.set_field(comp, "material_id", ""), cleared_value="")
         material.setToolTip(tooltip(title=label("comped.collision_material"),
                                     body=label("comped.collision_material_tip")))
-
-        def show_material(value):
-            if next((m for m in materials if m.id == value), None) is not None:
-                material.set_script(value, icon=material_icon)
-            elif value:
-                material.set_script(label("comped.collision_material_missing", name=value))
-            else:
-                material.set_script(label("comped.collision_material_none"), icon=material_icon)
-
-        def open_material_picker():
-            entries = [(m.id, m.id, material_icon) for m in materials]
-            popup = AssetPickerPopup(entries, C.ACCENT, parent=material, new_label=None)
-            popup.picked.connect(lambda value: (
-                self.set_field(comp, "material_id", value), show_material(value)))
-            popup.show_below(material)
-
-        material.set_callbacks(
-            on_add=open_material_picker,
-            on_open=open_material_picker,
-            on_clear=lambda: (self.set_field(comp, "material_id", ""), show_material("")),
-        )
         W.row(label("comped.collision_material"), material, layout, LABEL_WIDTH)
-        show_material(comp.material_id)
-        self.register_syncer("material_id", show_material)
+        material.set_value(comp.material_id)
+        self.register_syncer("material_id", material.set_value)
 

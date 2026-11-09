@@ -14,12 +14,13 @@ Usage dans un éditeur de component (ou plugin) :
     btn = W.btn_danger("×")
 """
 from __future__ import annotations
+from dataclasses import dataclass
 from ui.common.labels import label
 from typing import Callable, Any
 
 from PyQt6.QtWidgets import (
     QWidget, QFrame, QLabel, QPushButton, QToolButton, QCheckBox, QLineEdit, QSpinBox,
-    QDoubleSpinBox, QComboBox, QScrollArea, QApplication, QTreeWidget, QTreeWidgetItem,
+    QDoubleSpinBox, QComboBox, QApplication, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem,
     QTableWidget, QHBoxLayout, QVBoxLayout, QBoxLayout, QSizePolicy, QSpacerItem, QPlainTextEdit,
 )
 from PyQt6.QtGui import QFont, QIcon, QColor, QPainter
@@ -681,184 +682,60 @@ class NotesEdit(QPlainTextEdit):
             self.committed.emit(text)
 
 
-# ── ScriptSlot ────────────────────────────────────────────────────────
-# Widget réutilisable : bouton "+" pointillé quand vide,
-# ligne (nom · Éditer · ×) quand un script est assigné.
+# ── PickerPopup ──────────────────────────────────────────────────────────────
 
-class ScriptSlot(QWidget):
+@dataclass(frozen=True)
+class PickerEntry:
+    """Une ligne d'un `PickerPopup`.
+
+    `value` est rendue telle quelle par `picked` : un nom, un chemin, un index,
+    un jeton. `missing` dit une valeur posée qui n'existe plus (un asset
+    supprimé, une police sans planche) : la ligne reste choisissable, en jaune,
+    avec l'icône d'avertissement si elle n'en a pas d'autre."""
+    label: str
+    value: Any
+    icon: QIcon | None = None
+    missing: bool = False
+
+
+class PickerPopup(QFrame):
     """
-    Slot d'assignation de script réutilisable.
-
-    États :
-      - vide  → bouton "＋ <add_label>" dashed, cliquable
-      - actif → bouton nommé (nom de l'asset assigné) + btn "×"
-                le nom EST le bouton d'édition — pas de "Change" séparé.
-
-    Signaux émis via callbacks :
-      on_add()    → l'utilisateur clique "＋"
-      on_open()   → l'utilisateur clique sur le nom
-      on_clear()  → l'utilisateur clique "×"
-
-    Appeler set_script(name) / clear_script() pour changer l'état.
-    """
-
-    def __init__(self, add_label: str, accent_color: str,
-                 hint: str = "", show_clear: bool = True, parent=None):
-        super().__init__(parent)
-        self._color = accent_color
-
-        root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(2)
-
-        # ── Bouton "+" ────────────────────────────────────────────
-        self._btn_add = QPushButton(f"＋  {add_label}")
-        self._btn_add.setFont(QFont(T.UI, T.MD))
-        self._btn_add.setFixedHeight(36)
-        self._btn_add.setStyleSheet(
-            f"QPushButton{{background:{C.BG_INPUT};color:{C.TEXT_DIM};"
-            f"border:1px dashed {C.BORDER};border-radius:4px;}}"
-            f"QPushButton:hover{{color:{accent_color};border-color:{accent_color};}}"
-        )
-        root.addWidget(self._btn_add)
-
-        # ── Ligne active ──────────────────────────────────────────
-        self._active_w = QWidget()
-        hl = QHBoxLayout(self._active_w)
-        hl.setContentsMargins(0, 0, 0, 0)
-        hl.setSpacing(4)
-
-        # Le nom assigné EST le bouton d'édition : cliquer dessus rouvre le
-        # picker, comme le "＋" de l'état vide. L'icône de l'asset, quand il y
-        # en a une, vit DANS le bouton.
-        self._lbl = QPushButton("")
-        self._lbl.setIconSize(QSize(16, 16))
-        self._lbl.setFont(QFont(T.MONO, T.SM))
-        self._lbl.setFixedHeight(22)
-        self._lbl.setStyleSheet(
-            f"QPushButton{{color:{accent_color};background:{C.BG_INPUT};"
-            f"border:1px solid {accent_color};border-radius:4px;padding:0 8px;"
-            f"text-align:left;}}"
-            f"QPushButton:hover{{background:{C.BG_HOVER};}}"
-        )
-
-        self._btn_clear = QToolButton()
-        self._btn_clear.setText("×")
-        self._btn_clear.setFont(QFont(T.MONO, T.XL))
-        self._btn_clear.setStyleSheet(BTN_DANGER)
-
-        hl.addWidget(self._lbl, 1)
-        hl.addWidget(self._btn_clear)
-        root.addWidget(self._active_w)
-        # setVisible() APRÈS avoir été ajouté au layout (donc parenté) :
-        # appelé avant, sur un QToolButton encore sans parent, Qt le montre
-        # brièvement comme une vraie fenêtre top-level ("micro popup" observé
-        # à l'ouverture d'un projet / à la sélection d'un sprite).
-        self._btn_clear.setVisible(show_clear)
-        self._active_w.setVisible(False)
-
-        # ── Hint ──────────────────────────────────────────────────
-        if hint:
-            lbl_hint = QLabel(hint)
-            lbl_hint.setFont(_FONT_UI_XS)
-            lbl_hint.setStyleSheet(f"color:{C.TEXT_MUTED};")
-            root.addWidget(lbl_hint)
-
-        # ── Connexions internes ───────────────────────────────────
-        self._on_add   = None
-        self._on_open  = None
-        self._on_clear = None
-        self._btn_add.clicked.connect(self._click_add)
-        self._lbl.clicked.connect(self._click_open)
-        self._btn_clear.clicked.connect(self._click_clear)
-
-    def set_callbacks(self, on_add=None, on_open=None, on_clear=None):
-        self._on_add   = on_add
-        self._on_open  = on_open
-        self._on_clear = on_clear
-
-    def accept_drops(self, resolve, on_drop):
-        """Le slot reçoit un glisser : `resolve(mime)` rend la valeur qu'il porte, ou None s'il ne convient
-        pas ; `on_drop(valeur)` l'assigne. Le slot ne sait pas d'où vient le glisser."""
-        self._resolve_drop = resolve
-        self._on_drop = on_drop
-        self.setAcceptDrops(True)
-
-    def dragEnterEvent(self, e):
-        if self._resolve_drop(e.mimeData()) is not None:
-            e.acceptProposedAction()
-
-    def dropEvent(self, e):
-        value = self._resolve_drop(e.mimeData())
-        if value is not None:
-            self._on_drop(value)
-            e.acceptProposedAction()
-
-    def set_script(self, name: str, icon: QIcon | None = None):
-        self._lbl.setText(name)
-        self._lbl.setIcon(icon if icon is not None else QIcon())
-        self._btn_add.setVisible(False)
-        self._active_w.setVisible(True)
-
-    def clear_script(self):
-        self._lbl.setText("")
-        self._lbl.setIcon(QIcon())
-        self._btn_add.setVisible(True)
-        self._active_w.setVisible(False)
-
-    def _click_add(self):
-        if self._on_add: self._on_add()
-
-    def _click_open(self):
-        if self._on_open: self._on_open()
-
-    def _click_clear(self):
-        if self._on_clear: self._on_clear()
-
-
-# ── AssetPickerPopup ─────────────────────────────────────────────────────────
-
-_DEFAULT_NEW_LABEL = object()
-
-
-class AssetPickerPopup(QFrame):
-    """
-    Dropdown flottant pour choisir un asset (ou créer un script) : recherche + liste.
+    Liste flottante filtrable : on y choisit une valeur parmi des `PickerEntry`.
 
     Signaux :
-        picked(rel_path: str)  — l'utilisateur a sélectionné un script existant
-        new_requested()        — l'utilisateur clique "Nouveau script"
+        picked(value)          : la valeur de la ligne choisie, de n'importe quel type
+        new_requested()        : clic sur le bouton de création (`new_label`)
+        created(name: str)     : mode `create_named`, le nom tapé dans la recherche
+
+    La liste est construite une fois ; la recherche masque les lignes qui ne
+    correspondent pas, sans rien reconstruire.
     """
 
-    picked        = pyqtSignal(str)   # chemin relatif au projet
+    picked        = pyqtSignal(object)
     new_requested = pyqtSignal()
-    created       = pyqtSignal(str)   # nom tapé dans la recherche (mode `create_named`)
+    created       = pyqtSignal(str)
 
-    def __init__(self, scripts: list[tuple], accent: str, parent=None,
-                 new_label: str | None | object = _DEFAULT_NEW_LABEL,
-                 create_named: bool = False):
+    _ROW_H = 26
+    _MAX_LIST_H = 180
+
+    def __init__(self, entries: list[PickerEntry], accent: str, parent=None,
+                 new_label: str | None = None, create_named: bool = False):
         """
-        scripts   : liste de (nom_affichage, valeur) ou (nom_affichage, valeur, QIcon)
-                    — le 3e élément (icône par ligne) est optionnel, pour les
-                    pickers qui ont une identité visuelle (palettes, sprites...).
-        accent    : couleur d'accentuation (hex)
-        new_label : texte du bouton de création en bas du popup ; None pour
-                    l'omettre (ex: picker qui ne propose que des éléments déjà
-                    existants, sans création à la volée).
+        entries   : les lignes, dans l'ordre d'affichage.
+        accent    : couleur d'accentuation (hex).
+        new_label : texte du bouton de création en bas du popup ; None (défaut)
+                    pour un choix parmi l'existant seulement.
         create_named : la création prend son nom dans la barre de recherche
                     (`new_label` est alors un gabarit avec `{name}`) : le bouton
                     n'est actif que pour un nom libre, et `created(name)` le porte.
         """
         super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
-        # Normalise en (display, valeur, icone|None) — accepte les anciens
-        # appels à 2-tuples sans modification.
-        if new_label is _DEFAULT_NEW_LABEL:
-            new_label = label('wdg.new_script')
-        self._scripts = [(e[0], e[1], e[2] if len(e) > 2 else None) for e in scripts]
+        self._entries = list(entries)
         self._accent  = accent
         self._create_named = create_named
         self._new_template = new_label
         self._btn_new = None
+        self._done = False
 
         self.setFixedWidth(260)
         self.setStyleSheet(
@@ -882,20 +759,39 @@ class AssetPickerPopup(QFrame):
         )
         root.addWidget(self._search)
 
-        # ── Zone scrollable des scripts ────────────────────────────
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setMaximumHeight(180)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(QSS.scroll_area)
+        # ── Liste : une ligne par entrée, construite une seule fois ─
+        self._list = QListWidget()
+        self._list.setFont(QFont(T.MONO, T.SM))
+        self._list.setIconSize(QSize(16, 16))
+        self._list.setUniformItemSizes(True)
+        self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._list.setStyleSheet(
+            f"QListWidget{{background:transparent;border:none;outline:none;}}"
+            f"QListWidget::item{{color:{C.TEXT_NORM};border:none;border-radius:3px;padding:0 6px;}}"
+            f"QListWidget::item:hover,QListWidget::item:selected"
+            f"{{background:{C.BG_DEEP};color:{accent};}}"
+        )
+        for entry in self._entries:
+            item = QListWidgetItem(entry.label)
+            item.setSizeHint(QSize(0, self._ROW_H))
+            icon = entry.icon
+            if entry.missing:
+                item.setForeground(QColor(C.ACCENT_YLW))
+                if icon is None:
+                    from ui.common import icons
+                    icon = icons.get("warning", C.ACCENT_YLW)
+            if icon is not None:
+                item.setIcon(icon)
+            self._list.addItem(item)
+        self._list.itemClicked.connect(self._on_item)
+        self._list.itemActivated.connect(self._on_item)
+        root.addWidget(self._list)
 
-        self._list_widget = QWidget()
-        self._list_widget.setStyleSheet("background:transparent;")
-        self._list_layout = QVBoxLayout(self._list_widget)
-        self._list_layout.setContentsMargins(0, 0, 0, 0)
-        self._list_layout.setSpacing(2)
-        scroll.setWidget(self._list_widget)
-        root.addWidget(scroll)
+        self._no_results = QLabel(label('wdg.no_results'))
+        self._no_results.setFont(QFont(T.UI, T.XS))
+        self._no_results.setStyleSheet(f"color:{C.TEXT_MUTED};padding:4px;border:none;")
+        self._no_results.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        root.addWidget(self._no_results)
 
         # ── Séparateur + bouton de création (optionnels) ────────────
         if new_label is not None:
@@ -924,50 +820,36 @@ class AssetPickerPopup(QFrame):
 
     # ── Internals ─────────────────────────────────────────────────
 
+    def visible_entries(self) -> list[PickerEntry]:
+        """Les entrées que la recherche laisse voir, dans l'ordre."""
+        return [e for i, e in enumerate(self._entries) if not self._list.item(i).isHidden()]
+
     def _filter(self, text: str):
         query = text.lower().strip()
-        # Vider la liste
-        while self._list_layout.count():
-            item = self._list_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        matches = [(d, r, i) for d, r, i in self._scripts if query in d.lower()]
+        shown = 0
+        for i, entry in enumerate(self._entries):
+            hide = query not in entry.label.lower()
+            self._list.item(i).setHidden(hide)
+            shown += not hide
+        # La liste prend la hauteur de ce qu'elle montre, plafonnée : un choix
+        # parmi trois ne s'ouvre pas sur un grand vide.
+        frame = 2 * self._list.frameWidth()
+        self._list.setFixedHeight(min(self._MAX_LIST_H, shown * self._ROW_H) + frame)
+        self._list.setVisible(shown > 0)
+        self._no_results.setVisible(shown == 0)
         self._sync_create_button()
 
-        if not matches:
-            lbl = QLabel(label('wdg.no_results'))
-            lbl.setFont(QFont(T.UI, T.XS))
-            lbl.setStyleSheet(f"color:{C.TEXT_MUTED};padding:4px;")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._list_layout.addWidget(lbl)
-        else:
-            for display, rel, icon in matches:
-                btn = QPushButton(display)
-                btn.setFont(QFont(T.MONO, T.SM))
-                btn.setFixedHeight(26)
-                btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-                if icon is not None:
-                    btn.setIcon(icon)
-                    btn.setIconSize(QSize(16, 16))
-                btn.setStyleSheet(
-                    f"QPushButton{{background:transparent;color:{C.TEXT_NORM};"
-                    f"border:none;border-radius:3px;text-align:left;padding:0 6px;}}"
-                    f"QPushButton:hover{{background:{C.BG_DEEP};color:{self._accent};}}"
-                )
-                btn.clicked.connect(lambda checked, r=rel: self._on_pick(r))
-                self._list_layout.addWidget(btn)
-
-        self._list_layout.addStretch()
-
-    def _on_pick(self, rel: str):
-        self.picked.emit(rel)
+    def _on_item(self, item: QListWidgetItem):
+        if self._done:
+            return
+        self._done = True
+        self.picked.emit(self._entries[self._list.row(item)].value)
         self.close()
 
     def _creatable_name(self) -> str:
         """Le nom tapé s'il est libre (insensible à la casse), sinon ''."""
         name = self._search.text().strip()
-        taken = {d.lower() for d, _r, _i in self._scripts}
+        taken = {e.label.lower() for e in self._entries}
         return "" if (not name or name.lower() in taken) else name
 
     def _sync_create_button(self):
@@ -1022,6 +904,192 @@ class AssetPickerPopup(QFrame):
         pos.setX(max(geo.left(), min(pos.x(), geo.right() - self.width() + 1)))
         self.move(pos)
         self.show()
+
+
+# ── PickerSlot ────────────────────────────────────────────────────────
+# Le bouton qui tient une valeur choisie dans un PickerPopup : « + » en
+# pointillés quand rien n'est choisi, sinon la valeur (son nom est le bouton)
+# et, si l'appelant le permet, un ×.
+
+class PickerSlot(QWidget):
+    """
+    Slot de choix d'une valeur, décrit par des données.
+
+    entries()        : les `PickerEntry` proposées, lues à chaque ouverture.
+    describe(value)  : la `PickerEntry` qui montre `value`, ou None quand rien
+                       n'est choisi (le slot montre alors « + add_label »).
+                       Une valeur qui n'existe plus se décrit `missing=True`.
+    on_picked(value) : le choix de l'utilisateur, après la mise à jour du slot.
+    on_cleared       : optionnel ; porte le ×, qui remet `cleared_value`.
+    on_open          : optionnel ; le clic sur le nom, au lieu de rouvrir la liste.
+    new_label/on_new : optionnels ; le bouton de création du popup. Avec
+                       `create_named`, `on_new(nom)` reçoit le nom tapé, déjà
+                       posé dans le slot ; sinon `on_new()`.
+
+    La valeur posée reste listée même absente des entrées : l'effacer sans le
+    dire perdrait un choix que quelqu'un a fait. Le modèle reste la source de
+    vérité : l'appelant repose la valeur par `set_value` quand il change.
+    """
+
+    def __init__(self, add_label: str, accent: str,
+                 entries: Callable[[], list], describe: Callable[[Any], Any],
+                 on_picked: Callable[[Any], None], *,
+                 on_cleared: Callable[[], None] | None = None, cleared_value: Any = None,
+                 on_open: Callable[[], None] | None = None,
+                 new_label: str | None = None, on_new: Callable | None = None,
+                 create_named: bool = False, hint: str = "", parent=None):
+        super().__init__(parent)
+        self._accent = accent
+        self._entries = entries
+        self._describe = describe
+        self._on_picked = on_picked
+        self._on_cleared = on_cleared
+        self._cleared_value = cleared_value
+        self._on_open = on_open
+        self._new_label = new_label
+        self._on_new = on_new
+        self._create_named = create_named
+        self._value = None
+        self._resolve_drop = None
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(2)
+
+        # ── Bouton "+" ────────────────────────────────────────────
+        self._btn_add = QPushButton(f"＋  {add_label}")
+        self._btn_add.setFont(QFont(T.UI, T.MD))
+        self._btn_add.setFixedHeight(36)
+        self._btn_add.setStyleSheet(
+            f"QPushButton{{background:{C.BG_INPUT};color:{C.TEXT_DIM};"
+            f"border:1px dashed {C.BORDER};border-radius:4px;}}"
+            f"QPushButton:hover{{color:{accent};border-color:{accent};}}"
+        )
+        root.addWidget(self._btn_add)
+
+        # ── Ligne active : le nom EST le bouton, l'icône vit dedans ──
+        self._active_w = QWidget()
+        hl = QHBoxLayout(self._active_w)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(4)
+
+        self._lbl = QPushButton("")
+        self._lbl.setIconSize(QSize(16, 16))
+        self._lbl.setFont(QFont(T.MONO, T.SM))
+        self._lbl.setFixedHeight(22)
+
+        self._btn_clear = QToolButton()
+        self._btn_clear.setText("×")
+        self._btn_clear.setFont(QFont(T.MONO, T.XL))
+        self._btn_clear.setStyleSheet(BTN_DANGER)
+
+        hl.addWidget(self._lbl, 1)
+        hl.addWidget(self._btn_clear)
+        root.addWidget(self._active_w)
+        # setVisible() APRÈS l'ajout au layout (donc parenté) : appelé avant, sur
+        # un QToolButton encore sans parent, Qt le montre brièvement comme une
+        # vraie fenêtre top-level (« micro popup » observé à l'ouverture d'un projet).
+        self._btn_clear.setVisible(on_cleared is not None)
+        self._active_w.setVisible(False)
+
+        if hint:
+            lbl_hint = QLabel(hint)
+            lbl_hint.setFont(_FONT_UI_XS)
+            lbl_hint.setStyleSheet(f"color:{C.TEXT_MUTED};")
+            root.addWidget(lbl_hint)
+
+        self._btn_add.clicked.connect(self.open_picker)
+        self._lbl.clicked.connect(self._click_name)
+        self._btn_clear.clicked.connect(self._click_clear)
+
+    # ── Valeur ────────────────────────────────────────────────────
+
+    def value(self):
+        return self._value
+
+    def set_value(self, value):
+        """Montre `value` sans rien notifier (chargement, syncer, annulation)."""
+        self._value = value
+        entry = self._describe(value)
+        self._btn_add.setVisible(entry is None)
+        self._active_w.setVisible(entry is not None)
+        if entry is None:
+            self._lbl.setText("")
+            self._lbl.setIcon(QIcon())
+            return
+        color = C.ACCENT_YLW if entry.missing else self._accent
+        icon = entry.icon
+        if icon is None and entry.missing:
+            from ui.common import icons
+            icon = icons.get("warning", C.ACCENT_YLW)
+        self._lbl.setText(entry.label)
+        self._lbl.setIcon(icon if icon is not None else QIcon())
+        self._lbl.setStyleSheet(
+            f"QPushButton{{color:{color};background:{C.BG_INPUT};"
+            f"border:1px solid {color};border-radius:4px;padding:0 8px;"
+            f"text-align:left;}}"
+            f"QPushButton:hover{{background:{C.BG_HOVER};}}"
+        )
+
+    def pick(self, value):
+        """Le même chemin qu'un clic dans la liste : montrer, puis notifier.
+        Rechoisir la valeur courante ne notifie rien."""
+        if value == self._value:
+            return
+        self.set_value(value)
+        self._on_picked(value)
+
+    # ── Liste ─────────────────────────────────────────────────────
+
+    def popup_entries(self) -> list:
+        """Les entrées du popup, plus la valeur posée si la liste ne la contient pas."""
+        entries = list(self._entries())
+        current = self._describe(self._value)
+        if current is not None and all(e.value != self._value for e in entries):
+            entries.append(current)
+        return entries
+
+    def open_picker(self):
+        popup = PickerPopup(self.popup_entries(), self._accent, parent=self,
+                            new_label=self._new_label, create_named=self._create_named)
+        popup.picked.connect(self.pick)
+        if self._create_named:
+            popup.created.connect(self._created)
+        elif self._on_new is not None:
+            popup.new_requested.connect(self._on_new)
+        popup.show_below(self)
+
+    def _created(self, name: str):
+        self.set_value(name)
+        self._on_new(name)
+
+    def _click_name(self):
+        if self._on_open is not None:
+            self._on_open()
+        else:
+            self.open_picker()
+
+    def _click_clear(self):
+        self.set_value(self._cleared_value)
+        self._on_cleared()
+
+    # ── Glisser ───────────────────────────────────────────────────
+
+    def accept_drops(self, resolve: Callable[[Any], Any]):
+        """Le slot reçoit un glisser : `resolve(mime)` rend la valeur qu'il porte, ou None s'il ne convient
+        pas ; la valeur est alors choisie comme dans la liste. Le slot ne sait pas d'où vient le glisser."""
+        self._resolve_drop = resolve
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, e):
+        if self._resolve_drop(e.mimeData()) is not None:
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        value = self._resolve_drop(e.mimeData())
+        if value is not None:
+            self.pick(value)
+            e.acceptProposedAction()
 
 
 # ──────────────────────────────────────────────────────────────────

@@ -240,6 +240,8 @@ article a.backstage-btn-secondary:hover {
   aspect-ratio: 4 / 3;
   margin-inline: auto;
   border: 0;
+  /* Le document du lecteur garde un fond transparent avec ce schéma. */
+  color-scheme: light;
 }
 
 @media (max-width: 40em) {

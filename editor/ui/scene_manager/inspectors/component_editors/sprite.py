@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 from . import BaseComponentEditor, register
-from ui.common.widgets import W, ScriptSlot, AssetPickerPopup
+from ui.common.widgets import W, PickerSlot, PickerEntry
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.common.pickers import sprite_picker_slot, palette_picker_slot
@@ -90,23 +90,17 @@ class SpriteEditor(BaseComponentEditor):
         W.row(label("comped.palette"), pal_slot, layout)
 
         # ── État initial : même bouton+popup filtrable que "Sprite" ──
-        state_slot = ScriptSlot(
-            add_label=label("comped.choose_state"),
-            accent_color=COLOR_SPRITE,
-            show_clear=False,   # un state initial est toujours requis, rien à "vider"
-        )
-        state_slot.set_script(comp.initial_state or "Idle")
-        state_slot.setEnabled(sprite is not None)
+        def _describe_state(name):
+            missing = bool(sprite and sprite.states) and all(s.name != name for s in sprite.states)
+            return PickerEntry(name, name, missing=missing)
 
-        def _open_state_picker():
-            if not sprite:
-                return
-            names = [s.name for s in sprite.states] or [comp.initial_state or "Idle"]
-            popup = AssetPickerPopup(
-                [(n, n) for n in names], COLOR_SPRITE, parent=self.insp, new_label=None,
-            )
-            popup.picked.connect(lambda name: _on_state_picked(name))
-            popup.show_below(state_slot)
+        # Pas de × : un state initial est toujours requis, rien à « vider ».
+        state_slot = PickerSlot(
+            label("comped.choose_state"), COLOR_SPRITE,
+            lambda: [PickerEntry(s.name, s.name) for s in sprite.states] if sprite else [],
+            _describe_state, lambda name: _on_state_picked(name))
+        state_slot.set_value(comp.initial_state or "Idle")
+        state_slot.setEnabled(sprite is not None)
 
         def _on_state_picked(name: str):
             if self.insp._blocking or not self.insp._actor or name == comp.initial_state:
@@ -114,14 +108,12 @@ class SpriteEditor(BaseComponentEditor):
             comp.initial_state = name
             self.insp._save_component_change(None)
             self.insp._refresh_sprite_preview()
-            state_slot.set_script(name)
             new_state = next((s for s in sprite.states if s.name == name), None) if sprite else None
             if new_state:
                 speed.blockSignals(True)
                 speed.setValue(new_state.speed)
                 speed.blockSignals(False)
 
-        state_slot.set_callbacks(on_add=_open_state_picker, on_open=_open_state_picker)
         W.row(label("comped.state_init"), state_slot, layout)
 
         # ── Anim speed (du state initial uniquement — pas des autres states) ──

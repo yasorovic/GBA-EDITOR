@@ -28,7 +28,7 @@ from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitDoubleSpin, UnitSpin
 from ui.common.color_field import ColorField
 from ui.common.responsive import InspectorScrollArea
-from ui.common.widgets import W, AssetPickerPopup, NotesEdit, CollapsibleCard, ResetToDefaultButton
+from ui.common.widgets import W, PickerPopup, PickerEntry, NotesEdit, CollapsibleCard, ResetToDefaultButton
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.common.palette_slot_grid import PaletteSlotGridAsset
@@ -360,7 +360,6 @@ class SceneInspector(QWidget):
         from ui.common.pickers import attached_script_slot
         self._scene_script_slot = attached_script_slot(
             project     = lambda: self._project if self._scene else None,
-            current     = lambda: getattr(self._scene, "script", "") or "",
             on_assigned = self._scene_script_assign,
             on_cleared  = self._scene_script_clear,
             open_file   = self._scene_script_open_file,
@@ -870,8 +869,8 @@ class SceneInspector(QWidget):
                 self, label("sceneinsp.no_bitmap_title"),
                 label("sceneinsp.no_bitmap_text"))
             return
-        entries = [(b.name, b.name) for b in bitmaps]
-        popup = AssetPickerPopup(entries, icons.COLOR_BACKGROUND, parent=self, new_label=None)
+        entries = [PickerEntry(b.name, b.name) for b in bitmaps]
+        popup = PickerPopup(entries, icons.COLOR_BACKGROUND, parent=self)
         popup.picked.connect(self._set_bitmap_bg)
         popup.show_below(self._btn_bitmap_pick)
 
@@ -1599,12 +1598,7 @@ class SceneInspector(QWidget):
     # ── Script de scène — helpers ──────────────────────────────────
 
     def _refresh_scene_script_label(self):
-        sc = getattr(self._scene, "script", "") or ""
-        sp = self._project.asset_abs(sc) if sc and self._project else None
-        if sp and sp.exists():
-            self._scene_script_slot.set_script(sp.name)
-        else:
-            self._scene_script_slot.clear_script()
+        self._scene_script_slot.set_value(getattr(self._scene, "script", "") or None)
 
     def _scene_script_assign(self, rel: str):
         """Attache un script à la scène."""
