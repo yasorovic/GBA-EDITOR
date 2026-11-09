@@ -340,7 +340,81 @@ jobs:
             }
           }
 
-  # Les builds n'attendent pas `tests` : ils tournent en parallèle, et seul `publish`
+  # Vérifie que les modèles livrés produisent une ROM avec la chaîne Linux de Backstage.
+  linux-rom-build:
+    needs: [version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      QT_QPA_PLATFORM: offscreen
+      GBA_TESTS_REQUIRE_DEVKITPRO: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      # Les plus anciens tags n'ont pas de manifeste devkitPro ni de script de verdict.
+      - name: Récupérer les outils du workflow
+        uses: actions/checkout@v5
+        continue-on-error: true
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-tools
+          sparse-checkout: |
+            tools/ci_pytest.py
+            packaging/linux/backstage-setup-devkitpro
+            packaging/linux/devkitpro_packages.txt
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les bibliothèques et outils Linux
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libpulse0 make zstd xz-utils
+
+      - name: Installer les dépendances Python
+        run: python -m pip install -r packaging/requirements.txt -r packaging/requirements-dev.txt
+
+      - name: Installer devkitPro
+        run: |
+          setup=packaging/linux
+          if [ ! -f "$setup/devkitpro_packages.txt" ]; then
+            setup=.ci-tools/packaging/linux
+          fi
+          export XDG_DATA_HOME="$RUNNER_TEMP/rom-data" XDG_CACHE_HOME="$RUNNER_TEMP/rom-cache"
+          sh "$setup/backstage-setup-devkitpro" --force
+          dkp="$XDG_DATA_HOME/Backstage/devkitPro"
+          "$dkp/devkitARM/bin/arm-none-eabi-gcc" --version
+          printf 'DEVKITPRO=%s\n' "$dkp" >> "$GITHUB_ENV"
+
+      - name: Compiler les ROM des projets modèles
+        id: pytest
+        run: |
+          code=0
+          python -m pytest tests/rom_build/test_shipped_projects_build.py -m slow -rs -vv \
+            --junitxml "$RUNNER_TEMP/pytest.xml" || code=$?
+          printf 'exit-code=%s\n' "$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      - name: Publier le verdict ROM Linux
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          PYTEST_EXIT: ${{ steps.pytest.outputs.exit-code }}
+        run: |
+          if [ -z "$PYTEST_EXIT" ]; then
+            echo '**Tests ROM Linux : contrôle sans verdict.** Voir la première étape en échec ou interrompue.' >> "$GITHUB_STEP_SUMMARY"
+          elif ! python .ci-tools/tools/ci_pytest.py "Tests ROM Linux" "$PYTEST_EXIT"; then
+            echo "**Tests ROM Linux : résumé indisponible.** Voir le journal de pytest (code $PYTEST_EXIT)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # Les builds des livrables et les tests tournent en parallèle. Seul `publish`
   # exige que les tests soient verts. Rien ne part en release sur un échec.
   # Deux compilations Nuitka (`compile-windows`, `compile-linux`), puis quatre livrables
   # qui les reprennent par artefact : installateur et portable Windows, AppImage et
@@ -779,12 +853,13 @@ jobs:
       !cancelled() && (github.event_name == 'release' || inputs.tag != '')
       && needs.tests.result == 'success'
       && needs.windows-rom-build.result == 'success'
+      && needs.linux-rom-build.result == 'success'
       && (needs.prebuilt.outputs.run_id != ''
           || (needs.windows-installer.result == 'success'
               && needs.windows-portable.result == 'success'
               && needs.linux-appimage.result == 'success'
               && needs.linux-packages.result == 'success'))
-    needs: [version, tests, windows-rom-build, prebuilt, windows-installer, windows-portable, linux-appimage, linux-packages]
+    needs: [version, tests, windows-rom-build, linux-rom-build, prebuilt, windows-installer, windows-portable, linux-appimage, linux-packages]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
