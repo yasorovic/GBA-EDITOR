@@ -133,7 +133,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
+          # Pas de `cache: pip` : il serait sauvegardé en fin de job, après l'exécution des tests.
 
       - name: Installer les bibliothèques Qt
         if: steps.gate.outputs.green != 'true'
@@ -237,7 +237,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
+          # Pas de `cache: pip` : il serait sauvegardé en fin de job, après l'exécution des tests.
 
       - name: Installer les dépendances Python
         run: |
@@ -276,7 +276,7 @@ jobs:
           if (-not (Test-Path "C:\msys64\opt\devkitpro\devkitARM\bin\arm-none-eabi-gcc.exe")) { throw "devkitPro (GBA) n'est pas installé" }
 
       - name: Garder devkitPro en cache
-        if: steps.dkp-cache.outputs.cache-hit != 'true' && github.event_name == 'release'
+        if: steps.dkp-cache.outputs.cache-hit != 'true' && github.event_name == 'release' && needs.version.outputs.sha == github.sha
         uses: actions/cache/save@v5
         with:
           path: C:\msys64\opt\devkitpro
@@ -371,7 +371,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
+          # Pas de `cache: pip` : il serait sauvegardé en fin de job, après l'exécution des tests.
 
       - name: Installer les bibliothèques et outils Linux
         run: |
@@ -444,6 +444,9 @@ jobs:
       # un build à froid et un build incrémental sur les runs suivants.
       # restore + save séparés : la sauvegarde se fait même si une étape APRÈS le build
       # échoue (smoke test, installateur), sinon chaque essai repart à froid.
+      # Sauvegarde seulement après un build réussi, et seulement quand le code compilé est
+      # celui du commit qui a déclenché le run : un `workflow_dispatch` lancé depuis main
+      # avec un ancien `tag` écrirait sinon dans le cache de main un cache issu d'un autre code.
       - name: Restaurer le cache Nuitka
         uses: actions/cache/restore@v5
         with:
@@ -468,7 +471,7 @@ jobs:
         run: python packaging/nuitka_build.py --version "${{ needs.version.outputs.version }}" --output-dir build-out
 
       - name: Sauvegarder le cache Nuitka
-        if: always()
+        if: needs.version.outputs.sha == github.sha
         uses: actions/cache/save@v5
         with:
           path: '~\AppData\Local\Nuitka\Nuitka\Cache'
@@ -632,8 +635,9 @@ jobs:
       - name: Build Nuitka (standalone)
         run: python packaging/nuitka_build.py --version "${{ needs.version.outputs.version }}" --output-dir build-out
 
+      # Mêmes conditions que sous Windows (build réussi, code du commit déclencheur).
       - name: Sauvegarder le cache Nuitka
-        if: always()
+        if: needs.version.outputs.sha == github.sha
         uses: actions/cache/save@v5
         with:
           path: ~/.cache/Nuitka
