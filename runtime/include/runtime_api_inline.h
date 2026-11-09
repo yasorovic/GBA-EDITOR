@@ -306,8 +306,21 @@ static inline Vec3 vec3_splat(int k) { return (Vec3){ k, k, k }; }
    besoin de sous-pixel n'en entend jamais parler. L'écriture perd donc toute
    fraction sous-pixel accumulée (ex: par self:apply_velocity()) — c'est
    attendu d'un appel qui dit « l'acteur est ICI, au pixel », pas « avance ». */
+/* Un script qui déplace un enfant déplace son décalage local : `ox/oy = position monde − position du parent`, lue au
+   moment de l'écriture. Sans cela, la composition (`slot_compose`) remettrait l'enfant sur son ancien décalage dans
+   la même image. Appelée par les quatre écritures de position du script (`position`, `move`, `move_to`,
+   `apply_velocity`) ; le pas physique du moteur ne l'appelle pas (corps d'un enfant : hors de ce contrat). */
+static inline void slot_local_from_world(const Actor* s) {
+    if (!g_slot_depth) return;
+    SlotLink* l = &g_slot_link[s->slot_index];
+    if (l->parent < 0) return;
+    const Actor* p = &g_actors[l->parent];
+    l->ox = s->x - p->x;
+    l->oy = s->y - p->y;
+}
 static inline void actor_set_position(Actor* s, Vec2 p) {
     s->x=p.x<<8; s->y=p.y<<8; s->physics_sleep=0;
+    slot_local_from_world(s);
 }
 static inline Vec2 actor_get_position(const Actor* s)   { return (Vec2){ s->x>>8, s->y>>8 }; }
 
@@ -527,6 +540,7 @@ static inline void actor_move(Actor* s, Vec2 dir, int speed) {
     s->physics_sleep = 0;
     s->x += dx * (speed<<8) / mag;
     s->y += dy * (speed<<8) / mag;
+    slot_local_from_world(s);
 }
 /* actor_move_to, à l'inverse, calcule dx/dy/dist contre la position ARRONDIE
    (cx/cy) : `target` est une distance MONDE, potentiellement grande, et
@@ -539,9 +553,9 @@ static inline void actor_move_to(Actor* s, Vec2 target, int speed) {
     int dist = isqrt(dx*dx + dy*dy);
     if (speed < 0) speed = 0;   /* vitesse négative : sur place, et jamais dist == 0 en diviseur */
     if (speed > 0) s->physics_sleep = 0;
-    if (dist <= speed) { s->x = target.x<<8; s->y = target.y<<8; return; }
-    s->x += (dx * speed / dist) << 8;
-    s->y += (dy * speed / dist) << 8;
+    if (dist <= speed) { s->x = target.x<<8; s->y = target.y<<8; }
+    else { s->x += (dx * speed / dist) << 8; s->y += (dy * speed / dist) << 8; }
+    slot_local_from_world(s);
 }
 
 /* Physics — vélocité stockée sur l'Actor, lue par get_velocity. Ne déplace
@@ -581,8 +595,9 @@ static inline void actor_drop_through(Actor* s, int frames){
    (contrairement à slope_acc, qui corrige une AUTRE fraction : le cosinus de
    pente en collision, cf. resolve_actor_tiles). Remplace l'ancien idiome
    `self.position = self.position + self.velocity`, qui n'a plus de sens dès
-   que les deux membres ont des échelles différentes. */
-static inline void actor_apply_velocity(Actor* s) { s->x+=s->vx; s->y+=s->vy; }
+   que les deux membres ont des échelles différentes. C'est l'appel du SCRIPT : le pas physique du moteur
+   (`body_motion_step`) ajoute la vitesse lui-même, sans toucher au décalage d'un enfant. */
+static inline void actor_apply_velocity(Actor* s) { s->x+=s->vx; s->y+=s->vy; slot_local_from_world(s); }
 
 /* Animation — play_anim reçoit l'index d'état (résolu à la compile par le transpileur) */
 /* 255 = « cet état n'existe pas dans l'apparence courante » (marche 3c : la table de

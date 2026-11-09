@@ -48,7 +48,6 @@ Actor g_actors[@SLOTS@];
 s32 g_rigid_rest[@SLOTS@][2];
 int g_spool_start = @START@, g_actor_slot_end = @START@, g_scene_placed = @START@;
 u32 g_alive_bits[(@SLOTS@ + 31) / 32], g_alive_epoch;
-static inline void actor_apply_velocity(Actor* s) { s->x+=s->vx; s->y+=s->vy; }
 @HELPERS@
 @TABLE@
 static const u8 type_ne[N] = {@TYPES@};

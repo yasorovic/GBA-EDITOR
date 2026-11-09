@@ -21,6 +21,11 @@ La parenté sert à :
 Gardez la collision principale sur le parent. Un enfant est un acteur à part entière : il a son
 propre sprite, ses composants et son script.
 
+Un enfant suit son parent au décalage de sa pose dans la scène. Un script qui écrit sa position (ou
+le déplace par `move`, `move_to`, `apply_velocity`) change ce décalage : l'enfant reste où il a été
+placé, puis suit son parent à cette nouvelle distance. Le détail est dans la
+[référence du scripting](../../scripting-reference.md).
+
 Un **prefab** peut contenir des enfants de la même façon : toutes les instances reçoivent la
 composition complète.
 
