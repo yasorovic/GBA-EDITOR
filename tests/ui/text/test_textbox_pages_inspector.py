@@ -19,6 +19,9 @@ def inspector(qapp, tmp_path):
     insp.load(layout, box, project, project.active_scene)
     get_history().clear()
     yield insp, project, box, layout
+    # `close()` ne fait que masquer : sans ce commit, le minuteur de frappe (600 ms) d'un test
+    # pousserait sa commande dans l'historique du test suivant, dont l'annulation tomberait dessus.
+    insp._pages.commit()
     insp.close()
     get_history().clear()
 
