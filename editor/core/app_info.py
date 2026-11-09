@@ -1,5 +1,7 @@
 """
-core/app_info.py — qui est ce logiciel : son nom, son auteur, sa version.
+core/app_info.py
+
+Qui est ce logiciel : son nom, son auteur, sa version.
 
 SOURCE UNIQUE. Tout ce qui affiche ou publie l'une de ces trois valeurs la lit
 ici : la fenêtre, le rapport de diagnostic, le build Nuitka, l'installateur, le
@@ -26,7 +28,7 @@ packaging, qui n'ont pas les dépendances de l'éditeur.
 
 APP_NAME = "Backstage"
 APP_AUTHOR = "Yasorovic"
-APP_VERSION = "0.2.1-alpha"
+APP_VERSION = "0.2.2-alpha"
 
 # Adresses publiques du produit. Le code qui les lit sait s'en passer si l'une
 # est VIDE (le menu « Documentation » ou l'onglet « Modèles » ne s'affichent
