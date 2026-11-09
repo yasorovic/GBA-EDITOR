@@ -89,9 +89,20 @@ def test_changed_compile_flags_rebuild_objects(tmp_path, make_build):
     dépendance sur les drapeaux, make garderait les .o compilés avec l'ancien."""
     run, _compiler, _env = make_build
     (tmp_path / "src" / "probe.c").write_text("int probe(void) { return 7; }\n", encoding="utf-8")
+    obj = tmp_path / "obj" / "probe.o"
+
+    def age_object():
+        # `cflags.txt` réécrit dans la même seconde que le .o serait vu « pas plus récent » par un
+        # make qui compare à la seconde (celui du runner Windows) : le .o est vieilli comme dans
+        # les autres tests de ce fichier.
+        stamp = obj.stat().st_mtime_ns - 2_000_000_000
+        os.utime(obj, ns=(stamp, stamp))
+
     flags = "-O0 -Isrc -Igrit_out"
     assert " -c " in run(cflags=flags)
     assert " -c " not in run(cflags=flags)
+    age_object()
     assert " -c " in run(cflags=flags + " -DGBA_DEBUG_BUILD")
     assert " -c " not in run(cflags=flags + " -DGBA_DEBUG_BUILD")
+    age_object()
     assert " -c " in run(cflags=flags)
