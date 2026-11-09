@@ -87,8 +87,6 @@ def test_onglets_etroits_tronquent_les_noms_sans_boutons_de_defilement(qapp):
 
     from ui.common.eliding_style import ElidingStyle
     from ui.common.theme import GLOBAL_QSS
-    previous_stylesheet = qapp.styleSheet()
-    previous_style = qapp.style().objectName() or "Fusion"
     drawn = []
 
     class RecordingStyle(ElidingStyle):
@@ -96,14 +94,17 @@ def test_onglets_etroits_tronquent_les_noms_sans_boutons_de_defilement(qapp):
             drawn.append(text)
             super().drawItemText(painter, rect, flags, palette, enabled, text, textRole)
 
-    qapp.setStyle(RecordingStyle())
-    qapp.setStyleSheet(GLOBAL_QSS)
+    # Style et QSS posés sur ce panneau seulement : sur l'application, ils repoliraient chaque
+    # widget encore vivant de la session (blocage de plusieurs minutes vu sous Linux).
+    style = RecordingStyle()
+    panel = SceneTreePanel(library=SceneLibraryPanel())
     try:
-        panel = SceneTreePanel(library=SceneLibraryPanel())
+        panel.setStyleSheet(GLOBAL_QSS)
+        tabs = panel._context_tabs
+        tabs.setStyle(style)
         panel.resize(220, 400)
         panel.show()
         qapp.processEvents()
-        tabs = panel._context_tabs
         assert tabs.elideMode() == Qt.TextElideMode.ElideRight
         assert not tabs.usesScrollButtons()
         assert not any(button.isVisible() for button in tabs.findChildren(QToolButton))
@@ -119,5 +120,3 @@ def test_onglets_etroits_tronquent_les_noms_sans_boutons_de_defilement(qapp):
         assert all(tabs.tabText(index) in drawn for index in range(tabs.count()))
     finally:
         panel.hide()
-        qapp.setStyle(previous_style)
-        qapp.setStyleSheet(previous_stylesheet)

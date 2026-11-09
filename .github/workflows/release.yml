@@ -111,11 +111,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ needs.version.outputs.sha }}
+          SERVER_URL: ${{ github.server_url }}
         run: |
           id="$(gh run list --repo "$REPO" --workflow tests.yml --commit "$SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
           if [ -n "$id" ]; then
             echo "green=true" >> "$GITHUB_OUTPUT"
             echo "Tests déjà verts pour $SHA (run $id) : non rejoués."
+            printf '### Tests Linux\n\n**Validé** : [résultat de Tests pour le commit `%s`](%s/%s/actions/runs/%s).\n' \
+              "$SHA" "$SERVER_URL" "$REPO" "$id" >> "$GITHUB_STEP_SUMMARY" || true
           else
             echo "green=false" >> "$GITHUB_OUTPUT"
             echo "Aucun run vert de tests.yml pour $SHA : les tests tournent ici."
@@ -149,8 +152,39 @@ jobs:
         run: python tools/check_architecture.py --fresh
 
       - name: Tests
+        id: pytest
         if: steps.gate.outputs.green != 'true'
-        run: python -m pytest tests -q -rs
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          python -m pytest tests -rs -vv --junitxml "$env:RUNNER_TEMP/pytest.xml"
+          $code = $LASTEXITCODE
+          "exit-code=$code" >> $env:GITHUB_OUTPUT
+          exit $code
+
+      # Le tag peut être plus ancien que le script qui présente les résultats.
+      - name: Récupérer le script de verdict du workflow
+        if: ${{ !cancelled() && steps.pytest.outputs.exit-code != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-verdict
+          sparse-checkout: tools/ci_pytest.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Publier le verdict Linux
+        if: ${{ always() && steps.gate.outputs.green != 'true' }}
+        continue-on-error: true
+        env:
+          PYTEST_EXIT: ${{ steps.pytest.outputs.exit-code }}
+        run: |
+          if [ -z "$PYTEST_EXIT" ]; then
+            echo '**Tests Linux : contrôle sans verdict.** Voir la première étape en échec ou interrompue.' >> "$GITHUB_STEP_SUMMARY"
+          elif ! python .ci-verdict/tools/ci_pytest.py "Tests Linux" "$PYTEST_EXIT"; then
+            echo "**Tests Linux : résumé indisponible.** Voir le journal de pytest (code $PYTEST_EXIT)." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # Un build déjà fait pour CE commit ? Sans tag, c'est le pré-build lui-même : rien à chercher.
   # Avec tag, on cherche un `workflow_dispatch` de ce workflow, sur le commit du tag, dont les
@@ -271,7 +305,40 @@ jobs:
           "DEVKITARM=C:\devkitPro\devkitARM" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Tests lents
-        run: python -m pytest tests -m slow -q -rs
+        id: pytest
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          python -m pytest tests -m slow -rs -vv --junitxml "$env:RUNNER_TEMP/pytest.xml"
+          $code = $LASTEXITCODE
+          "exit-code=$code" >> $env:GITHUB_OUTPUT
+          exit $code
+
+      - name: Récupérer le script de verdict du workflow
+        if: ${{ !cancelled() && steps.pytest.outputs.exit-code != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-verdict
+          sparse-checkout: tools/ci_pytest.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Publier le verdict ROM Windows
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          PYTEST_EXIT: ${{ steps.pytest.outputs.exit-code }}
+        run: |
+          if (-not $env:PYTEST_EXIT) {
+            '**Tests ROM Windows : contrôle sans verdict.** Voir la première étape en échec ou interrompue.' >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            $PSNativeCommandUseErrorActionPreference = $false
+            python .ci-verdict/tools/ci_pytest.py "Tests ROM Windows" $env:PYTEST_EXIT
+            if ($LASTEXITCODE -ne 0) {
+              "**Tests ROM Windows : résumé indisponible.** Voir le journal de pytest (code $env:PYTEST_EXIT)." >> $env:GITHUB_STEP_SUMMARY
+            }
+          }
 
   # Les builds n'attendent pas `tests` : ils tournent en parallèle, et seul `publish`
   # exige que les tests soient verts. Rien ne part en release sur un échec.

@@ -12,8 +12,10 @@ d'où le `os.environ` en tête de module.
 """
 from __future__ import annotations
 
+import atexit
 import gc
 import os
+import sys
 
 # Avant le premier import de PyQt6 : pas d'écran requis.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -27,6 +29,27 @@ from ui.common.deferred_writes import get_deferred_writes
 # (`pytest_unconfigure` -> `gc_collect_harder`), sinon des widgets pris dans des
 # cycles sont finalisés APRÈS sa destruction : violation d'accès intermittente.
 _APP_KEPT_ALIVE: list[QApplication] = []
+_SESSION: list[pytest.Session] = []
+
+
+def _exit_before_finalization():
+    """Quitte sans la finalisation de l'interpréteur, pytest terminé et son rapport écrit.
+
+    Sinon les widgets laissés par les tests sont détruits en vrac, `QApplication` comprise, dans un
+    ordre que ni Python ni Qt ne garantissent : segfault à la sortie sous Linux (code 139 en CI après
+    une suite entièrement verte). `atexit` passe après pytest et avant cette destruction ; le code de
+    sortie de pytest est conservé."""
+    if QApplication.instance() is None or not _SESSION:
+        return
+    for stream in (sys.stdout, sys.stderr):
+        stream.flush()
+    os._exit(int(_SESSION[-1].exitstatus))
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if not _SESSION:
+        atexit.register(_exit_before_finalization)
+    _SESSION.append(session)
 
 
 @pytest.fixture(scope="session")

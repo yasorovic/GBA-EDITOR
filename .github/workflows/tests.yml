@@ -84,9 +84,11 @@ jobs:
       # `--fresh` (un interpréteur neuf par module, seul moyen de voir une boucle
       # qui dépend de l'ordre d'import) n'était jamais lancé du tout.
       - name: Ruff (erreurs certaines)
+        id: ruff
         run: ruff check editor tools tests
 
       - name: Contrôle d'architecture
+        id: architecture
         run: python tools/check_architecture.py --fresh
 
       # `cc` existe sur ubuntu-latest : la sonde qui interroge le vrai
@@ -95,7 +97,45 @@ jobs:
       # Un échec de Ruff ou d'architecture laisse pytest tourner si ses dépendances
       # sont prêtes. Les erreurs d'installation sont déjà signalées par leurs étapes.
       - name: Tests
+        id: pytest
         if: ${{ !cancelled() && steps.python-deps.outcome == 'success' }}
         # -vv : pyproject.toml pose déjà -q, qu'un -v seul annulerait. Un plantage de Qt (segfault) ne
         # nomme pas le test ; le dernier nom du journal le désigne.
-        run: python -m pytest tests -rs -vv
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          python -m pytest tests -rs -vv --junitxml "$env:RUNNER_TEMP/pytest.xml"
+          $code = $LASTEXITCODE
+          "exit-code=$code" >> $env:GITHUB_OUTPUT
+          exit $code
+
+      - name: Publier le verdict pytest
+        id: verdict
+        if: ${{ !cancelled() && steps.pytest.outputs.exit-code != '' }}
+        continue-on-error: true
+        env:
+          PYTEST_EXIT: ${{ steps.pytest.outputs.exit-code }}
+        run: python tools/ci_pytest.py "Tests Linux" "$PYTEST_EXIT"
+
+      - name: Résumer les contrôles sans verdict pytest
+        if: ${{ always() && (steps.verdict.outcome != 'success' || steps.ruff.outcome == 'failure' || steps.architecture.outcome == 'failure') }}
+        continue-on-error: true
+        env:
+          PYTEST_EXIT: ${{ steps.pytest.outputs.exit-code }}
+          VERDICT: ${{ steps.verdict.outcome }}
+          RUFF: ${{ steps.ruff.outcome }}
+          ARCHITECTURE: ${{ steps.architecture.outcome }}
+        run: |
+          {
+            if [ -z "$PYTEST_EXIT" ]; then
+              echo '**Tests Linux : contrôle sans verdict.** Voir la première étape en échec ou interrompue.'
+            elif [ "$VERDICT" != success ]; then
+              echo "**Tests Linux : résumé indisponible.** Voir le journal de pytest (code $PYTEST_EXIT)."
+            fi
+            if [ "$RUFF" = failure ]; then
+              echo '- Ruff a échoué. Voir le journal de cette étape.'
+            fi
+            if [ "$ARCHITECTURE" = failure ]; then
+              echo "- Le contrôle d'architecture a échoué. Voir le journal de cette étape."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
