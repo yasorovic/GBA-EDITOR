@@ -357,16 +357,18 @@ class SceneInspector(QWidget):
 
         W.separator(mode_inner)
 
-        from ui.common.widgets import ScriptSlot, AssetPickerPopup  # noqa: F401 (AssetPickerPopup used later)
-        self._scene_script_slot = ScriptSlot(
-            add_label    = label("sceneinsp.script_add"),
-            accent_color = icons.COLOR_SCRIPT,
-            hint         = label("sceneinsp.script_hint"),
-        )
-        self._scene_script_slot.set_callbacks(
-            on_add   = self._scene_script_new,
-            on_open  = self._scene_script_open,
-            on_clear = self._scene_script_clear,
+        from ui.common.pickers import attached_script_slot
+        self._scene_script_slot = attached_script_slot(
+            project     = lambda: self._project if self._scene else None,
+            current     = lambda: getattr(self._scene, "script", "") or "",
+            on_assigned = self._scene_script_assign,
+            on_cleared  = self._scene_script_clear,
+            open_file   = self._scene_script_open_file,
+            template    = "scene",
+            add_label   = label("sceneinsp.script_add"),
+            new_title   = label("sceneinsp.new_scene_script"),
+            hint        = label("sceneinsp.script_hint"),
+            parent      = self,
         )
         mode_inner.addWidget(self._scene_script_slot)
 
@@ -1604,51 +1606,14 @@ class SceneInspector(QWidget):
         else:
             self._scene_script_slot.clear_script()
 
-    def _scene_script_new(self):
-        """Ouvre le picker : liste des scripts de scène + bouton Nouveau."""
-        if not self._scene or not self._project: return
-        from ui.common.widgets import AssetPickerPopup
-
-        # Les scripts attachables du projet : le contexte vient de l'attache, pas du dossier
-        scripts = [(f.name, str(f.relative_to(self._project.root)).replace("\\", "/"))
-                   for f in self._project.script_files()]
-
-        popup = AssetPickerPopup(scripts, icons.COLOR_SCRIPT, parent=self)
-        popup.picked.connect(self._scene_script_assign)
-        popup.new_requested.connect(self._scene_script_create_new)
-        popup.show_below(self._scene_script_slot)
-
     def _scene_script_assign(self, rel: str):
-        """Assigne un script existant à la scène."""
+        """Attache un script à la scène."""
         self._set_scene_field("script", rel, extra_persist=self._refresh_scene_script_label)
         self.changed.emit()
 
-    def _scene_script_create_new(self):
-        """Dialogue de création d'un nouveau script de scène."""
-        if not self._scene or not self._project: return
-        from PyQt6.QtWidgets import QInputDialog
-        name, ok = QInputDialog.getText(self, label('sceneinsp.new_scene_script'), label('common.name_without_lua'))
-        if not ok or not name.strip(): return
-        from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        from ui.common.import_folder import import_folder
-        d = import_folder(self._project)
-        d.mkdir(parents=True, exist_ok=True)
-        sp = d / f"{name.strip()}.lua"
-        if not sp.exists():
-            ctx = ScriptTemplateContext(kind="scene", name=name.strip(), scene_name=self._scene.name)
-            sp.write_text(generate_script_template(ctx), encoding="utf-8", newline="\n")
-        rel = str(sp.relative_to(self._project.root)).replace("\\", "/")
-        self._set_scene_field("script", rel, extra_persist=self._refresh_scene_script_label)
-        self.changed.emit()
-        if hasattr(self, "_script_open_fn") and self._script_open_fn:
-            self._script_open_fn(str(sp))
-
-    def _scene_script_open(self):
-        if not self._scene or not self._project: return
-        sc = getattr(self._scene, "script", "") or ""
-        sp = self._project.asset_abs(sc) if sc else None
-        if sp and sp.exists() and hasattr(self, "_script_open_fn") and self._script_open_fn:
-            self._script_open_fn(str(sp))
+    def _scene_script_open_file(self, path: str):
+        if getattr(self, "_script_open_fn", None):
+            self._script_open_fn(path)
 
     def _scene_script_clear(self):
         self._set_scene_field("script", "", extra_persist=self._refresh_scene_script_label)

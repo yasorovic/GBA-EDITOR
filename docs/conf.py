@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -80,7 +81,17 @@ html_show_copyright = False
 html_show_sphinx = False
 
 
+def publish_platformer(app, exception):
+    if exception is not None or app.builder.name != "html":
+        return
+
+    project_dir = Path(__file__).resolve().parents[1] / "Project Demo" / "Platformer"
+    with ZipFile(project_dir / "build" / "Platformer-web.zip") as archive:
+        archive.extractall(Path(app.outdir) / "platformer")
+
+
 def setup(app):
     from _gen.lua_api import generate
 
     app.connect("builder-inited", lambda _app: generate())
+    app.connect("build-finished", publish_platformer)

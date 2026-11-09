@@ -63,3 +63,8 @@ docs/lua-api/api/
 
 # Documentation : index de recherche des fonctions, généré au build (docs/_gen/lua_api.py)
 docs/_gen_static/
+
+# La documentation publie uniquement le ZIP web de la démo Platformer.
+!/Project Demo/Platformer/build/
+/Project Demo/Platformer/build/*
+!/Project Demo/Platformer/build/Platformer-web.zip

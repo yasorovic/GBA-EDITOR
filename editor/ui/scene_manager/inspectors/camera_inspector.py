@@ -31,7 +31,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QScrollArea,
-    QPushButton, QInputDialog,
+    QPushButton,
 )
 from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QFontMetrics
@@ -44,8 +44,8 @@ from core.models.scene import Scene
 from core.project import Project
 from ui.common.theme import C, T, QSS
 from ui.common.responsive import InspectorScrollArea
-from ui.common.icons import COLOR_SCRIPT
-from ui.common.widgets import ScriptSlot, AssetPickerPopup, CollapsibleCard, NotesEdit, W
+from ui.common.widgets import CollapsibleCard, NotesEdit, W
+from ui.common.pickers import attached_script_slot
 from ui.common.notice import notice
 
 _MODES = [
@@ -219,15 +219,17 @@ class CameraInspector(QWidget):
 
         # ── Script de caméra ──────────────────────────────────────
         script_card = CollapsibleCard(label('caminsp.camera_script'))
-        self._script_slot = ScriptSlot(
-            add_label    = label('caminsp.add_a_camera_script'),
-            accent_color = COLOR_SCRIPT,
-            hint         = "on_start · on_update",
-        )
-        self._script_slot.set_callbacks(
-            on_add   = self._script_new,
-            on_open  = self._script_open,
-            on_clear = self._script_clear,
+        self._script_slot = attached_script_slot(
+            project     = lambda: self._project if self._camera is not None else None,
+            current     = lambda: self._camera.script if self._camera is not None else "",
+            on_assigned = self._script_assign,
+            on_cleared  = self._script_clear,
+            open_file   = self._script_open_file,
+            template    = "camera",
+            add_label   = label('caminsp.add_a_camera_script'),
+            new_title   = label('caminsp.new_camera_script'),
+            hint        = "on_start · on_update",
+            parent      = self,
         )
         script_card.body_layout.addWidget(self._script_slot)
         notice("camera.script", self._script_slot, script_card.body_layout)
@@ -504,48 +506,14 @@ class CameraInspector(QWidget):
 
     # ── Script ────────────────────────────────────────────────────
 
-    def _script_new(self):
-        if not self._project:
-            return
-        scripts = [(f.name, str(f.relative_to(self._project.root)).replace("\\", "/"))
-                   for f in self._project.script_files()]
-        popup = AssetPickerPopup(scripts, COLOR_SCRIPT, parent=self)
-        popup.picked.connect(self._script_assign)
-        popup.new_requested.connect(self._script_create_new)
-        popup.show_below(self._script_slot)
-
     def _script_assign(self, rel: str):
         cam = self._camera
         if cam is not None:
             self._edit([(cam, "script", rel)], "Camera script")
 
-    def _script_create_new(self):
-        cam = self._camera
-        if cam is None:
-            return
-        name, ok = QInputDialog.getText(self, label('caminsp.new_camera_script'), label('common.name_without_lua'))
-        if not ok or not name.strip():
-            return
-        from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        from ui.common.import_folder import import_folder
-        d = import_folder(self._project)
-        d.mkdir(parents=True, exist_ok=True)
-        sp = d / f"{name.strip()}.lua"
-        if not sp.exists():
-            ctx = ScriptTemplateContext(kind="camera", name=name.strip(), camera_name=cam.name)
-            sp.write_text(generate_script_template(ctx), encoding="utf-8", newline="\n")
-        rel = str(sp.relative_to(self._project.root)).replace("\\", "/")
-        self._edit([(cam, "script", rel)], "Camera script")
+    def _script_open_file(self, path: str):
         if self._script_open_fn:
-            self._script_open_fn(str(sp))
-
-    def _script_open(self):
-        cam = self._camera
-        if cam is None or not self._project or not cam.script:
-            return
-        sp = self._project.asset_abs(cam.script)
-        if sp and sp.exists() and self._script_open_fn:
-            self._script_open_fn(str(sp))
+            self._script_open_fn(path)
 
     def _script_clear(self):
         cam = self._camera

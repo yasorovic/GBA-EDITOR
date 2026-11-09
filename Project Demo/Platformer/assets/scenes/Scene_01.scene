@@ -347,46 +347,6 @@
       "notes": ""
     },
     {
-      "name": "Door",
-      "id": "bc0b53203caf",
-      "active": true,
-      "components": [
-        {
-          "component_type": "collision_shape",
-          "id": "collision",
-          "active": true,
-          "solid": false,
-          "response": "sensor",
-          "tag": "body",
-          "material_id": "",
-          "one_way": "off",
-          "x": 0,
-          "y": 0,
-          "w": 24,
-          "h": 24
-        },
-        {
-          "component_type": "script",
-          "id": "script",
-          "active": true,
-          "script": "assets/scripts/Door.lua",
-          "exports_values": {}
-        }
-      ],
-      "x": 432,
-      "y": 64,
-      "flip_h": false,
-      "flip_v": false,
-      "priority": 0,
-      "pal_bank": -1,
-      "visible": true,
-      "obj_mode": 0,
-      "screen_space": false,
-      "dir_x": 0,
-      "dir_y": 0,
-      "notes": ""
-    },
-    {
       "name": "Guard",
       "id": "9666aedf58f6",
       "active": true,
@@ -571,6 +531,44 @@
       "screen_space": false,
       "dir_x": 0,
       "dir_y": 0,
+      "notes": ""
+    }
+  ],
+  "areas": [
+    {
+      "name": "Door",
+      "id": "0c36c0a99b0d",
+      "active": true,
+      "components": [
+        {
+          "component_type": "collision_shape",
+          "id": "collision",
+          "active": true,
+          "solid": false,
+          "response": "sensor",
+          "tag": "area",
+          "material_id": "",
+          "one_way": "off",
+          "x": 5,
+          "y": 0,
+          "w": 27,
+          "h": 32
+        },
+        {
+          "component_type": "trigger",
+          "id": "trigger",
+          "active": true
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Door.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 424,
+      "y": 64,
       "notes": ""
     }
   ],

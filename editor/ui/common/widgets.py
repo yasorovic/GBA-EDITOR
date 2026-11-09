@@ -777,6 +777,23 @@ class ScriptSlot(QWidget):
         self._on_open  = on_open
         self._on_clear = on_clear
 
+    def accept_drops(self, resolve, on_drop):
+        """Le slot reçoit un glisser : `resolve(mime)` rend la valeur qu'il porte, ou None s'il ne convient
+        pas ; `on_drop(valeur)` l'assigne. Le slot ne sait pas d'où vient le glisser."""
+        self._resolve_drop = resolve
+        self._on_drop = on_drop
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, e):
+        if self._resolve_drop(e.mimeData()) is not None:
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        value = self._resolve_drop(e.mimeData())
+        if value is not None:
+            self._on_drop(value)
+            e.acceptProposedAction()
+
     def set_script(self, name: str, icon: QIcon | None = None):
         self._lbl.setText(name)
         self._lbl.setIcon(icon if icon is not None else QIcon())

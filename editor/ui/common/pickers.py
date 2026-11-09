@@ -76,6 +76,86 @@ def palette_picker_slot(
     return slot
 
 
+def attached_script_slot(
+    project: Callable[[], object],
+    current: Callable[[], Optional[str]],
+    on_assigned: Callable[[str], None],
+    on_cleared: Callable[[], None],
+    open_file: Callable[[str], None],
+    template: str,
+    add_label: str,
+    new_title: str,
+    hint: str = "",
+    parent=None,
+) -> ScriptSlot:
+    """Le slot du script attaché à un acteur, une Area, une scène ou une caméra : le même geste partout.
+
+    « + » ouvre la liste des scripts attachables (pas les behaviors) et « Nouveau script » ; un script glissé
+    seul depuis l'onglet Disk s'attache aussi ; le nom ouvre le script, « × » le détache. Un script neuf naît
+    comme *Create blank* (dossier affiché par l'onglet Disk, annulable, nom pris : suffixé), avec le modèle
+    `template` (« actor », « scene », « camera »).
+
+    L'appelant range la valeur : `on_assigned(chemin relatif)` et `on_cleared()`, puis remet le slot d'accord
+    avec son modèle (`set_script` / `clear_script`). `project` et `current` sont lus au moment du geste."""
+    from pathlib import Path
+    from PyQt6.QtWidgets import QInputDialog
+
+    slot = ScriptSlot(add_label=add_label, accent_color=icons.COLOR_SCRIPT, hint=hint)
+
+    def _open_picker():
+        proj = project()
+        if proj is None:
+            return
+        scripts = [(f.name, proj.asset_rel(f)) for f in proj.script_files()]
+        popup = AssetPickerPopup(scripts, icons.COLOR_SCRIPT, parent=parent)
+        popup.picked.connect(_assign)
+        popup.new_requested.connect(_create)
+        popup.show_below(slot)
+
+    def _assign(rel: str):
+        if rel != current():
+            on_assigned(rel)
+
+    def _create():
+        proj = project()
+        if proj is None:
+            return
+        name, ok = QInputDialog.getText(parent, new_title, label("common.name_without_lua"))
+        if not ok or not name.strip():
+            return
+        from core import asset_creation
+        from core.command_dispatcher import get_dispatcher
+        from core.history import RefreshAfterCmd, get_history
+        from ui.common.import_folder import import_folder
+        folder = import_folder(proj)
+        gesture = asset_creation.create_blank(proj, "script", folder, name=name.strip(), template=template)
+        get_history().push(RefreshAfterCmd(gesture.command, get_dispatcher().notify_disk_changed))
+        path = folder / f"{gesture.names[0]}.lua"
+        on_assigned(proj.asset_rel(path))
+        get_dispatcher().notify_scripts_changed()
+        open_file(str(path))
+
+    def _open():
+        proj, rel = project(), current()
+        path = proj.asset_abs(rel) if proj is not None and rel else None
+        if path is not None and path.exists():
+            open_file(str(path))
+
+    def _dropped(mime) -> Optional[str]:
+        """Un seul script attachable glissé depuis l'onglet Disk : son chemin relatif, sinon None."""
+        from ui.common.disk_view import dropped_paths
+        proj, paths = project(), dropped_paths(mime)
+        if proj is None or len(paths) != 1:
+            return None
+        wanted = Path(paths[0]).resolve()
+        path = next((f for f in proj.script_files() if f.resolve() == wanted), None)
+        return proj.asset_rel(path) if path is not None else None
+
+    slot.set_callbacks(on_add=_open_picker, on_open=_open, on_clear=on_cleared)
+    slot.accept_drops(_dropped, _assign)
+    return slot
+
+
 _UI_BANK_AUTO_LABEL = 'pick.own_palette_automatic'
 
 

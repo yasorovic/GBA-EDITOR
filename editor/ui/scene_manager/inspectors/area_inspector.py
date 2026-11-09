@@ -106,13 +106,14 @@ class AreaInspector(QWidget):
         W.row(label('actorinsp.tr.parent'), self._cmb_parent, area_card.body_layout)
         self._layout.addWidget(area_card)
 
+        # La forme, les effets et le script partent repliés : la note et l'Area suffisent à l'ouverture.
         # La forme : reconstruite à chaque chargement (le composant change avec l'Area).
-        self._shape_card = CollapsibleCard(label('areainsp.shape'))
+        self._shape_card = CollapsibleCard(label('areainsp.shape'), expanded=False)
         self._layout.addWidget(self._shape_card)
         self._shape_container: Optional[QWidget] = None
         self._build_effects_card()
         # Le script : reconstruit à chaque chargement, comme la forme.
-        self._script_card = CollapsibleCard(label('areainsp.script'))
+        self._script_card = CollapsibleCard(label('areainsp.script'), expanded=False)
         self._layout.addWidget(self._script_card)
         self._script_container: Optional[QWidget] = None
         self._layout.addStretch()
@@ -122,7 +123,7 @@ class AreaInspector(QWidget):
     def _build_effects_card(self) -> None:
         """Une case par effet (ajoute ou réactive le composant, comme le déclencheur) et ses réglages, grisés tant que la case est
         décochée. Les widgets sont construits une fois et resynchronisés par `_sync_effects`."""
-        card = CollapsibleCard(label('areainsp.fx.card'))
+        card = CollapsibleCard(label('areainsp.fx.card'), expanded=False)
         self._fx_checks: dict = {}
         self._fx_inputs: dict = {}
         for kind, key, fields in _EFFECTS:

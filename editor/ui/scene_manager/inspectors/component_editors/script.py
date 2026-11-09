@@ -3,16 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QInputDialog, QLineEdit, QSlider, QWidget,
-)
+from PyQt6.QtWidgets import QHBoxLayout, QLineEdit, QSlider, QWidget
 from PyQt6.QtGui import QFont
 
 from . import BaseComponentEditor, register
 from ui.common.widgets import W, ScriptSlot
+from ui.common.pickers import attached_script_slot
 from ui.common.labels import label
 from ui.common.theme import C, T, QSS
-from ui.common import icons
 
 
 @register("script")
@@ -22,18 +20,20 @@ class ScriptEditor(BaseComponentEditor):
         proj = self.insp._project
         sp   = proj.asset_abs(comp.script) if comp.script else None
 
-        slot = ScriptSlot(
-            add_label    = label("comped.script_add"),
-            accent_color = icons.COLOR_SCRIPT,
-            hint         = label("comped.script_hint"),
+        slot = attached_script_slot(
+            project     = lambda: self.insp._project,
+            current     = lambda: comp.script,
+            on_assigned = lambda rel: self._assign_script(comp, slot, rel),
+            on_cleared  = lambda: self._clear_script(comp, slot),
+            open_file   = self._open_file,
+            template    = "actor",
+            add_label   = label("comped.script_add"),
+            new_title   = label("comped.new_script_title"),
+            hint        = label("comped.script_hint"),
+            parent      = self.insp,
         )
         if sp and sp.exists():
             slot.set_script(sp.name)
-        slot.set_callbacks(
-            on_add   = lambda: self._new_script(comp, slot),
-            on_open  = lambda: self._open_script(comp),
-            on_clear = lambda: self._clear_script(comp, slot),
-        )
         layout.addWidget(slot)
 
         # ── Variables exposées du script ───────────────────────────
@@ -204,37 +204,16 @@ class ScriptEditor(BaseComponentEditor):
 
     # ── Actions ───────────────────────────────────────────────────────
 
-    def _open_script(self, comp):
-        proj = self.insp._project
-        sp = proj.asset_abs(comp.script) if comp.script else None
-        if not (sp and sp.exists()):
-            return
-        # Ouvrir dans le script editor interne
+    def _open_file(self, path: str):
         fn = getattr(self.insp, "_script_open_fn", None)
         if fn:
-            fn(str(sp))
+            fn(path)
 
-    def _new_script(self, comp, slot: ScriptSlot):
-        from core.command_dispatcher import get_dispatcher
-        proj = self.insp._project
-        name, ok = QInputDialog.getText(self.insp, label("comped.new_script_title"),
-                                        label("common.name_without_lua"))
-        if not ok or not name.strip(): return
-        # *Create blank* comme partout : dans le dossier que l'onglet Disk affiche, annulable (nom pris : suffixé).
-        from core import asset_creation
-        from core.history import RefreshAfterCmd, get_history
-        from ui.common.import_folder import import_folder
-        folder = import_folder(proj)
-        gesture = asset_creation.create_blank(proj, "script", folder, name=name.strip(), template="actor")
-        get_history().push(RefreshAfterCmd(gesture.command, get_dispatcher().notify_disk_changed))
-        sp = folder / f"{gesture.names[0]}.lua"
-        comp.script = proj.asset_rel(sp)
-        slot.set_script(sp.name)
+    def _assign_script(self, comp, slot: ScriptSlot, rel: str):
+        comp.script = rel
+        comp.exports_values = {}   # les valeurs de l'ancien script ne valent pas pour le nouveau
+        slot.set_script(Path(rel).name)
         self.insp._save_component_change(None)
-        get_dispatcher().notify_scripts_changed()
-        fn = getattr(self.insp, "_script_open_fn", None)
-        if fn:
-            fn(str(sp))
 
     def _clear_script(self, comp, slot: ScriptSlot):
         comp.script = None

@@ -234,6 +234,20 @@ article a.backstage-btn-secondary:hover {
   margin: 0;
 }
 
+.backstage-home-demo {
+  display: block;
+  width: min(100%, 36rem);
+  aspect-ratio: 4 / 3;
+  margin-inline: auto;
+  border: 0;
+}
+
+@media (max-width: 40em) {
+  .backstage-home-demo {
+    aspect-ratio: 3 / 4;
+  }
+}
+
 .backstage-cards.sd-container-fluid {
   padding-left: 0;
   padding-right: 0;
