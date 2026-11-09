@@ -41,7 +41,8 @@ def reference_index(p, sound_assets=None) -> dict[str, dict[str, int]]:
     sont donc appelées ici, jamais recopiées.
     """
     from codegen.font_emit import project_fonts
-    from codegen.runtime_codegen.gen_camera import project_cameras
+    from codegen.runtime_codegen.gen_camera import scene_cameras_indexed
+    from core.models.camera import camera_column_name
     from codegen.grit_conversion import resolve_sound_assets
 
     if sound_assets is None:
@@ -69,8 +70,9 @@ def reference_index(p, sound_assets=None) -> dict[str, dict[str, int]]:
         "background": index_of(p.data_column_choices("background")),
         "prefab":  index_of(p.data_column_choices("prefab")),
         # La caméra par DÉFAUT occupe l'entrée 0 et n'a pas de fichier : c'est
-        # `project_cameras` qui porte cette convention, pas cette table.
-        "camera":  {c.name: i for i, c in enumerate(project_cameras(p)) if c is not None},
+        # `scene_cameras_indexed` qui porte cette convention, pas cette table.
+        # Une cellule écrit « Scène/Caméra » : le nom seul est local à sa scène.
+        "camera":  {camera_column_name(s.name, c.name): i for i, s, c in scene_cameras_indexed(p)},
     }
 
 

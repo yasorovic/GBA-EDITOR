@@ -110,7 +110,7 @@ from core.models.audio import Sfx, Music, Jingle
 from core.models.font import Font
 from core.models.font_asset import FontAsset
 from core.models.ui_region import UILayout
-from core.models.camera import Camera
+from core.models.camera import Camera, camera_column_name
 from core.models.sound_box import MusicBox, JingleBox, SoundBox
 from core.models.data_table import DataTable
 from core.models.scene import Prefab, Actor, Scene
@@ -127,7 +127,7 @@ DATA_COLUMN_SOURCES = {
     "sfx":     lambda p: [s.name for s in p.sfx],
     "music":   lambda p: [m.name for m in p.music],
     "scene":   lambda p: [s.name for s in p.scenes],
-    "camera":  lambda p: sorted(p.camera_names()),
+    "camera":  lambda p: [camera_column_name(s.name, c.name) for s in p.scenes for c in s.cameras],
     "font":    lambda p: [a.name for a in p.font_assets],
     "palette": lambda p: [b.name for b in p.palettes],
     "region":  lambda p: p.region_names(),
@@ -228,8 +228,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.palettes: PaletteStore = PaletteStore(self.user_library_dir, self.root)
         self.ui_layouts: ResourceStore[UILayout] = ResourceStore(self.user_library_dir, UILayout)
         # Pas de ResourceStore pour Camera : une caméra appartient à sa scène
-        # (Scene.cameras), elle se charge/sauve avec elle (cf. camera_names()
-        # ci-dessous pour la vue à plat sur tout le projet).
+        # (Scene.cameras), elle se charge/sauve avec elle.
         # Trois registres et non un : les trois couches du matériel ne se
         # coordonnent pas, et un appel Lua nomme la boîte à qui il parle.
         self.music_boxes: ResourceStore[MusicBox] = ResourceStore(self.user_library_dir, MusicBox)
@@ -531,15 +530,6 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         source = DATA_COLUMN_SOURCES.get(column_type)
         return list(source(self)) if source else []
 
-    def camera_names(self) -> set[str]:
-        """Noms de TOUTES les caméras du projet, toutes scènes confondues.
-
-        Une caméra n'appartient qu'à une scène (`Scene.cameras`), mais son nom
-        doit rester unique au projet : `camera:switch("Nom")` n'est pas
-        qualifié par scène côté Lua, et chaque caméra reçoit une constante C
-        globale `CAM_<NOM>` (cf. models/camera.py)."""
-        return {c.name for s in self.scenes for c in s.cameras}
-
     def window_names(self) -> set[str]:
         """Noms de tous les `WindowSlot` rectangle (non-OBJ) du projet, toutes
         scènes confondues — même contrainte d'unicité que les caméras :
@@ -560,9 +550,8 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def seed_default_camera(self, scene) -> Camera:
         """Donne à une scène NEUVE sa caméra de départ : un vrai objet de
         `scene.cameras`, visible et éditable dans l'arbre et le canvas dès la
-        création. Le nom est unique à l'échelle du projet (cf. `camera_names`)."""
-        taken = self.camera_names()
-        cam = Camera(name=unique_name("Camera", taken))
+        création. Le nom est unique dans la scène (cf. models/camera.py)."""
+        cam = Camera(name=unique_name("Camera", {c.name for c in scene.cameras}))
         scene.cameras.append(cam)
         scene.camera = cam.name
         return cam

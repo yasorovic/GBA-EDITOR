@@ -16,7 +16,9 @@ Deux règles portées par le plan :
 Les cibles introuvables (``scene:switch("X")`` sans scène nommée ``X``) sont des
 nœuds de placement comme les autres : elles reçoivent une couche à droite de leur
 source. La vue les dessine en marqueur d'erreur, mais la disposition les traite
-uniformément pour éviter qu'elles se superposent.
+uniformément pour éviter qu'elles se superposent. Les sorties calculées
+(``scene:switch(levels[i])``) aussi, sous leur clé de nœud (`target_key`), propre à
+leur scène.
 """
 from __future__ import annotations
 
@@ -39,9 +41,9 @@ def _node_order(graph: SceneGraph) -> list[str]:
     order = [node.name for node in graph.nodes]
     seen = set(order)
     for edge in graph.edges:
-        if edge.target not in seen:
-            order.append(edge.target)
-            seen.add(edge.target)
+        if edge.target_key not in seen:
+            order.append(edge.target_key)
+            seen.add(edge.target_key)
     return order
 
 
@@ -84,8 +86,8 @@ def layout_positions(graph: SceneGraph) -> Positions:
     # dépendance de profondeur. Indexés pour distinguer les arêtes parallèles.
     succ: dict[str, list[tuple[int, str]]] = {name: [] for name in order}
     for idx, edge in enumerate(graph.edges):
-        if edge.source != edge.target:
-            succ[edge.source].append((idx, edge.target))
+        if edge.source != edge.target_key:
+            succ[edge.source].append((idx, edge.target_key))
 
     back = _back_edges(order, succ)
     forward = [(u, v) for u in order for (idx, v) in succ[u]

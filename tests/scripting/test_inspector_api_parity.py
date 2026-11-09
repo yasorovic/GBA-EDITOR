@@ -435,6 +435,16 @@ def test_camera_name_se_compare_par_son_nom_et_ne_s_ecrit_pas():
     assert errs, "camera.name est en lecture seule"
 
 
+def test_une_camera_se_cite_par_la_constante_de_sa_scene():
+    """Le nom d'une caméra est local à sa scène : compilé dans une scène, `camera:switch` vise `CAM_<SCÈNE>_<NOM>`."""
+    from scripting.parser import parse
+    from scripting.codegen import generate, CodegenContext
+    code, _, _ = generate(parse("function on_update()\n  camera:switch(\"Boss\")\nend\n"), CodegenContext(
+        actor_name="Level", actor_sym="Level", owner_kind="scene", scene_sym="Level", anim_names=[], sfx_names=[],
+        music_names=[], global_names=set(), const_names=set(), all_actor_syms=[]))
+    assert "camera_switch(CAM_LEVEL_BOSS)" in code
+
+
 def test_une_camera_inconnue_est_refusee_a_la_comparaison():
     errs, _ = _lua_scene("function on_update(self)\n"
                          "  if camera.name == \"Nulle\" then self:show() end\nend\n")

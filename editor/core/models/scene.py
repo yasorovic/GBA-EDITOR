@@ -530,7 +530,7 @@ class WindowSlot(SceneMember):
     window.set() — un seul point d'écriture, même principe que la caméra).
 
     `is_obj=False` : un rectangle candidat à WIN0/WIN1 — `name` l'identifie
-    (renommable, unique au PROJET, comme une caméra) ; l'allocateur décide
+    (renommable, unique au PROJET) ; l'allocateur décide
     seul lequel des deux rangs matériels il reçoit, un slot par scène qui en
     demande trop échoue au build (nommé), pas de repli silencieux possible.
     `is_obj=True` : la fenêtre-objet (forme donnée par les sprites en

@@ -484,12 +484,10 @@ class BuildWorker(EventEmitter, threading.Thread):
             if ok:
                 self._write_project_data_tables(p, sound_assets)
 
-            # Transpilation Lua → C pour chaque scène. Les caméras sont des
-            # assets PARTAGÉS (compilés une fois). Les prefabs, eux, sont
-            # RECOMPILÉS par scène depuis le pool par scène :
-            # chaque scène émet `actor_<Scène>_<Prefab>.c` contre SA géométrie
-            # (POOL_<Scène>_<Prefab>_*), donc plus de garde `compiled_prefabs`.
-            compiled_cameras: set[str] = set()
+            # Transpilation Lua → C pour chaque scène : ses acteurs, ses Areas,
+            # ses caméras. Les prefabs sont RECOMPILÉS par scène depuis le pool
+            # par scène : chaque scène émet `actor_<Scène>_<Prefab>.c` contre SA
+            # géométrie (POOL_<Scène>_<Prefab>_*).
             if ok:
                 for d in all_scene_data:
                     if not ok:
@@ -498,7 +496,6 @@ class BuildWorker(EventEmitter, threading.Thread):
                         p, d["scene"], d["scene_actors"], scene_names=scene_names,
                         precomputed_global_names=global_names,
                         precomputed_const_names=const_names,
-                        compiled_cameras=compiled_cameras,
                         # Les #define SFX_*/MUSIC_* sont des rangs dans ce que
                         # mmutil a reçu, pas dans le catalogue du projet.
                         sound_assets=sound_assets,
@@ -1077,14 +1074,12 @@ class BuildWorker(EventEmitter, threading.Thread):
 
     def _step_transpile_scripts(self, p, scene, scene_actors, scene_names=None,
                                  precomputed_global_names=None, precomputed_const_names=None,
-                                 compiled_cameras=None,
                                  sound_assets=None):
         return transpile_all(
             p, scene, scene_actors, self.project.prefabs, self._emit,
             scene_names=scene_names,
             precomputed_global_names=precomputed_global_names,
             precomputed_const_names=precomputed_const_names,
-            compiled_cameras=compiled_cameras,
             sound_assets=sound_assets,
         )
 

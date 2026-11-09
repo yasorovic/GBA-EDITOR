@@ -118,9 +118,7 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
     texts = project.build_texts() if hasattr(project, "build_texts") else (has("texts") or [])
     out[DOMAIN_TEXT] = [t.key for t in texts if getattr(t, "key", None)]
 
-    # Caméras et fenêtres : des méthodes, pas des collections d'objets.
-    if hasattr(project, "camera_names"):
-        out[DOMAIN_CAMERA] = sorted(project.camera_names())
+    # Fenêtres : une méthode, pas une collection d'objets.
     if hasattr(project, "collision_tags"):
         out[DOMAIN_BOX_TAG] = list(project.collision_tags())
     windows = sorted(project.window_names()) if hasattr(project, "window_names") else []
@@ -159,8 +157,9 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
         pooled = [pf.name for pf in project.prefabs if scene_has_model(project, sc, pf)]
     out[DOMAIN_ACTOR_NAME] = out.get(DOMAIN_ACTOR, []) + pooled
 
-    # Areas : celles de la scène active, comme les acteurs (leur nom est local à la scène).
+    # Areas et caméras : celles de la scène active, comme les acteurs (leur nom est local à la scène).
     if sc is not None:
         out[DOMAIN_AREA_NAME] = _names(getattr(sc, "areas", []))
+        out[DOMAIN_CAMERA] = _names(getattr(sc, "cameras", []))
 
     return {dom: names for dom, names in out.items() if names}

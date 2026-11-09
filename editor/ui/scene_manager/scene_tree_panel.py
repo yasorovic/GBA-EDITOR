@@ -1194,7 +1194,7 @@ class _ActiveSceneTree(_Tree):
         # alors l'ancien nom, sans message dédié.
         old_name = camera.name
         state = self._panel._content_state
-        if new_name in (proj.camera_names() - {old_name}):
+        if any(c is not camera and c.name == new_name for c in self._scene.cameras):
             state = None
         if state:
             # Le rangement doit précéder le rafraîchissement synchrone du renommage.

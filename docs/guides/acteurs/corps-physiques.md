@@ -132,8 +132,7 @@ sol plein sous lui le reprend aussitôt.
 ## 6. Acteurs posés et acteurs créés par le script
 
 Un acteur créé par `actor:spawn` se comporte comme le même acteur posé dans la scène : même blocage, mêmes
-impulsions Rigid, même transport par une plateforme, même sol. Une seule limite : l'événement `on_crushed` n'est pas
-appelé pour un passager né pendant le jeu.
+impulsions Rigid, même transport par une plateforme, même sol, même événement `on_crushed`.
 
 ## Si le comportement surprend
 

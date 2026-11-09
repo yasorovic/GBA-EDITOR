@@ -129,7 +129,7 @@ class BuildContext:
     scene_names:  list[str]  = None    # noms de scènes du projet
     # Codes des langues déclarées. Une liste vide interdit `lang.set` et `lang.get`.
     lang_codes:   list[str]  = None
-    camera_names: list[str]  = None    # noms de caméras du projet (pour camera.switch)
+    camera_names: list[str]  = None    # noms des caméras de la scène compilée (pour camera.switch)
     box_tag_names: list[str] = None    # tags de boîtes de collision du projet (self:collision_shape…)
     # Le propriétaire porte-t-il un PhysicsBody ? `None` relâche le contrôle de `self:physics_body()`.
     has_physics_body: bool = None
@@ -222,6 +222,8 @@ class Checker:
         self._vec_types: dict[str, Optional[str]] = {}
         # Étiquettes des exports `enum`, dans l'ordre déclaré : l'index est la valeur.
         self._enum_exports: dict[str, list[str]] = {}
+        # Exports `actor_ref` du script : une référence d'acteur réglée par instance, que le script ne réécrit pas.
+        self._export_actors: set[str] = set()
         # Types de référence des variables locales, pour valider leurs méthodes.
         self._ref_types: dict[str, str] = RefEnv()
         self._ref_types.child_of = lambda expr: self._child_of(expr) is not None
@@ -610,6 +612,14 @@ class Checker:
             for value in values:
                 self._note_ref_library(name, self._literal_library(value))
                 self._note_ref_target(name, literal_actor_target(value))
+        # Un export `actor_ref` désigne un acteur posé de la scène, réglé par instance : une référence d'acteur dont on ne
+        # sait pas, à la compilation du script, de quel acteur il s'agit (ses sprites et ses exports restent inconnus).
+        for loc in script.locals:
+            if loc.export_type == "actor_ref":
+                self._export_actors.add(loc.name)
+                self._ref_types[loc.name] = REF_ACTOR
+                self._ref_libs[loc.name] = None
+                self._ref_targets[loc.name] = None
         for fn in script.functions:
             walk(fn.body)
 
@@ -1709,6 +1719,11 @@ class Checker:
             self._check_global_write_value(s.target, s.value)
             if isinstance(s.target, ExprName):
                 self._check_bare_name(s.target.name, ecrit=True)
+                if s.target.name in self._export_actors:
+                    self.errors.append(CheckError(
+                        "error", f"{s.target.name} is an actor_ref export: it designates an actor placed in the "
+                                 "scene, chosen in the inspector of each instance. The script reads it but does "
+                                 "not reassign it; a local holds another actor."))
                 if s.target.name in self._enum_exports and isinstance(s.value, ExprString):
                     self._check_enum_label(s.target.name, s.value.value)
             self._check_expr(s.target)     # `t[i] = v` : la CIBLE aussi s'indexe
@@ -2767,7 +2782,7 @@ class Checker:
         if self.ctx.camera_names is not None and name not in self.ctx.camera_names:
             self.errors.append(CheckError(
                 "error",
-                f"{call_key}('{name}'): camera '{name}' not found in the project. Available "
+                f"{call_key}('{name}'): camera '{name}' not found in this scene. Available "
                 f"cameras: {', '.join(self.ctx.camera_names) or 'none'}.",
             ))
 

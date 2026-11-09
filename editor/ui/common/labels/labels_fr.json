@@ -1074,6 +1074,9 @@
     "scncanvas.graph_exit_dynamic": {
       "text": "Sortie — cible calculée (variable) : non résolue, vérifier le script"
     },
+    "scncanvas.graph_computed_target": {
+      "text": "Cible calculée « {target} » : la scène se choisit pendant le jeu. Une arête déplacée sur une scène écrit le nom de cette scène à sa place."
+    },
     "scncanvas.graph_exit_broken": {
       "text": "Sortie — cible introuvable (cite un nom qu'aucune scène ne porte)"
     },

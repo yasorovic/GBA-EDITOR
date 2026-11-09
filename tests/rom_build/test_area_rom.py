@@ -226,3 +226,45 @@ def test_une_area_scriptee_se_compile_et_recoit_les_contacts_des_poses_et_des_ne
     assert "static const AreaActorFn _ar_own[1][3]={{Scene_01_Trap_area_on_actor_enter,0,Scene_01_Trap_area_on_actor_exit}};" in main_c
     assert "_ar_on[_i],_ar_own[0],&g_area_prev[_k][0]" in main_c
     assert main_c.count("{0,0,0}") >= 2                               # une ligne de crochets d'acteur vide par type
+
+
+DOOR = """exports = {
+    next_scene = { type = "scene_ref", default = "Scene_01", label = "Next Scene" },
+}
+
+function on_actor_enter(other, other_box)
+  scene:switch(next_scene)
+end
+"""
+
+
+def test_deux_areas_qui_partagent_un_script_portent_chacune_leur_valeur_d_export(tmp_path):
+    """Un même script de porte sur deux Areas : chaque fichier `<Scène>_<Area>_area.c` porte la scène réglée sur SON Area
+    (sinon le `default` du script), et le tout compile avec le vrai gcc."""
+    from core.models.scene import Scene
+    projet = Project.create(tmp_path / "Game", "Game")
+    scripts = projet.user_library_dir / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    (scripts / "Door.lua").write_text(DOOR, encoding="utf-8")
+    projet.scenes.append(Scene(name="Scene_02"))
+    vers_deux = Area(name="DoorA", x=40, y=56)
+    vers_deux.components.append(ScriptComponent(script="assets/scripts/Door.lua",
+                                                 exports_values={"next_scene": "Scene_02"}))
+    par_defaut = Area(name="DoorB", x=120, y=56)
+    par_defaut.components.append(ScriptComponent(script="assets/scripts/Door.lua"))
+    projet.scenes[0].areas += [vers_deux, par_defaut]
+    projet.save()
+
+    worker = BuildWorker(Project.open(projet.root), Toolchain())
+    worker._step_launch_mgba = lambda _p: True
+    diagnostics, verdict = [], []
+    worker.on("diagnostic", diagnostics.append)
+    worker.on("finished", verdict.append)
+    worker.run()
+    assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
+
+    build = projet.root / "build"
+    door_a = next(build.rglob("Scene_01_DoorA_area.c")).read_text(encoding="utf-8")
+    door_b = next(build.rglob("Scene_01_DoorB_area.c")).read_text(encoding="utf-8")
+    assert "next_scene = SCENE_IDX_SCENE_02;" in door_a
+    assert "next_scene = SCENE_IDX_SCENE_01;" in door_b

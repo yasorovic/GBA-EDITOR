@@ -1514,7 +1514,7 @@ def _check_data_tables(ctx: ValidationContext):
 
 
 def _check_cameras(ctx: ValidationContext):
-    """Trois choses peuvent mentir sans faire échouer le build — d'où des
+    """Deux choses peuvent mentir sans faire échouer le build — d'où des
     avertissements plutôt qu'un silence.
 
     ① Une caméra en suivi cite un acteur par nom ; comme elle appartient
@@ -1522,10 +1522,10 @@ def _check_cameras(ctx: ValidationContext):
     ② La scène désigne une caméra qui n'existe plus (dans sa propre liste) :
       elle retombe sur la caméra par défaut, donc un cadrage à l'origine sans
       bornes.
-    ③ Deux caméras du projet portent le même nom : `camera:switch("Nom")`
-      n'est pas qualifié par scène, un doublon viserait la mauvaise caméra."""
+
+    Deux scènes peuvent avoir chacune une caméra du même nom : il est local à
+    sa scène (cf. models/camera.py)."""
     p = ctx.project
-    seen: dict[str, str] = {}   # nom → scène qui l'a vu en premier
     for scene in p.scenes:
         for cam in scene.cameras:
             if cam.mode == "follow" and not cam.follow_target:
@@ -1537,12 +1537,6 @@ def _check_cameras(ctx: ValidationContext):
                 ctx.warn(None,
                     f"Scene '{scene.name}': camera \"{cam.name}\" follows \"{cam.follow_target}\", which is not an actor "
                     "of this scene — the camera will stay still.")
-            if cam.name in seen and seen[cam.name] != scene.name:
-                ctx.warn(None,
-                    f"Two cameras named \"{cam.name}\" (scenes '{seen[cam.name]}' and '{scene.name}') — "
-                    f"camera:switch(\"{cam.name}\") would target either one, depending on the "
-                    "build.")
-            seen.setdefault(cam.name, scene.name)
         if not scene.cameras:
             # Sans caméra, la vue reste fixe à (0,0) : sans conséquence pour un
             # écran d'un seul tenant (menu, titre), mais tout ce qui dépasse
@@ -1732,8 +1726,7 @@ def _check_window_regions(ctx: ValidationContext):
       s'affiche partout au lieu d'être découpée (bug visuel silencieux).
     ② Un `WindowSlot` sans nom ne peut être ni alloué ni adressé depuis Lua.
     ③ Deux `WindowSlot` (toutes scènes) partageant un nom : `window.set_layer`
-      n'est pas qualifié par scène, un doublon viserait la mauvaise window —
-      même check que les caméras (`_check_cameras`)."""
+      n'est pas qualifié par scène, un doublon viserait la mauvaise window."""
     from codegen.window_alloc import scene_window_layout
     seen: dict[str, str] = {}   # nom → scène qui l'a vu en premier
     for scene in ctx.project.scenes:

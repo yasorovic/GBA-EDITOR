@@ -28,6 +28,7 @@ from scripting.api import LAYERS_BY_MODE, LAYER_NUMBERS, SpriteLibrary
 
 from codegen.c_names import sym as c_sym, scene_actor_sym, area_script_sym
 from codegen.runtime_codegen.physics.areas import scripted_areas
+from codegen.runtime_codegen.gen_camera import camera_sym
 import codegen.build_output as build_output
 from codegen.oam_alloc import scene_has_model, scene_oam_layout
 from codegen.runtime_codegen.input_layout import compute_input_layout
@@ -77,7 +78,7 @@ def _make_export_resolver(p, scene_name: str, text_keys: list):
     def ref_or_text(typ, name):
         name = "" if name is None else str(name)
         if not name:
-            return "0"
+            return "-1" if typ == "actor_ref" else "0"     # aucun acteur : 0 est l'emplacement du premier posé
         if typ == "sfx_ref":
             return sfx_constant(name)
         if typ == "scene_ref":
@@ -404,7 +405,6 @@ def transpile_all(
     scene_names: list[str] | None = None,
     precomputed_global_names: list[str] | None = None,
     precomputed_const_names: list[str] | None = None,
-    compiled_cameras: set[str] | None = None,
     sound_assets: dict | None = None,
 ) -> bool:
     """
@@ -488,7 +488,7 @@ def transpile_all(
     _actor_names = [a.name for a, _ in scene_actors]
     _area_names = [a.name for a in scene.areas]   # `area:get("…")` et `area.name` : les Areas de CETTE scène
     _scene_names = scene_names or []
-    _camera_names = sorted(p.camera_names()) if hasattr(p, "camera_names") else []
+    _camera_names = [c.name for c in scene.cameras]   # `camera:switch("…")` : les caméras de CETTE scène
     _box_tag_names = list(p.collision_tags()) if hasattr(p, "collision_tags") else []
     _window_names = sorted(p.window_names()) if hasattr(p, "window_names") else []
     # Une famille, un espace de noms — depuis que les trois boîtes sont trois
@@ -1058,10 +1058,13 @@ def transpile_all(
         emit("log_line", f"[lua->c] {scene_script_file.name} -> {out_name}")
 
     # Génération C — scripts d'Area : un fichier par Area, `<Scène>_<Area>_area.c`, `self` = sa référence (rang + 1).
+    # Compilé une fois par Area, le script porte les valeurs d'export de CETTE Area (réglées dans son inspecteur, sinon
+    # le `default` du script), exactement comme un acteur posé.
     for area_rank, area, area_ast, sp in area_scripts:
         area_s = area_script_sym(scene.name, area.name)
         ctx_area = replace(scene_ctx_gen, lua_file=sp.name, c_file=f"{area_s}_area.c", actor_name=area.name,
-                           actor_sym=area_s, owner_kind="area", area_ref=area_rank + 1)
+                           actor_sym=area_s, owner_kind="area", area_ref=area_rank + 1,
+                           export_inits=_export_inits(area, area_ast, _export_resolver))
         area_c, area_warnings, _ = lua_generate(area_ast, ctx_area)
         for w in area_warnings:
             emit("diagnostic", build_warning(w, "codegen", sp.name, actor=f"area {area.name}"))
@@ -1071,19 +1074,13 @@ def transpile_all(
 
     # Génération C — scripts de CAMÉRA
     #
-    # Une caméra n'appartient qu'à UNE scène (révisé 2026-08-24), mais son
-    # script est compilé comme n'importe quel script de projet : la garde
-    # `compiled_cameras` reste par précaution (même mécanique que les prefabs
-    # poolés) plutôt que par nécessité. Mêmes points d'entrée qu'un script de
-    # scène — `owner_kind="camera"` ne change que le mot dans le symbole C émis.
-    for cam in (c for s in p.scenes for c in s.cameras):
+    # Une caméra n'appartient qu'à UNE scène : son script est compilé une fois, dans le contexte de cette scène (ses
+    # acteurs, ses caméras). Mêmes points d'entrée qu'un script de scène : `owner_kind="camera"` ne change que le mot
+    # dans le symbole C émis.
+    for cam in scene.cameras:
         if not getattr(cam, "script", ""):
             continue
-        cam_sym = f"camera_{c_sym(cam.name)}"
-        if compiled_cameras is not None:
-            if cam_sym in compiled_cameras:
-                continue
-            compiled_cameras.add(cam_sym)
+        cam_sym = camera_sym(scene.name, cam.name)
         sp = p.asset_abs(cam.script)
         if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
             continue
@@ -1148,6 +1145,7 @@ def transpile_all(
             c_file        = f"{cam_sym}.c",
             actor_name    = cam.name,
             actor_sym     = cam_sym,
+            scene_sym     = c_sym(scene.name),
             input_masks   = input_layout.masks,
             input_sequences = input_layout.sequences,
             input_buffered_bits = input_layout.buffered_bits,

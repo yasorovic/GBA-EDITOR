@@ -3552,6 +3552,9 @@
     "scncanvas.graph_exit_dynamic": {
       "text": "Exit — computed target (variable): can't be resolved, check the script"
     },
+    "scncanvas.graph_computed_target": {
+      "text": "Computed target « {target} »: the scene is chosen while the game runs. An edge moved onto a scene writes that scene's name in its place."
+    },
     "scncanvas.graph_exit_broken": {
       "text": "Exit — target not found (switches to a name no scene has)"
     },

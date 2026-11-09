@@ -293,7 +293,7 @@ int main(void) {
     actor_play_anim(a, 1);
     printf("anim_reelle %d %d\n", actor_get_anim(a), actor_get_frame(a));
 
-    /* Tranche 2 — la caméra : l'index de table EST la constante CAM_<NOM>. */
+    /* Tranche 2 — la caméra : l'index de table EST la constante CAM_<SCÈNE>_<NOM>. */
     g_cam_active = 3;
     printf("cam_active %d\n", camera_get_active());
     camera_set_margin((Vec2){ 60, -5 });                 /* négatif → serré à 0 */

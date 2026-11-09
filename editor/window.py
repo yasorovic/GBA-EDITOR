@@ -2186,7 +2186,7 @@ class MainWindow(QMainWindow):
             edge = edge[0]
         self._status.showMessage(
             label("scncanvas.graph_edge_calls", source=edge.source,
-                  target=edge.target, count=len(edge.refs)), 4000)
+                  target=edge.target, count=edge.count), 4000)
 
     def _show_graph_group(self, group_id: str) -> None:
         """Ouvre l'inspecteur d'un groupe seulement après chargement du projet."""
@@ -2204,9 +2204,10 @@ class MainWindow(QMainWindow):
 
         La sortie de secours du Graphe (condition, déplacement, suppression) :
         on ouvre le premier appel agrégé, à sa ligne exacte via `LuaRef`."""
-        if not edge.refs:
+        calls = edge.calls()
+        if not calls:
             return
-        ref = edge.refs[0]
+        ref = calls[0]
         self.open_script(ref.path, ref.line)
 
     def _create_blank(self, kind: str) -> str:

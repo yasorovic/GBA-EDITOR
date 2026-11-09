@@ -27,6 +27,7 @@ from core.disk_folders import valid_entry_name
 from core.project_paths import PROJECT_EXT
 from core.models.audio import Jingle, Music
 from core.models.background import BackgroundAsset
+from core.models.camera import camera_column_name
 from core.models.components import SpriteComponent, ScriptComponent, SoundFxComponent
 from core.models.palette import PaletteBank, PaletteUsage, OWN_PAL_BANK
 from core.models.scene import Scene
@@ -150,14 +151,13 @@ class ProjectRenameMixin:
     def rename_camera(self, scene: Scene, camera, new_name: str):
         """Renomme une caméra POSSÉDÉE par `scene` et répare ce qui la cite :
         le pointeur `scene.camera` s'il la désignait, et les `camera:switch(…)`
-        des scripts — non qualifiés par scène, donc potentiellement n'importe
-        où dans le projet (cf. models/camera.py). Refuse en silence une
-        collision avec une autre caméra du projet — même contrainte que la
-        constante C `CAM_<NOM>` qu'elle recevra."""
+        des scripts (sur tout le projet, comme `rename_actor` : un script de prefab
+        sert plusieurs scènes). Refuse en silence une collision avec une autre
+        caméra de la MÊME scène : le nom est local à la scène (cf. models/camera.py)."""
         new_name = new_name.strip()
         old_name = camera.name
         if (not new_name or new_name == old_name or camera not in scene.cameras
-                or new_name in (self.camera_names() - {old_name})):
+                or any(c is not camera and c.name == new_name for c in scene.cameras)):
             return
         with self._renaming():
             camera.name = new_name
@@ -165,6 +165,8 @@ class ProjectRenameMixin:
                 scene.camera = new_name
             self.save_scene(scene)
             refs = self.rename_lua_refs(DOMAIN_CAMERA, old_name, new_name)
+            self._rename_data_asset_refs("camera", camera_column_name(scene.name, old_name),
+                                         camera_column_name(scene.name, new_name))
         self._notify_renamed("Camera", old_name, new_name, refs)
 
     def rename_window(self, scene: Scene, window, new_name: str):

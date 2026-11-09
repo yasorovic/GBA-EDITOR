@@ -499,6 +499,9 @@ class CodeGen:
         # Variables de tête qui tiennent un acteur d'une image à l'autre : stockées en RÉFÉRENCE
         # (un entier, cf. `actor_ref_make`), lues par `actor_ref_get`.
         self._held_refs: set[str] = set()
+        # Exports `actor_ref` du script : un entier, l'emplacement de l'acteur posé désigné (-1 : aucun), que le script
+        # emploie comme une référence d'acteur, lue par `actor_at`.
+        self._export_actors: set[str] = set()
         self._export_extern_mark = 0
         # Le nom de l'élément d'interface qu'un local tient (cf. expr_types.element_of),
         # ou None s'il en tient plusieurs : l'état d'une image se nomme dans SON sprite.
@@ -535,6 +538,9 @@ class CodeGen:
         # la structure de pool, ou statique de fichier).
         self._script = script
         self._note_held_refs(script)
+        self._export_actors = {loc.name for loc in script.locals if loc.export_type == "actor_ref"}
+        for name in self._export_actors:
+            self._ref_types[name] = REF_ACTOR
         # Un `local` de tête qui tient une référence (`interface:get`, `sfx.play`) est typé
         # comme dans le checker : sans cela, `zone:clear()` retombait sur une méthode d'acteur.
         for loc in script.locals:
@@ -1418,13 +1424,15 @@ class CodeGen:
 
         if typ in _EXPORT_C_TYPE:
             c_type = _EXPORT_C_TYPE[typ]   # tous scalaires câblés → "int"
+            # Aucun acteur : -1, jamais 0, qui est l'emplacement du premier acteur posé.
+            none = "-1" if typ == "actor_ref" else "0"
             if init is None:
-                return c_type, "0", ""
+                return c_type, none, ""
             # Un défaut string/nom (string, actor_ref…) non résolu ne peut pas
-            # initialiser un int : on repart de 0. (Chemin quasi mort : le
+            # initialiser un int : on repart de rien. (Chemin quasi mort : le
             # résolveur remplit désormais export_inits pour tout export câblé.)
             if isinstance(loc.value, ExprString):
-                return c_type, "0", f"value '{loc.value.value or 'empty'}' not resolved at build"
+                return c_type, none, f"value '{loc.value.value or 'empty'}' not resolved at build"
             # Les littéraux flottants sont déjà tronqués par le parser
             # (ExprNumber(int(...)) : le moteur n'a pas de flottants).
             return c_type, init, ""
@@ -1692,8 +1700,8 @@ class CodeGen:
                 and self._call_key(s.value.func) == "actor.spawn"
             ) or (
                 # `local b = last` : la variable de tête qui tient une référence se résout en
-                # acteur à la lecture.
-                isinstance(s.value, ExprName) and s.value.name in self._held_refs
+                # acteur à la lecture, comme un export `actor_ref`.
+                isinstance(s.value, ExprName) and s.value.name in (self._held_refs | self._export_actors)
             ) or (
                 # `local bras = self.bras` tient un acteur, exactement comme
                 # `actor:get(...)` : donc un `Actor*` et non un `int`, sans quoi
@@ -1816,7 +1824,12 @@ class CodeGen:
             raw = self._state_ref(field) if field is not None else e.name
             # Une variable de tête qui tient un acteur range une RÉFÉRENCE : on la résout en
             # `Actor*` (ou nil si l'emplacement a changé de main depuis).
-            return f"actor_ref_get({raw})" if e.name in self._held_refs else raw
+            if e.name in self._held_refs:
+                return f"actor_ref_get({raw})"
+            # Un export `actor_ref` range l'emplacement d'un acteur posé : `Actor*`, ou nil s'il est vide (-1) ou détruit.
+            if e.name in self._export_actors:
+                return f"actor_at({raw})"
+            return raw
         if isinstance(e, ExprIndex):
             # screen.width / screen.height / etc. → littéral C
             if isinstance(e.obj, ExprName) and e.obj.name == "screen":
@@ -1980,7 +1993,7 @@ class CodeGen:
         récepteur CHAÎNÉ (`actor:get("Foe").velocity`) s'émet par son expression :
         `resolve_prop` n'en rend qu'un libellé, bon pour un message du checker."""
         c = (receiver if isinstance(access.obj, ExprName)
-             and access.obj.name not in self._held_refs else self._expr(access.obj))
+             and access.obj.name not in (self._held_refs | self._export_actors) else self._expr(access.obj))
         # Une propriété HÉRITÉE (`menu.visible`, de `ui_element`) attend le récepteur de
         # son parent : la même conversion que pour une méthode héritée.
         if p is not None and "." in p.lua_name:
@@ -2921,7 +2934,8 @@ class CodeGen:
             par la scène du spawner ; string → index de texte (TEXT_*, anonyme) ;
           - vec2/vec3/rect → le littéral composé `(Vec2){x, y}` (via _expr).
         None si la clé n'est pas un export réglable du prefab (checker l'aura
-        signalé). Les *_ref/string vides tombent sur 0 : pas de référence."""
+        signalé). Les *_ref/string vides tombent sur 0 : pas de référence (-1 pour un
+        actor_ref, cf. `_ref_or_text_literal`)."""
         meta = (self.ctx.spawn_exports.get(prefab_name) or {}).get(key)
         if not meta:
             return None
@@ -2940,11 +2954,12 @@ class CodeGen:
 
     def _ref_or_text_literal(self, typ: str, name: str) -> str:
         """Un nom d'export `*_ref`/`string` → sa constante C, dans le contexte de
-        CE fichier (le posé, le template poolé, ou le spawner). Vide → « 0 ». Les
+        CE fichier (le posé, le template poolé, ou le spawner). Vide → « 0 », sauf un
+        actor_ref : « -1 », car 0 est l'emplacement du premier acteur posé. Les
         macros émises (SFX_*, SCENE_IDX_*, ACTOR_*, TEXT_*) sont toutes en portée
         ici : l'en-tête du fichier les #define (cf. _emit_header)."""
         if not name:
-            return "0"
+            return "-1" if typ == "actor_ref" else "0"
         if typ == "sfx_ref":
             return sfx_constant(name)
         if typ == "scene_ref":
@@ -3060,7 +3075,7 @@ _DOMAIN_CONSTANT: dict = {
     DOMAIN_AREA_NAME: lambda g, name: area_name_constant(name, g.ctx.scene_sym),
     DOMAIN_SCENE:   lambda g, name: scene_constant(name),
     DOMAIN_LANG:    lambda g, name: lang_constant(name),
-    DOMAIN_CAMERA:  lambda g, name: camera_constant(name),
+    DOMAIN_CAMERA:  lambda g, name: camera_constant(name, g.ctx.scene_sym),
     # Pas `hardware_enum_constant` : depuis le 2026-08-25 la moitié des noms
     # valides (les WindowSlot du projet) n'existe dans aucune table statique
     # : même mécanique que DOMAIN_CAMERA, dérivée du nom, pas d'une table.

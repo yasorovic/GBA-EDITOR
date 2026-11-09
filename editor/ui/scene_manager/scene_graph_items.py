@@ -6,6 +6,9 @@ Trois formes, une par chose que la projection peut produire :
 - `MissingTargetItem` : une cible ``scene:switch("X")`` dont aucune scène ne porte
   le nom. C'est un marqueur terminal d'erreur de liaison, JAMAIS un nœud : pas de
   départ possible, rien à ouvrir, rien à renommer. Un seul par nom manquant.
+- `ComputedTargetItem` : une sortie calculée (``scene:switch(levels[i])``), propre
+  à sa scène, terminale elle aussi. Une arête qui y arrive se rebranche sur une
+  scène, ce qui écrit le nom de la scène à la place de l'expression.
 - `SceneGraphEdgeItem` : une transition dirigée d'une carte vers une carte ou un
   marqueur, avec un compteur quand plusieurs appels la portent, et une boucle
   quand elle revient sur sa source.
@@ -19,7 +22,7 @@ from __future__ import annotations
 import math
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QBrush, QColor, QPainterPath, QPen, QPixmap, QPolygonF
+from PyQt6.QtGui import QBrush, QColor, QFont, QPainterPath, QPen, QPixmap, QPolygonF
 from PyQt6.QtWidgets import QGraphicsItem
 
 from scripting.scene_graph import EntryState, ExitState, NodeDiagnostic
@@ -290,20 +293,21 @@ class SceneCardItem(QGraphicsItem):
             painter.drawPixmap(img, self._preview, QRectF(self._preview.rect()))
 
 
-class MissingTargetItem(QGraphicsItem):
-    """Marqueur d'une cible introuvable — barré d'un ✕, en rouge, non éditable."""
+class TerminalTargetItem(QGraphicsItem):
+    """Un nœud où une arête arrive sans être une scène : déplaçable, aimanté à la
+    grille, avec seulement un port D'ENTRÉE (il ne mène nulle part), par lequel on
+    reconnecte les arêtes qui y arrivent. `key` est sa clé de placement
+    (`SceneGraphEdge.target_key`), `name` ce qu'il affiche."""
 
-    def __init__(self, name: str, geometry_changed=None):
+    def __init__(self, key: str, name: str, color: str, tip: str, geometry_changed=None):
         super().__init__()
+        self.key = key
         self.name = name
         self._geometry_changed = geometry_changed
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable
                       | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
                       | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
-        # Une cible introuvable est terminale : seulement un port D'ENTRÉE,
-        # sélectionnable via son parent pour reconnecter les arêtes fautives.
-        entry = NodePortItem(C.ACCENT_RED, False,
-                              label("edgeinsp.target_missing", target=name), parent=self)
+        entry = NodePortItem(color, False, tip, parent=self)
         entry.setPos(0, CARD_H / 2)
         entry.setZValue(1)
 
@@ -327,6 +331,14 @@ class MissingTargetItem(QGraphicsItem):
     def anchor_rect(self) -> QRectF:
         return self.mapToScene(QRectF(0, 0, CARD_W, CARD_H)).boundingRect()
 
+
+class MissingTargetItem(TerminalTargetItem):
+    """Marqueur d'une cible introuvable — barré d'un ✕, en rouge, non éditable."""
+
+    def __init__(self, name: str, geometry_changed=None):
+        super().__init__(name, name, C.ACCENT_RED, label("edgeinsp.target_missing", target=name),
+                         geometry_changed)
+
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(painter.RenderHint.Antialiasing, True)
         body = QRectF(0, 0, CARD_W, CARD_H)
@@ -345,6 +357,37 @@ class MissingTargetItem(QGraphicsItem):
         text = QRectF(30, 0, CARD_W - 38, CARD_H)
         painter.drawText(text, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                          self.name)
+
+
+class ComputedTargetItem(TerminalTargetItem):
+    """Une sortie calculée d'UNE scène : ``scene:switch(levels[i])``, ou un export
+    `scene_ref` laissé vide. Elle porte le texte de l'expression, en jaune comme le
+    port « cible calculée ». Ce n'est pas une erreur : la scène se choisit au jeu.
+    Rebrancher une arête qui y arrive écrit un nom de scène à la place."""
+
+    def __init__(self, key: str, expression: str, geometry_changed=None):
+        tip = label("scncanvas.graph_computed_target", target=expression)
+        super().__init__(key, expression, C.ACCENT_YLW, tip, geometry_changed)
+        self.setToolTip(tip)
+
+    def paint(self, painter, option, widget=None):
+        painter.setRenderHint(painter.RenderHint.Antialiasing, True)
+        body = QRectF(0, 0, CARD_W, CARD_H)
+        painter.setPen(QPen(QColor(C.ACCENT_YLW), 1.0, Qt.PenStyle.DashLine))
+        painter.setBrush(QBrush(QColor(C.BG_PANEL)))
+        painter.drawRoundedRect(body, _RADIUS, _RADIUS)
+
+        painter.setPen(QPen(QColor(C.ACCENT_YLW)))
+        painter.setFont(ui_font(T.MD, bold=True))
+        painter.drawText(QRectF(10, 0, 14, CARD_H), Qt.AlignmentFlag.AlignCenter, "?")
+
+        painter.setPen(QPen(QColor(C.TEXT_NORM)))
+        font = QFont(T.CODE)
+        font.setPixelSize(12)
+        painter.setFont(font)
+        text = QRectF(30, 0, CARD_W - 38, CARD_H)
+        shown = painter.fontMetrics().elidedText(self.name, Qt.TextElideMode.ElideRight, int(text.width()))
+        painter.drawText(text, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, shown)
 
 
 def _port_anchors(source: QRectF, target: QRectF) -> tuple[QPointF, QPointF]:

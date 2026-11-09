@@ -184,7 +184,7 @@ DOMAIN_BOX_TAG = "box_tag"
 # Nom d'une Area de la scène : `area:get("Door")` et `area.name == "Door"` (AREA_<SCÈNE>_<NOM>, la référence elle-même).
 DOMAIN_AREA_NAME = "area_name"
 DOMAIN_SCENE  = "scene"   # SCENE_IDX_{name}
-DOMAIN_CAMERA = "camera"  # CAM_{name}   : caméra du projet
+DOMAIN_CAMERA = "camera"  # CAM_{SCÈNE}_{name} : caméra de la scène
 # Chaque boîte sonore possède son propre espace de noms d'états.
 DOMAIN_SOUND_BOX_STATE   = "sound_box_state"
 DOMAIN_JINGLE_BOX_STATE  = "jingle_box_state"
@@ -1204,8 +1204,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
     ),
     "camera.switch": ApiFunc(
         lua_name="camera.switch", c_func="camera_switch",
-        params=[Param("name", PARAM_STR, DOMAIN_CAMERA, doc="Name of a camera of the project")],
-        doc="Activates another camera of the project: its framing and bounds are set"
+        params=[Param("name", PARAM_STR, DOMAIN_CAMERA, doc="Name of a camera of the scene")],
+        doc="Activates another camera of the scene: its framing and bounds are set"
             " immediately. Only one camera is active at a time.",
     ),
     # ── Séquences ────────────────────────────────────────────────
@@ -2633,8 +2633,11 @@ def scene_constant(scene_name: str) -> str:
     return f"SCENE_IDX_{c_sym(scene_name).upper()}"
 
 
-def camera_constant(camera_name: str) -> str:
-    """'Boss' → 'CAM_BOSS'"""
+def camera_constant(camera_name: str, scene_sym: str = "") -> str:
+    """'Boss' → 'CAM_<SCÈNE>_BOSS' : le `#define` que `headers.py` écrit par caméra, qualifié par la scène puisque le
+    nom d'une caméra est local à sa scène. Sans scène (script partagé), le nom nu : aucun symbole C ne le porte."""
+    if scene_sym:
+        return f"CAM_{(scene_sym + '_' + c_sym(camera_name)).upper()}"
     return f"CAM_{c_ident(camera_name)}"
 
 

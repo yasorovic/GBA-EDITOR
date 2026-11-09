@@ -12,10 +12,11 @@ démarrage ; un script en change par appel explicite (`camera.switch`), il
 n'existe pas de bascule automatique par zone — un script déclenché par une
 collision suffit à en faire une.
 
-Le nom d'une caméra reste unique à l'échelle du PROJET (pas seulement de sa
-scène) : `camera:switch("Nom")` n'est pas qualifié par scène côté Lua, et
-chaque caméra reçoit une constante C globale `CAM_<NOM>` — deux scènes ne
-peuvent donc pas nommer leur caméra pareil.
+Le nom d'une caméra est LOCAL à sa scène, comme celui d'un acteur ou d'une
+Area : deux scènes peuvent chacune avoir sa « Camera ». `camera:switch("Nom")`
+ne vise que les caméras de la scène du script (une caméra ne suit que des
+acteurs de sa scène, celle d'une autre scène n'aurait rien à cadrer), et la
+constante C est qualifiée par la scène : `CAM_<SCÈNE>_<NOM>`.
 
 Ce que la caméra ne porte PAS, et pourquoi :
 
@@ -56,6 +57,12 @@ CAM_MODES = (CAM_FIXED, CAM_FOLLOW, CAM_SCRIPT)
 
 # Le mode tel que le runtime le reçoit — un entier dans la table des caméras.
 CAM_MODE_IDS = {CAM_FIXED: 0, CAM_FOLLOW: 1, CAM_SCRIPT: 2}
+
+
+def camera_column_name(scene_name: str, camera_name: str) -> str:
+    """Ce qu'une colonne de données `camera` écrit pour désigner une caméra : « Scène/Caméra ». Une table appartient
+    au projet, et le nom seul d'une caméra ne dit pas de quelle scène elle est."""
+    return f"{scene_name}/{camera_name}"
 
 
 @dataclass

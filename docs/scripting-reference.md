@@ -139,7 +139,9 @@ Dans l'autre sens, `a.root` rend l'acteur racine de l'instance (la racine elle-m
 
 **Lire et écrire les exports d'un autre acteur.** Sur un acteur désigné par son nom, ses `exports` de type `int`, `float`, `bool` ou `enum` se lisent et s'écrivent par leur nom, sans préfixe : `boss.hp = boss.hp - 1`, `boss.state = "RAGE"`, `if boss.state == "RAGE" then ... end`. Une étiquette d'`enum` se vérifie au Build. Un export inconnu est refusé avec la liste de ceux que l'acteur déclare. Seuls les `exports` sont visibles de l'extérieur : les autres variables du script restent privées.
 
-Les autres types s'écrivent chacun à leur façon. Un **vecteur ou un rectangle** se donne par son constructeur et se lit champ par champ : `boss.home = vec2(8, 9)`, `boss.home.x = 3`, `local h = boss.home` puis `h.x`. Faites passer la valeur par un `local` avant de l'utiliser dans un calcul de vecteurs (`boss.home + vec2(1, 1)` n'est pas typé). Une **référence** (`actor_ref`, `scene_ref`, `sfx_ref`) et un **texte** (`string`) s'écrivent et se comparent par leur nom entre guillemets : `boss.target = "Player"`, `if boss.target == "Player" then ... end`. Leur valeur lue n'est qu'un numéro interne : elle ne sert qu'à cette comparaison.
+Les autres types s'écrivent chacun à leur façon. Un **vecteur ou un rectangle** se donne par son constructeur et se lit champ par champ : `boss.home = vec2(8, 9)`, `boss.home.x = 3`, `local h = boss.home` puis `h.x`. Faites passer la valeur par un `local` avant de l'utiliser dans un calcul de vecteurs (`boss.home + vec2(1, 1)` n'est pas typé).
+
+Depuis un autre script, les **références** (`actor_ref`, `scene_ref`, `sfx_ref`) et les **textes** (`string`) s'écrivent et se comparent avec une valeur entre guillemets (`boss.target = "Player"`, `if boss.target == "Player" then ... end`). Cette lecture renvoie un identifiant interne. Pour manipuler l'acteur directement, utilisez le nom nu de l'export `actor_ref` dans le script qui le déclare.
 
 **Un acteur disparu.** Une action sur une référence dont l'acteur a été détruit ou vaut `nil` n'a aucun effet, et ne fait pas planter la ROM : l'appel est sauté (une lecture rend 0). Un build debug l'écrit dans le log mGBA (`warning: hide() skipped, the actor is destroyed, inactive or nil`). Un acteur seulement **désactivé** existe toujours : ses exports se lisent et s'écrivent, et `activate`, `deactivate` et `destroy` s'appliquent ; les autres actions (bouger, animer, afficher) sont sautées tant qu'il dort. Les **propriétés** suivent la même règle : lire `boss.position` ou `boss.Canon.visible` sur un acteur disparu rend 0, et écrire `boss.position = vec2(1, 2)` est sauté, avec le même avertissement en build debug (`warning: reading position skipped, the actor is destroyed or nil`). Rien n'oblige à tester avant d'appeler, `if boss then` reste le moyen d'éviter ce cas.
 
@@ -207,7 +209,7 @@ Ce qui étend le script lui-même : variables réglables par instance, séquence
 
 ### Variables exposées (`exports`)
 
-Une table `exports` déclarée au premier niveau expose des variables **réglables par instance** depuis l'inspecteur. Chaque acteur posé du même script garde sa propre valeur — un seul `Patrol.lua` sur trois gardes, chacun sa vitesse, au lieu de trois scripts jumeaux.
+Une table `exports` déclarée au premier niveau expose des variables **réglables par instance** depuis l'inspecteur. Des acteurs ou des Areas qui partagent un script peuvent donner des valeurs différentes à ses exports. Par exemple, trois gardes peuvent utiliser le même `Patrol.lua`, chacun avec sa vitesse.
 
 ```lua
 exports = {
@@ -222,16 +224,23 @@ function on_update()
 end
 ```
 
-- **On l'utilise par son nom nu**, comme n'importe quelle variable : la lire, la réassigner. Sa seule particularité est que sa valeur de départ vient de l'inspecteur, pas du script.
+- **On utilise un export par son nom nu.** On peut le lire et le réassigner, sauf pour `actor_ref`, qui se lit comme une référence d'acteur.
 - **Un `enum` se compare et s'affecte par son étiquette** : `if team == "RED" then … end`, `team = "BLUE"`. Le build la remplace par son index et refuse une étiquette absente de `values`. Le nombre (`team == 1`) reste accepté, mais l'étiquette se relit mieux.
 - **La valeur réglée sur l'instance** l'emporte sur le `default` ; sans réglage, c'est le `default`.
 - **Tous les types sont réglables par instance**, avec la valeur portée jusqu'au jeu :
   - `int`, `float`, `bool`, `enum` — entiers au runtime (`float` est tronqué, un `enum` vaut l'index de son étiquette).
   - `string` — le texte devient une **entrée de la table de textes** (comme un littéral passé à `text.draw`) : traduisible, et un simple index au runtime. On l'utilise donc là où un texte est attendu (`text:draw(label)`).
-  - `actor_ref`, `scene_ref`, `sfx_ref` — une **référence** par son nom. Un `actor_ref` désigne un acteur **de la scène** de l'instance ; vide = aucune référence.
+  - `actor_ref` désigne par son nom un acteur placé dans la scène de l'instance.
+  - `scene_ref` et `sfx_ref` désignent une scène ou un effet sonore par son nom.
   - `vec2`, `vec3`, `rect` — des **valeurs composées** (`{x, y}`, `{x, y, w, h}`), lisibles champ par champ (`home.x`).
 - **Le nom d'un export ne peut pas être** celui d'un champ d'acteur (`position`, `velocity`…), d'une variable globale, ni d'un mot de l'API (`input`, `wait`…) — le build le refuse.
 - **Une variable seulement LUE ne coûte rien** (acteur posé) : le build la fond dans le code. Seule une variable réécrite occupe de la mémoire. Régler `speed` sur dix gardes qui ne font que la lire n'ajoute aucun octet.
+
+#### Utiliser un export `actor_ref`
+
+Dans le script qui le déclare, `Rock` se lit comme une référence d'acteur. On peut appeler `Rock:hide()`, lire `Rock.position` ou stocker la référence dans une variable locale avec `local r = Rock` dans un événement. Un champ vide (`default = ""`) ou un acteur détruit donne `nil`. Le test `if Rock then` permet d'agir seulement si l'acteur existe.
+
+Le script ne peut pas réassigner `Rock`. La cible se choisit dans l'inspecteur de chaque instance. Voir l'exemple du rocher dans le [guide des Areas](guides/faire-vivre/zones-area.md).
 
 #### Régler un prefab au spawn
 

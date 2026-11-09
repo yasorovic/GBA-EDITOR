@@ -498,15 +498,14 @@ class CommandDispatcher(EventEmitter):
 
     def add_camera(self, name: Optional[str] = None) -> Optional["Camera"]:
         """Ajoute une caméra à la scène active (avec historique). Nom unique
-        à l'échelle du PROJET (cf. `Project.camera_names` — `camera.switch`
-        n'est pas qualifié par scène)."""
+        dans la scène (cf. models/camera.py)."""
         from core.history import AddListItemCmd
         from core.models.camera import Camera
         from core.selection_bus import CameraSelection
         if not self._project or not self._project.active_scene:
             return None
         scene = self._project.active_scene
-        cam = Camera(name=unique_name(name or "Camera", self._project.camera_names()))
+        cam = Camera(name=unique_name(name or "Camera", {c.name for c in scene.cameras}))
 
         def persist():
             self._save_scene()

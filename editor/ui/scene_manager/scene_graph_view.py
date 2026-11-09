@@ -47,7 +47,7 @@ from ui.common.canvas_top_bar import CanvasTopBar
 from ui.common.shortcut_hints import ShortcutHints
 from ui.scene_manager.scene_graph_hints import scene_graph_hints
 from ui.scene_manager.scene_graph_items import (
-    CARD_H, CARD_W, MissingTargetItem, SceneCardItem, SceneGraphEdgeItem,
+    CARD_H, CARD_W, ComputedTargetItem, MissingTargetItem, SceneCardItem, SceneGraphEdgeItem, TerminalTargetItem,
     ScenePreviewToggleItem,
 )
 from ui.scene_manager.scene_graph_breadcrumb import SceneGraphBreadcrumb
@@ -69,14 +69,30 @@ _PAN_MARGIN = 2000.0  # respiration autour du contenu pour paner dans le vide
 _GRID_STEP = 40.0
 
 
+_UNSET = object()   # export sans valeur d'instance : le `default` du script s'applique
+
+
 class _RewriteEdgeCmd(Command):
-    """Réécriture groupée d'une transition Lua, annulable en un geste."""
-    def __init__(self, changes, refresh):
+    """Rebranchement groupé de transitions, annulable en un geste : réécriture des littéraux Lua (`changes`) et
+    valeur d'export posée sur les instances (`values` : (scène, composant script, export, avant, après))."""
+    def __init__(self, changes, refresh, values=(), save_scene=None):
         self._changes, self._refresh = changes, refresh
+        self._values, self._save_scene = values, save_scene
         self.label = "Reconnecter transition"
     def _apply(self, index):
         for path, before, after in self._changes:
             path.write_text((before, after)[index], encoding="utf-8", newline="\n")
+        scenes = []
+        for scene, comp, export, before, after in self._values:
+            value = (before, after)[index]
+            if value is _UNSET:
+                comp.exports_values.pop(export, None)
+            else:
+                comp.exports_values[export] = value
+            if scene not in scenes:
+                scenes.append(scene)
+        for scene in scenes:
+            self._save_scene(scene)
         self._refresh(index)
     def execute(self): self._apply(1)
     def undo(self): self._apply(0)
@@ -203,7 +219,7 @@ class _GraphCanvas(GridBackdropViewMixin, QGraphicsView):
             # derrière la carte, on les résout donc à partir de leur pointe.
             port_owner = self.itemAt(event.position().toPoint())
             while port_owner is not None and not isinstance(
-                    port_owner, (SceneCardItem, MissingTargetItem)):
+                    port_owner, (SceneCardItem, TerminalTargetItem)):
                 port_owner = port_owner.parentItem()
             if port_owner is not None:
                 rect = port_owner.anchor_rect()
@@ -335,7 +351,7 @@ class _GraphMinimap(QWidget):
         self.hide()
 
     def _content_rect(self) -> QRectF:
-        relevant = (SceneCardItem, MissingTargetItem, SceneGroupBoxItem, SceneGraphNoteItem)
+        relevant = (SceneCardItem, TerminalTargetItem, SceneGroupBoxItem, SceneGraphNoteItem)
         rects = [item.sceneBoundingRect() for item in self._canvas.scene().items()
                  if isinstance(item, relevant)]
         if not rects:
@@ -412,7 +428,7 @@ class _GraphMinimap(QWidget):
                 color = QColor(item.color or "#FFFFFF")
                 painter.setPen(QPen(color, 1)); painter.setBrush(QBrush(color))
                 painter.drawRect(mini(item.sceneBoundingRect()))
-            elif isinstance(item, (SceneCardItem, MissingTargetItem)):
+            elif isinstance(item, (SceneCardItem, TerminalTargetItem)):
                 painter.setPen(Qt.PenStyle.NoPen); painter.setBrush(QBrush(QColor(C.TEXT_DIM)))
                 painter.drawRect(mini(item.sceneBoundingRect()))
         painter.setPen(QPen(QColor(C.ACCENT), 1.5)); painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -449,12 +465,27 @@ def _fingerprint(project) -> tuple:
     """Empreinte bon marché de ce qui fait varier la STRUCTURE projetée.
 
     Noms de scènes et scène de départ, plus l'état sur disque de chaque script
-    exécutable (`stat`, sans lecture ni parsing). La position des nœuds n'y entre
-    pas : la déplacer ne doit pas re-parser une seule ligne de Lua.
+    exécutable (`stat`, sans lecture ni parsing), les membres posés (un prefab posé
+    apporte son script à la scène) et leurs valeurs d'export (une porte rebranchée
+    dans l'inspecteur change une arête). Les scripts suivis sont ceux de
+    `Project.scene_scripts`, qui compte TOUS les prefabs dans chaque scène : plus
+    large que ce que le graphe lit, donc tout changement qui compte est vu. La
+    position des nœuds n'y entre pas : la déplacer ne doit pas re-parser une seule
+    ligne de Lua.
     """
     scenes = tuple(getattr(project, "scenes", ()) or ())
     start = getattr(getattr(project, "settings", None), "start_scene", "")
     stamps: set[tuple] = set()
+    exports: list[tuple] = []
+    for scene in scenes:
+        members = ([("actor", a) for a in getattr(scene, "actors", ()) or ()]
+                   + [("area", a) for a in getattr(scene, "areas", ()) or ()])
+        for kind, member in members:
+            comp = member.get_component("script") if hasattr(member, "get_component") else None
+            script = ((getattr(comp, "script", ""), bool(getattr(comp, "active", True)),
+                       repr(sorted((getattr(comp, "exports_values", None) or {}).items())))
+                      if comp is not None else None)
+            exports.append((scene.name, kind, member.name, getattr(member, "prefab_name", "") or "", script))
     if hasattr(project, "scene_scripts"):
         for scene in scenes:
             scripts, _opaque = project.scene_scripts(scene)
@@ -464,7 +495,7 @@ def _fingerprint(project) -> tuple:
                     stamps.add((str(path), st.st_mtime_ns, st.st_size))
                 except OSError:
                     stamps.add((str(path), None, None))
-    return (start, tuple(scene.name for scene in scenes), tuple(sorted(stamps)))
+    return (start, tuple(scene.name for scene in scenes), tuple(sorted(stamps)), tuple(exports))
 
 
 class SceneGraphView(QWidget):
@@ -506,7 +537,7 @@ class SceneGraphView(QWidget):
         self._boxes: dict[str, SceneGroupBoxItem] = {}   # groupe replié -> boîte
         self._frames: dict[str, SceneGroupBoxItem] = {}  # groupe déplié -> cadre
         self._name_box: dict[str, SceneGroupBoxItem] = {}  # scène cachée -> sa boîte
-        self._missing: dict[str, MissingTargetItem] = {}
+        self._terminals: dict[str, TerminalTargetItem] = {}   # cibles introuvables et sorties calculées, par clé de nœud
         self._notes: dict[str, SceneGraphNoteItem] = {}
         self._notes_visible = True
         self._edge_bindings: dict[object, list[SceneGraphEdgeItem]] = {}
@@ -661,7 +692,7 @@ class SceneGraphView(QWidget):
 
     def _center_graph_on_selection(self) -> bool:
         """Centre les éléments sélectionnés et indique si une cible existait."""
-        focusable = (SceneCardItem, MissingTargetItem, SceneGroupBoxItem, SceneGraphNoteItem)
+        focusable = (SceneCardItem, TerminalTargetItem, SceneGroupBoxItem, SceneGraphNoteItem)
         items = [item for item in self._scene.selectedItems() if isinstance(item, focusable)]
         if items:
             rect = items[0].sceneBoundingRect()
@@ -1253,7 +1284,7 @@ class SceneGraphView(QWidget):
                 self._state.set_scene_position(name, p.x(), p.y())
                 moved = True
                 moved_cards.append(name)
-        for name, marker in self._missing.items():
+        for name, marker in self._terminals.items():
             p = marker.pos()
             if self._state.missing_position(name) != (p.x(), p.y()):
                 self._state.set_missing_position(name, p.x(), p.y())
@@ -1321,9 +1352,19 @@ class SceneGraphView(QWidget):
         if not edges:
             return
         grouped = {}
+        values = []
         for edge in edges:
             for ref in edge.refs:
-                grouped.setdefault(ref.path, []).append(ref)
+                grouped.setdefault(ref.path, []).append((ref, edge.computed))
+            # Une sortie par export se rebranche sur SON instance : le script est partagé par toutes les portes.
+            scene = self._scene_by_name(edge.source)
+            for link in edge.links:
+                members = getattr(scene, "areas" if link.owner_kind == "area" else "actors", ())
+                owner = next((m for m in members if m.name == link.owner), None)
+                comp = owner.get_component("script") if owner is not None else None
+                if comp is not None:
+                    values.append((scene, comp, link.export,
+                                   comp.exports_values.get(link.export, _UNSET), target.name))
         changes = []
         for path, refs in grouped.items():
             try:
@@ -1331,18 +1372,20 @@ class SceneGraphView(QWidget):
             except OSError:
                 continue
             after = before
-            for ref in sorted(refs, key=lambda r: r.start, reverse=True):
-                literal = after[ref.start:ref.stop + 1]
-                quote = literal[:1]
+            for ref, computed in sorted(refs, key=lambda r: r[0].start, reverse=True):
+                # Un littéral garde les guillemets de l'auteur ; une expression calculée (`levels[i]`) est remplacée
+                # en entier par le nom de la scène, entre guillemets doubles.
+                quote = '"' if computed else after[ref.start:ref.start + 1]
                 value = target.name.replace("\\", "\\\\").replace(quote, "\\" + quote)
                 after = after[:ref.start] + quote + value + quote + after[ref.stop + 1:]
             if after != before:
                 changes.append((path, before, after))
-        if changes:
+        if changes or values:
             get_history().push(_RewriteEdgeCmd(
                 changes, lambda index: self._refresh_retargeted_edges(
                     [(edge.source, edge.target) for edge in edges] if index == 0
-                    else [(edge.source, target.name) for edge in edges])))
+                    else [(edge.source, target.name) for edge in edges]),
+                values, self._project.save_scene))
 
     def _refresh_retargeted_edges(self, pairs) -> None:
         self.refresh()
@@ -1586,7 +1629,7 @@ class SceneGraphView(QWidget):
         self._boxes = {}
         self._frames = {}
         self._name_box = {}
-        self._missing = {}
+        self._terminals = {}
         self._notes = {}
         self._edge_bindings = {}
         pos = self._node_positions(graph)
@@ -1626,20 +1669,32 @@ class SceneGraphView(QWidget):
 
         # Cibles introuvables : marqueurs de la RACINE seulement (au sein d'un
         # niveau, un lien vers un nom sans scène sort par une porte de sortie).
-        missing: dict[str, MissingTargetItem] = {}
+        # Sorties calculées : un nœud par (scène, expression), dessiné dès que sa
+        # scène l'est en carte, à tout niveau. Leur place se range avec celle des
+        # cibles introuvables, sous leur clé de nœud.
+        terminals: dict[str, TerminalTargetItem] = {}
         if level is None:
-            missing_names = {edge.target for edge in graph.edges if edge.target not in node_names}
+            terminal_keys = {edge.target_key for edge in graph.edges
+                             if edge.computed or edge.target not in node_names}
             if self._state is not None:
-                self._state.prune_missing_positions(missing_names)
+                self._state.prune_missing_positions(terminal_keys)
             for edge in graph.edges:
-                if edge.target in node_names or edge.target in missing:
+                if edge.computed or edge.target in node_names or edge.target in terminals:
                     continue
                 marker = MissingTargetItem(edge.target, geometry_changed=self._item_geometry_changed)
                 marker_pos = (self._state.missing_position(edge.target) if self._state else None)
                 marker.setPos(*(marker_pos or pos[edge.target]))
                 self._scene.addItem(marker)
-                missing[edge.target] = marker
-                self._missing[edge.target] = marker
+                terminals[edge.target] = marker
+        for edge in graph.edges:
+            if not edge.computed or edge.source not in self._cards or edge.target_key in terminals:
+                continue
+            node = ComputedTargetItem(edge.target_key, edge.target, geometry_changed=self._item_geometry_changed)
+            node_pos = (self._state.missing_position(edge.target_key) if self._state else None)
+            node.setPos(*(node_pos or pos[edge.target_key]))
+            self._scene.addItem(node)
+            terminals[edge.target_key] = node
+        self._terminals = terminals
 
         self._render_groups(shown, place, pos, node_names)
         if self._notes_visible and self._state is not None:
@@ -1661,9 +1716,9 @@ class SceneGraphView(QWidget):
             if name in self._name_box:
                 box = self._name_box[name]
                 return box.anchor_rect(), f"box:{box.group_id}", True, box
-            if name in missing:
-                item = missing[name]
-                return item.anchor_rect(), f"missing:{name}", True, item
+            if name in terminals:
+                item = terminals[name]
+                return item.anchor_rect(), f"terminal:{name}", True, item
             return None, None, False, None
 
         # Arêtes traversant le bord du niveau : on retient l'ancre INTERNE (le
@@ -1672,11 +1727,11 @@ class SceneGraphView(QWidget):
         exit_links: list[tuple] = []    # (edge, rect du nœud source interne)
         for edge in graph.edges:
             source, skey, s_in, source_item = anchor(edge.source)
-            target, tkey, t_in, target_item = anchor(edge.target)
+            target, tkey, t_in, target_item = anchor(edge.target_key)
             if s_in and t_in:
                 if skey == tkey and skey.startswith("box:"):
                     continue            # lien interne à une boîte repliée
-                self._add_live_edge(source_item, target_item, len(edge.refs), edge)
+                self._add_live_edge(source_item, target_item, edge.count, edge)
             elif s_in and not t_in:
                 exit_links.append((edge, source_item))   # sort du niveau
             elif t_in and not s_in:
@@ -1719,7 +1774,7 @@ class SceneGraphView(QWidget):
         une arête interne (elle ouvre le même appel `scene.switch`)."""
         for edge, node_item in links:
             source, target = (door, node_item) if incoming else (node_item, door)
-            self._add_live_edge(source, target, len(edge.refs), edge)
+            self._add_live_edge(source, target, edge.count, edge)
 
     def _ancestor_ids(self, gid: str | None, fmap: dict) -> set[str]:
         """Ids des dossiers ancêtres STRICTS de `gid`."""

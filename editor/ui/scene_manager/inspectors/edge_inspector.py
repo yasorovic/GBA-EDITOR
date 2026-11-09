@@ -210,7 +210,11 @@ class EdgeInspector(QWidget):
         for value in self._edges:
             for ref in value.refs:
                 self._add_call(ref, _source_line(ref))
-        if not any(value.refs for value in self._edges):
+            # Une sortie par export : l'appel est partagé, c'est l'acteur ou l'Area qui fixe la cible, il se nomme donc
+            # en tête.
+            for link in value.links:
+                self._add_call(link.ref, _source_line(link.ref), f"{link.owner} · {link.ref.path.name} : {link.ref.line}")
+        if not any(value.calls() for value in self._edges):
             self._add_message(label("edgeinsp.target_missing", target=self._edge.target))
 
     def _set_style(self, style: str) -> None:
@@ -260,10 +264,10 @@ class EdgeInspector(QWidget):
             if (widget := item.widget()) is not None:
                 widget.deleteLater()
 
-    def _add_call(self, ref, source: str) -> None:
+    def _add_call(self, ref, source: str, where: str = "") -> None:
         line = _CallRow()
         marker, prefix, text, open_btn = line.marker, line.prefix, line.text, line.open_btn
-        prefix.setText(f"{ref.path.name} : {ref.line}")
+        prefix.setText(where or f"{ref.path.name} : {ref.line}")
         text.setText(source)
         text.editingFinished.connect(lambda r=ref, field=text: self._save_source_line(r, field))
         open_btn.clicked.connect(lambda: self.open_ref.emit(ref))

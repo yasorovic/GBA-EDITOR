@@ -211,10 +211,11 @@ def test_une_camera_qui_suit_un_acteur_d_une_autre_scene_avertit(project):
     assert says(run(project, validator._check_cameras), "warning", 'follows "Ghost", which is not an actor of this scene')
 
 
-def test_deux_cameras_de_meme_nom_dans_deux_scenes_avertissent(project):
+def test_deux_cameras_de_meme_nom_dans_deux_scenes_n_avertissent_pas(project):
+    # Le nom d'une caméra est local à sa scène, comme celui d'un acteur.
     _scene_with_camera(project, "One", "Cam")
     _scene_with_camera(project, "Two", "Cam")
-    assert says(run(project, validator._check_cameras), "warning", 'Two cameras named "Cam" (scenes \'One\' and \'Two\')')
+    assert not says(run(project, validator._check_cameras), "warning", 'Two cameras named "Cam"')
 
 
 # ── Scripts, budget d'OAM, fenêtres, symboles C ───────────────────────────

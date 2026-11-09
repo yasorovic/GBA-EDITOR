@@ -310,3 +310,70 @@ def test_clic_droit_supprimer_un_groupe_remonte_ses_membres(qapp, tmp_path):
 
 # ── Navigation par niveaux au clavier (← / →) ────────────────────────────
 
+
+
+def test_rebrancher_une_porte_change_son_instance_pas_le_script(qapp, tmp_path):
+    """Une arête née d'un export `scene_ref` se rebranche sur l'acteur qui la porte : le script, partagé par
+    toutes les portes, reste intact, et l'annulation rend la valeur d'avant (ici : aucune, le `default`)."""
+    from core.history import get_history
+    from core.models.components import ScriptComponent
+    from core.models.scene import Actor
+    from ui.scene_manager.scene_graph_items import SceneCardItem
+    from ui.scene_manager.scene_graph_view import SceneGraphView
+
+    project, _source = _project(tmp_path)
+    project.scenes.append(_scene("Victory"))
+    door = project.root / "assets" / "scripts" / "door.lua"
+    door.write_text('exports = {\n    next_scene = { type = "scene_ref", default = "Arena", label = "Next" },\n}\n'
+                    'function on_update()\n    scene:switch(next_scene)\nend\n', encoding="utf-8")
+    before = door.read_text(encoding="utf-8")
+    actor = Actor(name="Door")
+    actor.components = [ScriptComponent(script="assets/scripts/door.lua")]
+    project.scenes[1].actors = [actor]
+    saved = []
+    project.save_scene = saved.append
+
+    view = SceneGraphView()
+    view.set_project(project)
+    view.refresh()
+    edge = next(e for e in view.graph.edges if e.source == "Arena")
+    assert edge.target == "Arena" and edge.links
+
+    target = next(i for i in view._scene.items() if isinstance(i, SceneCardItem) and i.name == "Victory")
+    view._retarget_edges([type("Item", (), {"edge": edge})()], target)
+
+    assert actor.components[0].exports_values == {"next_scene": "Victory"}
+    assert door.read_text(encoding="utf-8") == before
+    assert saved == [project.scenes[1]]
+    assert ("Arena", "Victory") in {(e.source, e.target) for e in view.graph.edges}
+
+    get_history().undo()
+    assert actor.components[0].exports_values == {}
+
+
+def test_rebrancher_une_sortie_calculee_ecrit_le_nom_de_scene(qapp, tmp_path):
+    """Le nœud calculé porte l'expression ; glisser son arête sur une scène remplace l'expression par le nom, entre
+    guillemets, et l'arête devient une transition ordinaire. L'annulation rend le script d'origine."""
+    from core.history import get_history
+    from ui.scene_manager.scene_graph_items import ComputedTargetItem, SceneCardItem
+    from ui.scene_manager.scene_graph_view import SceneGraphView
+
+    project, source = _project(tmp_path)
+    source.write_text('scene:switch(levels[i])\n', encoding="utf-8")
+
+    view = SceneGraphView()
+    view.set_project(project)
+    view.refresh()
+    nodes = [i for i in view._scene.items() if isinstance(i, ComputedTargetItem)]
+    assert [(n.key, n.name) for n in nodes] == [("Title::levels[i]", "levels[i]")]
+    edge = next(e for e in view.graph.edges if e.computed)
+
+    target = next(i for i in view._scene.items() if isinstance(i, SceneCardItem) and i.name == "Arena")
+    view._retarget_edges([type("Item", (), {"edge": edge})()], target)
+
+    assert source.read_text(encoding="utf-8") == 'scene:switch("Arena")\n'
+    assert [(e.source, e.target, e.computed) for e in view.graph.edges] == [("Title", "Arena", False)]
+    assert not any(isinstance(i, ComputedTargetItem) for i in view._scene.items())
+
+    get_history().undo()
+    assert source.read_text(encoding="utf-8") == 'scene:switch(levels[i])\n'

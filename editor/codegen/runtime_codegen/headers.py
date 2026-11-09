@@ -15,10 +15,10 @@ from core.project import Project
 from codegen.c_names import sym as c_sym, scene_actor_sym
 from core.app_paths import RUNTIME_DIR
 import codegen.build_output as build_output
-from codegen.runtime_codegen.gen_camera import project_cameras
+from codegen.runtime_codegen.gen_camera import scene_cameras_indexed
 from codegen.oam_alloc import scene_oam_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
-from scripting.api import area_name_constant
+from scripting.api import area_name_constant, camera_constant
 
 
 def actorname_ids(p: Project) -> dict:
@@ -489,22 +489,21 @@ def generate_runtime_api(
                      "bg_slot) */")
             a += layer_lines
 
-    # Constantes CAM_* — l'index d'une caméra dans la table du runtime, tel que
-    # `camera:switch(CAM_X)` l'attend. Même ordre que `project_cameras`, qui
-    # émet la table : les deux dérivent de la même liste, sinon un script
-    # activerait la mauvaise caméra.
-    _cams = project_cameras(p)
-    if len(_cams) > 1:
+    # Constantes CAM_<SCÈNE>_<NOM> : l'index d'une caméra dans la table du runtime, tel que
+    # `camera:switch(CAM_X)` l'attend. Même liste que celle qui émet la table
+    # (`scene_cameras_indexed`), sinon un script activerait la mauvaise caméra.
+    # Qualifiées par la scène : le nom d'une caméra est local à sa scène.
+    _cams = scene_cameras_indexed(p)
+    if _cams:
         a.append("")
-        a.append("/* Project cameras — used by camera:switch() */")
+        a.append("/* Project cameras, used by camera:switch() */")
         a.append("#define CAM_DEFAULT 0")
-        for i, cam in enumerate(_cams):
-            if cam is not None:
-                a.append(f"#define CAM_{c_sym(cam.name).upper()} {i}")
+        for i, sc, cam in _cams:
+            a.append(f"#define {camera_constant(cam.name, c_sym(sc.name))} {i}")
 
     # Constantes WIN_* — le rang matériel (WINR_0/WINR_1) d'un WindowSlot,
     # décidé par l'allocateur (`window_alloc.py`). Une window n'appartient qu'à une scène, mais
-    # son nom est unique au PROJET (même contrainte que les caméras) : une
+    # son nom est unique au PROJET : une
     # seule passe sur toutes les scènes suffit à émettre le `#define`.
     from codegen.window_alloc import scene_window_layout
     _win_lines: list[str] = []

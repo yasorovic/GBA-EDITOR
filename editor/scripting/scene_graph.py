@@ -12,17 +12,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .api import DOMAIN_SCENE
-from .refactor import LuaRef, domain_args_in_text, iter_refs
+from .exports_parser import parse_exports
+from .refactor import LuaRef, iter_refs, non_literal_args_in_text, scene_compiled_scripts
 
 
 @dataclass(frozen=True)
 class SceneGraphNode:
     """Une scène déclarée par le projet, dans son ordre de catalogue.
 
-    `has_dynamic_exit` retient ce que les arêtes ne peuvent pas dire : la scène
-    contient un ``scene:switch(<calculé>)`` : une cible choisie au runtime, ou un
+    `has_dynamic_exit` : la scène contient un ``scene:switch(<calculé>)`` (une
+    cible choisie au runtime, dessinée en arête vers un nœud « calculé »), ou un
     script illisible dont on ne sait rien. C'est le fait que le diagnostic traduit
-    en « point de vigilance » ; il ne devient jamais une fausse arête.
+    en « point de vigilance ».
     """
 
     name: str
@@ -31,17 +32,54 @@ class SceneGraphNode:
 
 
 @dataclass(frozen=True)
+class ExportLink:
+    """Une sortie portée par un membre posé de la scène (acteur ou Area) : son script appelle
+    ``scene:switch(<export>)`` et l'export ``scene_ref`` vaut, sur CETTE instance, le nom de la scène cible (valeur
+    réglée dans l'inspecteur, sinon le `default` du script). `owner` est le nom du membre, `owner_kind` dit dans
+    quelle liste de la scène le chercher ("actor" ou "area", un acteur et une Area pouvant porter le même nom).
+    `ref` est l'appel, pour ouvrir le script à la bonne ligne."""
+
+    owner: str
+    owner_kind: str
+    export: str
+    ref: LuaRef
+
+
+@dataclass(frozen=True)
 class SceneGraphEdge:
-    """Des appels littéraux allant d'une scène vers une autre.
+    """Des appels allant d'une scène vers une autre.
 
     Plusieurs appels entre la même paire sont regroupés : ``refs`` conserve
-    néanmoins chaque occurrence afin que l'interface puisse afficher le
-    compteur et ouvrir le bon script à la bonne ligne.
+    néanmoins chaque occurrence littérale afin que l'interface puisse afficher le
+    compteur et ouvrir le bon script à la bonne ligne. ``links`` porte les sorties
+    dont la cible est la valeur d'un export sur une instance : elles se rebranchent
+    sur l'instance, jamais dans le texte du script, que toutes les instances partagent.
+
+    `computed` : la cible n'est pas une scène mais une sortie qu'on ne sait pas
+    résoudre avant le jeu. `target` est alors le texte de l'expression
+    (``levels[i]``) ou le nom de l'export laissé vide ; ses `refs` sont les
+    expressions elles-mêmes, qu'un rebranchement remplace par un nom de scène.
     """
 
     source: str
     target: str
     refs: tuple[LuaRef, ...]
+    links: tuple[ExportLink, ...] = ()
+    computed: bool = False
+
+    @property
+    def count(self) -> int:
+        return len(self.refs) + len(self.links)
+
+    @property
+    def target_key(self) -> str:
+        """Le nœud où l'arête arrive. Une sortie calculée a son nœud À ELLE, propre à sa scène : deux scènes qui
+        écrivent `scene:switch(levels[i])` n'ont pas la même sortie."""
+        return f"{self.source}::{self.target}" if self.computed else self.target
+
+    def calls(self) -> tuple[LuaRef, ...]:
+        """Tous les appels de la transition, littéraux puis exports : ce qu'on ouvre."""
+        return self.refs + tuple(link.ref for link in self.links)
 
 
 @dataclass(frozen=True)
@@ -55,25 +93,28 @@ class SceneGraph:
 def scene_graph(project) -> SceneGraph:
     """Construit le graphe connu des appels ``scene.switch`` d'un projet.
 
-    Les scripts sont associés à leur scène par ``Project.scene_scripts`` : le
-    même appel dans un script d'acteur devient donc une sortie de la scène où
-    cet acteur s'exécute. Les scripts non analysables et les arguments calculés
-    ne sont volontairement pas transformés en fausses destinations ; ils
-    restent la responsabilité du Script Editor jusqu'à la future représentation
-    explicite des cibles indéterminées.
+    Les scripts d'une scène sont ceux que le build compile pour elle
+    (`scene_compiled_scripts`) : le même appel dans un script d'acteur devient donc
+    une sortie de la scène où cet acteur s'exécute, et le script d'un prefab ne
+    compte que dans les scènes où ce prefab a un modèle (posé, ou spawné par un nom
+    littéral). Un argument calculé n'est jamais transformé en fausse
+    destination : il mène à un nœud « calculé » qui porte son expression. Un
+    script non analysable ne donne aucune arête, seulement `has_dynamic_exit`.
     """
     scenes = tuple(getattr(project, "scenes", ()) or ())
     start = getattr(getattr(project, "settings", None), "start_scene", "")
 
     grouped: dict[tuple[str, str], list[LuaRef]] = {}
+    linked: dict[tuple[str, str], list[ExportLink]] = {}
+    computed_refs: dict[tuple[str, str], list[LuaRef]] = {}
+    computed_links: dict[tuple[str, str], list[ExportLink]] = {}
     dynamic: set[str] = set()
     for scene in scenes:
         # Plusieurs acteurs peuvent référencer le même fichier ; une occurrence
         # de code doit rester une occurrence de graphe, pas une par utilisateur.
-        paths: set[Path] = set()
-        if hasattr(project, "scene_scripts"):
-            scripts, _opaque = project.scene_scripts(scene)
-            paths.update(Path(path) for path in scripts)
+        paths = {path for path in scene_compiled_scripts(project, scene) if path.suffix.lower() == ".lua"}
+        export_calls: dict[Path, list[LuaRef]] = {}
+        defaults: dict[Path, dict] = {}
         for path in sorted(paths, key=lambda p: str(p).casefold()):
             try:
                 text = path.read_text(encoding="utf-8")
@@ -85,22 +126,63 @@ def scene_graph(project) -> SceneGraph:
                 if ref.api_key != "scene.switch":
                     continue
                 grouped.setdefault((scene.name, ref.value), []).append(ref)
-            # Une cible calculée (`scene:switch(var)`) ou un script illisible ne
-            # produit aucune arête, mais reste un fait à signaler : la scène a une
-            # sortie qu'on ne sait pas résoudre. Même primitive que la réservation
-            # VRAM des polices : l'ignorance se propage, elle ne se confond pas
-            # avec « aucune sortie ».
-            if domain_args_in_text(text, DOMAIN_SCENE)[1]:
+            defaults[path] = {var["name"]: var["default"] for var in parse_exports(path)
+                              if var["type"] == "scene_ref"}
+            exported, expressions, unknown = non_literal_args_in_text(
+                text, DOMAIN_SCENE, set(defaults[path]), path)
+            export_calls[path] = [ref for ref in exported if ref.api_key == "scene.switch"]
+            # Une cible calculée (`scene:switch(levels[i])`) mène à son nœud
+            # « calculé » ; un script illisible ne mène nulle part. Les deux
+            # restent un fait à signaler : la scène a une sortie qu'on ne sait pas
+            # résoudre. Même primitive que la réservation VRAM des polices :
+            # l'ignorance se propage, elle ne se confond pas avec « aucune
+            # sortie ». Un export `scene_ref` jamais réassigné n'est pas calculé :
+            # chaque instance posée en donne la valeur, ci-dessous.
+            for ref in expressions:
+                if ref.api_key == "scene.switch":
+                    computed_refs.setdefault((scene.name, ref.value), []).append(ref)
+                    dynamic.add(scene.name)
+            if unknown:
                 dynamic.add(scene.name)
+
+        # Un export prend sa valeur sur l'instance : seuls les membres POSÉS de la scène la portent, acteurs et Areas
+        # (le build compile le script d'une Area avec les valeurs de CETTE Area, comme celui d'un acteur posé).
+        members = ([("actor", a) for a in getattr(scene, "actors", ()) or ()]
+                   + [("area", a) for a in getattr(scene, "areas", ()) or ()])
+        for kind, member in members:
+            comp = member.get_component("script") if hasattr(member, "get_component") else None
+            if not comp or not getattr(comp, "active", True) or not getattr(comp, "script", ""):
+                continue
+            path = Path(project.asset_abs(comp.script)).resolve()     # résolu, comme `scene_compiled_scripts`
+            if path not in export_calls:
+                continue
+            values = getattr(comp, "exports_values", None) or {}
+            for ref in export_calls[path]:
+                target = str(values.get(ref.value, defaults[path].get(ref.value, "")) or "")
+                link = ExportLink(member.name, kind, ref.value, ref)
+                if not target:
+                    # Export laissé vide : aucune cible connue. Son nœud « calculé » porte le nom de l'export, et le
+                    # rebrancher règle l'instance, comme pour une porte réglée.
+                    computed_links.setdefault((scene.name, ref.value), []).append(link)
+                    dynamic.add(scene.name)
+                    continue
+                linked.setdefault((scene.name, target), []).append(link)
 
     nodes = tuple(
         SceneGraphNode(scene.name, scene.name == start, scene.name in dynamic)
         for scene in scenes)
 
+    def by_place(refs):
+        return tuple(sorted(refs, key=lambda ref: (str(ref.path).casefold(), ref.start)))
+
     edges = tuple(
-        SceneGraphEdge(source, target, tuple(sorted(
-            refs, key=lambda ref: (str(ref.path).casefold(), ref.start))))
-        for (source, target), refs in grouped.items()
+        SceneGraphEdge(source, target, by_place(grouped.get((source, target), ())),
+                       tuple(linked.get((source, target), ())))
+        for source, target in dict.fromkeys([*grouped, *linked])
+    ) + tuple(
+        SceneGraphEdge(source, target, by_place(computed_refs.get((source, target), ())),
+                       tuple(computed_links.get((source, target), ())), computed=True)
+        for source, target in dict.fromkeys([*computed_refs, *computed_links])
     )
     return SceneGraph(nodes, edges)
 
@@ -146,6 +228,8 @@ def node_diagnostics(graph: SceneGraph) -> dict[str, NodeDiagnostic]:
     literal_out = {node.name: False for node in graph.nodes}
     broken_out = {node.name: False for node in graph.nodes}
     for edge in graph.edges:
+        if edge.computed:
+            continue        # ni scène ni nom cassé : `has_dynamic_exit` le porte déjà
         if edge.source in names:
             if edge.target in names:
                 literal_out[edge.source] = True

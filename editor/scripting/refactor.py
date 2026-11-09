@@ -393,6 +393,61 @@ def domain_args_in_text(text: str, domain: str) -> tuple[set[str], bool]:
     return names, dynamic
 
 
+def non_literal_args_in_text(text: str, domain: str, exports: set[str], path: Path | None = None
+                             ) -> tuple[list[LuaRef], list[LuaRef], bool]:
+    """Les arguments de `domain` qui ne sont PAS un littéral : (exports, expressions, inconnu).
+
+    Le pendant de `domain_args_in_text`, qui ne dit que « il y en a ». Ici chaque argument garde sa position, pour que
+    le graphe le dessine et qu'un geste le remplace par un littéral :
+    - `exports` : l'argument est le NOM d'un export de `exports` (`scene:switch(next_scene)`), dont la valeur est posée
+      sur chaque instance avant le build. `value` = le nom de l'export ;
+    - `expressions` : toute autre expression (`levels[i]`, `a and "X" or "Y"`), et un export que le script réassigne,
+      qui n'a plus de valeur connue. `value` = le texte de l'expression ;
+    - `inconnu` : un argument qu'on ne sait pas situer (appel incomplet, script illisible)."""
+    if not _LUAPARSER_OK:
+        return [], [], True
+    try:
+        tree = raw_tree(text)
+    except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
+        return [], [], True
+
+    assigned = {target.id for node in _lua_ast.walk(tree)
+                if isinstance(node, (_nodes.Assign, _nodes.LocalAssign))
+                for target in node.targets if isinstance(target, _nodes.Name)}
+    fixed = exports - assigned
+    refs: list[LuaRef] = []
+    expressions: list[LuaRef] = []
+    dynamic = False
+    elems = _element_locals(tree)
+    for node in _lua_ast.walk(tree):
+        if not isinstance(node, (_nodes.Call, _nodes.Invoke)):
+            continue
+        key = _node_key(node, elems)
+        arg_domains = _SITES.get(key or "")
+        if not arg_domains:
+            continue
+        args = node.args or []
+        for i, dom in arg_domains.items():
+            if dom != domain:
+                continue
+            if i >= len(args):
+                dynamic = True
+                continue
+            arg = args[i]
+            if isinstance(arg, _nodes.String):
+                continue
+            if arg.start_char is None or arg.stop_char is None:
+                dynamic = True
+                continue
+            at = dict(path=path or Path(""), domain=dom, line=text.count("\n", 0, arg.start_char) + 1,
+                      start=arg.start_char, stop=arg.stop_char, api_key=key or "")
+            if isinstance(arg, _nodes.Name) and arg.id in fixed:
+                refs.append(LuaRef(value=arg.id, **at))
+            else:
+                expressions.append(LuaRef(value=text[arg.start_char:arg.stop_char + 1], **at))
+    return refs, expressions, dynamic
+
+
 def find_call_sites_in_project(project, *domains: str) -> list[LuaCallSite]:
     """Tous les appels du projet couvrant `domains`, en un seul parcours."""
     out: list[LuaCallSite] = []
@@ -454,6 +509,13 @@ def _scene_spawn_closure(project, scene) -> tuple[set[Path], set[str]]:
                 add_script(prefab_by_name[name])
                 todo += scripts - before
     return scripts, spawned
+
+
+def scene_compiled_scripts(project, scene) -> set[Path]:
+    """Les scripts que le build compile pour CETTE scène (chemins résolus) : la scène, ses Areas, ses acteurs, et les
+    prefabs qui y ont un modèle (posés ou spawnés par un nom littéral). Ce que le pool de la scène peut exécuter, et
+    rien d'autre : un prefab qui n'y naît jamais n'y fait rien."""
+    return _scene_spawn_closure(project, scene)[0]
 
 
 def scene_spawned_prefabs(project, scene) -> set[str]:

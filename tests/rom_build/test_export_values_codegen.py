@@ -366,7 +366,7 @@ def test_resolveur_ref_vide_tombe_sur_zero():
     actor = SimpleNamespace(get_component=lambda k: SimpleNamespace(exports_values={}))
     inits = _export_inits(actor, script, res)
     assert inits["boom"] == "0"      # défaut "" → pas de référence
-    assert inits["target"] == "0"
+    assert inits["target"] == "-1"   # aucun acteur : 0 est l'emplacement du premier posé
 
 
 # ── Le checker : un nom d'export ne masque rien ───────────────────

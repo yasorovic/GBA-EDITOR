@@ -158,6 +158,27 @@ end
   copies indépendantes, chacune avec ses variables. Un fichier ne peut pas servir à la fois à une Area
   et à un acteur, une scène ou une caméra.
 
+Une Area peut donner une impulsion à un autre acteur de la scène quand le joueur entre dans la zone.
+Dans la carte **Script** de chaque Area, choisissez l'acteur dans le champ **Rock**. L'acteur choisi
+doit avoir un corps physique. La boîte du joueur doit porter le tag `player` et la matrice de tags
+doit autoriser le contact avec la zone.
+
+```lua
+exports = {
+    Rock = { type = "actor_ref", default = "", label = "Rock" },
+}
+
+function on_actor_enter(other, other_box)
+    if other_box.tag == "player" and Rock then
+        Rock:physics_body():add_velocity(vec2(512, -256))
+    end
+end
+```
+
+Chaque Area peut ainsi viser son propre rocher avec le même script. Si le champ **Rock** est vide ou
+si le rocher a été détruit, la condition échoue. L'impulsion ajoute à sa vitesse 2 px par frame vers
+la droite et 1 px par frame vers le haut.
+
 ## 5. Retrouver une Area depuis n'importe où
 
 Un script (d'acteur ou de scène) obtient une Area par son nom, comme `actor:get` pour un acteur :
