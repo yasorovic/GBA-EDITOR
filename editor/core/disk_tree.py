@@ -131,6 +131,17 @@ def _scan(folder: Path, assets: _Links, sources: _Links, missing_assets: set[str
     return nodes
 
 
+def asset_at(project, path) -> tuple[str, str] | None:
+    """`(famille, nom)` de l'asset dont `path` est le fichier, ou `None` : une source, un script, un dossier ou une
+    table du projet entier (textes, variables) se renomment comme de simples fichiers. Mêmes familles chargées que
+    `build_disk_tree`."""
+    hit = _linked_files(project)[0].get(_key(path))
+    if hit is None or hit[1] in ("texts", "variables"):
+        return None
+    name, family = hit
+    return family, name
+
+
 def build_disk_tree(project) -> DiskNode:
     """L'arbre de `assets/`. Les familles différées doivent être chargées
     (`project.load_all_resources()`), sinon leurs assets passeraient pour des

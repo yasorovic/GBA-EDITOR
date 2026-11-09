@@ -199,24 +199,42 @@ def test_a_source_that_already_has_an_asset_can_still_give_another(qapp):
     assert menu.actions()[0].text() == "Create as"                              # le bouton et le clic droit s'y adaptent
 
 
-def test_a_project_json_offers_edit_externally_to_the_text_editor(qapp):
+def test_edit_is_offered_for_one_entry_the_window_can_open_externally(qapp):
     opened = []
     spy = _Spy()
     callbacks = spy.callbacks()
     callbacks.edit_externally = opened.append
+    callbacks.externally_editable = lambda node: node.family != "scenes"     # la fenêtre juge (cf. window._external_file)
     texts = _tree().children[0].children[-1]
     scene = next(n for n in _tree().children[0].children if n.family == "scenes")
 
     menu = QMenu()
     add_asset_actions(menu, [texts], callbacks)
-    entry = next(a for a in menu.actions() if a.text() == "Edit externally")
+    entry = next(a for a in menu.actions() if a.text() == "Edit")
     entry.trigger()
-    assert opened == [texts.path]
+    assert opened == [texts]
 
-    for nodes, cb in (([scene], callbacks), ([texts], spy.callbacks())):      # un autre asset ; ou aucun éditeur câblé
+    for nodes, cb in (([scene], callbacks), ([texts], spy.callbacks()),      # refusé par la fenêtre ; ou aucun outil câblé
+                      ([texts, texts], callbacks)):                         # ou plus d'une entrée
         menu = QMenu()
         add_asset_actions(menu, nodes, cb)
-        assert all(a.text() != "Edit externally" for a in menu.actions())
+        assert all(a.text() != "Edit" for a in menu.actions())
+
+
+def test_rename_is_offered_for_an_asset_but_not_for_a_project_table(qapp):
+    spy = _Spy()
+    asked = []
+    texts = _tree().children[0].children[-1]
+    scene = next(n for n in _tree().children[0].children if n.family == "scenes")
+
+    for node, offered in ((scene, True), (texts, False)):
+        menu = QMenu()
+        add_asset_actions(menu, [node], spy.callbacks(), asked.append)
+        entries = [a for a in menu.actions() if a.text() == "Rename"]
+        assert bool(entries) is offered
+        if entries:
+            entries[0].trigger()
+    assert asked == [scene]
 
 
 

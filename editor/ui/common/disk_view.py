@@ -127,7 +127,8 @@ class DiskCallbacks:
     create_blank: Callable[[str, str], None]            # (type, dossier)
     new_folder: Callable[[str], str | None]             # dossier parent -> chemin du dossier créé
     blank_kinds: list = field(default_factory=list)     # [(type, mot)] dans l'ordre du menu
-    edit_externally: Callable[[Path], None] | None = None   # ouvre un .json dans l'éditeur de texte réglé ; sans elle, pas d'entrée
+    edit_externally: Callable[[object], None] | None = None   # DiskNode : ouvre son fichier dans l'outil externe réglé
+    externally_editable: Callable[[object], bool] | None = None   # ce nœud a-t-il un fichier qu'un outil externe édite ?
     duplicate_items: Callable[[list], None] | None = None   # [DiskNode] : une copie de chaque asset, en UNE entrée d'historique
     duplicable: Callable[[object], bool] | None = None      # ce nœud (un asset, une source) se duplique-t-il ?
 
@@ -176,17 +177,16 @@ def duplicable_nodes(nodes: list, callbacks: DiskCallbacks) -> bool:
 
 
 def renamable(node: disk_tree.DiskNode) -> bool:
-    """Un dossier, une source, un script ou un fichier non géré se renomme depuis le Disk ; le nom d'un autre asset
-    se change dans son écran, qui sait tout ce qui le cite."""
-    return node.kind != disk_tree.ASSET or node.family == "scripts"
+    """Tout se renomme depuis le Disk, sauf les tables du projet entier (textes, variables), que le code cherche à
+    un endroit précis. Un asset est renommé par la fenêtre comme dans sa library : ce qui le cite suit."""
+    return node.kind != disk_tree.ASSET or node.family not in _TEXT_FILE_FAMILIES
 
 
 def _icon(name: str):
     return icons.get(name, icons.COLOR_DEFAULT)
 
 
-# Les .json du projet entier (textes, traductions, variables) : le double-clic ouvre leur écran, le clic droit
-# les offre aussi à un éditeur de texte externe.
+# Les .json du projet entier (textes, traductions, variables) : à un endroit fixe, ils ne se renomment pas.
 _TEXT_FILE_FAMILIES = ("texts", "variables")
 
 # Une source, libre ou déjà citée par un asset : on peut en tirer un asset de plus.
@@ -231,18 +231,20 @@ def add_asset_actions(menu: QMenu, nodes: list, callbacks: DiskCallbacks,
         dup = menu.addAction(_icon("copy"), label('disk.duplicate', n=len(nodes)))
         dup.setShortcut(shortcut_hints.bound("common.duplicate"))
         dup.triggered.connect(lambda _=False: callbacks.duplicate_items(list(nodes)))
-    if (callbacks.edit_externally is not None and len(nodes) == 1
-            and nodes[0].kind == disk_tree.ASSET and nodes[0].family in _TEXT_FILE_FAMILIES):
-        path = nodes[0].path
-        menu.addAction(_icon("script_file"), label('disk.edit_externally')).triggered.connect(
-            lambda _=False: callbacks.edit_externally(path))
+    if (callbacks.edit_externally is not None and callbacks.externally_editable is not None and len(nodes) == 1
+            and callbacks.externally_editable(nodes[0])):
+        node = nodes[0]
+        menu.addAction(_icon("open_external"), label('disk.edit_externally')).triggered.connect(
+            lambda _=False: callbacks.edit_externally(node))
     # La fin du menu, comme partout dans l'éditeur : l'emplacement sur le disque, puis *Delete* en dernier.
     if (len(nodes) == 1 or removable) and not menu.isEmpty():
         menu.addSeparator()
     if len(nodes) == 1:
         path = nodes[0].path
         if begin_rename is not None and renamable(nodes[0]):
-            menu.addAction(label('disk.rename')).triggered.connect(
+            rename = menu.addAction(_icon("rename"), label('disk.rename'))
+            rename.setShortcut(QKeySequence(Qt.Key.Key_F2))       # la touche d'édition de la liste (EditKeyPressed)
+            rename.triggered.connect(
                 lambda _=False: begin_rename(nodes[0]))
         menu.addAction(_icon("folder"), label('common.reveal')).triggered.connect(
             lambda _=False: reveal_in_file_manager(path))

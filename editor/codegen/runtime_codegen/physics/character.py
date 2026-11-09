@@ -110,7 +110,7 @@ def character_solver_lines(one_way_tiles=frozenset()) -> list[str]:
         "   `g_ow_cols` le même masque par rangée et par colonne (NULL : pas de table, on lit la carte). Posés à",
         "   l'entrée de scène ; par défaut tout est à lire. */",
         "static u8 g_ow_any = 0x1E;",
-        "static const u8 *g_ow_rows = NULL, *g_ow_cols = NULL;",
+        "static const u8 *g_ow_rows __attribute__((unused)) = NULL, *g_ow_cols __attribute__((unused)) = NULL;",
         "#define TILE_SIZE 8",
         "",
         "/* Tile type profile — EMITTED from core/models/collision_tiles.py,",

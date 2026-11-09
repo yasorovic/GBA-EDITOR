@@ -801,7 +801,13 @@ static inline void actor_slot_tables_clear(int k) {
 }
 
 /* Le modèle fournit les valeurs initiales. L'emplacement fournit son identité
-   de stockage et sa génération, y compris quand un spawn reprend un posé. */
+   de stockage et sa génération, y compris quand un spawn reprend un posé.
+   `inline` et `noinline` sont voulus ensemble : `noinline` garde un seul corps pour tous les appels (taille de code),
+   `inline` évite d'émettre la fonction dans une unité qui ne l'appelle pas (sinon elle exige `g_alive_epoch` et les
+   autres globales partout, sondes natives comprises). GCC signale ce mélange (-Wattributes) : l'avertissement est
+   masqué ici seulement. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wattributes"
 static inline void __attribute__((unused, noinline)) actor_init_slot(
         int slot, int entry, const Actor* initial, const OamEntry* display) {
     Actor* actor = &g_actors[slot];
@@ -816,6 +822,7 @@ static inline void __attribute__((unused, noinline)) actor_init_slot(
     actor->alive = 1;
     alive_bit_set(slot);
 }
+#pragma GCC diagnostic pop
 
 /* Activation / destruction */
 static inline void slot_kill(Actor* s) {

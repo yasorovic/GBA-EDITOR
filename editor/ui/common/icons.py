@@ -241,6 +241,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "mk_tag":                ("mdi.tag-outline",             "⌗"),
     # Text Editor — clé d'un texte : accrochée au rangement ou nommée à la main
     "copy":                  ("mdi.content-copy",            "⧉"),
+    "rename":                ("mdi.rename-box",              "✎"),
     "copied":                ("mdi.check",                   "✓"),
     "checkbox_tick":         ("mdi.check",                   "✓"),
     # Chrome des widgets — consommées par les QSS via qss_image()

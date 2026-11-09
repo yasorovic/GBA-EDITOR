@@ -4,10 +4,11 @@ core/external_tools.py — chemins des logiciels tiers, réglage du LOGICIEL
 
 Portée actuelle : quatre chemins configurables depuis l'écran Réglages
 (catégorie « External Tools »), pour l'image, le son, la police et le texte
-(éditeur de fichiers `.json` & co). « text » sert au clic droit « Edit externally » de
-l'onglet Disk (`window._edit_externally`) ; « image » aux boutons « Edit » des écrans
-Sprite et Background (`ui/common/external_editor.py`). Un chemin vide s'ouvre dans
-l'application par défaut du système. « audio » et « font » attendent leur câblage.
+(éditeur de fichiers `.json` & co). Le clic droit « Edit » de l'onglet Disk
+(`window._edit_externally`) choisit l'outil d'après le format (`tool_kind_for`) ;
+« image » sert aussi aux boutons « Edit » des écrans Sprite et Background
+(`ui/common/external_editor.py`). Un chemin vide s'ouvre dans l'application par
+défaut du système.
 """
 from __future__ import annotations
 
@@ -26,6 +27,27 @@ TOOL_KINDS: list[tuple[str, str]] = [
     ("font",  "Font editor"),
     ("text",  "Text editor"),
 ]
+
+
+_TEXT_FILE_EXTS = {".json", ".lua", ".c", ".h", ".hex", ".gpl", ".pal", ".txt", ".csv", ".md"}
+
+
+def tool_kind_for(path: Path) -> str | None:
+    """L'outil (`TOOL_KINDS`) qui édite `path` d'après son format, ou `None` pour un format qu'aucun n'édite. Un
+    `.png` est une image (même source d'une police), un `.wav` un son : le cas courant gagne, comme dans l'onglet Disk."""
+    from core.models.audio import MUSIC_FILE_EXTS, SFX_FILE_EXTS
+    from core.models.font import FONT_FILE_EXTS
+    from core.models.sprite import IMAGE_FILE_EXTS
+    suffix = Path(path).suffix.lower()
+    if suffix in IMAGE_FILE_EXTS:
+        return "image"
+    if suffix in MUSIC_FILE_EXTS | SFX_FILE_EXTS:
+        return "audio"
+    if suffix in FONT_FILE_EXTS:
+        return "font"
+    if suffix in _TEXT_FILE_EXTS:
+        return "text"
+    return None
 
 
 class ExternalTools:

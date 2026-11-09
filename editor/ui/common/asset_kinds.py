@@ -32,7 +32,7 @@ from core.models.resource import (
     MIME_ANIMATED_BG, MIME_MUSIC, MIME_PREFAB_TEMPLATE, MIME_SCRIPT,
 )
 from core.history import (
-    get_history, DeleteResourceCmd, DeleteFileCmd, RenameFileCmd, RefreshAfterCmd,
+    get_history, Command, DeleteResourceCmd, DeleteFileCmd, RenameFileCmd, RefreshAfterCmd,
 )
 
 
@@ -595,3 +595,62 @@ ALL_KINDS = (
     SCENES, PREFABS, SCRIPTS, SPRITES, BACKGROUNDS,
     FONTS, PALETTES, SFX, MUSIC, JINGLES, DATA_TABLES,
 )
+
+
+# ──────────────────────────────────────────────────────────────────
+#  Renommer depuis l'onglet Disk
+# ──────────────────────────────────────────────────────────────────
+
+def _rename_box(attr: str):
+    """Rien ne cite une boîte sonore par son nom : le renommage n'a que le fichier à suivre (cf. sound_panel)."""
+    def rename(project, box, new_name: str) -> str:
+        getattr(project, attr).rename(box, new_name)
+        return box.name
+    return rename
+
+
+# Le renommage d'un asset depuis l'onglet Disk est celui de sa library : les mêmes `Project.rename_*`, qui réécrivent
+# ce qui le cite. Les familles sans library (interfaces, boîtes sonores) ont ici le leur.
+_DISK_RENAMES = {
+    "scenes": SCENES.rename, "prefabs": PREFABS.rename, "sprites": SPRITES.rename,
+    "backgrounds": BACKGROUNDS.rename, "fonts": FONTS.rename, "font_assets": FONT_ASSETS.rename,
+    "palettes": PALETTES.rename, "sfx": SFX.rename, "music": MUSIC.rename, "jingles": JINGLES.rename,
+    "data_tables": DATA_TABLES.rename, "ui_layouts": _renamer("rename_ui_layout"),
+    "music_boxes": _rename_box("music_boxes"), "jingle_boxes": _rename_box("jingle_boxes"),
+    "sound_boxes": _rename_box("sound_boxes"),
+}
+
+
+class RenameAssetCmd(Command):
+    """Renommer un asset depuis l'onglet Disk (annulable). Le texte saisi est le nom du fichier : l'extension de la
+    famille, si elle y est, est retirée. `applied` : le nom retenu, `None` si le renommage est refusé (nom vide ou
+    déjà pris, famille inconnue, refus du projet)."""
+
+    def __init__(self, project, family: str, name: str, typed: str):
+        self._project, self._family = project, family
+        store = getattr(project, family, None)
+        self._obj = store.get(name) if store is not None else None
+        typed = typed.strip()
+        suffix = getattr(store, "suffix", "")
+        if suffix and typed.lower().endswith(suffix.lower()):
+            typed = typed[:-len(suffix)].strip()
+        self._old, self._new = name, typed
+        self.applied: str | None = None
+        self.label = f"Renommer {name}"
+
+    def _rename(self, before: str, after: str) -> bool:
+        renamer = _DISK_RENAMES.get(self._family)
+        store = getattr(self._project, self._family)
+        if renamer is None or self._obj is None or not after or after == before or store.get(after) is not None:
+            return False
+        try:
+            return renamer(self._project, self._obj, after) != before
+        except (OSError, ValueError):                 # un fichier du nouveau nom existe déjà sur le disque
+            return False
+
+    def execute(self):
+        self.applied = self._obj.name if self._rename(self._old, self._new) else None
+
+    def undo(self):
+        if self.applied is not None:
+            self._rename(self.applied, self._old)

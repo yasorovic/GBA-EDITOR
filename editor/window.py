@@ -1484,11 +1484,22 @@ class MainWindow(QMainWindow):
         return str(command.created) if command.created is not None else None
 
     def _rename_disk_item(self, path: str, new_name: str):
-        """Un dossier, une source ou un script renommé EN PLACE dans l'arbre ou la vue à plat (annulable). Les
-        assets qui citent ce qui a changé de chemin le suivent."""
+        """Une entrée renommée EN PLACE dans l'arbre ou la vue à plat (annulable). Le fichier d'un asset est renommé
+        par l'asset lui-même (`RenameAssetCmd`, comme dans sa library : ce qui le cite suit) ; un dossier, une source
+        ou un script l'est comme un fichier, et les assets qui citent ce qui a changé de chemin le suivent."""
         if not self.project:
             return
         from core.disk_commands import RenamePathCmd
+        self.project.load_all_resources()
+        if (asset := disk_tree.asset_at(self.project, Path(path))) is not None:
+            from ui.common.asset_kinds import RenameAssetCmd
+            command = RenameAssetCmd(self.project, *asset, new_name)
+            self._disk_push(command)
+            if command.applied is None:
+                self._status.showMessage(label('disk.rename_refused'), 6000)
+                get_history().undo()
+                self._refresh_disk()
+            return
         command = RenamePathCmd(self.project, Path(path), new_name, around=self._watcher.suspended)
         self._disk_push(command, after=self._after_disk_move)
         if command.renamed is None:
@@ -1602,13 +1613,36 @@ class MainWindow(QMainWindow):
             delete_items=self._disk_delete_items, deletable=self._disk_deletable,
             import_files=self._disk_import_files, import_paths=self._disk_import_paths,
             create_blank=self._disk_create_blank,
-            new_folder=self._create_disk_folder, blank_kinds=kinds, edit_externally=self._edit_externally,
+            new_folder=self._create_disk_folder, blank_kinds=kinds,
+            edit_externally=self._edit_externally, externally_editable=lambda node: self._external_file(node) is not None,
             duplicate_items=self._disk_duplicate_items, duplicable=self._disk_duplicable)
 
-    def _edit_externally(self, path: Path) -> None:
-        """Ouvre `path` dans l'éditeur de texte des réglages « External Tools », sinon dans l'application du système."""
+    def _external_file(self, node) -> tuple[str, Path] | None:
+        """`(outil, fichier)` que le clic droit « Edit » ouvre pour `node`, ou `None`. Un fichier s'ouvre lui-même,
+        d'après son format ; un asset tiré d'une source (sprite, fond, son, police, palette) ouvre cette source, s'il
+        n'en a qu'une ; un asset que l'éditeur crée (scène, prefab…) n'a pas d'outil externe. Les textes, variables et
+        scripts s'ouvrent dans l'éditeur de texte."""
+        from core.external_tools import tool_kind_for
+        if not self.project or node.kind == disk_tree.FOLDER:
+            return None
+        path = node.path
+        if node.kind == disk_tree.ASSET and node.family not in ("texts", "variables", "scripts"):
+            family = next((f for f in self.project.source_families() if f[0] == node.family), None)
+            item = family[1].get(node.owner) if family is not None else None
+            sources = [p for p in family[2](self.project, item) if p.exists()] if item is not None else []
+            if len(sources) != 1:
+                return None
+            path = sources[0]
+        kind = tool_kind_for(path)
+        return (kind, path) if kind is not None else None
+
+    def _edit_externally(self, node) -> None:
+        """Ouvre le fichier de `node` dans l'outil des réglages « External Tools » pour son format, sinon dans
+        l'application du système. Le fichier réédité est repris par le surveillant du projet."""
         from ui.common.external_editor import open_with
-        open_with(self._external_tools.path("text"), path)
+        if (target := self._external_file(node)) is not None:
+            kind, path = target
+            open_with(self._external_tools.path(kind), path)
 
     def _disk_create_options(self, path: str) -> list:
         """`[(famille, mot, nom)]` : ce que cette source libre peut devenir, le plus courant d'abord ; vide si ce

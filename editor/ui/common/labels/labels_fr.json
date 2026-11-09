@@ -2505,7 +2505,7 @@
     "disk.open_assets_tip": { "text": "Ouvre le dossier assets dans l’explorateur de fichiers." },
     "common.reveal": { "text": "Révéler" },
     "assetlibrary.locate_tip": { "text": "Montre le fichier de cet asset dans l’onglet Disk." },
-    "disk.edit_externally": { "text": "Modifier dans un éditeur externe" },
+    "disk.edit_externally": { "text": "Modifier" },
     "disk.new_folder": { "text": "Nouveau dossier" },
     "disk.add_folder_tip": { "text": "Ajoute au dossier choisi : importer un fichier, créer un asset ou faire un dossier." },
     "disk.rename": { "text": "Renommer" },

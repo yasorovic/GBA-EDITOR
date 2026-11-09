@@ -4908,7 +4908,7 @@
     "disk.open_assets_tip": { "text": "Opens the assets folder in the file explorer." },
     "common.reveal": { "text": "Reveal" },
     "assetlibrary.locate_tip": { "text": "Shows the file of this asset in the Disk tab." },
-    "disk.edit_externally": { "text": "Edit externally" },
+    "disk.edit_externally": { "text": "Edit" },
     "disk.new_folder": { "text": "New folder" },
     "disk.add_folder_tip": { "text": "Adds to the selected folder: import a file, create an asset, or make a folder." },
     "disk.rename": { "text": "Rename" },

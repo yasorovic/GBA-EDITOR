@@ -118,26 +118,41 @@ def test_a_folder_or_a_file_is_renamed_in_place_and_only_a_real_change_is_report
     assert asked[-1] == (str(jump), "hop.wav")
 
 
-def test_the_root_and_an_asset_are_not_editable_and_never_ask_for_a_rename(qapp):
+def test_the_root_and_a_project_table_are_not_editable_and_never_ask_for_a_rename(qapp):
+    tree = _tree()
+    texts = Path("assets") / "texts.json"
+    tree.children.append(disk_tree.DiskNode("texts.json", texts, disk_tree.ASSET, "texts", "texts"))
     view = DiskTreeView()
-    view.set_tree(_tree())
+    view.set_tree(tree)
     asked = _emitted(view.rename_requested)
     root = view._tree.topLevelItem(0)
-    goal = _find(view, Path("assets") / "sfx" / "GOAL.json")
 
-    assert not root.flags() & Qt.ItemFlag.ItemIsEditable and not goal.flags() & Qt.ItemFlag.ItemIsEditable
+    assert not root.flags() & Qt.ItemFlag.ItemIsEditable and not _find(view, texts).flags() & Qt.ItemFlag.ItemIsEditable
     root.setExpanded(False)                             # le changement d'icône émet `itemChanged` : pas une demande
     root.setText(0, "x")
     assert asked == []
-    view.begin_rename(str(Path("assets") / "sfx" / "GOAL.json"))      # sans effet sur un asset
+    view.begin_rename(str(texts))                       # sans effet sur une table du projet
     assert view._tree.state() != view._tree.State.EditingState
 
 
-def test_only_folders_sources_and_scripts_are_renamable():
+def test_an_asset_is_renamed_in_place_like_a_file(qapp):
+    view = DiskTreeView()
+    view.set_tree(_tree())
+    asked = _emitted(view.rename_requested)
+    goal = Path("assets") / "sfx" / "GOAL.json"
+
+    assert _find(view, goal).flags() & Qt.ItemFlag.ItemIsEditable
+    _find(view, goal).setText(0, "WIN.json")
+    assert asked == [(str(goal), "WIN.json")]
+
+
+def test_everything_but_the_project_tables_is_renamable():
     folder = disk_tree.DiskNode("a", Path("a"), disk_tree.FOLDER)
     source = disk_tree.DiskNode("a.wav", Path("a.wav"), disk_tree.FREE_SOURCE)
     script = disk_tree.DiskNode("a.lua", Path("a.lua"), disk_tree.ASSET, "a", "scripts")
     asset = disk_tree.DiskNode("a.sfx", Path("a.sfx"), disk_tree.ASSET, "a", "sfx")
-    assert [renamable(n) for n in (folder, source, script, asset)] == [True, True, True, False]
+    texts = disk_tree.DiskNode("texts.json", Path("texts.json"), disk_tree.ASSET, "texts", "texts")
+    variables = disk_tree.DiskNode("variables.json", Path("variables.json"), disk_tree.ASSET, "variables", "variables")
+    assert [renamable(n) for n in (folder, source, script, asset, texts, variables)] == [True] * 4 + [False] * 2
 
 
