@@ -11,6 +11,7 @@ from core import toolchain as tc
 def _toolchain(monkeypatch, tmp_path, found, folder=True):
     monkeypatch.setattr(tc, "_WIN_DEFAULTS", [])
     monkeypatch.setattr(tc, "_UNIX_DEFAULTS", [])
+    monkeypatch.delenv("DEVKITPRO", raising=False)
     monkeypatch.setattr(tc.Toolchain, "_load_config", lambda self: {})
     monkeypatch.setattr(tc.shutil, "which", lambda name: None)
     t = tc.Toolchain()
@@ -54,6 +55,31 @@ def test_un_outil_propre_a_devkitpro_sans_dossier_est_incomplet(monkeypatch, tmp
 def test_ni_dossier_ni_outil_est_introuvable(monkeypatch, tmp_path):
     t = _toolchain(monkeypatch, tmp_path, set(), folder=False)
     assert t.devkitpro_state == tc.DEVKITPRO_MISSING
+
+
+def test_devkitpro_hors_des_emplacements_connus_est_trouve_par_sa_variable(monkeypatch, tmp_path):
+    """Sans réglage ni PATH, `$DEVKITPRO` désigne la chaîne pour chaque outil, pas seulement
+    pour `devkitpro_root` (job ROM Linux de la release : chaîne installée hors emplacement connu)."""
+    monkeypatch.setattr(tc, "_WIN_DEFAULTS", [])
+    monkeypatch.setattr(tc, "_UNIX_DEFAULTS", [])
+    monkeypatch.setattr(tc.Toolchain, "_load_config", lambda self: {})
+    monkeypatch.setattr(tc.shutil, "which", lambda name: "/usr/bin/make" if name == "make" else None)
+    tools = {"grit": "tools/bin/grit", "mmutil": "tools/bin/mmutil", "bin2s": "tools/bin/bin2s",
+             "gcc": "devkitARM/bin/arm-none-eabi-gcc", "objdump": "devkitARM/bin/arm-none-eabi-objdump"}
+    for relative in tools.values():
+        (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / relative).write_text("")
+    t = tc.Toolchain()
+    assert t.devkitpro_state == tc.DEVKITPRO_MISSING
+    monkeypatch.setenv("DEVKITPRO", str(tmp_path))
+    t.recheck()
+    assert t.devkitpro_state == tc.DEVKITPRO_OK
+    assert t.devkitpro_root == tmp_path
+    assert t.resolve_grit() == tmp_path / tools["grit"]
+    assert t.resolve_arm_gcc() == tmp_path / tools["gcc"]
+    assert t.resolve_binutil("objdump") == tmp_path / tools["objdump"]
+    assert t.resolve_mmutil() == tmp_path / tools["mmutil"]
+    assert t.resolve_bin2s() == tmp_path / tools["bin2s"]
 
 
 class _FakeProcess:

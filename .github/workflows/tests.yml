@@ -47,9 +47,23 @@ permissions:
   contents: read
 
 jobs:
+  # La même suite sur les deux systèmes livrés, en deux jobs côte à côte : un échec propre à
+  # l'un (un segfault Qt sous Linux, un chemin sous Windows) se voit avec le nom du système.
+  # `fail-fast: false` : un échec d'un côté n'interrompt pas l'autre.
   tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: Tests ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+            timeout: 15
+          - os: windows-latest
+            label: Windows
+            timeout: 40
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout }}
     env:
       # Le contrôle d'architecture importe l'éditeur, donc PyQt6, sur une
       # machine sans écran.
@@ -69,6 +83,7 @@ jobs:
       # PyQt6 arrive en wheel, mais ses bibliothèques Qt réclament ces .so à
       # l'import — absents d'une image ubuntu sans bureau.
       - name: Installer les bibliothèques Qt
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
           sudo apt-get install -y --no-install-recommends \
@@ -80,20 +95,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r packaging/requirements.txt -r packaging/requirements-dev.txt
 
+      # Le gcc des sondes natives sous Windows : celui de msys2 (ucrt64), comme en développement local.
+      # Le msys2 du runner n'a que sa base ; `CC` le désigne (cf. tests/native_toolchain.py).
+      - name: Installer gcc (msys2)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-gcc"
+          if ($LASTEXITCODE -ne 0) { throw "installation de gcc échouée" }
+          if (-not (Test-Path "C:\msys64\ucrt64\bin\gcc.exe")) { throw "gcc absent de C:\msys64\ucrt64\bin" }
+          "CC=C:/msys64/ucrt64/bin/gcc.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
       # Ce contrôle existait déjà mais n'avait jamais tourné automatiquement, et
       # `--fresh` (un interpréteur neuf par module, seul moyen de voir une boucle
       # qui dépend de l'ordre d'import) n'était jamais lancé du tout.
+      # Ruff et l'architecture ne dépendent pas du système : une fois, côté Linux.
       - name: Ruff (erreurs certaines)
         id: ruff
+        if: runner.os == 'Linux'
         run: ruff check editor tools tests
 
       - name: Contrôle d'architecture
         id: architecture
+        if: runner.os == 'Linux'
         run: python tools/check_architecture.py --fresh
 
-      # `cc` existe sur ubuntu-latest : la sonde qui interroge le vrai
-      # gba_engine.h compile et s'exécute, donc l'équivalence est réellement
-      # vérifiée ici — c'est le seul endroit où elle l'est à coup sûr.
+      # `cc` existe sur ubuntu-latest, `CC` pointe le gcc msys2 sous Windows : la sonde qui
+      # interroge le vrai gba_engine.h compile et s'exécute, donc l'équivalence est réellement
+      # vérifiée ici : c'est le seul endroit où elle l'est à coup sûr.
       # Un échec de Ruff ou d'architecture laisse pytest tourner si ses dépendances
       # sont prêtes. Les erreurs d'installation sont déjà signalées par leurs étapes.
       - name: Tests
@@ -113,24 +142,27 @@ jobs:
         id: verdict
         if: ${{ !cancelled() && steps.pytest.outputs.exit-code != '' }}
         continue-on-error: true
+        shell: bash
         env:
           PYTEST_EXIT: ${{ steps.pytest.outputs.exit-code }}
-        run: python tools/ci_pytest.py "Tests Linux" "$PYTEST_EXIT"
+        run: python tools/ci_pytest.py "Tests ${{ matrix.label }}" "$PYTEST_EXIT"
 
       - name: Résumer les contrôles sans verdict pytest
         if: ${{ always() && (steps.verdict.outcome != 'success' || steps.ruff.outcome == 'failure' || steps.architecture.outcome == 'failure') }}
         continue-on-error: true
+        shell: bash
         env:
           PYTEST_EXIT: ${{ steps.pytest.outputs.exit-code }}
+          LABEL: ${{ matrix.label }}
           VERDICT: ${{ steps.verdict.outcome }}
           RUFF: ${{ steps.ruff.outcome }}
           ARCHITECTURE: ${{ steps.architecture.outcome }}
         run: |
           {
             if [ -z "$PYTEST_EXIT" ]; then
-              echo '**Tests Linux : contrôle sans verdict.** Voir la première étape en échec ou interrompue.'
+              echo "**Tests $LABEL : contrôle sans verdict.** Voir la première étape en échec ou interrompue."
             elif [ "$VERDICT" != success ]; then
-              echo "**Tests Linux : résumé indisponible.** Voir le journal de pytest (code $PYTEST_EXIT)."
+              echo "**Tests $LABEL : résumé indisponible.** Voir le journal de pytest (code $PYTEST_EXIT)."
             fi
             if [ "$RUFF" = failure ]; then
               echo '- Ruff a échoué. Voir le journal de cette étape.'

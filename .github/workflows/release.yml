@@ -340,11 +340,12 @@ jobs:
             }
           }
 
-  # Vérifie que les modèles livrés produisent une ROM avec la chaîne Linux de Backstage.
+  # Les tests lents (projets modèles, musique, Area, ROM interactive…) avec la chaîne Linux de Backstage,
+  # comme `windows-rom-build` avec celle de Windows.
   linux-rom-build:
     needs: [version]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
       QT_QPA_PLATFORM: offscreen
       GBA_TESTS_REQUIRE_DEVKITPRO: "1"
@@ -387,17 +388,19 @@ jobs:
           if [ ! -f "$setup/devkitpro_packages.txt" ]; then
             setup=.ci-tools/packaging/linux
           fi
-          export XDG_DATA_HOME="$RUNNER_TEMP/rom-data" XDG_CACHE_HOME="$RUNNER_TEMP/rom-cache"
+          # L'emplacement par défaut (~/.local/share/Backstage/devkitPro) : c'est celui que l'éditeur
+          # cherche (core/toolchain.py). Un XDG_DATA_HOME posé pour cette seule étape ne serait plus
+          # là au moment des tests, et grit comme arm-none-eabi-gcc resteraient introuvables.
           sh "$setup/backstage-setup-devkitpro" --force
-          dkp="$XDG_DATA_HOME/Backstage/devkitPro"
+          dkp="$HOME/.local/share/Backstage/devkitPro"
           "$dkp/devkitARM/bin/arm-none-eabi-gcc" --version
           printf 'DEVKITPRO=%s\n' "$dkp" >> "$GITHUB_ENV"
 
-      - name: Compiler les ROM des projets modèles
+      - name: Tests lents
         id: pytest
         run: |
           code=0
-          python -m pytest tests/rom_build/test_shipped_projects_build.py -m slow -rs -vv \
+          python -m pytest tests -m slow -rs -vv \
             --junitxml "$RUNNER_TEMP/pytest.xml" || code=$?
           printf 'exit-code=%s\n' "$code" >> "$GITHUB_OUTPUT"
           exit "$code"

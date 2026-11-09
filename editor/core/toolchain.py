@@ -102,6 +102,14 @@ _UNIX_DEFAULTS = [
 ]
 
 
+def _known_devkitpro() -> list[Path]:
+    """Les dossiers devkitPro où chercher sans réglage : `$DEVKITPRO` d'abord (la variable que
+    devkitPro pose lui-même), puis les emplacements typiques. Lue à chaque appel : la variable
+    peut changer après l'import."""
+    env = os.environ.get("DEVKITPRO")
+    return ([Path(env)] if env else []) + _WIN_DEFAULTS + _UNIX_DEFAULTS
+
+
 # Les trois outils sans lesquels aucune ROM ne se construit, et les états qu'en tire
 # `Toolchain.devkitpro_state`.
 DEVKITPRO_TOOLS = ("grit", "make", "arm-none-eabi-gcc")
@@ -156,9 +164,7 @@ class Toolchain:
         `/opt/devkitpro` sans rien configurer n'y figure pas."""
         if self.devkitpro_path and self.devkitpro_path.is_dir():
             return self.devkitpro_path
-        candidates = [Path(e) for e in (os.environ.get("DEVKITPRO"),) if e]
-        candidates += _WIN_DEFAULTS + _UNIX_DEFAULTS
-        return next((c for c in candidates if c.is_dir()), None)
+        return next((c for c in _known_devkitpro() if c.is_dir()), None)
 
     @devkitpro_path.setter
     def devkitpro_path(self, path: Path):
@@ -205,7 +211,7 @@ class Toolchain:
         if p := shutil.which("grit"):
             return Path(p)
         # 3. Emplacements connus
-        for base in _WIN_DEFAULTS + _UNIX_DEFAULTS:
+        for base in _known_devkitpro():
             for sub in ["tools/bin/grit.exe", "tools/bin/grit"]:
                 c = base / sub
                 if c.exists():
@@ -239,7 +245,7 @@ class Toolchain:
         # 1. Chemin donné par l'utilisateur (réglages), puis 2. PATH système,
         # puis 3. emplacements connus.
         explicit = [Path(self.devkitpro_path)] if self.devkitpro_path else []   # Path() normalise \ et /
-        known = [Path(b) for b in _WIN_DEFAULTS + _UNIX_DEFAULTS]
+        known = _known_devkitpro()
 
         def scan(bases):
             for base in bases:
@@ -268,7 +274,7 @@ class Toolchain:
         bases = []
         if dkp := self.devkitpro_path:
             bases.append(Path(dkp))
-        bases += [Path(b) for b in _WIN_DEFAULTS + _UNIX_DEFAULTS]
+        bases += _known_devkitpro()
         for base in bases:
             for name in (f"{exe}.exe", exe):
                 candidate = base / "devkitARM" / "bin" / name
@@ -306,7 +312,7 @@ class Toolchain:
             for c in [dkp / "tools" / "bin" / "mmutil.exe",
                       dkp / "tools" / "bin" / "mmutil"]:
                 if c.exists(): return c
-        for base in _WIN_DEFAULTS + _UNIX_DEFAULTS:
+        for base in _known_devkitpro():
             for sub in ["tools/bin/mmutil.exe", "tools/bin/mmutil"]:
                 c = base / sub
                 if c.exists(): return c
@@ -320,7 +326,7 @@ class Toolchain:
             for c in [dkp / "tools" / "bin" / "bin2s.exe",
                       dkp / "tools" / "bin" / "bin2s"]:
                 if c.exists(): return c
-        for base in _WIN_DEFAULTS + _UNIX_DEFAULTS:
+        for base in _known_devkitpro():
             for sub in ["tools/bin/bin2s.exe", "tools/bin/bin2s"]:
                 c = base / sub
                 if c.exists(): return c
@@ -418,7 +424,7 @@ class Toolchain:
 
     def _devkitpro_folder_found(self) -> bool:
         bases = [self.devkitpro_path] if self.devkitpro_path else []
-        bases += _WIN_DEFAULTS + _UNIX_DEFAULTS
+        bases += _known_devkitpro()
         return any(Path(base).is_dir() for base in bases)
 
     @property
