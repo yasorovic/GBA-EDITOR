@@ -1,7 +1,7 @@
 # Vue d'ensemble
 
-Ce guide explique comment utiliser Backstage pour construire un jeu Game Boy Advance. Aucune
-connaissance de la console n'est requise : les contraintes matérielles sont expliquées au fil des pages.
+Ce guide explique comment utiliser Backstage pour construire un jeu Game Boy Advance.
+Aucune connaissance de la console n'est requise : les contraintes matérielles sont expliquées au fil des pages.
 
 ## Télécharger Backstage
 
@@ -86,7 +86,8 @@ L'écran **Scenes** du projet de démonstration Platformer.
 
 Backstage s'appuie sur **devkitPro**, la chaîne d'outils qui compile la ROM. Si vous avez téléchargé l'installateur de Backstage pour Windows, devkitPro sera installé directement et vous n'aurez rien d'autre à configurer.
 La version portable pour Windows (`.zip`) n'installe pas devkitPro : il faut l'installer séparément, comme ci-dessous.
-Si vous souhaitez installer devkitpro séparément, indiquez le chemin de votre installation personnelle dans **File → Settings**.
+
+_Si vous souhaitez installer devkitpro séparément, indiquez le chemin de votre installation personnelle dans **File → Settings**._
 
 **Windows.** Téléchargez l'installateur sur la [page officielle de devkitPro](https://devkitpro.org/wiki/Getting_Started), lancez-le et cochez **GBA Development** quand il propose les composants.
 

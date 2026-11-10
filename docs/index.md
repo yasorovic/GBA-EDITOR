@@ -38,7 +38,7 @@ Découvrir Backstage
 :::
 ::::
 
-Essayez le jeu de démonstration de Backstage. Utilisez les flèches pour vous déplacer et **Z** pour sauter, ou les commandes tactiles sur téléphone.
+Essayez le jeu de démonstration de Backstage. Utilisez les **flèches** de votre clavier pour vous déplacer et la touche **Z** pour sauter, ou les commandes tactiles sur téléphone.
 
 ```{raw} html
 <iframe class="backstage-home-demo" src="platformer/index.html"
@@ -67,7 +67,7 @@ Vous savez programmer ? Écrivez le comportement de vos acteurs et parcourez tou
 :link-type: doc
 :class-card: backstage-card backstage-card-blue
 
-Ce qu'est Backstage, ce qu'il fait, ce qu'il ne fait pas, et ce que vous avez le droit d'en faire. Cette section arrive bientôt.
+Ce qu'est Backstage, ce qu'il fait, et ce que vous avez le droit d'en faire. _Cette section arrive bientôt._
 :::
 
 :::{grid-item-card} Architecture
@@ -75,17 +75,18 @@ Ce qu'est Backstage, ce qu'il fait, ce qu'il ne fait pas, et ce que vous avez le
 :link-type: doc
 :class-card: backstage-card backstage-card-teal
 
-Curieux de la technique ? Comment un projet devient une ROM. Cette section arrive bientôt.
+Curieux de la technique ? Comment un projet devient une ROM. _Cette section arrive bientôt._
 :::
 ::::
 
 ```{note}
-Backstage est en alpha : cette documentation grandit avec lui. Le **Manual**, qui décrira l'éditeur écran par écran, arrive bientôt.
+Backstage est en alpha : cette documentation grandit avec lui. Le **Manuel**, qui décrira le fonctionnement de l'éditeur, arrive bientôt.
 ```
 
 ## Participer
 
-Backstage est un projet libre, développé en public. Vos retours aident à améliorer la documentation comme le logiciel : une explication n'est pas claire, une page introuvable, une fonction qui manque.
+Backstage est un projet libre, développé publiquement. 
+Vous pouvez suivre son développement sur Github ou en installant le logiciel et en suivant les mises à jour. Vos retours aident à améliorer la documentation comme le logiciel : une explication n'est pas claire, une page introuvable, une fonction qui manque.
 
 - Signalez un problème ou proposez une idée sur le [dépôt GitHub](https://github.com/yasorovic/GBA-EDITOR/issues).
 - Téléchargez la dernière version sur la page des [releases](https://github.com/yasorovic/GBA-EDITOR/releases).

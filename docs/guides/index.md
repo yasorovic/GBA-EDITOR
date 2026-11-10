@@ -1,8 +1,6 @@
 # Guides
 
-Un guide traite **un seul sujet** de l'éditeur et se lit sans avoir lu les autres. Chacun annonce ce
-qu'il faut avoir préparé (en général un acteur et une scène), développe son propre exemple, puis
-liste les pièges. Ouvrez celui dont vous avez besoin, dans l'ordre que vous voulez.
+Un guide traite **un seul sujet** de l'éditeur et se lit sans avoir lu les autres. Chacun annonce ce dont il a besoin et développe son propre exemple, puis liste les pièges. Ouvrez celui dont vous avez besoin, dans l'ordre que vous voulez.
 
 Pour une première prise en main pas à pas, commencez plutôt par le
 [Getting Started](../user-guide/index.md).
