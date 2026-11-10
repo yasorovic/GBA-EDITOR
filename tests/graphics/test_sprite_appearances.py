@@ -145,4 +145,4 @@ def test_chaque_apparence_reserve_sa_palette_propre(tmp_path):
     from core.models.palette import OWN_PAL_BANK
     hero.pal_bank = OWN_PAL_BANK
     palettes = _actor_own_palettes(p, scene)
-    assert palettes == [[0x001F, 0x03E0], [0x7C00, 0x7FFF]]      # l'inactive aussi
+    assert [cols for _owner, cols in palettes] == [[0x001F, 0x03E0], [0x7C00, 0x7FFF]]      # l'inactive aussi

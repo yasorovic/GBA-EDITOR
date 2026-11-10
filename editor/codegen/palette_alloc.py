@@ -50,15 +50,41 @@ def own_palette(png_path) -> list[int]:
     return cached
 
 
+@dataclass
+class BankRequest:
+    """Une demande de banques : des couleurs (dédupliquées par contenu exact) et
+    ceux qui les partagent. Un propriétaire est un couple (genre, nom), par
+    exemple ("actor", "Hero") ; le genre s'écrit en anglais, le log le cite tel quel."""
+    owners: list            # list[tuple[str, str]]
+    banks: int              # 1 (palette propre), N (bloc contigu d'un fond compressé), 16 (fond 8 bpp)
+
+
+@dataclass
+class BankRefusal:
+    """Une demande qui n'a pas trouvé de place, et pourquoi :
+    - `not_enough_banks` : il reste moins de banques libres que demandé ;
+    - `not_adjacent` : il en reste assez, mais pas côte à côte ;
+    - `needs_whole_pool` : un fond 8 bpp et d'autres palettes se disputent le pool
+      (le fond veut les 16 banques, ou il les a déjà prises).
+    `free_banks` = les banques libres au moment du refus."""
+    request: BankRequest
+    cause: str
+    free_banks: list
+
+
 class SceneBankLayout:
     """Résultat de l'allocation pour une scène + un pool."""
 
     def __init__(self, slot_colors: list[Optional[list[int]]],
                  own_slot: dict[tuple, Optional[int]],
-                 bg_block: Optional[dict[tuple, Optional[int]]] = None):
+                 bg_block: Optional[dict[tuple, Optional[int]]] = None,
+                 slot_owners: Optional[list[list[tuple]]] = None,
+                 refusals: Optional[list[BankRefusal]] = None):
         self.slot_colors = slot_colors      # 16 entrées : couleurs BGR555 ou None
         self._own_slot   = own_slot          # tuple(colors) -> index de banque (None si débordement)
         self._bg_block   = bg_block or {}    # clé palettes fond compressé -> offset de bloc (None si débordement)
+        self.slot_owners = slot_owners or [[] for _ in range(16)]  # qui occupe chaque banque
+        self.refusals    = refusals or []    # demandes sans place, dans l'ordre d'allocation
 
     def bank_index(self, pal_bank: int, own_colors: Optional[list[int]]) -> Optional[int]:
         """Index de banque hardware d'un asset :
@@ -86,12 +112,6 @@ class SceneBankLayout:
     def bank_count(self) -> int:
         """Nombre de banques réellement occupées (référencées + propres)."""
         return sum(1 for c in self.slot_colors if c)
-
-    def overflow(self) -> bool:
-        """True si au moins une palette propre (ou un bloc de fond compressé)
-        n'a pas trouvé de place libre."""
-        return (any(v is None for v in self._own_slot.values())
-                or any(v is None for v in self._bg_block.values()))
 
 
 def effective_palette_colors(p: Project, pal_bank: int, png_path,
@@ -137,8 +157,8 @@ def _sprite_own_palette(sp) -> list[int]:
     return list(getattr(sp, "own_palette", None) or []) if sp else []
 
 
-def ui_image_own_palettes(p: Project, scene: Scene, pool: str) -> list[list[int]]:
-    """Palettes propres des sprites affichés par les IMAGES d'interface.
+def ui_image_own_palettes(p: Project, scene: Scene, pool: str) -> list[tuple]:
+    """(propriétaire, palette propre) des sprites affichés par les IMAGES d'interface.
 
     Le pendant de `ui_fill_encoded_sources` pour un sprite : une image dessine
     des tuiles qui citent une sous-palette, il lui faut donc une banque. Sans
@@ -152,14 +172,14 @@ def ui_image_own_palettes(p: Project, scene: Scene, pool: str) -> list[list[int]
     from core.models.ui_region import TARGET_BG
     rm = int(getattr(scene, "render_mode", 0) or 0)
     want_bg = (pool == "bg")
-    out: list[list[int]] = []
+    out: list[tuple] = []
     for lay, im in p.scene_ui_images(scene):
         if (lay.resolved_target(im, rm) == TARGET_BG) != want_bg:
             continue
         sp = p.get_sprite(getattr(im, "sprite_name", "") or "")
         cols = _sprite_own_palette(sp)
         if cols:
-            out.append(cols)
+            out.append((("UI image", im.name), cols))
     return out
 
 
@@ -188,24 +208,24 @@ def ui_image_sprite_pools(p: Project) -> dict:
     return out
 
 
-def _actor_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
-    """Palettes propres des ACTEURS de la scène en mode OWN (métadonnées
-    sprite.own_palette). Les prefabs poolés de la scène s'y ajoutent via
+def _actor_own_palettes(p: Project, scene: Scene) -> list[tuple]:
+    """(propriétaire, palette propre) des ACTEURS de la scène en mode OWN
+    (métadonnées sprite.own_palette). Les prefabs poolés de la scène s'y ajoutent via
     `_scene_prefab_own_palettes` — même pool de dédup, cf. `scene_bank_layout`."""
-    out: list[list[int]] = []
+    out: list[tuple] = []
     for a in scene.actors:
         if not a.active or getattr(a, "pal_bank", OWN_PAL_BANK) != OWN_PAL_BANK:
             continue
         for sp in _owner_sprites(p, a):
             cols = _sprite_own_palette(sp)
             if cols:
-                out.append(cols)
+                out.append((("actor", a.name), cols))
     return out
 
 
-def _scene_prefab_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
-    """Palettes propres (mode OWN) des prefabs que CETTE scène poole — racine ET
-    parties.
+def _scene_prefab_own_palettes(p: Project, scene: Scene) -> list[tuple]:
+    """(propriétaire, palette propre) des prefabs en mode OWN que CETTE scène
+    poole, racine ET parties.
 
     Per-scène depuis que le spawn l'est (T1) : une scène ne réserve de banque OBJ
     que pour les prefabs qu'ELLE spawne, dans SES slots libres, au lieu du slot
@@ -218,42 +238,41 @@ def _scene_prefab_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
     propre sprite, donc sa propre palette — l'allocation globale d'avant ne
     réservait que la racine, et une partie en mode propre retombait en silence
     sur la banque 0. Ordre déterministe (catalogue de prefabs, racine puis
-    parties), dédup par couleurs."""
-    out: list[list[int]] = []
-    seen: set[tuple] = set()
+    parties) ; la dédup par couleurs est celle de l'allocateur, qui garde ainsi
+    le nom de chaque prefab qui partage une banque."""
+    out: list[tuple] = []
 
-    def _add(owner):
-        if getattr(owner, "pal_bank", OWN_PAL_BANK) != OWN_PAL_BANK:
+    def _add(holder, owner: tuple):
+        if getattr(holder, "pal_bank", OWN_PAL_BANK) != OWN_PAL_BANK:
             return
-        for sp in _owner_sprites(p, owner):
+        for sp in _owner_sprites(p, holder):
             cols = _sprite_own_palette(sp)
-            key = tuple(cols)
-            if cols and key not in seen:
-                seen.add(key)
-                out.append(cols)
+            if cols:
+                out.append((owner, cols))
 
     for pf in p.prefabs:
         if not scene_has_model(p, scene, pf):
             continue
-        _add(pf)
+        _add(pf, ("prefab", pf.name))
         for part in (getattr(pf, "children", []) or []):
-            _add(part)
+            _add(part, ("prefab part", f"{pf.name}/{getattr(part, 'name', '')}"))
     return out
 
 
-def _bg_own_sources(p: Project, scene: Scene) -> list[Path]:
-    """PNG des layers BG en mode OWN de la scène, hors fonds COMPRESSÉS
+def _bg_own_sources(p: Project, scene: Scene) -> list[tuple]:
+    """(propriétaire, PNG) des layers BG en mode OWN de la scène, hors fonds COMPRESSÉS
     (ceux-ci ont déjà leurs propres sous-palettes en métadonnées — gérés à
     part par `_bg_encoded_sources`/allocation par bloc, cf.
     [[project_palette_system_design]])."""
-    srcs: list[Path] = []
+    srcs: list[tuple] = []
     for layer in getattr(scene, "background_layers", []):
         if not layer.background_name or getattr(layer, "pal_bank", OWN_PAL_BANK) != OWN_PAL_BANK:
             continue
         ba = p.get_background(layer.background_name)
         if ba and getattr(ba, "tileset", None):
             continue
-        srcs.append(p.background_image_path(ba, layer.background_name))
+        srcs.append((("background", layer.background_name),
+                     p.background_image_path(ba, layer.background_name)))
     return srcs
 
 
@@ -290,8 +309,9 @@ def bg_animation_sources(p: Project, scene: Scene) -> list:
         pas dans `ba.palettes` de l'un ni de l'autre. Le bloc est dédupliqué par
         contenu, comme pour les fonds — deux fusions aux mêmes couleurs partagent
         leur banque."""
-        def __init__(self, name, pal):
+        def __init__(self, name, pal, host_name):
             self.name, self.palettes, self.bpp = name, [pal], 4
+            self.owner = ("animation on background", host_name)   # nommé dans le log
 
     out = []
     for layer in getattr(scene, "background_layers", []):
@@ -301,7 +321,7 @@ def bg_animation_sources(p: Project, scene: Scene) -> list:
         if host is None or not getattr(host, "tileset", None):
             continue
         for i, pal in enumerate(host_palettes(p, host)):
-            out.append(_Synth(f"{host.name}#anim{i}", pal))
+            out.append(_Synth(f"{host.name}#anim{i}", pal, host.name))
     return out
 
 
@@ -473,7 +493,7 @@ def scene_bank_layout(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
 
 
 def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
-    # (clé de dédup, contenu de banque) : la clé reste la liste BRUTE — c'est
+    # (propriétaire, clé de dédup, contenu de banque) : la clé reste la liste BRUTE, c'est
     # elle que `bank_index` reçoit de ses appelants — mais le contenu écrit dans
     # la banque dépend de la FORME de la source, cf. `_own_bank_content`.
     if pool == "obj":
@@ -482,26 +502,27 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
         # consommateurs de palette propre de la scène, même pool de dédup. Depuis
         # que le spawn est per-scène, un prefab n'est plus un cas à part avec un
         # slot global — c'est un OWN de plus, alloué dans les slots libres d'ici.
-        own_color_lists = [
-            (c, _own_bank_content(c, "obj"))                      # métadonnées sprite
-            for c in (_actor_own_palettes(p, scene)
-                      + _scene_prefab_own_palettes(p, scene)
-                      + ui_image_own_palettes(p, scene, "obj"))]
+        own_requests = [
+            (owner, c, _own_bank_content(c, "obj"))               # métadonnées sprite
+            for owner, c in (_actor_own_palettes(p, scene)
+                             + _scene_prefab_own_palettes(p, scene)
+                             + ui_image_own_palettes(p, scene, "obj"))]
         encoded_assets = []
     else:
         active = list(getattr(scene, "active_bg_palettes", []))[:16]
         # Deux formes se croisent ici : le BG legacy porte déjà son slot 0
         # (extraction PNG), le sprite d'une image d'UI ne le porte pas
         # (métadonnées). D'où deux constructeurs de contenu et non un seul.
-        own_color_lists = (
-            [(c, _own_bank_content(c, "bg"))                      # BG legacy: extraction
-             for c in (own_palette(png) for png in _bg_own_sources(p, scene))]
-            + [(c, _sprite_bank_content(c))                       # métadonnées sprite
-               for c in ui_image_own_palettes(p, scene, "bg")]
+        legacy = [(owner, own_palette(png)) for owner, png in _bg_own_sources(p, scene)]
+        own_requests = (
+            [(owner, c, _own_bank_content(c, "bg"))               # BG legacy: extraction
+             for owner, c in legacy]
+            + [(owner, c, _sprite_bank_content(c))                # métadonnées sprite
+               for owner, c in ui_image_own_palettes(p, scene, "bg")]
             # Polices en mode propre : `font_palette` rend DÉJÀ le contenu de
             # banque (index 0 transparent + encre), donc clé de dédup = contenu.
             # Une police partageant ses couleurs avec un fond partage sa banque.
-            + [(cols, cols) for _n, pb, cols in _scene_font_palettes(p, scene)
+            + [(("font", name), cols, cols) for name, pb, cols in _scene_font_palettes(p, scene)
                if pb == OWN_PAL_BANK])
         # Layers + animés posés dessus + fonds de conteneurs d'UI : tous
         # affichent des tuiles qui citent des sous-palettes, tous ont donc besoin
@@ -513,12 +534,41 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
                           + ui_fill_encoded_sources(p, scene))
 
     slots: list[Optional[list[int]]] = [None] * 16
+    # Qui occupe chaque banque. Une banque d'asset reçoit la liste `owners` de
+    # SA demande (même objet) : un propriétaire ajouté plus tard par la dédup y
+    # apparaît aussi.
+    slot_owners: list[list[tuple]] = [[] for _ in range(16)]
     for i, name in enumerate(active):
         bank = p.get_palette(name) if name else None
         if bank and bank.colors:
             slots[i] = list(bank.colors)
+            slot_owners[i] = [("scene palette", name)]
 
     own_slot: dict[tuple, Optional[int]] = {}
+    requests: dict[tuple, BankRequest] = {}
+    refusals: list[BankRefusal] = []
+    whole_pool_taken = False
+
+    def _new_request(key: tuple, owner: tuple, banks: int) -> Optional[BankRequest]:
+        """La demande de ces couleurs, ou None si elle existe déjà (dédup par
+        contenu exact) : `owner` s'ajoute alors à ses propriétaires."""
+        known = requests.get(key)
+        if known is not None:
+            if owner not in known.owners:
+                known.owners.append(owner)
+            return None
+        request = requests[key] = BankRequest([owner], banks)
+        return request
+
+    def _refuse(request: BankRequest):
+        free = [i for i in range(16) if slots[i] is None]
+        if request.banks == 16 or whole_pool_taken:
+            cause = "needs_whole_pool"
+        elif len(free) < request.banks:
+            cause = "not_enough_banks"
+        else:
+            cause = "not_adjacent"
+        refusals.append(BankRefusal(request, cause, free))
 
     # Fonds compressés (OWN) : bloc de banques CONTIGUËS par asset (N sous-
     # palettes), dédupliqué par contenu exact. Alloué avant les palettes
@@ -527,43 +577,57 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
     bg_block: dict[tuple, Optional[int]] = {}
     for ba in encoded_assets:
         key = _bg_palettes_key(ba)
-        if key in bg_block:
-            continue
         if getattr(ba, "bpp", 4) == 8:
             # 8bpp : UNE palette de 256 couleurs qui occupe LES 16 banques de
             # PAL_BG_RAM (le pal_bank des SE est ignoré par le hardware). Ne peut
             # donc PAS cohabiter avec d'autres palettes BG : si des banques sont
             # déjà prises (référencées / autre asset), c'est un débordement.
+            request = _new_request(key, ("8bpp background", ba.name), 16)
+            if request is None:
+                continue
             pal256 = list(key[0]) if key else []
             if all(s is None for s in slots):
                 for i in range(16):
                     chunk = pal256[i * 16:(i + 1) * 16]
                     slots[i] = list(chunk) + [0] * (16 - len(chunk))
+                    slot_owners[i] = request.owners
                 bg_block[key] = 0
+                whole_pool_taken = True
             else:
                 bg_block[key] = None   # débordement (cohabitation impossible)
+                _refuse(request)
             continue
         n = min(len(key), 16)
+        request = _new_request(key, getattr(ba, "owner", None) or ("background", ba.name), max(1, n))
+        if request is None:
+            continue
         start = _find_free_block(slots, n)
         bg_block[key] = start
-        if start is not None:
-            for i in range(n):
-                slots[start + i] = list(key[i])
+        if start is None:
+            _refuse(request)
+            continue
+        for i in range(n):
+            slots[start + i] = list(key[i])
+            slot_owners[start + i] = request.owners
 
     # Acteurs/layers de la scène : slots restants.
-    for cols, bank_cols in own_color_lists:
+    for owner, cols, bank_cols in own_requests:
         if not cols:
             continue
         key = tuple(cols)
-        if key in own_slot:
+        request = _new_request(key, owner, 1)
+        if request is None:
             continue
         # Bout haut d'abord (15 → 0), cf. `_find_free_block` : la banque 0 =
         # backdrop reste libre, et la palette de scène (index bas fixe) gagne
         # tout conflit puisqu'elle est déjà posée quand on cherche ici.
         free = next((j for j in range(15, -1, -1) if slots[j] is None), None)
         own_slot[key] = free
-        if free is not None:
-            slots[free] = list(bank_cols)
+        if free is None:
+            _refuse(request)
+            continue
+        slots[free] = list(bank_cols)
+        slot_owners[free] = request.owners
 
     # Banque 0 de secours : uniquement en cas de VRAI débordement — un asset
     # (palette propre ou bloc de fond) qui n'a trouvé aucune banque libre retombe
@@ -572,12 +636,11 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
     # garbage. Sans débordement, la banque 0 reste LIBRE : c'est sa place normale
     # depuis que les palettes propres s'allouent par le bout haut (elle porte le
     # backdrop de la scène, cf. `_find_free_block`).
-    overflow = (any(v is None for v in own_slot.values())
-                or any(v is None for v in bg_block.values()))
-    if slots[0] is None and overflow:
+    if slots[0] is None and refusals:
         slots[0] = list(DEFAULT_PAL_BANK_COLORS)
+        slot_owners[0] = [("fallback colours", "")]
 
-    return SceneBankLayout(slots, own_slot, bg_block)
+    return SceneBankLayout(slots, own_slot, bg_block, slot_owners, refusals)
 
 
 def scene_font_runtime_banks(p: Project, scene: Scene) -> dict:

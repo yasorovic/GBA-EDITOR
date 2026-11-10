@@ -2516,20 +2516,67 @@ def _check_background_tile_capacity(ctx: ValidationContext):
                 "Lower the Tiles target in the Background editor, or split the image.")
 
 
+def _owners_text(owners) -> str:
+    """« actor 'Hero', prefab 'Coin' » : les propriétaires d'une demande de banques."""
+    return ", ".join(f"{kind} '{name}'" if name else kind for kind, name in owners)
+
+
+def _banks_text(banks: list) -> str:
+    """« 3 », « 3 and 9 », « 3, 5 and 9 »."""
+    words = [str(b) for b in banks]
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def _taken_text(layout, free_banks: list) -> str:
+    """Ce qui occupe les banques prises, les banques voisines au même occupant
+    regroupées : « 0: scene palette 'Sky'; 4-8: background 'forest' »."""
+    runs: list[list] = []          # [début, fin, texte]
+    for bank in range(16):
+        if bank in free_banks:
+            continue
+        text = _owners_text(layout.slot_owners[bank])
+        if runs and runs[-1][1] == bank - 1 and runs[-1][2] == text:
+            runs[-1][1] = bank
+        else:
+            runs.append([bank, bank, text])
+    return "; ".join(f"{a}: {t}" if a == b else f"{a}-{b}: {t}" for a, b, t in runs)
+
+
 def _check_palette_bank_overflow(ctx: ValidationContext):
-    """Chaque scene ne dispose que de 16 banques materielles par pool (OBJ /
-    BG). Palettes referencees + palettes propres distinctes (assets en mode
-    OWN) sont auto-allouees par palette_alloc ; si le total depasse 16, une
-    ou plusieurs palettes propres ne trouvent pas de slot -> avertissement
-    (non bloquant : ces assets retombent sur la banque 0 au build)."""
+    """Chaque scène dispose de 16 banques matérielles par pool (OBJ / BG).
+    `palette_alloc` y range les palettes de la scène et les palettes propres
+    des assets ; chaque demande qu'il n'a pas pu placer donne un avertissement
+    qui nomme ses propriétaires, la cause (`BankRefusal.cause`) et l'occupation
+    du pool. Non bloquant : l'asset retombe sur la banque 0 au build."""
     from codegen.palette_alloc import scene_bank_layout
     p = ctx.project
     for scene in p.scenes:
-        for pool, label in (("obj", "OBJ (sprites)"), ("bg", "BG (backgrounds)")):
+        for pool, label in (("obj", "OBJ"), ("bg", "BG")):
             layout = scene_bank_layout(p, scene, pool)
-            if layout.overflow():
-                ctx.warn(None,
-                    f"Scene '{scene.name}': more than 16 {label} palettes needed (referenced + own "
-                    "palettes of assets without an assigned palette). Some assets "
-                    "will fall back to bank 0 and display wrong colours — reduce the "
-                    "number of distinct palettes or share referenced palettes.")
+            for refusal in layout.refusals:
+                request, free = refusal.request, refusal.free_banks
+                owners = _owners_text(request.owners)
+                verb = "needs" if len(request.owners) == 1 else "need"
+                if request.banks == 16:
+                    wanted = "all 16 banks"
+                elif request.banks == 1:
+                    wanted = "a bank"
+                else:
+                    wanted = f"{request.banks} adjacent banks"
+                if refusal.cause == "needs_whole_pool":
+                    cause = ("An 8bpp background takes the whole pool and cannot share it with other "
+                             "palettes: move them to another scene or encode the background in 4bpp.")
+                elif refusal.cause == "not_adjacent":
+                    cause = (f"Banks {_banks_text(free)} are free but not adjacent: "
+                             "remove or reorder the scene palettes in between.")
+                elif free:
+                    count = "1 bank is" if len(free) == 1 else f"{len(free)} banks are"
+                    cause = (f"Only {count} free ({_banks_text(free)}): "
+                             "share a scene palette or reduce the number of distinct palettes.")
+                else:
+                    cause = "No bank is free: share a scene palette or reduce the number of distinct palettes."
+                taken = _taken_text(layout, free)
+                ctx.warn(request.owners[0][1],
+                    f"Scene '{scene.name}', {label} palettes: {owners} {verb} {wanted}. {cause} "
+                    + (f"Taken: {taken}. " if taken else "")
+                    + "Meanwhile the build falls back to bank 0, with wrong colours.")

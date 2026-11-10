@@ -245,13 +245,6 @@ def test_bank_index_d_une_palette_propre():
     assert lay.bank_index(OWN_PAL_BANK, []) is None             # rien à allouer
 
 
-def test_overflow_signale_le_debordement():
-    cols = _couleurs(1)
-    assert SceneBankLayout([None] * 16, {tuple(cols): 4}).overflow() is False
-    assert SceneBankLayout([None] * 16, {tuple(cols): None}).overflow() is True
-    assert SceneBankLayout([None] * 16, {}, {(): None}).overflow() is True
-
-
 def test_bank_count_ne_compte_que_les_banques_remplies():
     slots = [None] * 16
     slots[0], slots[9] = _couleurs(1), _couleurs(2)
@@ -313,8 +306,9 @@ def test_la_banque_zero_de_secours_se_remplit_au_debordement(projet):
     _ajouter_fond_compresse(projet, "Foret", [_couleurs(20), _couleurs(21)])
 
     lay = scene_bank_layout(projet, scene, "bg")
-    assert lay.overflow() is True
+    assert [r.cause for r in lay.refusals] == ["not_enough_banks"]
     assert lay.slot_colors[0] == list(DEFAULT_PAL_BANK_COLORS)
+    assert lay.slot_owners[0] == [("fallback colours", "")]
 
 
 def test_un_fond_compresse_obtient_un_bloc_contigu(projet):
@@ -325,7 +319,8 @@ def test_un_fond_compresse_obtient_un_bloc_contigu(projet):
     debut = lay.bg_block_offset(ba)
     assert debut is not None
     assert lay.slot_colors[debut:debut + 3] == sous
-    assert lay.overflow() is False
+    assert lay.refusals == []
+    assert lay.slot_owners[debut] == [("background", "Foret")]
 
 
 def test_deux_fonds_aux_memes_couleurs_partagent_leur_bloc(projet):
@@ -352,7 +347,47 @@ def test_un_fond_compresse_deborde_faute_de_place(projet):
 
     lay = scene_bank_layout(projet, scene, "bg")
     assert lay.bg_block_offset(ba) is None
-    assert lay.overflow() is True
+    [refus] = lay.refusals
+    assert refus.cause == "not_enough_banks"
+    assert refus.request.owners == [("background", "Foret")]
+    assert refus.request.banks == 6
+    assert refus.free_banks == [12, 13, 14, 15]
+    assert lay.slot_owners[0] == [("scene palette", "P0")]
+
+
+def test_des_banques_libres_mais_disjointes_se_disent_non_contigues(projet):
+    """Le cas que « more than 16 » masquait : il reste DEUX banques (3 et 9),
+    le fond en demande deux, mais pas côte à côte. Ce n'est pas un manque de
+    banques, c'est la fragmentation, et le refus doit le dire."""
+    scene = _scene_avec_fonds("Foret")
+    noms = []
+    for i in range(16):
+        if i in (3, 9):
+            noms.append("")
+            continue
+        _ajouter_palette(projet, f"P{i}", i + 1)
+        noms.append(f"P{i}")
+    scene.active_bg_palettes = noms
+    _ajouter_fond_compresse(projet, "Foret", [_couleurs(30), _couleurs(31)])
+
+    [refus] = scene_bank_layout(projet, scene, "bg").refusals
+    assert refus.cause == "not_adjacent"
+    assert refus.free_banks == [3, 9]
+
+
+def test_un_refus_nomme_tous_ceux_qui_partagent_les_couleurs(projet):
+    """La dédup par contenu regroupe deux fonds identiques en UNE demande : le
+    refus doit nommer les deux, sinon le second disparaît du diagnostic."""
+    scene = _scene_avec_fonds("Foret", "ForetNuit")
+    scene.active_bg_palettes = [f"P{i}" for i in range(15)]
+    for i in range(15):
+        _ajouter_palette(projet, f"P{i}", i + 1)
+    sous = [_couleurs(50), _couleurs(51)]
+    _ajouter_fond_compresse(projet, "Foret", sous)
+    _ajouter_fond_compresse(projet, "ForetNuit", [list(p) for p in sous])
+
+    [refus] = scene_bank_layout(projet, scene, "bg").refusals
+    assert refus.request.owners == [("background", "Foret"), ("background", "ForetNuit")]
 
 
 def test_un_fond_8bpp_occupe_les_seize_banques(projet):
@@ -379,7 +414,24 @@ def test_un_fond_8bpp_ne_cohabite_avec_rien(projet):
 
     lay = scene_bank_layout(projet, scene, "bg")
     assert lay.bg_block_offset(ba) is None
-    assert lay.overflow() is True
+    [refus] = lay.refusals
+    assert refus.cause == "needs_whole_pool"
+    assert refus.request.banks == 16
+
+
+def test_apres_un_fond_8bpp_plus_rien_ne_trouve_de_place(projet):
+    """L'autre sens du conflit : le fond 8 bpp a pris les 16 banques, le fond
+    suivant est refusé, et la cause reste le 8 bpp, pas un simple manque."""
+    scene = _scene_avec_fonds("Photo", "Foret")
+    _ajouter_fond_compresse(projet, "Photo",
+                            [[(i * 7) & 0x7FFF for i in range(256)]], bpp=8)
+    _ajouter_fond_compresse(projet, "Foret", [_couleurs(60)])
+
+    lay = scene_bank_layout(projet, scene, "bg")
+    [refus] = lay.refusals
+    assert refus.cause == "needs_whole_pool"
+    assert refus.request.owners == [("background", "Foret")]
+    assert lay.slot_owners[15] == [("8bpp background", "Photo")]
 
 
 def test_l_allocation_est_deterministe(projet):

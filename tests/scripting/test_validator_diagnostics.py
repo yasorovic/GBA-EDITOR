@@ -185,15 +185,32 @@ def test_une_banque_de_palette_inexistante_avertit_pour_acteur_prefab_et_fond(pr
     assert says(found, "warning", "Background 'sky' BG0")
 
 
-def test_un_depassement_de_seize_banques_avertit(project, monkeypatch):
+def test_un_refus_de_banques_nomme_l_asset_la_cause_et_l_occupation(project, monkeypatch):
+    """Le cas que l'ancien « more than 16 » confondait avec un manque : deux banques
+    libres, mais pas côte à côte. Le message nomme le fond, les banques libres et
+    ce qui occupe les autres, regroupé par occupant."""
     from codegen import palette_alloc
+    from codegen.palette_alloc import BankRefusal, BankRequest, SceneBankLayout
 
-    class Full:
-        def overflow(self):
-            return True
+    owners = [[("scene palette", f"P{i}")] for i in range(16)]
+    owners[3] = owners[9] = []
+    forest = [("background", "forest")]
+    for bank in range(10, 16):
+        owners[bank] = forest
+    request = BankRequest([("background", "hills")], 2)
+    layout = SceneBankLayout([None] * 16, {}, {}, owners,
+                             [BankRefusal(request, "not_adjacent", [3, 9])])
+    monkeypatch.setattr(palette_alloc, "scene_bank_layout",
+                        lambda _p, _s, pool: layout if pool == "bg" else SceneBankLayout([None] * 16, {}))
 
-    monkeypatch.setattr(palette_alloc, "scene_bank_layout", lambda *_args: Full())
-    assert says(run(project, validator._check_palette_bank_overflow), "warning", "more than 16")
+    ctx = ValidationContext(project)
+    validator._check_palette_bank_overflow(ctx)
+    [message] = ctx.warnings
+    assert message.actor == "hills"
+    assert "background 'hills' needs 2 adjacent banks" in message.message
+    assert "Banks 3 and 9 are free but not adjacent" in message.message
+    assert "10-15: background 'forest'" in message.message
+    assert "0: scene palette 'P0'; 1: scene palette 'P1'" in message.message
 
 
 # ── Audio ─────────────────────────────────────────────────────────────────
