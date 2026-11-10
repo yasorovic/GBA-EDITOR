@@ -65,6 +65,7 @@ class AreaInspector(QWidget):
         scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
+        self._scroll = scroll
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
@@ -307,6 +308,12 @@ class AreaInspector(QWidget):
         ScriptEditor(self).build(self._script_comp, None, layout)
         self._script_card.body_layout.addWidget(container)
         self._script_container = container
+
+    def focus_script_export(self, export: str) -> None:
+        """Déplie la carte du script et montre le champ de l'export `export` (clic d'un diagnostic)."""
+        from .component_editors.script import reveal_export_row
+        self._script_card.set_expanded(True)
+        reveal_export_row(self, self._scroll, export)
 
     def _save_component_change(self, _comp=None) -> None:
         """Appelé par `ScriptEditor` après qu'il a écrit `script` sur le composant. Le premier script choisi range le

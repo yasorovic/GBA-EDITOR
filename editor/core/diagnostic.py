@@ -18,13 +18,16 @@ class DiagnosticTarget:
     la donnée pure, et c'est l'interface qui résout le nom au moment du clic (par
     `Project.all_elements`), comme le journal résout un `fichier.lua:ligne`.
 
-    Un seul `kind` pour l'instant — `ui_element` : la zone/le panneau/l'image
-    d'une mise en page, que rien ne rendait cliquable jusqu'ici (un acteur passe
-    déjà par son nom, un script par le `fichier.lua:ligne` de son message). Le
-    vocabulaire s'étendra si un autre écran gagne une cible (cf. TodoTechnique)."""
-    kind: str            # "ui_element"
-    name: str = ""       # nom de l'élément
+    Deux `kind` :
+    - `ui_element` : la zone/le panneau/l'image d'une mise en page (`name`, `layout`) ;
+    - `script_export` : un export de script réglé par instance (`name` = l'acteur ou l'Area de `scene`, `export` = le
+      nom de l'export). Le clic ouvre l'inspecteur de l'instance sur ce champ, là où l'auteur le corrige, plutôt que sur
+      la ligne du script, qui n'est pas fautive."""
+    kind: str            # "ui_element" | "script_export"
+    name: str = ""       # nom de l'élément, de l'acteur ou de l'Area
     layout: str = ""     # mise en page qui le contient (désambiguïse `all_elements`)
+    scene: str = ""      # scène de l'acteur ou de l'Area (`script_export`)
+    export: str = ""     # nom de l'export (`script_export`)
 
 
 @dataclass
@@ -69,9 +72,9 @@ class ValidationMessage:
 
 
 def build_error(message: str, source: str, file: str = "", line: int = 0,
-                actor: str = "") -> ValidationMessage:
+                actor: str = "", target: Optional[DiagnosticTarget] = None) -> ValidationMessage:
     """Une erreur de build émise hors du validateur (étape, outil, générateur)."""
-    return ValidationMessage("error", actor, message, None, source, file, line)
+    return ValidationMessage("error", actor, message, target, source, file, line)
 
 
 def build_warning(message: str, source: str, file: str = "", line: int = 0,

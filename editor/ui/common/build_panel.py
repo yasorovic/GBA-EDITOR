@@ -122,6 +122,7 @@ class DiagnosticsView(QWidget):
     location_activated = pyqtSignal(str, int)   # fichier.lua, ligne (comme la console)
     actor_activated = pyqtSignal(str, str)      # (scène, acteur) ; scène "" = la scène active
     element_activated = pyqtSignal(str, str)    # mise en page, nom d'élément d'UI
+    export_activated = pyqtSignal(str, str, str)   # (scène, acteur ou Area, nom de l'export)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -216,6 +217,9 @@ class DiagnosticsView(QWidget):
         target = getattr(m, "target", None)
         if target is not None and target.kind == "ui_element":
             self.element_activated.emit(target.layout, target.name)
+            return
+        if target is not None and target.kind == "script_export":
+            self.export_activated.emit(target.scene, target.name, target.export)
             return
         # Le fichier et la ligne du diagnostic d'abord (ils sont des champs) ; le texte
         # n'est lu que pour un message du validateur qui cite encore `fichier.lua:ligne`.

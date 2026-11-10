@@ -6,7 +6,7 @@ Sorties  : fichiers actor_*.c et scene.c écrits dans p.src_dir/
 """
 from __future__ import annotations
 import shutil
-from dataclasses import replace
+from dataclasses import replace, is_dataclass, fields
 from pathlib import Path
 from typing import Optional
 
@@ -17,8 +17,9 @@ from codegen.actor_appearance import owner_appearances
 from core.models.scene import Actor, Scene
 from core.project import Project
 from core import lua_scripts
-from core.diagnostic import build_error, build_warning
-from scripting.parser  import parse as lua_parse, LuaParseError
+from core.diagnostic import build_error, build_warning, DiagnosticTarget
+from scripting.parser  import (parse as lua_parse, LuaParseError, StmtIf, StmtWhile, ExprName, ExprIndex,
+                               ExprInvoke, ExprBinop, ExprUnop)
 from scripting.checker import check as lua_check, BuildContext
 from scripting.codegen import generate as lua_generate, CodegenContext
 from scripting.globals import write_globals
@@ -124,6 +125,70 @@ def _export_inits(owner, script, resolver) -> dict:
         val = overrides[loc.name] if loc.name in overrides else _default_pyval(loc.value)
         out[loc.name] = resolver(typ, val, loc.export_values)
     return out
+
+
+def _nodes(node, line=0):
+    """Chaque noeud de l'arbre sous `node`, avec la ligne du statement qui le contient."""
+    line = getattr(node, "line", 0) or line
+    yield node, line
+    if is_dataclass(node):
+        for f in fields(node):
+            yield from _nodes(getattr(node, f.name), line)
+    elif isinstance(node, (list, tuple)):
+        for n in node:
+            yield from _nodes(n, line)
+
+
+# Les types de référence qu'un export VIDE laisse à nil au runtime : les seuls dont l'usage peut échouer. Un `sfx_ref`
+# ou un `scene_ref` vide vaut 0, une entrée valide. Un type de référence qui gagne une valeur nulle s'ajoute ici.
+_NULLABLE_REFS = frozenset({"actor_ref"})
+
+
+def _unset_refs(owner, script) -> list[tuple[str, int]]:
+    """Les exports de référence (`_NULLABLE_REFS`) que CETTE instance laisse vides alors que le script s'en sert
+    (`rock:physics_body()`, `rock.x`) sans jamais tester s'il existe : [(nom, ligne du premier usage)].
+
+    Vide, un `actor_ref` vaut nil au runtime (`actor_at(-1)`). Le C lit alors un pointeur nul, que gcc -O2 compile en
+    instruction indéfinie : la console se fige sans un message. Un script qui teste le nom (`if rock then`,
+    `rock ~= nil`, `rock and …`, `not rock`) a prévu le cas et passe."""
+    comp = owner.get_component("script")
+    overrides = (getattr(comp, "exports_values", None) or {}) if comp else {}
+    empty = {loc.name for loc in script.locals if loc.export_type in _NULLABLE_REFS
+             and not (overrides[loc.name] if loc.name in overrides else _default_pyval(loc.value))}
+    if not empty:
+        return []
+
+    def bare(e):
+        return e.name if isinstance(e, ExprName) and e.name in empty else None
+
+    tested: set[str] = set()
+    used: dict[str, int] = {}
+    for node, line in _nodes(script.functions):
+        if isinstance(node, (StmtIf, StmtWhile)):
+            conds = [node.cond] + [c for c, _b in getattr(node, "elseifs", [])]
+            tested.update(n for n in map(bare, conds) if n)
+        elif isinstance(node, ExprBinop) and node.op in ("==", "!=", "and", "or"):   # `~=` se lit `!=`
+            tested.update(n for n in (bare(node.left), bare(node.right)) if n)
+        elif isinstance(node, ExprUnop) and node.op == "not":
+            tested.update(n for n in (bare(node.operand),) if n)
+        elif isinstance(node, (ExprInvoke, ExprIndex)):
+            n = bare(node.obj)
+            if n:
+                used.setdefault(n, line)
+    return [(n, line) for n, line in used.items() if n not in tested]
+
+
+def _check_refs_set(owner, script, sp: Path, owner_label: str, scene_name: str, emit) -> bool:
+    """Refuse le build quand une instance laisse vide un export de référence que son script utilise sans le tester
+    (cf. `_unset_refs`). Le diagnostic cible le CHAMP de l'inspecteur, là où l'auteur le corrige. True si tout est
+    réglé."""
+    missing = _unset_refs(owner, script)
+    for name, line in missing:
+        emit("diagnostic", build_error(
+            f"the export \"{name}\" is empty. Pick a reference in the inspector, or test it first "
+            f"(`if {name} then`).", "checker", sp.name, line, owner_label,
+            target=DiagnosticTarget("script_export", owner.name, scene=scene_name, export=name)))
+    return not missing
 
 
 def prefab_lua_script(p, pf):
@@ -675,7 +740,7 @@ def transpile_all(
             actor_exports = _actor_exports,
         )
         script, ok = _compile_script(sp, ctx_check, emit)
-        if not ok:
+        if not ok or not _check_refs_set(actor, script, sp, actor.name, scene.name, emit):
             return False
 
         parsed_scripts.append((actor, sprite, script, sp))
@@ -754,7 +819,7 @@ def transpile_all(
     for area_rank, area, sp in scripted_areas(p, scene):
         area_ast, ok = _compile_script(sp, replace(scene_ctx_check, actor_name=area.name, owner_kind="area"), emit,
                                        f"area {area.name}")
-        if not ok:
+        if not ok or not _check_refs_set(area, area_ast, sp, f"area {area.name}", scene.name, emit):
             return False
         area_scripts.append((area_rank, area, area_ast, sp))
 

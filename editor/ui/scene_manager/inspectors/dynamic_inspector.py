@@ -517,6 +517,15 @@ class DynamicInspector(QWidget):
         self._set_header("actor", label('common.actor'), actor.name if actor else "")
         self._stack.setCurrentIndex(self._MODE_ACTOR)
 
+    def focus_script_export(self, export: str):
+        """Montre le champ de l'export `export` dans l'inspecteur affiché (acteur ou Area), là où un diagnostic
+        d'export l'envoie."""
+        index = self._stack.currentIndex()
+        if index == self._MODE_ACTOR and self._actor_insp is not None:
+            self._actor_insp.focus_script_export(export)
+        elif index == self._MODE_AREA and self._area_insp is not None:
+            self._area_insp.focus_script_export(export)
+
     def show_area(self, area, project, scene=None):
         self._ensure(self._MODE_AREA)
         self._area_insp.load(area, project, scene)

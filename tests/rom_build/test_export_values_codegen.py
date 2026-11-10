@@ -428,3 +428,63 @@ def test_tous_les_types_cables_sans_avertissement():
         src = f'exports = {{ v = {{ type = "{typ}", default = {dflt} }} }}\n'
         assert _errors(src) == [], typ
         assert not any("instance" in w for w in _warnings(src)), typ
+
+
+# ── Un export `actor_ref` vide qu'un script utilise sans le tester ─
+# Vide, il vaut nil : le C lit un pointeur nul, que gcc -O2 compile en instruction indéfinie et la console se fige.
+
+_SRC_ROCK = (
+    "exports = {\n"
+    '    rock = {type = "actor_ref", default = "", label = "Rock"},\n'
+    "}\n"
+    "\n"
+    "function on_actor_enter(other, other_box)\n"
+    '    if other_box.tag == "player" then\n'
+    "        rock:physics_body():add_velocity(vec2(512, -256))\n"
+    "    end\n"
+    "end\n"
+)
+
+
+def _owner(values):
+    comp = SimpleNamespace(exports_values=values)
+    return SimpleNamespace(get_component=lambda k: comp if k == "script" else None)
+
+
+def test_actor_ref_vide_utilise_est_signale_avec_sa_ligne():
+    from scripting.parser import parse
+    from codegen.runtime_codegen.lua_compiler import _unset_refs
+    assert _unset_refs(_owner({}), parse(_SRC_ROCK)) == [("rock", 7)]
+
+
+def test_actor_ref_regle_passe():
+    from scripting.parser import parse
+    from codegen.runtime_codegen.lua_compiler import _unset_refs
+    assert _unset_refs(_owner({"rock": "Rock"}), parse(_SRC_ROCK)) == []
+
+
+def test_actor_ref_vide_mais_teste_passe():
+    from scripting.parser import parse
+    from codegen.runtime_codegen.lua_compiler import _unset_refs
+    for guard in ("if rock then", "if rock ~= nil then", "if not rock then return end\n    if true then"):
+        src = _SRC_ROCK.replace('if other_box.tag == "player" then', guard)
+        assert _unset_refs(_owner({}), parse(src)) == [], guard
+
+
+def test_le_build_refuse_et_cible_le_champ_de_linspecteur():
+    from pathlib import Path
+    from scripting.parser import parse
+    from codegen.runtime_codegen.lua_compiler import _check_refs_set
+    out = []
+    area = _owner({})
+    area.name = "Trigger"
+    ok = _check_refs_set(area, parse(_SRC_ROCK), Path("Rock.lua"), "area Trigger", "Scene_02",
+                               lambda kind, msg: out.append(msg))
+    assert not ok
+    assert len(out) == 1 and out[0].level == "error"
+    msg = out[0]
+    assert msg.console_line() == ('[error] Rock.lua:7: [area Trigger] the export "rock" is empty. Pick a '
+                                  'reference in the inspector, or test it first (`if rock then`).')
+    # Le clic mène au champ de l'export dans l'inspecteur de l'Area, pas à la ligne du script.
+    assert (msg.target.kind, msg.target.scene, msg.target.name, msg.target.export) == (
+        "script_export", "Scene_02", "Trigger", "rock")

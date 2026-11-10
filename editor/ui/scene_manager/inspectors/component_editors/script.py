@@ -1,7 +1,7 @@
 """Éditeur du ScriptComponent."""
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QHBoxLayout, QLineEdit, QSlider, QWidget
 from PyQt6.QtGui import QFont
 
@@ -13,10 +13,26 @@ from ui.common.labels import label
 from ui.common.theme import C, T, QSS
 
 
+def reveal_export_row(insp, scroll, export: str) -> None:
+    """Fait défiler `scroll` jusqu'à la ligne de l'export `export` que `ScriptEditor` a construite pour `insp`, et donne
+    le focus à son champ. Appelé au clic d'un diagnostic d'export, jamais au chargement."""
+    row = getattr(insp, "_export_rows", {}).get(export)
+    if row is None:
+        return
+
+    def go():
+        scroll.ensureWidgetVisible(row)
+        field = next((w for w in row.findChildren(QWidget) if w.focusPolicy() != Qt.FocusPolicy.NoFocus), None)
+        (field or row).setFocus(Qt.FocusReason.OtherFocusReason)
+    QTimer.singleShot(0, go)
+
+
 @register("script")
 class ScriptEditor(BaseComponentEditor):
 
     def build(self, comp, row, layout):
+        # Nom d'export -> sa ligne dans l'inspecteur : ce que `reveal_export_row` montre au clic d'un diagnostic.
+        self.insp._export_rows = {}
         proj = self.insp._project
         sp   = proj.asset_abs(comp.script) if comp.script else None
 
@@ -53,7 +69,11 @@ class ScriptEditor(BaseComponentEditor):
         W.section(label("comped.exposed_vars"), layout)
 
         for var in variables:
+            first = layout.count()
             self._build_var_row(comp, var, layout)
+            item = layout.itemAt(first)
+            if item is not None and item.widget() is not None:
+                self.insp._export_rows[var["name"]] = item.widget()
 
     _FLOAT_SLIDER_STEPS = 1000
 

@@ -510,6 +510,7 @@ class MainWindow(QMainWindow):
         d.location_activated.connect(self._open_build_location)
         d.actor_activated.connect(self._select_actor_by_name)
         d.element_activated.connect(self._select_ui_element)
+        d.export_activated.connect(self._select_script_export)
         panel.disk.refresh_requested.connect(self._rescan_and_refresh_disk)
         panel.disk.move_requested.connect(self._move_disk_items)
         panel.disk.asset_open_requested.connect(self._open_disk_asset)
@@ -1935,6 +1936,26 @@ class MainWindow(QMainWindow):
             return
         self._switch_screen("Scenes")
         self._bus.select(UIElementSelection(*match))
+
+    def _select_script_export(self, scene_name: str, owner_name: str, export: str):
+        """Clic sur un diagnostic d'export de script : ouvrir la scène, sélectionner l'acteur ou l'Area et montrer le
+        champ de l'export dans son inspecteur. La sélection vient APRÈS le changement d'écran : _show_screen vide le bus."""
+        if not self.project:
+            return
+        index = next((i for i, s in enumerate(self.project.scenes) if s.name == scene_name), None)
+        if index is None:
+            self._status.showMessage(label("win.actor_not_found", name=scene_name), 4000)
+            return
+        scene = self.project.scenes[index]
+        owner = next((o for o in list(scene.actors) + list(scene.areas) if o.name == owner_name), None)
+        if owner is None:
+            self._status.showMessage(label("win.actor_not_found", name=owner_name), 4000)
+            return
+        self._switch_screen("Scenes")
+        if self.project.active_scene is not scene:
+            self._on_scene_selected(index, refresh_diagnostics=False)
+        self._bus.select(owner)
+        self._inspector.focus_script_export(export)
 
     def _show_script_user(self, target):
         """Clic sur une ligne de « Voir les utilisations » d'un script : ouvrir le Scene Manager et y

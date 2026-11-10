@@ -109,6 +109,11 @@ passes du solveur sont nombreuses (1 à 8, 4 par défaut), plus une pile est sta
 posées sans se recouvrir s'endorment vite ; des caisses qui naissent en se recouvrant se repoussent sans cesse et
 gardent un coût élevé tant que le recouvrement dure.
 
+Un `CharacterBody` ne pousse pas un Rigid : il s'arrête contre lui comme contre un mur, et le Rigid ne le pousse
+pas non plus. C'est le choix des moteurs courants : le personnage reste sous le contrôle exact de son script. Pousser
+une caisse est donc une règle de jeu écrite par le script, qui donne de la vitesse au corps de la caisse
+(`physics_body():add_velocity(...)`).
+
 ## 5. Faces à sens unique et descente
 
 Une face à sens unique n'arrête que ce qui vient du côté vers lequel elle regarde. Deux endroits la déclarent :

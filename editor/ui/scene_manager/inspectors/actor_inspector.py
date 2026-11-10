@@ -1212,6 +1212,15 @@ class ActorInspector(QWidget):
             bar.setValue(self._comp_card.mapTo(self._scroll.widget(), self._comp_card.rect().topLeft()).y())
         QTimer.singleShot(0, go)
 
+    def focus_script_export(self, export: str):
+        """Ouvre l'éditeur du composant script et montre le champ de l'export `export` (clic d'un diagnostic)."""
+        from .component_editors.script import reveal_export_row
+        comp = self._actor.get_component("script") if self._actor else None
+        if comp is None:
+            return
+        self._comp_list.setCurrentRow(self._actor.components.index(comp))
+        reveal_export_row(self, self._scroll, export)
+
     def _add_component(self, type_name: str):
         already_shown = displayed_sprite_component(self._actor) is not None
         comp = self._actor.add_component(type_name)
