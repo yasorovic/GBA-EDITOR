@@ -16,6 +16,7 @@ from ui.common.icons import COLOR_SPRITE
 from core.history import get_history, AddListItemCmd
 from core.models.components import ONE_WAY_MODES, PhysicMaterialComponent
 from core.models.scene import Area
+from scripting.api import box_tag_constant
 
 
 @register("collision_shape")
@@ -42,8 +43,13 @@ class CollisionEditor(BaseComponentEditor):
         def _create_tag(name: str):
             # Création = déclaration au niveau projet (Project Settings >
             # Collisions) PUIS affectation : le tag existe pour toutes les boîtes.
+            # Un nom qui donne la constante d'un tag existant (« player » pour « Player ») EST ce tag : on
+            # reprend son orthographe au lieu d'en déclarer un second.
             name = name.strip()
-            if name and name not in proj.collision_tags():
+            same = next((t for t in proj.collision_tags() if box_tag_constant(t) == box_tag_constant(name)), None)
+            if same is not None:
+                name = same
+            elif name:
                 get_history().push(AddListItemCmd(
                     proj.settings.collision_tags, name,
                     label=f"Déclarer le tag {name}",

@@ -109,4 +109,18 @@ def test_my_box_et_other_box_sont_des_references_de_boite():
         return [m for m in check(parse(src), ctx) if m.level == "error"]
 
     assert erreurs("Player") == []
+    assert erreurs("player") == []           # même constante BOXTAG_PLAYER : le même tag
     assert any("no collision shape with tag" in m.message for m in erreurs("Plyer"))
+
+
+def test_deux_orthographes_d_une_meme_constante_sont_un_seul_tag(tmp_path):
+    """Une box taguée « player » dans un projet qui a le tag réservé « Player » : les deux donnent
+    BOXTAG_PLAYER. Avant, le header émettait deux `#define BOXTAG_PLAYER` (0 puis 4) et gcc gardait
+    le dernier en silence : la box n'était plus dans le groupe réservé Player."""
+    p = _projet(tmp_path)
+    p.scenes.items[0].actors[0].components.append(_box("player"))
+    tags = p.collision_tags()
+    assert "Player" in tags and "player" not in tags
+    h = _header(p, tmp_path)
+    assert h.count("#define BOXTAG_PLAYER ") == 1
+    assert f"#define BOXTAG_PLAYER {tags.index('Player')}" in h

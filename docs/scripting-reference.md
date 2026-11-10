@@ -349,7 +349,7 @@ Pour rechercher une forme Lua précise dans une erreur, voici les appels refusé
 
 Une fonction écrite `function f() … end, dans un corps` ou `function objet:methode() … end` est également refusée. Déclarez une fonction privée au premier niveau. `local function f() … end` n'est pas une forme disponible.
 
-Une affectation multiple `a, b = b, a` est refusée : écrivez une affectation par ligne. Pour échanger deux valeurs, passez par un `local` (`local t = a`, `a = b`, `b = t`). La forme `local x, y = 1, 2` reste valide.
+L'affectation multiple est valide, comme en Lua : `x, y = 0, 0`, ou `a, b = b, a` pour échanger deux valeurs. Toutes les valeurs sont lues avant la première affectation. Une affectation `a, b = 1`, avec moins (ou plus) de valeurs que de cibles, est en revanche refusée : il n'y a pas de `nil` à donner aux cibles en trop, et une fonction ne rend qu'une valeur.
 
 Le build refuse aussi, avec un message qui nomme la faute :
 

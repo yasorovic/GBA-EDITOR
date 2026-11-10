@@ -44,7 +44,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_ACTOR_PROPS, 
                   DOMAIN_LANG,
                   DOMAIN_PALETTE,
                   DOMAIN_IMAGE_STATE, DOMAIN_UI_ELEMENT,
-                  DOMAIN_ACTOR_NAME, DOMAIN_BOX_TAG, DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL,
+                  DOMAIN_ACTOR_NAME, DOMAIN_BOX_TAG, box_tag_constant, DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL,
                   DOMAIN_SEQUENCE,
                   DOMAIN_OBJ_MODE, DOMAIN_DIRECTION, DOMAIN_WIN_REGION,
                   DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE, HARDWARE_ENUMS,
@@ -2973,8 +2973,10 @@ class Checker:
         """Le tag d'une boîte de collision : `Project.collision_tags()`. Sans lui
         le `#define BOXTAG_*` n'existe pas et gcc échoue sur la ligne générée.
         Une faute de frappe échouerait aussi SILENCIEUSEMENT au runtime (une
-        boîte absente se lit vide et s'écrit sans effet) : d'où l'erreur ici."""
-        if self.ctx.box_tag_names is not None and name not in self.ctx.box_tag_names:
+        boîte absente se lit vide et s'écrit sans effet) : d'où l'erreur ici.
+        Comparé par constante, comme `collision_tags()` dédoublonne : « player » nomme le tag « Player »."""
+        known = {box_tag_constant(t) for t in self.ctx.box_tag_names or []}
+        if self.ctx.box_tag_names is not None and box_tag_constant(name) not in known:
             self.errors.append(CheckError(
                 "error",
                 f"{call_key}('{name}'): no collision shape with tag '{name}' in the project. Known "

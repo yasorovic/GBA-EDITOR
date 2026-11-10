@@ -1195,9 +1195,17 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # mettrait « Interactive » avant « Player ».
         declared = list(RESERVED_COLLISION_TAGS) + [
             t for t in self.settings.collision_tags if t not in RESERVED_COLLISION_TAGS]
-        seen = set(declared)
-        extra = sorted(t for t in discovered if t not in seen)
-        return declared + extra
+        # Un tag EST sa constante `BOXTAG_<TAG>` : deux orthographes qui donnent la même (« Player » et
+        # « player ») sont un seul tag, sinon deux `#define` identiques et gcc garde le dernier, en silence.
+        # La première orthographe rencontrée gagne : la déclarée, donc la réservée.
+        from codegen.c_names import sym as c_sym
+        out, seen = [], set()
+        for t in declared + sorted(discovered):
+            key = c_sym(t).upper()
+            if key not in seen:
+                seen.add(key)
+                out.append(t)
+        return out
 
 
 

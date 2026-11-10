@@ -209,15 +209,15 @@ NESTED_FUNCTION = Refusal(
     "handler or another function.")
 
 
-# `a, b = b, a` : luaparser produit un `Assign` à plusieurs cibles, le MÊME nœud
+# `a, b = 1` : luaparser produit un `Assign` à plusieurs cibles, le MÊME nœud
 # qu'une affectation simple : son refus ne peut donc pas être indexé par le nom
-# du nœud (même cas que NESTED_FUNCTION). Le parser ne lisait que la première
-# cible : la seconde affectation disparaissait, et un échange (`a, b = b, a`)
-# devenait `a = b`, sans un mot.
+# du nœud (même cas que NESTED_FUNCTION). L'affectation multiple elle-même est
+# acceptée (`a, b = b, a`, cf. parser._multi_assign) ; seul le décompte inégal
+# est refusé : pas de `nil` pour les cibles en trop, une fonction rend une valeur.
 MULTI_ASSIGN = Refusal(
-    "a, b = b, a",
-    "a multiple assignment does not exist: write one assignment per line. To swap "
-    "two values, go through a local: `local t = a`, `a = b`, `b = t`.")
+    "a, b = 1",
+    "a multiple assignment gives one value to each target: write as many values as "
+    "targets (`a, b = 1, 2`). A function returns a single value.")
 
 
 # ─── Ce qui n'est jamais dispatché ────────────────────────────────

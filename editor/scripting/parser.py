@@ -310,6 +310,9 @@ class _Converter:
         # dès que le noeud n'a pas conservé ses tokens (même contrainte que
         # `refactor.iter_call_sites`, qui compte déjà les sauts de ligne).
         self._source = source
+        # Numérote les `local` cachés d'une affectation multiple (`_multi_assign`) :
+        # deux échanges dans un même corps ne déclarent pas deux fois le même nom C.
+        self._multi_count = 0
 
     def _line(self, node) -> int:
         """Ligne 1-indexée du noeud, ou 0 si son offset est inconnu."""
@@ -439,9 +442,7 @@ class _Converter:
         match t:
             case "Assign":
                 if len(node.targets) > 1:
-                    # `a, b = b, a` : ne garder que la première cible faisait
-                    # disparaître le reste. Le checker refuse (lua_subset.MULTI_ASSIGN).
-                    return StmtUnsupported(node="MultiAssign", line=self._line(node))
+                    return self._multi_assign(node, local_scope)
                 tgt = self._expr(node.targets[0])
                 val = self._expr(node.values[0])
                 return StmtAssign(target=tgt, value=val)
@@ -503,6 +504,32 @@ class _Converter:
                 # ici quand il est imbriqué dans un corps : au premier niveau,
                 # c'est `convert_chunk` qui le prend, et il est légitime.
                 return StmtUnsupported(node=t, line=self._line(node))
+
+    def _multi_assign(self, node, local_scope: set[str]):
+        """`a, b = b, a` : des affectations simples, que tout l'aval connaît déjà.
+
+        Lua évalue TOUTES les valeurs avant d'affecter. Une valeur non constante
+        après la première passe donc par un `local` caché, déclaré avant toute
+        affectation : `local _multi_1 = a`, `a = b`, `b = _multi_1`. La première
+        est lue avant toute écriture, une constante ne lit rien : ni l'une ni
+        l'autre n'en a besoin, et `x, y = 0, 0` reste deux lignes de C.
+
+        Un nombre de valeurs différent du nombre de cibles est porté au checker
+        (lua_subset.MULTI_ASSIGN) : il n'y a pas de `nil` à donner aux cibles en
+        trop, et une fonction ne rend qu'une valeur."""
+        if len(node.values or []) != len(node.targets):
+            return StmtUnsupported(node="MultiAssign", line=self._line(node))
+        temps, assigns = [], []
+        for i, (t, v) in enumerate(zip(node.targets, node.values)):
+            value = self._expr(v)
+            if i > 0 and not isinstance(value, (ExprNumber, ExprBool, ExprString, ExprNil)):
+                self._multi_count += 1
+                name = f"_multi_{self._multi_count}"
+                local_scope.add(name)
+                temps.append(StmtLocalAssign(name=name, value=value))
+                value = ExprName(name)
+            assigns.append(StmtAssign(target=self._expr(t), value=value))
+        return temps + assigns
 
     def _if(self, node, local_scope) -> StmtIf:
         then = self._block(node.body, set(local_scope))

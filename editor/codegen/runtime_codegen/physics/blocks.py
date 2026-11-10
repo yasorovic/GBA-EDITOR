@@ -214,7 +214,12 @@ def block_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance) -> 
         La résolution contre la carte ne bouge un acteur que d'après sa VITESSE : à vitesse nulle elle le prend pour un
         téléport et le laisse où il est, et le blocage annule la vitesse sur l'axe qu'il repousse. Sans garde, un mobile
         poussé par un bloqueur traversait donc le mur derrière lui : un déplacement qui le ferait entrer dans un mur est
-        refusé, la carte garde le dernier mot."""
+        refusé, la carte garde le dernier mot.
+
+        Refuser la poussée ne suffit pas : le mobile resterait DANS le bloqueur, et le solveur d'impulsions écarterait
+        alors un Rigid (masse inverse nulle du Character) : le joueur au sol, que sa gravité enfonce d'un pixel dans le
+        sol une image sur quelques-unes, poussait les Rigid. Le mobile renonce donc aussi à son propre pas de l'image sur
+        l'axe que le blocage a arrêté (vitesse annulée) : il reste où il était, contre le bloqueur, sans le pousser."""
         if not scene_has_cmap(scene) or physics_body_mode(owner) not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
             return 0
         return physics_collider_mask(owner, sprite, map_only=True) if uses_character_solver(owner, sprite) else 0
@@ -255,8 +260,9 @@ def block_tick_lines(p, scene, scene_actors, pi, resolve_initial_appearance) -> 
     capacity = sum(1 for kind in lay.placed_type_ids if kind in blocking) + spool
     where = "" if capacity <= _LIST_IWRAM else " EWRAM_BSS"
     if walls:
-        step = ("{ u8 _mi=_bk_mi[_a->type_id]; if(_mi!=255){ int _bx=_a->x,_by=_a->y; " + call
-                + " if(_bk_wall[_mi]&&(_a->x!=_bx||_a->y!=_by)&&mover_in_wall(_a,_bk_wall[_mi])){ _a->x=_bx; _a->y=_by; } } }")
+        step = ("{ u8 _mi=_bk_mi[_a->type_id]; if(_mi!=255){ int _bx=_a->x,_by=_a->y,_bvx=_a->vx,_bvy=_a->vy; " + call
+                + " if(_bk_wall[_mi]&&(_a->x!=_bx||_a->y!=_by)&&mover_in_wall(_a,_bk_wall[_mi])){"
+                " _a->x=_bx; _a->y=_by; if(!_a->vx) _a->x-=_bvx; if(!_a->vy) _a->y-=_bvy; } } }")
     else:
         step = "{ u8 _mi=_bk_mi[_a->type_id]; if(_mi!=255) " + call + " }"
 
