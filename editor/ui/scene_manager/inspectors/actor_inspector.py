@@ -1304,11 +1304,13 @@ class ActorInspector(QWidget):
     def _save_component_change(self, comp=None):
         """
         Persist sans reconstruire l'éditeur.
-        Si comp est le composant actuellement affiché, synce les widgets via _field_syncers.
-        Sinon (undo sur un autre comp), reconstruit l'éditeur complet.
+        Repeuple l'éditeur réutilisable courant, y compris après annulation.
+        Sinon, garde le chemin des éditeurs construits pour un seul composant.
         """
         self._persist()
         self._refresh_list_labels()
+        if comp is not None and comp is getattr(self, "_current_comp", None):
+            self._reload_component_editor(comp)
         if comp is not None and comp is not getattr(self, "_current_comp", None):
             row = self._comp_list.currentRow()
             self._build_editor(self._actor.components[row] if row >= 0 else None)
@@ -1351,8 +1353,24 @@ class ActorInspector(QWidget):
         old.setParent(None)  # type: ignore[arg-type]
         old.deleteLater()
 
+    def _reload_component_editor(self, comp) -> bool:
+        from ui.scene_manager.inspectors.component_editors import get_editor
+
+        editor = getattr(self, "_component_editor", None)
+        if comp is None or editor is None or type(editor) is not get_editor(component_type_name(comp)):
+            return False
+        if not editor.reload(comp):
+            return False
+        self._current_comp = comp
+        for field, sync in self._field_syncers.items():
+            sync(getattr(comp, field))
+        return True
+
     def _build_editor(self, comp):
+        if self._reload_component_editor(comp):
+            return
         self._clear_editor()
+        self._component_editor = None
         self._current_comp = comp
         # dict field → callable(value) pour resync les widgets sans rebuild
         self._field_syncers: dict[str, callable] = {}
@@ -1369,16 +1387,21 @@ class ActorInspector(QWidget):
         def row(label, widget):
             return _W.row(label, widget, self._editor_layout)
 
-        # ── Méta-header Id + Active (via W) ──────────────────────
-        _W.meta_bar(comp, self._field_syncers, self._set_comp, self._editor_layout,
-                    show_id=component_type_name(comp) not in SINGLETON_COMPONENTS)
-        _W.separator(self._editor_layout, margin_v=2)
-
         from ui.scene_manager.inspectors.component_editors import get_editor
         type_name = component_type_name(comp)
         EditorCls = get_editor(type_name)
-        if EditorCls:
-            EditorCls(self).build(comp, row, self._editor_layout)
+        editor = EditorCls(self) if EditorCls else None
+        if editor is not None:
+            editor.comp = comp
+        # L'en-tête suit la cible de CET éditeur, même après sa réutilisation.
+        set_comp = (lambda _comp, field, value: self._set_comp(editor.comp, field, value)) if editor else self._set_comp
+        _W.meta_bar(comp, self._field_syncers, set_comp, self._editor_layout,
+                    show_id=component_type_name(comp) not in SINGLETON_COMPONENTS)
+        _W.separator(self._editor_layout, margin_v=2)
+
+        if editor is not None:
+            self._component_editor = editor
+            editor.build(comp, row, self._editor_layout)
         else:
             lbl = QLabel(label("actorinsp.no_editor", type=type_name))
             lbl.setFont(QFont(T.UI, T.SM)); lbl.setStyleSheet(f"color:{C.TEXT_MUTED};")
