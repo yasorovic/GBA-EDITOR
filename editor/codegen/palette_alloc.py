@@ -167,6 +167,34 @@ def _sprite_own_palette(sp) -> list[int]:
     return list(getattr(sp, "own_palette", None) or []) if sp else []
 
 
+def _sprite_palettes_by_size(p: Project) -> list[tuple]:
+    """(couleurs, ensemble) des palettes propres distinctes des sprites du projet,
+    la plus grande d'abord, puis par ordre des couleurs : la première qui en
+    contient une autre est sa palette englobante (cf. `enclosing_sprite_palette`)."""
+    distinct = {tuple(cols) for cols in (_sprite_own_palette(sp) for sp in p.sprites) if cols}
+    return [(cols, frozenset(cols))
+            for cols in sorted(distinct, key=lambda cols: (-len(set(cols)), cols))]
+
+
+def enclosing_sprite_palette(p: Project, cols) -> list[int]:
+    """La palette propre de sprite qui remplace `cols` partout dans le projet : la
+    plus grande palette de sprite du projet qui contient toutes ses couleurs (à
+    taille égale, la première par ordre des couleurs), `cols` elle-même sinon.
+
+    Un sprite dont la palette est contenue dans une autre partage ainsi sa banque :
+    ses tuiles sont recalées par couleur sur l'englobante (`GritSprites`), et sa
+    banque en reçoit les couleurs, même dans une scène où l'autre sprite est
+    absent. Le choix vaut pour tout le projet parce que les tuiles d'un sprite
+    sont converties une seule fois ; une scène n'y perd aucune banque, puisque
+    deux palettes ne donnent jamais deux englobantes là où elles n'en prenaient
+    qu'une. Idempotente : l'englobante d'une englobante est elle-même."""
+    if not cols:
+        return list(cols or [])
+    own = set(cols)
+    candidates = layout_memo("sprite_palettes", (p,), lambda: _sprite_palettes_by_size(p))
+    return list(next((colors for colors, colors_set in candidates if own <= colors_set), cols))
+
+
 def ui_image_own_palettes(p: Project, scene: Scene, pool: str) -> list[tuple]:
     """(propriétaire, palette propre) des sprites affichés par les IMAGES d'interface.
 
@@ -478,19 +506,6 @@ def _sprite_bank_content(cols) -> list[int]:
     return [RESERVED_SLOT_COLOR] + list(cols)
 
 
-def _own_bank_content(cols, pool: str) -> list[int]:
-    """Contenu à écrire dans une banque matérielle pour une palette propre,
-    quand la FORME de `cols` se déduit du pool : métadonnées sprite en OBJ
-    (sans slot 0, à préfixer), extraction PNG en BG (`own_palette()`,
-    extract_palette_from_image, qui inclut déjà ce slot — ne pas le préfixer
-    une 2e fois).
-
-    Cette déduction ne vaut donc que là où le pool BG ne reçoit QUE du BG
-    legacy. Un sprite posé en cible BG (image d'UI) est l'exception : sa liste
-    vient des métadonnées, pas d'une extraction — `_sprite_bank_content`."""
-    return _sprite_bank_content(cols) if pool == "obj" else list(cols)
-
-
 def scene_bank_layout(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
     """Alloue les 16 banques d'un pool ("obj"|"bg") pour une scène :
     (1) palettes référencées à leur index fixe ; (2) pour OBJ, palettes propres
@@ -515,9 +530,16 @@ def bg_map_banks(p: Project, scene: Scene, ba) -> tuple:
 
 
 def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
-    # (propriétaire, clé de dédup, contenu de banque) : la clé reste la liste BRUTE, c'est
-    # elle que `bank_index` reçoit de ses appelants — mais le contenu écrit dans
-    # la banque dépend de la FORME de la source, cf. `_own_bank_content`.
+    # (propriétaire, couleurs brutes, clé de dédup, contenu de banque) : `bank_index`
+    # reçoit les couleurs BRUTES de ses appelants, et chacune est rattachée à la
+    # banque de sa clé ; la clé d'un sprite est sa palette englobante
+    # (`enclosing_sprite_palette`), celle des autres sources leurs couleurs. Le
+    # contenu écrit dans la banque dépend de la FORME de la source : une palette de
+    # sprite n'a pas son slot 0 (`_sprite_bank_content`), l'extraction d'un BG legacy l'a déjà.
+    def _sprite_request(owner, cols, content):
+        enclosing = enclosing_sprite_palette(p, cols)
+        return owner, cols, enclosing, content(enclosing)
+
     if pool == "obj":
         active = list(getattr(scene, "active_obj_palettes", []))[:16]
         # Acteurs, prefabs poolés PAR CETTE SCÈNE (T5) et images d'UI : tous des
@@ -525,7 +547,7 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
         # que le spawn est per-scène, un prefab n'est plus un cas à part avec un
         # slot global — c'est un OWN de plus, alloué dans les slots libres d'ici.
         own_requests = [
-            (owner, c, _own_bank_content(c, "obj"))               # métadonnées sprite
+            _sprite_request(owner, c, _sprite_bank_content)       # métadonnées sprite
             for owner, c in (_actor_own_palettes(p, scene)
                              + _scene_prefab_own_palettes(p, scene)
                              + ui_image_own_palettes(p, scene, "obj"))]
@@ -537,14 +559,14 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
         # (métadonnées). D'où deux constructeurs de contenu et non un seul.
         legacy = [(owner, own_palette(png)) for owner, png in _bg_own_sources(p, scene)]
         own_requests = (
-            [(owner, c, _own_bank_content(c, "bg"))               # BG legacy: extraction
+            [(owner, c, c, list(c))                               # BG legacy: extraction, slot 0 compris
              for owner, c in legacy]
-            + [(owner, c, _sprite_bank_content(c))                # métadonnées sprite
+            + [_sprite_request(owner, c, _sprite_bank_content)    # métadonnées sprite
                for owner, c in ui_image_own_palettes(p, scene, "bg")]
             # Polices en mode propre : `font_palette` rend DÉJÀ le contenu de
             # banque (index 0 transparent + encre), donc clé de dédup = contenu.
             # Une police partageant ses couleurs avec un fond partage sa banque.
-            + [(("font", name), cols, cols) for name, pb, cols in _scene_font_palettes(p, scene)
+            + [(("font", name), cols, cols, cols) for name, pb, cols in _scene_font_palettes(p, scene)
                if pb == OWN_PAL_BANK])
         # Layers + animés posés dessus + fonds de conteneurs d'UI : tous
         # affichent des tuiles qui citent des sous-palettes, tous ont donc besoin
@@ -635,23 +657,23 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
             slot_owners[bank] = request.owners
 
     # Acteurs/layers de la scène : slots restants.
-    for owner, cols, bank_cols in own_requests:
+    for owner, cols, key_cols, bank_cols in own_requests:
         if not cols:
             continue
-        key = tuple(cols)
+        key = tuple(key_cols)
         request = _new_request(key, owner, 1)
-        if request is None:
-            continue
-        # Bout haut d'abord (15 → 0), cf. `_find_free_block` : la banque 0 =
-        # backdrop reste libre, et la palette de scène (index bas fixe) gagne
-        # tout conflit puisqu'elle est déjà posée quand on cherche ici.
-        free = next((j for j in range(15, -1, -1) if slots[j] is None), None)
-        own_slot[key] = free
-        if free is None:
-            _refuse(request)
-            continue
-        slots[free] = list(bank_cols)
-        slot_owners[free] = request.owners
+        if request is not None:
+            # Bout haut d'abord (15 → 0), cf. `_find_free_block` : la banque 0 =
+            # backdrop reste libre, et la palette de scène (index bas fixe) gagne
+            # tout conflit puisqu'elle est déjà posée quand on cherche ici.
+            free = next((j for j in range(15, -1, -1) if slots[j] is None), None)
+            own_slot[key] = free
+            if free is None:
+                _refuse(request)
+            else:
+                slots[free] = list(bank_cols)
+                slot_owners[free] = request.owners
+        own_slot[tuple(cols)] = own_slot[key]   # les couleurs brutes mènent à la banque de leur clé
 
     # Banque 0 de secours : uniquement en cas de VRAI débordement — un asset
     # (palette propre ou bloc de fond) qui n'a trouvé aucune banque libre retombe
@@ -792,7 +814,7 @@ def _obj_instance_pairs(p: Project, scene: Scene) -> list[tuple[tuple, InstanceR
             cols = _sprite_own_palette(sp)
             if not cols:
                 continue
-            key = tuple(_own_bank_content(cols, "obj"))
+            key = tuple(_sprite_bank_content(enclosing_sprite_palette(p, cols)))
             out.append((key, InstanceRef("actor", a, a.name,
                                          getattr(a, "pal_bank", OWN_PAL_BANK))))
     return out
@@ -813,7 +835,7 @@ def _bg_instance_pairs(p: Project, scene: Scene) -> list[tuple[tuple, InstanceRe
         cols = own_palette(p.background_image_path(ba, layer.background_name))
         if not cols:
             continue
-        key = tuple(_own_bank_content(cols, "bg"))
+        key = tuple(cols)   # extraction PNG : le slot 0 y est déjà
         out.append((key, InstanceRef("bg_layer", layer, f"BG{layer.bg_slot}",
                                      getattr(layer, "pal_bank", OWN_PAL_BANK))))
     return out
@@ -890,7 +912,7 @@ def _ui_image_pairs(p: Project, scene: Scene, pool: str) -> list[tuple[tuple, In
             continue
         # Palette de SPRITE dans les deux pools — cf. `_sprite_bank_content` ;
         # la vue montre alors la banque 16 slots que la ROM écrit vraiment.
-        key = tuple(_sprite_bank_content(cols))
+        key = tuple(_sprite_bank_content(enclosing_sprite_palette(p, cols)))
         label = f"{im.name} (conteneur)" if can_fill(im) \
                 else f"{im.name} (image UI)"
         out.append((key, InstanceRef("ui_image", im, label, OWN_PAL_BANK)))

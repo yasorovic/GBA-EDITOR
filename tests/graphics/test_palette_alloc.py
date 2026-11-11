@@ -23,7 +23,7 @@ from core.palette_presets import DEFAULT_PAL_BANK_COLORS
 from core.project import Project
 from oam_fixtures import faire_naitre
 from codegen.palette_alloc import (
-    SceneBankLayout, scene_bank_layout, _find_free_block, _own_bank_content,
+    SceneBankLayout, scene_bank_layout, _find_free_block,
     _sprite_bank_content,
 )
 
@@ -116,30 +116,13 @@ def test_find_free_block_traite_zero_comme_un():
 
 # ── Contenu d'une banque de palette propre ────────────────────────
 
-def test_le_pool_obj_reserve_le_slot_zero():
-    """Piège documenté : sans ce décalage, la 1re couleur d'un sprite atterrit en
-    position 0, que le hardware OBJ rend transparente quoi qu'il arrive — la
-    couleur n'apparaît jamais, sans un mot."""
-    cols = [1, 2, 3]
-    assert _own_bank_content(cols, "obj") == [RESERVED_SLOT_COLOR, 1, 2, 3]
-
-
-def test_le_pool_bg_ne_le_reserve_pas():
-    """Le BG legacy passe par `extract_palette_from_image`, qui inclut DÉJÀ ce
-    slot : le préfixer une seconde fois décalerait toutes les couleurs d'un
-    cran."""
-    cols = [RESERVED_SLOT_COLOR, 1, 2, 3]
-    assert _own_bank_content(cols, "bg") == cols
-
-
 def test_une_palette_de_sprite_reserve_le_slot_zero_dans_LES_DEUX_pools():
     """Le préfixe se décide sur la FORME de la source, pas sur le pool.
 
-    `_own_bank_content` peut trancher sur le pool parce que le pool BG n'y
-    reçoit que du BG legacy, dont la liste porte déjà son slot 0. Un SPRITE posé
-    en cible BG (image d'interface) casse cette équivalence : sa liste vient des
+    Le BG legacy passe par `extract_palette_from_image`, qui porte déjà son
+    slot 0. Un SPRITE, même posé en cible BG (image d'interface), vient des
     métadonnées, sans slot 0, alors que l'index 0 d'une tuile 4bpp est
-    transparent en BG comme en OBJ. Il lui faut donc le même préfixe.
+    transparent en BG comme en OBJ. Il lui faut donc le préfixe.
 
     Ce que ça coûtait de se tromper : grit remappe les tuiles sur la forme
     16 slots rendue par `effective_palette_colors` (préfixée), la banque était
@@ -147,7 +130,6 @@ def test_une_palette_de_sprite_reserve_le_slot_zero_dans_LES_DEUX_pools():
     couleurs de ses voisines."""
     cols = [1, 2, 3]
     assert _sprite_bank_content(cols) == [RESERVED_SLOT_COLOR, 1, 2, 3]
-    assert _sprite_bank_content(cols) == _own_bank_content(cols, "obj")
 
 
 def test_le_sprite_d_une_image_d_UI_en_cible_BG_garde_son_slot_reserve(projet):
@@ -489,3 +471,112 @@ def test_l_allocation_est_deterministe(projet):
     b = scene_bank_layout(projet, scene, "bg")
     assert a.slot_colors == b.slot_colors
     assert a.bank_count() == b.bank_count()
+
+
+# ── Inclusion : une palette de sprite contenue dans une autre partage sa banque ──
+
+def _sprite(p: Project, nom: str, couleurs: list[int]):
+    from core.models.sprite import SpriteAsset
+    sp = SpriteAsset(name=nom, asset=f"{nom}.png", own_palette=list(couleurs))
+    p.sprites.append(sp)
+    return sp
+
+
+def _scene_avec_acteurs(*sprites: str) -> Scene:
+    from core.models.components import SpriteComponent
+    from core.models.scene import Actor
+    acteurs = []
+    for nom in sprites:
+        a = Actor(name=f"Acteur{nom}")
+        a.components.append(SpriteComponent(id="s0", sprite_name=nom, active=True))
+        acteurs.append(a)
+    return Scene(name="Test", actors=acteurs)
+
+
+ROUGE, VERT, BLEU, JAUNE = 0x001F, 0x03E0, 0x7C00, 0x03FF
+
+
+def test_un_sprite_contenu_dans_un_autre_partage_sa_banque(projet):
+    petit = _sprite(projet, "Petit", [ROUGE, BLEU])
+    grand = _sprite(projet, "Grand", [VERT, ROUGE, BLEU])
+
+    lay = scene_bank_layout(projet, _scene_avec_acteurs("Petit", "Grand"), "obj")
+    assert lay.bank_count() == 1
+    banque = lay.bank_index(OWN_PAL_BANK, petit.own_palette)
+    assert banque == lay.bank_index(OWN_PAL_BANK, grand.own_palette)
+    assert lay.slot_colors[banque] == [RESERVED_SLOT_COLOR, VERT, ROUGE, BLEU]
+    assert lay.slot_owners[banque] == [("actor", "ActeurPetit"), ("actor", "ActeurGrand")]
+
+
+def test_une_chaine_d_inclusions_remonte_a_la_plus_grande(projet):
+    """A dans B dans C : A et B prennent C, même dans une scène où C n'est pas."""
+    _sprite(projet, "A", [ROUGE])
+    _sprite(projet, "B", [ROUGE, VERT])
+    _sprite(projet, "C", [BLEU, ROUGE, VERT])
+
+    lay = scene_bank_layout(projet, _scene_avec_acteurs("A", "B"), "obj")
+    assert lay.bank_count() == 1
+    assert [RESERVED_SLOT_COLOR, BLEU, ROUGE, VERT] in lay.slot_colors
+
+
+def test_les_memes_couleurs_dans_un_autre_ordre_partagent_leur_banque(projet):
+    _sprite(projet, "Avant", [ROUGE, VERT])
+    _sprite(projet, "Apres", [VERT, ROUGE])
+
+    lay = scene_bank_layout(projet, _scene_avec_acteurs("Avant", "Apres"), "obj")
+    assert lay.bank_count() == 1
+
+
+def test_une_scene_sans_l_englobante_ne_prend_pas_plus_de_banques(projet):
+    """L'englobante vaut pour tout le projet : sa banque en reçoit les couleurs
+    même quand le sprite qui la porte n'est pas dans la scène, sans coûter de
+    banque de plus que la palette d'origine."""
+    petit = _sprite(projet, "Petit", [ROUGE, BLEU])
+    _sprite(projet, "Grand", [VERT, ROUGE, BLEU, JAUNE])
+    _sprite(projet, "Autre", [JAUNE, VERT])
+
+    lay = scene_bank_layout(projet, _scene_avec_acteurs("Petit", "Autre"), "obj")
+    assert lay.bank_count() == 1    # Autre est aussi dans Grand
+    assert lay.slot_colors[lay.bank_index(OWN_PAL_BANK, petit.own_palette)] == \
+        [RESERVED_SLOT_COLOR, VERT, ROUGE, BLEU, JAUNE]
+
+
+def test_l_englobante_d_une_englobante_est_elle_meme(projet):
+    from codegen.palette_alloc import enclosing_sprite_palette
+    _sprite(projet, "A", [ROUGE])
+    _sprite(projet, "B", [VERT, ROUGE])
+    _sprite(projet, "C", [ROUGE, VERT])          # même taille, autre ordre : l'ordre des couleurs tranche
+    englobante = enclosing_sprite_palette(projet, [ROUGE])
+    assert englobante == [ROUGE, VERT]
+    assert enclosing_sprite_palette(projet, englobante) == englobante
+    assert enclosing_sprite_palette(projet, [BLEU]) == [BLEU]   # aucune ne la contient
+
+
+def test_la_conversion_recale_les_pixels_sur_l_englobante(projet, monkeypatch):
+    """Les tuiles d'un sprite sont converties une fois pour tout le projet : elles
+    doivent viser les positions de ses couleurs DANS l'englobante, celle que sa
+    banque recevra. grit est remplacé par un .c au format qu'il écrit, dont la
+    palette suit l'ordre propre du sprite (index 1 = ROUGE, 2 = BLEU)."""
+    from PIL import Image
+    from codegen import grit_conversion
+
+    petit = _sprite(projet, "Petit", [ROUGE, BLEU])
+    _sprite(projet, "Grand", [VERT, ROUGE, BLEU])
+    png = projet.asset_abs(petit.asset)
+    png.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGBA", (8, 8), (255, 0, 0, 255)).save(png)
+    monkeypatch.setattr(grit_conversion, "build_sprite_sheet_indexed", lambda src, *_a: src)
+    monkeypatch.setattr(grit_conversion, "quantize_asset", lambda *_a: Image.new("RGBA", (8, 8)))
+
+    def grit(cmd, _label, cwd):
+        out = Path(cwd) / (cmd[cmd.index("-o") + 1] + ".c")
+        out.write_text(
+            "const unsigned int sprite_PetitTiles[1] __attribute__((aligned(4)))= {\n0x00000021,\n};\n"
+            f"const unsigned short sprite_PetitPal[3] __attribute__((aligned(4)))= {{\n"
+            f"0x{RESERVED_SLOT_COLOR:04X},0x{ROUGE:04X},0x{BLEU:04X},\n}};\n", encoding="utf-8")
+        return True
+
+    conversion = grit_conversion.GritSprites(Path("grit"), lambda *_a: None, grit)
+    assert conversion.run(projet, [(None, petit, [RESERVED_SLOT_COLOR, ROUGE, BLEU])]) is True
+    texte = (projet.grit_out_dir / "sprite_Petit.c").read_text(encoding="utf-8")
+    assert "0x00000032" in texte    # ROUGE est en 2, BLEU en 3 dans [réservé, VERT, ROUGE, BLEU]

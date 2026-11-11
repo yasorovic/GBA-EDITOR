@@ -530,7 +530,16 @@ class GritSprites:
             # palette_alloc.effective_palette_colors), ce fallback ne sert que si
             # la résolution en amont a échoué.
             from core.models.gba_color import RESERVED_SLOT_COLOR
+            from codegen.palette_alloc import enclosing_sprite_palette
             bank_colors = list(colors) if colors else ([RESERVED_SLOT_COLOR] + own_pal if own_pal else [])
+            # Palette propre : les pixels se calent d'abord sur elle (`direct_index`),
+            # puis `remap_tiles_to_bank` les recale PAR COULEUR sur sa palette
+            # englobante, celle que la banque recevra (cf. `enclosing_sprite_palette`).
+            # Une palette de scène garde son recoloriage par index : les deux étapes
+            # visent alors la même banque.
+            target_colors = bank_colors
+            if own_pal and bank_colors == [RESERVED_SLOT_COLOR] + own_pal:
+                target_colors = [RESERVED_SLOT_COLOR] + enclosing_sprite_palette(p, own_pal)
 
             sym = f"sprite_{c_sym(sprite.name)}"
             outputs = [p.grit_out_dir / f"{sym}.c", p.grit_out_dir / f"{sym}.h"]
@@ -538,6 +547,7 @@ class GritSprites:
                 "source": file_digest(ap),
                 "sprite": sprite.to_dict(),
                 "palette": bank_colors,
+                "bank": target_colors,
                 "grit": tool_signature(self._grit),
             }) if self._cache else "")
             if self._cache and self._cache.hit(f"sprite:{sprite.name}", fingerprint, outputs):
@@ -584,7 +594,7 @@ class GritSprites:
                 return False
 
             if bank_colors:
-                if not remap_tiles_to_bank(Path(out_base + ".c"), bank_colors, self._emit):
+                if not remap_tiles_to_bank(Path(out_base + ".c"), target_colors, self._emit):
                     return False
             for ext in (".c", ".h"):
                 src_f = Path(out_base + ext)
