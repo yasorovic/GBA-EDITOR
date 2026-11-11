@@ -4,7 +4,11 @@
    tableau (le moteur laisse la porte ouverte, `#ifndef PAL_BG_RAM`). Le tableau part rempli de 0x7777, une valeur
    qu'aucune étape n'écrit : une case qui la garde n'a pas été recopiée.
 
-   SORTIE : « <étape> <pool> <index> <couleur en hexadécimal> » pour les index 47 à 64 de chaque pool. */
+   SORTIE : « <étape> <pool> <index> <couleur en hexadécimal> » pour les index 47 à 64 de chaque pool, puis
+   « lu <index> <couleur> » pour ce que `get_color` rend.
+
+   Les tables de début de scène (`g_pal_bg_<scène>` dans un vrai build) sont posées par `palette_scene_start` : le
+   pool BG part de couleurs 0x05nn, le pool OBJ n'en a pas (NULL, comme une scène sans palette OBJ). */
 
 #include <stdio.h>
 
@@ -83,8 +87,12 @@ static void imprimer(const char *etape) {
             printf("%s %d %d %04x\n", etape, pool, i, (unsigned)fake_pal[pool * 256 + i]);
 }
 
+static unsigned short scene_bg[256];
+
 int main(void) {
     for (int i = 0; i < 512; i++) fake_pal[i] = 0x7777;
+    for (int i = 0; i < 256; i++) scene_bg[i] = (unsigned short)(0x0500 + i);
+    palette_scene_start(scene_bg, 0);
 
     palette_set_bg(3, 1);       imprimer("ecrite");     /* la copie change, pas la mémoire de palettes */
     palette_commit();           imprimer("recopiee");   /* la banque 3 du pool BG arrive, rien d'autre */
@@ -93,5 +101,16 @@ int main(void) {
     palette_commit();           imprimer("rien_a_recopier");
 
     palette_set_obj(3, 0);      palette_commit();       imprimer("obj");
+
+    /* Une banque tenue par un script : couleur par couleur, puis rendue à son début de scène. */
+    int banque = palette_bg_bank(3);
+    palette_bank_set_color(banque, 5, palette_rgb(31, 0, 0));
+    palette_bank_set_color(banque, 0, 0x1234);              /* l'index 0 n'est pas écrit */
+    palette_bank_set_color(palette_bg_bank(16), 5, 0x1234); /* banque hors bornes : rien */
+    printf("lu 5 %04x\n", (unsigned)palette_bank_get_color(banque, 5));
+    palette_commit();           imprimer("couleur");
+    palette_bank_reset(banque); palette_commit();       imprimer("reset");
+    palette_bank_reset(palette_obj_bank(3)); palette_commit(); imprimer("reset_obj_sans_table");
+    printf("lu rgb %04x\n", (unsigned)palette_rgb(40, 16, -2));
     return 0;
 }

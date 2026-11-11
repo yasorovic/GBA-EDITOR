@@ -153,6 +153,14 @@ Le panneau **API**, section **Décor**, détaille les fonds tuilés, les palette
 
 Pour un fond 4 bpp à plusieurs sous-palettes, `layer.pal_bank` donne la banque de la première sous-palette. Les banques peuvent être disjointes. Un calcul comme `layer.pal_bank + 1` peut donc viser une autre palette que la deuxième sous-palette du fond.
 
+`palette:bg_bank(n)` et `palette:obj_bank(n)` rendent une banque de palette (0 à 15) de l'un des deux pools. Ses méthodes `get_color`, `set_color`, `replace` et `reset` lisent et changent ses couleurs. Une couleur s'écrit `palette:rgb(r, g, b)`, chaque canal de 0 à 31 : c'est la précision du GBA, et un nombre écrit en clair hors de cette plage est refusé. L'index 0 d'une banque est transparent et n'est jamais écrit. Une écriture vaut pour tout ce qui cite la banque, et elle apparaît à l'écran à l'image suivante.
+
+```lua
+local ciel = palette:bg_bank(3)
+ciel:set_color(5, palette:rgb(31, 16, 0))
+ciel:reset()   -- les couleurs du début de la scène
+```
+
 ## Son
 
 Effets, musique et jingles. Voir le panneau **API**, section **Son**.

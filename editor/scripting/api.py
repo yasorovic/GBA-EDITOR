@@ -47,6 +47,7 @@ REF_ACTOR = "actor"
 # Références matérielles distinctes des modules qui les créent.
 REF_LAYER = "background_layer"    # un fond tuilé : son numéro matériel (bg_slot)
 REF_WINDOW_REGION = "window_region"  # une région du pochoir : son rang (WINR_*)
+REF_PALETTE_BANK = "palette_bank"    # une banque matérielle de palette : pool * 16 + banque
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,10 @@ REF_TYPE_TABLE: dict[str, RefType] = {
     REF_LAYER: RefType(
         c_type="int", prefix="layer",
         hint="A background is numbered by the hardware, from 0 to 3: `layer:get(n)`."),
+    REF_PALETTE_BANK: RefType(
+        c_type="int", prefix="palette",
+        hint="A palette bank is numbered by the hardware, from 0 to 15, in each pool: "
+             "`palette:bg_bank(n)` or `palette:obj_bank(n)`."),
     REF_ACTOR: RefType(
         c_type="Actor*", prefix="self",
         hint="An actor is called as `self:method()` on the actor running the script, "
@@ -1537,6 +1542,55 @@ RUNTIME_API: dict[str, ApiFunc] = {
         params=[Param("bank", PARAM_INT, doc="Sprite palette bank (0-15)"), Param("p", PARAM_STR, DOMAIN_PALETTE, doc="Name of a palette of the project")],
         doc="Replaces the colours of the SPRITE bank `bank` (0-15). Ex: "
             "palette:set_obj(1, \"Night\")",
+    ),
+    # Une banque TENUE par le script : lire et changer ses couleurs une à une, la
+    # remplacer, la rendre à son début de scène. Toute écriture passe par la copie
+    # des palettes en RAM et arrive à l'écran au VBlank suivant. Une écriture vaut
+    # pour TOUT ce qui cite la banque : on vise une banque, pas un asset.
+    "palette.bg_bank": ApiFunc(
+        lua_name="palette.bg_bank", c_func="palette_bg_bank",
+        params=[Param("bank", PARAM_INT, doc="Background palette bank (0-15)")], ret=REF_PALETTE_BANK,
+        doc="The BACKGROUND palette bank `bank` (0-15). Everything that cites the bank "
+            "sees its changes. Ex: palette:bg_bank(3):set_color(5, palette:rgb(31, 0, 0))",
+    ),
+    "palette.obj_bank": ApiFunc(
+        lua_name="palette.obj_bank", c_func="palette_obj_bank",
+        params=[Param("bank", PARAM_INT, doc="Sprite palette bank (0-15)")], ret=REF_PALETTE_BANK,
+        doc="The SPRITE palette bank `bank` (0-15). Everything that cites the bank "
+            "sees its changes. Ex: palette:obj_bank(1):reset()",
+    ),
+    "palette.rgb": ApiFunc(
+        lua_name="palette.rgb", c_func="palette_rgb",
+        params=[Param("r", PARAM_INT, doc="Red, 0-31"), Param("g", PARAM_INT, doc="Green, 0-31"),
+                Param("b", PARAM_INT, doc="Blue, 0-31")], ret="int",
+        doc="A colour as the GBA shows it: 5 bits per channel, 0-31 each, clamped. "
+            "Ex: palette:rgb(31, 16, 0) is orange",
+    ),
+    f"{REF_PALETTE_BANK}:get_color": ApiFunc(
+        lua_name=f"{REF_PALETTE_BANK}:get_color", c_func="palette_bank_get_color",
+        params=[Param("index", PARAM_INT, doc="Colour index in the bank (0-15)")], ret="int",
+        self_first=True,
+        doc="The current colour `index` of the bank, as palette:rgb() builds it.",
+    ),
+    f"{REF_PALETTE_BANK}:set_color": ApiFunc(
+        lua_name=f"{REF_PALETTE_BANK}:set_color", c_func="palette_bank_set_color",
+        params=[Param("index", PARAM_INT, doc="Colour index in the bank (1-15)"),
+                Param("color", PARAM_INT, doc="A colour from palette:rgb()")],
+        self_first=True,
+        doc="Changes colour `index` (1-15) of the bank. Index 0 is transparent and is "
+            "left alone. Ex: palette:bg_bank(3):set_color(5, palette:rgb(31, 0, 0))",
+    ),
+    f"{REF_PALETTE_BANK}:replace": ApiFunc(
+        lua_name=f"{REF_PALETTE_BANK}:replace", c_func="palette_bank_replace",
+        params=[Param("p", PARAM_STR, DOMAIN_PALETTE, doc="Name of a palette of the project")],
+        self_first=True,
+        doc="Replaces colours 1 to 15 of the bank with those of a palette of the "
+            "project. Ex: palette:bg_bank(0):replace(\"Night\")",
+    ),
+    f"{REF_PALETTE_BANK}:reset": ApiFunc(
+        lua_name=f"{REF_PALETTE_BANK}:reset", c_func="palette_bank_reset",
+        params=[], self_first=True,
+        doc="Gives the bank back the colours it had when the scene started.",
     ),
 
     # ── Sauvegarde (SRAM) ──────────────────────────────────────────

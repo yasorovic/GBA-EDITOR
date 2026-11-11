@@ -41,7 +41,11 @@ def etapes(tmp_path_factory) -> dict:
     sortie = subprocess.run([str(binaire)], capture_output=True, text=True, env=env).stdout
     out: dict = {}
     for ligne in sortie.splitlines():
-        etape, pool, index, valeur = ligne.split()
+        mots = ligne.split()
+        if mots[0] == "lu":
+            out.setdefault("lu", {})[mots[1]] = mots[2]
+            continue
+        etape, pool, index, valeur = mots
         out.setdefault(etape, {})[(int(pool), int(index))] = valeur
     return out
 
@@ -55,8 +59,8 @@ def test_une_ecriture_n_atteint_pas_la_memoire_de_palettes_avant_le_vblank(etape
 
 def test_le_commit_recopie_la_banque_ecrite_et_rien_d_autre(etapes):
     recopiee = etapes["recopiee"]
-    assert [recopiee[(0, i)] for i in BANQUE_3] == ["0000"] + [f"02{c:02x}" for c in range(1, 16)]
-    assert recopiee[(0, 47)] == recopiee[(0, 64)] == INTACTE
+    assert [recopiee[(0, i)] for i in BANQUE_3] == [INTACTE] + [f"02{c:02x}" for c in range(1, 16)]
+    assert recopiee[(0, 47)] == recopiee[(0, 64)] == INTACTE    # l'index 0 de la banque non plus : jamais écrit
     assert all(recopiee[(1, i)] == INTACTE for i in range(47, 65))
 
 
@@ -66,8 +70,33 @@ def test_un_commit_sans_ecriture_ne_recopie_rien(etapes):
 
 def test_le_pool_obj_a_sa_propre_plage(etapes):
     obj = etapes["obj"]
-    assert [obj[(1, i)] for i in BANQUE_3] == ["0000"] + [f"01{c:02x}" for c in range(1, 16)]
+    assert [obj[(1, i)] for i in BANQUE_3] == [INTACTE] + [f"01{c:02x}" for c in range(1, 16)]
     assert obj[(0, 48)] == "1111"     # le pool BG n'a pas été recopié une seconde fois
+
+
+# ── Une banque tenue par un script ──────────────────────────────────────────
+
+def test_set_color_change_une_couleur_et_get_color_la_relit_avant_l_affichage(etapes):
+    assert etapes["lu"]["5"] == "001f"                     # palette:rgb(31, 0, 0), lu dans la copie
+    couleur = etapes["couleur"]
+    assert couleur[(0, 53)] == "001f"
+    assert couleur[(0, 48)] == "1111"                      # l'index 0 n'a pas reçu 0x1234
+    assert couleur[(0, 54)] == "0206"                      # les autres couleurs de la banque restent
+
+
+def test_reset_rend_le_debut_de_scene_sans_toucher_l_index_0(etapes):
+    reset = etapes["reset"]
+    assert [reset[(0, i)] for i in range(49, 64)] == [f"05{i:02x}" for i in range(49, 64)]
+    assert reset[(0, 48)] == "1111"
+
+
+def test_reset_d_un_pool_sans_table_remet_a_zero(etapes):
+    reset = etapes["reset_obj_sans_table"]
+    assert [reset[(1, i)] for i in range(49, 64)] == ["0000"] * 15
+
+
+def test_rgb_borne_chaque_canal_a_0_31(etapes):
+    assert etapes["lu"]["rgb"] == "021f"                    # (31, 16, 0)
 
 
 class _Journal:
@@ -85,3 +114,4 @@ def test_le_main_emis_ecrit_les_palettes_par_la_copie_et_les_recopie_apres_le_vb
     assert "VBlankIntrWait();\n        palette_commit();" in main_c
     assert "palette_write(PAL_POOL_BG, 0, &backdrop, 1);" in main_c
     assert "PAL_BG_RAM" not in main_c and "PAL_OBJ_RAM" not in main_c
+    assert "palette_scene_start(" in main_c

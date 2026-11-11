@@ -89,6 +89,10 @@ _ENGINE_KEYS: frozenset[str] = frozenset({
     "window_region:set_obj", "window_region:set_blend",
     "blend.set_layer", "blend.set_obj", "blend.set_backdrop",
     "blend.set_alpha", "blend.set_fade", "blend.mode",
+    # Les palettes : remplacer une banque entière (`palette:set_bg`) reste l'itération ;
+    # la tenir couleur par couleur est le moteur.
+    "palette.bg_bank", "palette.obj_bank", "palette.rgb",
+    "palette_bank:get_color", "palette_bank:set_color", "palette_bank:replace", "palette_bank:reset",
     # Le son ne replie pas ses trois boîtes ici. Elles sont peu fréquentes,
     # mais les cacher sous un vague « Aller plus loin » les rendait
     # indécouvrables. Elles vivent plus bas dans des sous-groupes nommés de
@@ -210,6 +214,8 @@ _FUNC_HOME: dict[str, str] = {
     "background_layer:set_tile": "Tilemap", "background_layer:get_tile": "Tilemap",
     "background_layer:set_tile_palette": "Tilemap", "background_layer:set_tile_flip": "Tilemap",
     "background_layer:fill": "Tilemap",
+    "palette_bank:get_color": "Palette", "palette_bank:set_color": "Palette",
+    "palette_bank:replace": "Palette", "palette_bank:reset": "Palette",
     "window_region:show": "Window", "window_region:hide": "Window", "window_region:set": "Window",
     "window_region:set_layer": "Window", "window_region:get_layer": "Window",
     "window_region:set_obj": "Window", "window_region:set_blend": "Window",

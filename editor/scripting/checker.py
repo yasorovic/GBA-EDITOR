@@ -2096,6 +2096,12 @@ class Checker:
                     _key, api = self._method_of(ref, e.method)
                     self._check_args(_key, api, e.args, receiver=chain_label(e.obj),
                                      library=self._library_of(e.obj))
+                elif ref and self._method_of(ref, e.method)[1] is not None:
+                    # Une autre référence enchaînée (`palette:bg_bank(0):replace("Nuit")`) : ses
+                    # arguments se jugent comme sur un `local` qui la tiendrait, sinon un nom
+                    # inconnu n'échouerait qu'au `make`.
+                    _key, api = self._method_of(ref, e.method)
+                    self._check_args(_key, api, e.args, receiver=chain_label(e.obj))
                 elif ref and self._method_of(ref, e.method)[1] is None:
                     shown = f"{chain_label(e.obj)}:{e.method}"
                     if not self._unknown_element(e.obj):
@@ -2148,6 +2154,22 @@ class Checker:
                 self._check_spawn_table(e)
             if key == "layer.get":
                 self._check_layer_number(e.args)
+            if key in ("palette.bg_bank", "palette.obj_bank", "palette.rgb"):
+                self._check_palette_numbers(key, e.args)
+
+    def _check_palette_numbers(self, key: str, args: list):
+        """Les nombres écrits en clair d'une banque (0-15) et d'une couleur (0-31 par canal, la
+        précision du GBA). Hors bornes, le moteur borne en silence : une banque visée n'existe
+        pas, et `palette:rgb(255, 0, 0)` écrit pour du 0-255 sortirait du blanc saturé au lieu
+        d'un rouge. Un nombre calculé n'est pas jugé, comme un index de tableau."""
+        high = 31 if key == "palette.rgb" else 15
+        for arg in args:
+            if isinstance(arg, ExprNumber) and not 0 <= arg.value <= high:
+                what = "a colour channel" if key == "palette.rgb" else "a palette bank"
+                self.errors.append(CheckError(
+                    "error",
+                    f"{module_call_form(key)}(…): {arg.value} is outside 0-{high}, the range of "
+                    f"{what} on the GBA."))
 
     def _check_layer_number(self, args: list):
         """`layer:get(n)` : cette scène a-t-elle le fond `n` ? Un numéro écrit en clair est jugé au

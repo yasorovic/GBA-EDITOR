@@ -277,15 +277,63 @@ extern const int g_palette_count;
    voisine, un index hors table lirait des couleurs au hasard. Le nom vient
    d'une constante générée, donc l'index est juste par construction — sauf si
    la palette a été supprimée du catalogue entre deux builds. */
-void palette_set_bg(int bank, int idx) {
-    if (bank < 0 || bank > 15 || idx < 0 || idx >= g_palette_count) return;
-    palette_write(PAL_POOL_BG, bank * 16, g_palettes[idx], 16);
+/* ── Une banque tenue par un script (`palette:bg_bank(n)`) ───────── */
+/* La référence est un entier : pool * 16 + banque, -1 si le numéro est hors de
+   0-15 (chaque méthode l'ignore alors). L'index 0 d'une banque n'est jamais
+   écrit par ces fonctions : il est transparent partout, sauf en banque 0 du BG où
+   c'est le backdrop de la scène, qui a son propre chemin. */
+int palette_bg_bank(int bank)  { return (bank >= 0 && bank < 16) ? bank : -1; }
+int palette_obj_bank(int bank) { return (bank >= 0 && bank < 16) ? 16 + bank : -1; }
+
+/* Une couleur telle que le GBA l'affiche : 5 bits par canal, 0-31, bornés. */
+int palette_rgb(int r, int g, int b) {
+    r = r < 0 ? 0 : r > 31 ? 31 : r;
+    g = g < 0 ? 0 : g > 31 ? 31 : g;
+    b = b < 0 ? 0 : b > 31 ? 31 : b;
+    return r | (g << 5) | (b << 10);
 }
 
-void palette_set_obj(int bank, int idx) {
-    if (bank < 0 || bank > 15 || idx < 0 || idx >= g_palette_count) return;
-    palette_write(PAL_POOL_OBJ, bank * 16, g_palettes[idx], 16);
+/* Les palettes de début de scène : les tables ROM émises par le build, NULL si
+   la scène n'occupe aucune banque de ce pool. C'est ce que `reset` rétablit.
+   Posées par scene_init. */
+static const u16 *g_palette_scene[2];
+
+void palette_scene_start(const u16 *bg, const u16 *obj) {
+    g_palette_scene[PAL_POOL_BG]  = bg;
+    g_palette_scene[PAL_POOL_OBJ] = obj;
 }
+
+/* La couleur COURANTE, lue dans la copie : ce que la prochaine image affichera. */
+int palette_bank_get_color(int ref, int index) {
+    if (ref < 0 || ref > 31 || index < 0 || index > 15) return 0;
+    return g_palette_copy[ref >> 4][(ref & 15) * 16 + index];
+}
+
+void palette_bank_set_color(int ref, int index, int color) {
+    if (ref < 0 || ref > 31 || index < 1 || index > 15) return;
+    u16 c = (u16)(color & 0x7FFF);
+    palette_write(ref >> 4, (ref & 15) * 16 + index, &c, 1);
+}
+
+/* Les couleurs 1 à 15 d'une palette du catalogue (`g_palettes`). */
+void palette_bank_replace(int ref, int idx) {
+    if (ref < 0 || ref > 31 || idx < 0 || idx >= g_palette_count) return;
+    palette_write(ref >> 4, (ref & 15) * 16 + 1, g_palettes[idx] + 1, 15);
+}
+
+/* Le contenu de début de scène ; une banque que la scène n'occupait pas revient à zéro. */
+void palette_bank_reset(int ref) {
+    static const u16 zeros[16];
+    if (ref < 0 || ref > 31) return;
+    int pool = ref >> 4, first = (ref & 15) * 16;
+    const u16 *scene = g_palette_scene[pool];
+    palette_write(pool, first + 1, (scene ? scene + first : zeros) + 1, 15);
+}
+
+/* Raccourcis de `palette:bg_bank(n):replace(nom)`. Ils écrivaient aussi l'index 0,
+   ce qui effaçait le backdrop en banque 0 du BG. */
+void palette_set_bg(int bank, int idx)  { palette_bank_replace(palette_bg_bank(bank), idx); }
+void palette_set_obj(int bank, int idx) { palette_bank_replace(palette_obj_bank(bank), idx); }
 
 /* ── Sauvegarde (SRAM) ───────────────────────────────────────────── */
 /* 32 Kio de mémoire sauvegardée à 0x0E000000, alimentés par la pile de la

@@ -295,6 +295,11 @@ def _background_lines(p, scene, sym: str, bgi: list[dict], scene_actors: list, s
     # afficher une couleur de fond).
     L.append(f"    {{ static const u16 backdrop = 0x{resolve_backdrop_color(p, scene):04X}; "
              "palette_write(PAL_POOL_BG, 0, &backdrop, 1); }")
+    # Ce que `palette:bg_bank(n):reset()` rétablit : les tables de la scène, quand
+    # elles sont émises (cf. gen_scene_data, même garde que les copies ci-dessus).
+    bg_table = f"g_pal_bg_{sym}" if bg_layout.bank_count() > 0 else "0"
+    obj_table = f"g_pal_obj_{sym}" if obj_layout.bank_count() > 0 else "0"
+    L.append(f"    palette_scene_start({bg_table}, {obj_table});")
     return L
 
 
