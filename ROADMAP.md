@@ -18,7 +18,7 @@ d'un plan. Le numéro `0.Y.0` n'est attribué qu'à la sortie (voir [Workflow de
 
 | Étape | État |
 | --- | --- |
-| Jouer son jeu dans le navigateur (itch.io) | Conception faite, développement non commencé |
+| Jouer son jeu dans le navigateur (itch.io) | Livré le 2026-11-09, démo Platformer validée sur itch.io |
 | Nodal background editor | Conception en cours, développement non commencé |
 | Nodal soundbox et soundmixer | À concevoir |
 | Le pipeline 2D complet (`1.0.0-stable`, affirmation de capacité) | En route |
@@ -36,12 +36,12 @@ d'un plan. Le numéro `0.Y.0` n'est attribué qu'à la sortie (voir [Workflow de
 
 ### Jouer son jeu dans le navigateur
 
-Un jeu fini doit pouvoir se jouer sans installer d'émulateur. Cette version ajoute un outil qui
-prend une ROM `.gba` et produit un dossier web prêt à être envoyé sur itch.io, avec un émulateur
-compilé pour le navigateur. La ROM n'est pas modifiée.
+L'export **Build WEB** produit un ZIP prêt à être envoyé sur itch.io, avec le lecteur et l'émulateur
+compilé pour le navigateur. Il réutilise le build ROM sans modifier la ROM ; le jeu se lance aussi
+depuis le ZIP extrait, en ouvrant `index.html`.
 
-- Faisabilité vérifiée.
-- Reste à faire : tout le développement, puis la vérification sur les principaux navigateurs.
+- Livré le 2026-11-09 ; démo Platformer validée sur itch.io.
+- Export local vérifié dans Chrome et Firefox, depuis le disque et en HTTP.
 
 ### Nodal background editor
 

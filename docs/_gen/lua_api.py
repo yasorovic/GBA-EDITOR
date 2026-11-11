@@ -218,8 +218,8 @@ def _cards(groups: list[dict], color: str, prefix: str) -> list[str]:
         total = len(g["iteration"]) + len(g["engine"])
         count = f"{total} fonction" + ("s" if total > 1 else "")
         lines += [f":::{{grid-item-card}} {g['name']}", f":link: {prefix}{g['slug']}", ":link-type: doc",
-                  f":class-card: backstage-card backstage-card-{color}", "",
-                  g["description"], "", "+++", count, ":::", ""]
+                  f":class-card: backstage-card backstage-card-{color}", f":footer: {count}", "",
+                  g["description"], "", ":::", ""]
     return lines + ["::::", ""]
 
 
