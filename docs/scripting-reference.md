@@ -149,7 +149,9 @@ Depuis un autre script, les **références** (`actor_ref`, `scene_ref`, `sfx_ref
 
 ## Décor
 
-Fonds tuilés, palettes, fenêtres et mélange de couleurs. Voir le panneau **API**, section **Décor** — rien de spécifique à documenter ici pour l'instant au-delà de ce que chaque fiche de fonction explique déjà.
+Le panneau **API**, section **Décor**, détaille les fonds tuilés, les palettes, les fenêtres et le mélange de couleurs.
+
+Pour un fond 4 bpp à plusieurs sous-palettes, `layer.pal_bank` donne la banque de la première sous-palette. Les banques peuvent être disjointes. Un calcul comme `layer.pal_bank + 1` peut donc viser une autre palette que la deuxième sous-palette du fond.
 
 ## Son
 

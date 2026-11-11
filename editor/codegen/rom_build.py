@@ -35,7 +35,7 @@ from codegen.grit_conversion import (
 )
 from codegen.layout_cache import scene_layout_cache
 from codegen.palette_alloc import (
-    scene_bank_layout, effective_palette_colors, ui_image_sprite_pools,
+    scene_bank_layout, effective_palette_colors, ui_image_sprite_pools, REFUSED_BG_BANKS,
 )
 from codegen.actor_appearance import owner_appearances
 from codegen.oam_alloc import scene_has_model, project_has_model
@@ -108,19 +108,6 @@ _ROM_LOCK_SIGNS = ("Invalid argument", "Permission denied")
 # Un outil (make, grit, mmutil) qui ne rend pas la main en ce temps est tenu pour bloqué : sans limite, un `make` figé
 # gelait le build jusqu'à la fermeture de l'éditeur.
 _TOOL_TIMEOUT_SECONDS = 15 * 60
-
-
-class _PalKey:
-    """Porteur de palette pour interroger `SceneBankLayout.bg_block_offset`.
-
-    Celui-ci prend un asset et lit `.palettes` ; une sous-palette synthétisée par
-    la fusion d'un animé avec son décor n'appartient à aucun asset (cf.
-    codegen/bg_anim). L'allocation étant dédupliquée par CONTENU, ce porteur
-    minimal suffit à retrouver la banque."""
-    __slots__ = ("palettes", "bpp")
-
-    def __init__(self, pal):
-        self.palettes, self.bpp = [pal], 4
 
 
 class BuildWorker(EventEmitter, threading.Thread):
@@ -355,13 +342,11 @@ class BuildWorker(EventEmitter, threading.Thread):
                                    " build (increment 2) → ignored")
                         continue
                     if ba and ba.tileset:
-                        has_ov = bool(getattr(layer, "tile_palette_overrides", None))
-                        sym = bg_layer_sym_for(scene, layer)
-                        # Map PROPRE À LA SCÈNE si overrides (scène = source de
-                        # vérité), sinon partagée entre scènes (dédup ROM).
-                        key = (scene.name, sym) if has_ov else (ba.name, layer.bg_slot)
-                        if key not in seen_encoded:
-                            seen_encoded.add(key)
+                        # Une carte par disposition de banques, ou par scène
+                        # quand le calque est repeint (cf. bg_layer_sym_for).
+                        sym = bg_layer_sym_for(p, scene, layer)
+                        if sym not in seen_encoded:
+                            seen_encoded.add(sym)
                             # Garde-fou 8bpp → 4bpp (transitoire) : aucun tileset
                             # 8bpp ne doit atteindre bg_emit (il serait interprété
                             # en 4bpp = corrompu).
@@ -376,9 +361,9 @@ class BuildWorker(EventEmitter, threading.Thread):
                                     f"'{build_ba.name}' 8bpp takes the whole BG "
                                     "palette — the other background layers of "
                                     f"scene '{scene.name}' will have wrong colours", "bg"))
-                            pal_offset = bg_layout.bg_block_offset(build_ba) or 0
+                            banks = bg_layout.bg_banks(build_ba) or REFUSED_BG_BANKS
                             final_map = self._bg_final_tilemap(
-                                p, scene, build_ba, layer, pal_offset)
+                                p, scene, build_ba, layer, banks)
                             self._emit_encoded_bg(p, build_ba, sym, final_map)
                         continue
                     key = (layer.background_name, layer.bg_slot)
@@ -687,13 +672,13 @@ class BuildWorker(EventEmitter, threading.Thread):
             self.toolchain.resolve_grit(), self._emit, self._run_cmd, asset_cache
         ).run(p, layers)
 
-    def _bg_final_tilemap(self, p, scene, ba, layer, pal_offset: int) -> list:
-        """SE finale par cellule du layer (pal_offset DÉJÀ appliqué) :
+    def _bg_final_tilemap(self, p, scene, ba, layer, banks) -> list:
+        """SE finale par cellule du layer (banques matérielles DÉJÀ appliquées) :
         - tuile PEINTE (`layer.tile_palette_overrides`) -> SE_PALBANK = banque HW de la
           banque de scène choisie (slot dans active_bg_palettes == index HW, cf.
           scene_bank_layout qui place chaque banque active à son slot). La scène
           est la source de vérité : l'asset (`ba.tilemap`) reste intact.
-        - tuile normale -> pal_bank local + pal_offset (bloc de l'asset)."""
+        - tuile normale -> `banks[pal_bank local]`, la banque allouée à cette sous-palette."""
         from core.models.tile_codec import unpack_se, pack_se
         tp = getattr(layer, "tile_palette_overrides", None) or {}
         tw = ba.tiles_w or 1
@@ -712,15 +697,14 @@ class BuildWorker(EventEmitter, threading.Thread):
                 if bank and bank.colors:
                     out.append(pack_se(tid, slot, fh, fv))
                     continue
-            out.append(pack_se(tid, pb + pal_offset, fh, fv))
+            out.append(pack_se(tid, banks[pb], fh, fv))
         # Animés en mode `shared` : leur rectangle pointe sur le bloc réservé, une
         # fois pour toutes. Cuit ici et non posé à l'init parce que la carte ne
         # changera plus — au runtime il ne restera que des pixels à recopier.
         from codegen.bg_anim import bake_shared_map, host_palettes
         lay = scene_bank_layout(p, scene, "bg")
-        offsets = {tuple(pal): (lay.bg_block_offset(_PalKey(pal)) or 0)
-                   for pal in host_palettes(p, ba)}
-        return bake_shared_map(p, ba, out, offsets)
+        pal_banks = {tuple(pal): lay.bg_palette_bank(pal) for pal in host_palettes(p, ba)}
+        return bake_shared_map(p, ba, out, pal_banks)
 
     def _bg_build_asset(self, p, ba):
         """Filtre les fonds non émissibles au build. Un fond BITMAP (Mode 4) est
@@ -736,8 +720,8 @@ class BuildWorker(EventEmitter, threading.Thread):
     def _emit_encoded_bg(self, p, ba, sym, final_tilemap):
         """Émet un fond COMPRESSÉ (métadonnées) en C compatible grit — pas de
         grit. `sym` = symbole du layer (partagé, ou propre à la scène si peint,
-        cf. bg_layer_sym_for). `final_tilemap` = SE avec pal_offset + overrides
-        déjà appliqués (cf. _bg_final_tilemap) — donc pal_offset=0 ici. cf.
+        cf. bg_layer_sym_for). `final_tilemap` = SE avec banques + overrides
+        déjà appliqués (cf. _bg_final_tilemap), donc pal_offset=0 ici. cf.
         codegen/bg_emit.
 
         Le tileset émis est celui du CHARBLOCK, pas celui du seul fond : les
@@ -792,8 +776,7 @@ class BuildWorker(EventEmitter, threading.Thread):
 
         def _bank(a) -> int:
             """Banque allouée à la sous-palette SYNTHÉTISÉE de cette fusion."""
-            pal = a["block"].composed.palette
-            return bg_layout.bg_block_offset(_PalKey(pal)) or 0
+            return bg_layout.bg_palette_bank(a["block"].composed.palette)
 
         # `instance` — une table par fusion distincte, pas par placement : deux
         # copies au-dessus du même décor lisent la même.

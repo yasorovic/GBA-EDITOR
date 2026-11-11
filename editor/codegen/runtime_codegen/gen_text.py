@@ -705,8 +705,8 @@ def scene_image_fills(p: Project, scene) -> tuple[list[dict], list[dict]]:
         ba = p.get_background(src_name) if src_name else None
         if ba is None or not getattr(ba, "tileset", None):    continue
         if getattr(ba, "bpp", 4) == 8:                        continue  # cf. layers 8bpp
-        pal_offset = bank_layout.bg_block_offset(ba)
-        if pal_offset is None:                                continue  # pas de banques
+        banks = bank_layout.bg_banks(ba)
+        if banks is None:                                     continue  # pas de banques
 
         x, y, _ = lay.absolute_origin(el, lambda _n: None)
         tx, ty = x // 8, y // 8
@@ -727,7 +727,7 @@ def scene_image_fills(p: Project, scene) -> tuple[list[dict], list[dict]]:
             if cell >= len(src_map):
                 return UI_SE_EMPTY
             tid, pb, fh, fv = unpack_se(src_map[cell])
-            return pack_se(tid, pb + pal_offset, fh, fv)
+            return pack_se(tid, banks[pb], fh, fv)
 
         se = [UI_SE_EMPTY] * (w * h)
         if fk == FILL_BG:
@@ -756,6 +756,6 @@ def scene_image_fills(p: Project, scene) -> tuple[list[dict], list[dict]]:
             assets.append({"name": ba.name, "sym": f"ui_bg_{c_sym(ba.name)}",
                            "words": words, "tiles": len(words) // 8})
         fills.append({"name": el.name, "tx": tx, "ty": ty, "w": w, "h": h,
-                      "asset": by_name[ba.name], "se": se, "bank": pal_offset,
+                      "asset": by_name[ba.name], "se": se, "bank": banks[0],
                       "slot": int(lay.bg_slot)})   # slot BG du nœud (routage v0.12)
     return fills, assets

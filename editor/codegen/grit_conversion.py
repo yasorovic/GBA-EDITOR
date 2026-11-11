@@ -82,17 +82,19 @@ def bg_layer_sym(asset_name: str, bg_slot: int) -> str:
     return c_sym(f"{asset_name}_bg{bg_slot}")
 
 
-def bg_layer_sym_for(scene, layer) -> str:
-    """Symbole d'un layer au build. Par défaut PARTAGÉ entre scènes
-    (`bg_layer_sym`, dédup ROM). Mais si le layer porte des overrides de palette
-    par tuile (`layer.tile_palette_overrides`), la map devient PROPRE À LA SCÈNE (la
-    scène est la source de vérité) : symbole qualifié par le nom de scène. Les
-    tuiles restant identiques, seule la map (SE_PALBANK) diffère — mais on émet
-    tuiles+map ensemble par simplicité (surcoût ROM seulement pour un fond
-    partagé ET peint dans plusieurs scènes)."""
+def bg_layer_sym_for(p: Project, scene, layer) -> str:
+    """Symbole d'un layer compressé. Les scènes qui placent ses sous-palettes
+    dans les mêmes banques partagent les tuiles et la carte en ROM. Un calque
+    repeint garde un symbole propre à sa scène."""
+    base = bg_layer_sym(layer.background_name, layer.bg_slot)
     if getattr(layer, "tile_palette_overrides", None):
-        return c_sym(f"{scene.name}_{layer.background_name}_bg{layer.bg_slot}")
-    return bg_layer_sym(layer.background_name, layer.bg_slot)
+        base = c_sym(f"{scene.name}_{base}")
+    ba = p.get_background(layer.background_name)
+    if ba is None:
+        return base
+    from codegen.palette_alloc import bg_map_banks
+    banks = "".join(f"{bank:x}" for bank in bg_map_banks(p, scene, ba))
+    return f"{base}_pal{banks}"
 
 
 def bg_map_geometry(w: int, h: int) -> tuple[int, int, int]:

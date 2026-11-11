@@ -2562,13 +2562,10 @@ def _check_palette_bank_overflow(ctx: ValidationContext):
                 elif request.banks == 1:
                     wanted = "a bank"
                 else:
-                    wanted = f"{request.banks} adjacent banks"
+                    wanted = f"{request.banks} banks"
                 if refusal.cause == "needs_whole_pool":
                     cause = ("An 8bpp background takes the whole pool and cannot share it with other "
                              "palettes: move them to another scene or encode the background in 4bpp.")
-                elif refusal.cause == "not_adjacent":
-                    cause = (f"Banks {_banks_text(free)} are free but not adjacent: "
-                             "remove or reorder the scene palettes in between.")
                 elif free:
                     count = "1 bank is" if len(free) == 1 else f"{len(free)} banks are"
                     cause = (f"Only {count} free ({_banks_text(free)}): "

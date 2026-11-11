@@ -316,8 +316,9 @@ def test_un_fond_compresse_obtient_un_bloc_contigu(projet):
     ba = _ajouter_fond_compresse(projet, "Foret", sous)
 
     lay = scene_bank_layout(projet, _scene_avec_fonds("Foret"), "bg")
-    debut = lay.bg_block_offset(ba)
-    assert debut is not None
+    banques = lay.bg_banks(ba)
+    debut = banques[0]
+    assert banques == [debut, debut + 1, debut + 2]
     assert lay.slot_colors[debut:debut + 3] == sous
     assert lay.refusals == []
     assert lay.slot_owners[debut] == [("background", "Foret")]
@@ -330,13 +331,13 @@ def test_deux_fonds_aux_memes_couleurs_partagent_leur_bloc(projet):
     b = _ajouter_fond_compresse(projet, "ForetNuit", [list(p) for p in sous])
 
     lay = scene_bank_layout(projet, _scene_avec_fonds("Foret", "ForetNuit"), "bg")
-    assert lay.bg_block_offset(a) == lay.bg_block_offset(b)
+    assert lay.bg_banks(a) == lay.bg_banks(b)
     assert lay.bank_count() == 2
 
 
 def test_un_fond_compresse_deborde_faute_de_place(projet):
-    """Douze banques référencées, un fond qui en réclame six d'affilée : il n'y a
-    pas de bloc, et le dire est tout ce que le module peut faire."""
+    """Douze banques référencées, un fond qui en réclame six : il n'en reste que
+    quatre, et le dire est tout ce que le module peut faire."""
     scene = _scene_avec_fonds("Foret")
     noms = []
     for i in range(12):
@@ -346,7 +347,7 @@ def test_un_fond_compresse_deborde_faute_de_place(projet):
     ba = _ajouter_fond_compresse(projet, "Foret", [_couleurs(30 + i) for i in range(6)])
 
     lay = scene_bank_layout(projet, scene, "bg")
-    assert lay.bg_block_offset(ba) is None
+    assert lay.bg_banks(ba) is None
     [refus] = lay.refusals
     assert refus.cause == "not_enough_banks"
     assert refus.request.owners == [("background", "Foret")]
@@ -355,10 +356,14 @@ def test_un_fond_compresse_deborde_faute_de_place(projet):
     assert lay.slot_owners[0] == [("scene palette", "P0")]
 
 
-def test_des_banques_libres_mais_disjointes_se_disent_non_contigues(projet):
-    """Le cas que « more than 16 » masquait : il reste DEUX banques (3 et 9),
-    le fond en demande deux, mais pas côte à côte. Ce n'est pas un manque de
-    banques, c'est la fragmentation, et le refus doit le dire."""
+def test_un_fond_prend_des_banques_disjointes_et_sa_carte_les_cite(projet, tmp_path):
+    """Il reste DEUX banques (3 et 9), le fond en demande deux : chaque case d'une
+    carte 4 bpp désigne sa propre banque, le fond n'a donc pas besoin d'un bloc.
+    La carte émise envoie la sous-palette 0 en banque 3 et la 1 en banque 9."""
+    from core.models.tile_codec import pack_se, unpack_se
+    from codegen import BuildWorker
+    from core.toolchain import Toolchain
+
     scene = _scene_avec_fonds("Foret")
     noms = []
     for i in range(16):
@@ -368,11 +373,48 @@ def test_des_banques_libres_mais_disjointes_se_disent_non_contigues(projet):
         _ajouter_palette(projet, f"P{i}", i + 1)
         noms.append(f"P{i}")
     scene.active_bg_palettes = noms
-    _ajouter_fond_compresse(projet, "Foret", [_couleurs(30), _couleurs(31)])
+    sous = [_couleurs(30), _couleurs(31)]
+    ba = _ajouter_fond_compresse(projet, "Foret", sous)
+    ba.tilemap = [pack_se(0, 0, 0, 0), pack_se(0, 1, 0, 0)]
+    ba.tiles_w = 2
 
-    [refus] = scene_bank_layout(projet, scene, "bg").refusals
-    assert refus.cause == "not_adjacent"
-    assert refus.free_banks == [3, 9]
+    lay = scene_bank_layout(projet, scene, "bg")
+    assert lay.refusals == []
+    assert lay.bg_banks(ba) == [3, 9]
+    assert (lay.slot_colors[3], lay.slot_colors[9]) == (sous[0], sous[1])
+
+    worker = BuildWorker(projet, Toolchain())
+    carte = worker._bg_final_tilemap(projet, scene, ba, scene.background_layers[0], lay.bg_banks(ba))
+    assert [unpack_se(se)[1] for se in carte] == [3, 9]
+
+
+def test_une_carte_n_est_partagee_qu_entre_scenes_aux_memes_banques(projet):
+    """La carte d'un fond grave ses banques : deux scènes qui le rangent dans des
+    banques différentes ne peuvent pas lire la même. Avant, la seconde lisait en
+    silence les banques de la première."""
+    from codegen.grit_conversion import bg_layer_sym_for
+
+    _ajouter_fond_compresse(projet, "Foret", [_couleurs(70), _couleurs(71)])
+    _ajouter_fond_compresse(projet, "Collines", [_couleurs(72), _couleurs(73)])
+    seule = Scene(name="Seule", background_layers=[BackgroundLayer(background_name="Foret", bg_slot=0)])
+    jumelle = Scene(name="Jumelle", background_layers=[BackgroundLayer(background_name="Foret", bg_slot=0)])
+    apres = Scene(name="Apres", background_layers=[
+        BackgroundLayer(background_name="Collines", bg_slot=1),
+        BackgroundLayer(background_name="Foret", bg_slot=0)])
+    autre = Scene(name="Autre", background_layers=[
+        BackgroundLayer(background_name="Collines", bg_slot=1),
+        BackgroundLayer(background_name="Foret", bg_slot=0)])
+    scenes = (seule, jumelle, apres, autre)
+    for scene in scenes:
+        projet.scenes.append(scene)
+
+    assert scene_bank_layout(projet, seule, "bg").bg_banks(projet.get_background("Foret")) == [14, 15]
+    assert scene_bank_layout(projet, apres, "bg").bg_banks(projet.get_background("Foret")) == [12, 13]
+    sym = {s.name: bg_layer_sym_for(projet, s, next(L for L in s.background_layers
+                                                      if L.background_name == "Foret"))
+           for s in scenes}
+    assert sym["Seule"] == sym["Jumelle"]
+    assert sym["Apres"] == sym["Autre"] != sym["Seule"]
 
 
 def test_un_refus_nomme_tous_ceux_qui_partagent_les_couleurs(projet):
@@ -397,7 +439,7 @@ def test_un_fond_8bpp_occupe_les_seize_banques(projet):
     ba = _ajouter_fond_compresse(projet, "Photo", [pal256], bpp=8)
 
     lay = scene_bank_layout(projet, _scene_avec_fonds("Photo"), "bg")
-    assert lay.bg_block_offset(ba) == 0
+    assert lay.bg_banks(ba) == [0]
     assert lay.bank_count() == 16
     assert lay.slot_colors[0] == pal256[:16]
     assert lay.slot_colors[15] == pal256[240:]
@@ -413,7 +455,7 @@ def test_un_fond_8bpp_ne_cohabite_avec_rien(projet):
                                  [[(i * 7) & 0x7FFF for i in range(256)]], bpp=8)
 
     lay = scene_bank_layout(projet, scene, "bg")
-    assert lay.bg_block_offset(ba) is None
+    assert lay.bg_banks(ba) is None
     [refus] = lay.refusals
     assert refus.cause == "needs_whole_pool"
     assert refus.request.banks == 16

@@ -3,7 +3,7 @@
 `scene_init` et `scene_tick` relisent ce placement (posé par `apply_vram_layout`), ils ne le recalculent pas."""
 from __future__ import annotations
 
-from codegen.palette_alloc import effective_palette_colors
+from codegen.palette_alloc import effective_palette_colors, REFUSED_BG_BANKS
 from core.models.palette import OWN_PAL_BANK
 
 
@@ -98,14 +98,14 @@ def layer_base_bank(p, scene, bi: dict, bg_layout) -> int:
     """Banque de palette de BASE d'un fond, telle que le build la grave dans sa map.
 
     Une banque choisie (0-15) est elle-même. « Palette propre » : le premier slot du bloc
-    alloué au fond compressé (ses sous-palettes occupent des banques contiguës), ou le slot
+    alloué à la première sous-palette du fond compressé (les autres ne suivent pas forcément), ou le slot
     alloué à sa palette. Un fond dont les tuiles ont des banques peintes différentes rend
     ici sa banque de base, pas toutes celles en usage."""
     if bi["pal_bank"] != OWN_PAL_BANK:
         return bi["pal_bank"]
     ba = p.get_background(bi["stem"])
     if bi.get("compressed"):
-        return (bg_layout.bg_block_offset(ba) if ba else None) or 0
+        return ((bg_layout.bg_banks(ba) if ba else None) or REFUSED_BG_BANKS)[0]
     png = p.background_image_path(ba, bi['stem'])
     colors = effective_palette_colors(p, OWN_PAL_BANK, png, scene.active_bg_palettes)
     return bg_layout.bank_index(OWN_PAL_BANK, colors) or 0

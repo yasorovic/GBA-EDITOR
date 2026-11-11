@@ -132,9 +132,8 @@ def bg_info(p, scene) -> list[dict]:
             # Fond COMPRESSÉ (métadonnées) — 16 palettes via g_pal_bg, tuiles/map
             # depuis le C émis par pipeline._emit_encoded_bg. Un axe >64 tuiles
             # dépasse la fenêtre hardware -> streaming (map résidente 64 sur cet axe).
-            # Symbole PROPRE À LA SCÈNE si le layer est peint (map d'overrides,
-            # cf. bg_layer_sym_for / pipeline._emit_encoded_bg).
-            sym = bg_layer_sym_for(scene, layer)
+            # Le symbole tient compte des banques et des retouches de la scène.
+            sym = bg_layer_sym_for(p, scene, layer)
             tw, th = ba.tiles_w, ba.tiles_h
             stream_h = tw > 64
             stream_v = th > 64

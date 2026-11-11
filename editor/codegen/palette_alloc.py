@@ -29,6 +29,10 @@ from core.models.gba_color import extract_palette_from_image
 from core.models.gba_color import RESERVED_SLOT_COLOR
 from core.palette_presets import DEFAULT_PAL_BANK_COLORS
 
+# Banques lues par un fond compressé refusé : sa sous-palette `i` tombe en banque `i`,
+# telle que la scène la remplit (la banque 0 de secours y est posée, cf. `_allocate_scene_banks`).
+REFUSED_BG_BANKS = tuple(range(16))
+
 # Cache des palettes propres, invalidé par mtime du PNG.
 _own_cache: dict[tuple[str, float], list[int]] = {}
 
@@ -63,7 +67,6 @@ class BankRequest:
 class BankRefusal:
     """Une demande qui n'a pas trouvé de place, et pourquoi :
     - `not_enough_banks` : il reste moins de banques libres que demandé ;
-    - `not_adjacent` : il en reste assez, mais pas côte à côte ;
     - `needs_whole_pool` : un fond 8 bpp et d'autres palettes se disputent le pool
       (le fond veut les 16 banques, ou il les a déjà prises).
     `free_banks` = les banques libres au moment du refus."""
@@ -77,12 +80,12 @@ class SceneBankLayout:
 
     def __init__(self, slot_colors: list[Optional[list[int]]],
                  own_slot: dict[tuple, Optional[int]],
-                 bg_block: Optional[dict[tuple, Optional[int]]] = None,
+                 bg_block: Optional[dict[tuple, Optional[list[int]]]] = None,
                  slot_owners: Optional[list[list[tuple]]] = None,
                  refusals: Optional[list[BankRefusal]] = None):
         self.slot_colors = slot_colors      # 16 entrées : couleurs BGR555 ou None
         self._own_slot   = own_slot          # tuple(colors) -> index de banque (None si débordement)
-        self._bg_block   = bg_block or {}    # clé palettes fond compressé -> offset de bloc (None si débordement)
+        self._bg_block   = bg_block or {}    # clé palettes fond compressé -> banque par sous-palette (None si débordement)
         self.slot_owners = slot_owners or [[] for _ in range(16)]  # qui occupe chaque banque
         self.refusals    = refusals or []    # demandes sans place, dans l'ordre d'allocation
 
@@ -96,16 +99,23 @@ class SceneBankLayout:
             return None
         return self._own_slot.get(tuple(own_colors))
 
-    def bg_block_offset(self, ba) -> Optional[int]:
-        """Offset (première banque) du bloc alloué à un BackgroundAsset
-        compressé (ses N sous-palettes occupent des banques contiguës) —
-        None si débordement (pas assez de banques libres contiguës)."""
-        key = _bg_palettes_key(ba)
-        return self._bg_block.get(key)
+    def bg_banks(self, ba) -> Optional[list[int]]:
+        """Banque matérielle de chaque sous-palette d'un BackgroundAsset compressé :
+        la sous-palette `i` d'une case va en `bg_banks(ba)[i]`. Contiguës quand la
+        scène avait la place, dispersées sinon. None si le fond n'a pas de banques
+        dans cette scène (refusé, ou absent) : le build lit alors les banques 0..
+        telles que la scène les remplit (`bg_banks(ba) or REFUSED_BG_BANKS`)."""
+        return self._bg_block.get(_bg_palettes_key(ba))
+
+    def bg_palette_bank(self, pal) -> int:
+        """Banque d'UNE sous-palette allouée seule : celle d'une fusion d'animé et de
+        décor, qui n'appartient à aucun asset (cf. `bg_animation_sources`). 0 si
+        elle n'a pas de banque, comme pour un fond refusé."""
+        return (self._bg_block.get((tuple(pal),)) or REFUSED_BG_BANKS)[0]
 
     def bg_overflowed(self, ba) -> bool:
-        """Le bloc de palettes de ce fond compressé n'a trouvé aucune place : le build le pose à l'offset 0
-        (`bg_block_offset(...) or 0`) et ses tuiles lisent les banques 0.. telles que la scène les remplit."""
+        """Les palettes de ce fond compressé n'ont pas trouvé de place : le build lit `REFUSED_BG_BANKS`, et ses
+        tuiles affichent les banques 0.. telles que la scène les remplit."""
         key = _bg_palettes_key(ba)
         return key in self._bg_block and self._bg_block[key] is None
 
@@ -492,6 +502,18 @@ def scene_bank_layout(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
     return layout_memo("bank", (p, scene), lambda: _allocate_scene_banks(p, scene, pool), (pool,))
 
 
+def bg_map_banks(p: Project, scene: Scene, ba) -> tuple:
+    """Les banques que la carte d'un fond compressé grave dans cette scène : celles
+    de ses sous-palettes, puis celles des fusions d'animés cuites dans la carte
+    (cf. `bg_anim.bake_shared_map`). Deux scènes au même résultat peuvent lire la
+    même carte ; sinon chacune a la sienne (cf. `grit_conversion.bg_layer_sym_for`)."""
+    from codegen.bg_anim import host_blocks
+    layout = scene_bank_layout(p, scene, "bg")
+    return (tuple(layout.bg_banks(ba) or REFUSED_BG_BANKS)
+            + tuple(layout.bg_palette_bank(block.composed.palette)
+                    for block in host_blocks(p, ba) if block.shared))
+
+
 def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
     # (propriétaire, clé de dédup, contenu de banque) : la clé reste la liste BRUTE, c'est
     # elle que `bank_index` reçoit de ses appelants — mais le contenu écrit dans
@@ -562,19 +584,16 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
 
     def _refuse(request: BankRequest):
         free = [i for i in range(16) if slots[i] is None]
-        if request.banks == 16 or whole_pool_taken:
-            cause = "needs_whole_pool"
-        elif len(free) < request.banks:
-            cause = "not_enough_banks"
-        else:
-            cause = "not_adjacent"
+        cause = "needs_whole_pool" if request.banks == 16 or whole_pool_taken else "not_enough_banks"
         refusals.append(BankRefusal(request, cause, free))
 
-    # Fonds compressés (OWN) : bloc de banques CONTIGUËS par asset (N sous-
-    # palettes), dédupliqué par contenu exact. Alloué avant les palettes
-    # propres à slot unique ci-dessous (moins de fragmentation, les blocs sont
-    # plus gros et plus contraints).
-    bg_block: dict[tuple, Optional[int]] = {}
+    # Fonds compressés (OWN) : une banque par sous-palette, dédupliquées par
+    # contenu exact. Un bloc contigu quand il en existe un (le rangement d'avant
+    # la correspondance, que les projets existants retrouvent tel quel), sinon
+    # les banques libres les plus hautes, où qu'elles soient : chaque case d'une
+    # carte 4 bpp désigne sa propre banque. Alloués avant les palettes propres
+    # à slot unique ci-dessous (les demandes les plus grosses d'abord).
+    bg_block: dict[tuple, Optional[list[int]]] = {}
     for ba in encoded_assets:
         key = _bg_palettes_key(ba)
         if getattr(ba, "bpp", 4) == 8:
@@ -591,7 +610,7 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
                     chunk = pal256[i * 16:(i + 1) * 16]
                     slots[i] = list(chunk) + [0] * (16 - len(chunk))
                     slot_owners[i] = request.owners
-                bg_block[key] = 0
+                bg_block[key] = [0]   # une seule palette ; le pal_bank des cases est ignoré en 8 bpp
                 whole_pool_taken = True
             else:
                 bg_block[key] = None   # débordement (cohabitation impossible)
@@ -602,13 +621,18 @@ def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayou
         if request is None:
             continue
         start = _find_free_block(slots, n)
-        bg_block[key] = start
-        if start is None:
+        if start is not None:
+            banks = list(range(start, start + n))
+        else:
+            free = [j for j in range(15, -1, -1) if slots[j] is None]
+            banks = sorted(free[:n]) if len(free) >= n else None
+        bg_block[key] = banks
+        if banks is None:
             _refuse(request)
             continue
-        for i in range(n):
-            slots[start + i] = list(key[i])
-            slot_owners[start + i] = request.owners
+        for i, bank in enumerate(banks):
+            slots[bank] = list(key[i])
+            slot_owners[bank] = request.owners
 
     # Acteurs/layers de la scène : slots restants.
     for owner, cols, bank_cols in own_requests:

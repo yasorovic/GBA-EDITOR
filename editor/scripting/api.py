@@ -2041,7 +2041,8 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             " it). Read-only: the bank is engraved in each cell of the map. Used to "
             "recolour the background: palette:set_bg(layer:get(1).pal_bank, \"Night\")."
             " A background whose tiles are painted with different banks returns its "
-            "base bank, not all those in use.",
+            "base bank, not all those in use. A background with several sub-palettes "
+            "returns the bank of the first one: the others are not always the next banks.",
     ),
     f"{REF_LAYER}.map": ApiProp(
         lua_name=f"{REF_LAYER}.map", c_getter="layer_get_map",

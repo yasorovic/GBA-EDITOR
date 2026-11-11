@@ -417,7 +417,7 @@ def shared_frame_tiles(a: dict) -> list:
             for t in blk.composed.frame_tiles(f, geom.cells)]
 
 
-def bake_shared_map(p, host_ba, tilemap: list, pal_offsets: dict) -> list:
+def bake_shared_map(p, host_ba, tilemap: list, pal_banks: dict) -> list:
     """Carte de l'hôte avec les rectangles des animés `shared` déjà pointés sur
     leur bloc réservé.
 
@@ -435,7 +435,7 @@ def bake_shared_map(p, host_ba, tilemap: list, pal_offsets: dict) -> list:
         geom = placement_geometry(host_ba, ba, pl)
         if geom is None:
             continue
-        bank = pal_offsets.get(tuple(blk.composed.palette), 0)
+        bank = pal_banks.get(tuple(blk.composed.palette), 0)
         for r in range(geom.rows):
             for c in range(geom.cols):
                 cell = r * geom.cols + c
