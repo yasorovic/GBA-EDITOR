@@ -145,5 +145,10 @@ int main(void) {
     palette_bank_rotate(banque, 0, 3, 1);                     palette_commit(); imprimer("rotation_index_0");
     palette_bank_rotate(banque, 5, 3, 1);                     palette_commit();
     palette_scene_start(scene_bg, 0);                         palette_commit(); imprimer("rotation_nouvelle_scene");
+
+    /* Le calcul (update, pendant l'affichage) n'écrit pas la mémoire de palettes ; la recopie (commit, au VBlank) oui. */
+    palette_pool_fade(palette_bg_pool(), palette_rgb(31, 31, 31), 16);
+    palette_update();                                         imprimer("calculee");
+    palette_commit();                                         imprimer("calculee_recopiee");
     return 0;
 }

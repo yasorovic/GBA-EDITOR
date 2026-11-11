@@ -89,10 +89,14 @@ def main_lines(p, sprite_offsets: dict, start_idx: int, start_scene: str, n_scen
             "                g_scene_vtable[g_current_scene].init();",
             "        }",
         ]
+    # Les couleurs finales (effets, rotation) se calculent AVANT d'attendre le
+    # VBlank, pendant l'affichage : le VBlank ne dure que 83 776 cycles, et un
+    # calcul qui le déborderait ferait arriver la recopie pendant le dessin.
+    L.append("        palette_update();")
     L.append("        VBlankIntrWait();")
     # Premier geste du VBlank : les palettes changées pendant la frame passée
     # (scene_init, scripts, police) arrivent en PAL RAM avant que l'image suivante
-    # ne se dessine.
+    # ne se dessine. Une simple copie, déjà calculée.
     L.append("        palette_commit();")
     # la fenêtre mesurée est EXACTEMENT le travail d'une frame —
     # de la reprise après ce VBlankIntrWait() à l'entrée du suivant. Hors build

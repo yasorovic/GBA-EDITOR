@@ -220,10 +220,12 @@ static void __attribute__((unused)) bg_anim_update(BgAnim *list, int n) {
 
 /* ── Copie des palettes en RAM ───────────────────────────────────── */
 /* Personne n'écrit directement dans la mémoire de palettes : chaque écrivain
-   (scene_init, palette_set_*, text_set_font) modifie cette copie, et
-   `palette_commit()` en recopie la plage modifiée juste après le VBlank, quand
-   la console ne dessine pas. La copie garde ainsi les couleurs courantes
-   lisibles, et une couleur changée en cours de frame ne coupe plus l'image.
+   (scene_init, palette_set_*, text_set_font) modifie cette copie, et la plage
+   modifiée part à l'écran en deux temps : `palette_update()` calcule les
+   couleurs finales pendant l'affichage, juste avant `VBlankIntrWait()`, puis
+   `palette_commit()` les recopie au début du VBlank, quand la console ne dessine
+   pas. La copie garde ainsi les couleurs courantes lisibles, et une couleur
+   changée en cours de frame ne coupe plus l'image.
 
    En EWRAM : 1 Kio, que l'IWRAM (déjà serrée) n'a pas à payer. Un pool = les 256
    couleurs de PAL_BG_RAM ou de PAL_OBJ_RAM. Plage modifiée par pool, bornes
@@ -238,18 +240,28 @@ static void __attribute__((unused)) bg_anim_update(BgAnim *list, int n) {
 
 static u16 g_palette_copy[2][256] EWRAM_BSS;
 static u16 g_palette_final[2][256] EWRAM_BSS;
-static int g_palette_dirty_first[2] = {256, 256};
+static int g_palette_dirty_first[2] = {256, 256};   /* à recalculer (update) */
 static int g_palette_dirty_last[2]  = {-1, -1};
+static int g_palette_ready_first[2] = {256, 256};   /* calculé, à recopier (commit) */
+static int g_palette_ready_last[2]  = {-1, -1};
 
 /* Les effets de palette : l'étage « tôt » de la chaîne vidéo, avant la mosaïque,
    les fenêtres et le mélange. Un effet par banque (index pool * 16 + banque, les
    mêmes que la référence `palette_bank`) et un par pool (32 + pool), appliqués dans
    cet ordre. Intensités 0-16, l'échelle du fondu matériel (BLDY) : 0 = aucun
    effet, 16 = effet complet. Dans un effet, l'ordre est fixe : inversion, gris,
-   puis fondu vers `fade_color`. */
+   puis fondu vers `fade_color`.
+
+   Le calcul passe par des TABLES de 32 entrées, refaites seulement quand l'effet
+   change : l'inversion et le fondu ne dépendent que d'un canal. Une couleur coûte
+   alors six lectures de table au lieu de neuf interpolations ; seul le gris, qui
+   mêle les trois canaux, reste calculé. */
 typedef struct {
     u16 fade_color;
     u8  fade, grayscale, invert;
+    u8  active;               /* l'un des trois est non nul */
+    u8  invert_table[32];     /* le même pour les trois canaux */
+    u8  fade_table[3][32];    /* rouge, vert, bleu */
 } PaletteEffect;
 
 #define PAL_EFFECT_POOL  32
@@ -292,65 +304,91 @@ static inline int palette_toward(int from, int to, int amount) {
     return from + (((to - from) * amount) >> 4);
 }
 
-static u16 palette_effect_apply(u16 color, const PaletteEffect *e) {
-    if (!e->fade && !e->grayscale && !e->invert) return color;
-    int r = color & 31, g = (color >> 5) & 31, b = (color >> 10) & 31;
-    if (e->invert) {
-        r = palette_toward(r, 31 - r, e->invert);
-        g = palette_toward(g, 31 - g, e->invert);
-        b = palette_toward(b, 31 - b, e->invert);
+/* Refait les tables d'un effet après un changement de ses réglages. */
+static void palette_effect_rebuild(PaletteEffect *e) {
+    e->active = e->fade || e->grayscale || e->invert;
+    if (!e->active) return;
+    int target[3] = { e->fade_color & 31, (e->fade_color >> 5) & 31, (e->fade_color >> 10) & 31 };
+    for (int x = 0; x < 32; x++) {
+        e->invert_table[x] = (u8)palette_toward(x, 31 - x, e->invert);
+        for (int ch = 0; ch < 3; ch++) e->fade_table[ch][x] = (u8)palette_toward(x, target[ch], e->fade);
     }
+}
+
+static inline u16 palette_effect_apply(u16 color, const PaletteEffect *e) {
+    int r = e->invert_table[color & 31];
+    int g = e->invert_table[(color >> 5) & 31];
+    int b = e->invert_table[(color >> 10) & 31];
     if (e->grayscale) {
         int luma = (r * 77 + g * 151 + b * 28) >> 8;   /* poids de la luminance, somme 256 */
         r = palette_toward(r, luma, e->grayscale);
         g = palette_toward(g, luma, e->grayscale);
         b = palette_toward(b, luma, e->grayscale);
     }
-    if (e->fade) {
-        int c = e->fade_color;
-        r = palette_toward(r, c & 31, e->fade);
-        g = palette_toward(g, (c >> 5) & 31, e->fade);
-        b = palette_toward(b, (c >> 10) & 31, e->fade);
-    }
-    return (u16)(r | (g << 5) | (b << 10));
+    return (u16)(e->fade_table[0][r] | (e->fade_table[1][g] << 5) | (e->fade_table[2][b] << 10));
 }
 
-/* Appelée une fois par frame, juste après VBlankIntrWait() (gen_main_loop). Seule
-   la plage modifiée est recalculée puis recopiée : chaque couleur ne dépend que
-   d'elle-même et des effets de sa banque et de son pool. L'index 0 d'une banque
-   échappe à l'effet de la banque (transparent, ou le backdrop en banque 0 du BG),
-   pas à celui du pool : un fondu de tout l'écran fond aussi le backdrop.
+/* Les couleurs finales de la plage modifiée, banque par banque. Appelée une fois
+   par frame juste AVANT VBlankIntrWait() (gen_main_loop), pendant l'affichage :
+   le calcul d'un effet sur tout un pool déborderait du VBlank. Une banque sans
+   rotation ni effet, dans un pool sans effet, se copie telle quelle.
 
-   La rotation fait exception à « chaque couleur ne dépend que d'elle-même » : une
-   couleur écrite dans une banque qui tourne s'affiche à un autre index. La plage
-   s'étend donc à toute banque qui tourne à ses deux bouts. Rotation puis effet de
-   la banque : l'effet est le même pour toutes les couleurs de la banque, l'ordre
-   ne change pas l'image. */
-static int palette_rotated_source(int pool, int i) {
-    const PaletteRotation *r = &g_palette_rotation[pool * 16 + (i >> 4)];
-    int k = (i & 15) - r->first;
-    if (k < 0 || k >= r->count) return i;
-    k -= r->shift;
-    if (k < 0) k += r->count;
-    return (i & ~15) + r->first + k;
-}
-
-void palette_commit(void) {
+   L'index 0 d'une banque échappe à l'effet de la banque (transparent, ou le
+   backdrop en banque 0 du BG), pas à celui du pool : un fondu de tout l'écran fond
+   aussi le backdrop. Une couleur écrite dans une banque qui tourne s'affiche à un
+   autre index : la plage s'étend donc à toute banque qui tourne à ses deux bouts.
+   Rotation puis effet de la banque : l'effet est le même pour toutes les couleurs
+   de la banque, l'ordre ne change pas l'image. */
+void palette_update(void) {
     for (int pool = 0; pool < 2; pool++) {
         int first = g_palette_dirty_first[pool], last = g_palette_dirty_last[pool];
         if (first > last) continue;
         if (g_palette_rotation[pool * 16 + (first >> 4)].count) first &= ~15;
         if (g_palette_rotation[pool * 16 + (last >> 4)].count)  last |= 15;
+        const u16 *src = g_palette_copy[pool];
+        u16 *dst = g_palette_final[pool];
         const PaletteEffect *pool_effect = &g_palette_effect[PAL_EFFECT_POOL + pool];
-        for (int i = first; i <= last; i++) {
-            u16 c = g_palette_copy[pool][palette_rotated_source(pool, i)];
-            if (i & 15) c = palette_effect_apply(c, &g_palette_effect[pool * 16 + (i >> 4)]);
-            g_palette_final[pool][i] = palette_effect_apply(c, pool_effect);
+        for (int bank = first >> 4; bank <= last >> 4; bank++) {
+            int lo = bank * 16 > first ? bank * 16 : first;
+            int hi = bank * 16 + 15 < last ? bank * 16 + 15 : last;
+            const PaletteRotation *rot = &g_palette_rotation[pool * 16 + bank];
+            const PaletteEffect *bank_effect = &g_palette_effect[pool * 16 + bank];
+            if (!rot->count && !bank_effect->active && !pool_effect->active) {
+                for (int i = lo; i <= hi; i++) dst[i] = src[i];
+                continue;
+            }
+            for (int i = lo; i <= hi; i++) {
+                int k = (i & 15) - rot->first, from = i;
+                if (k >= 0 && k < rot->count) {
+                    k -= rot->shift;
+                    if (k < 0) k += rot->count;
+                    from = bank * 16 + rot->first + k;
+                }
+                u16 c = src[from];
+                if ((i & 15) && bank_effect->active) c = palette_effect_apply(c, bank_effect);
+                if (pool_effect->active)             c = palette_effect_apply(c, pool_effect);
+                dst[i] = c;
+            }
         }
-        copy16((pool == PAL_POOL_BG ? PAL_BG_RAM : PAL_OBJ_RAM) + first,
-               g_palette_final[pool] + first, (u32)(last - first + 1) * 2);
+        if (first < g_palette_ready_first[pool]) g_palette_ready_first[pool] = first;
+        if (last > g_palette_ready_last[pool])   g_palette_ready_last[pool] = last;
         g_palette_dirty_first[pool] = 256;
         g_palette_dirty_last[pool]  = -1;
+    }
+}
+
+/* Appelée une fois par frame, juste après VBlankIntrWait() : une simple copie de
+   ce que `palette_update` a calculé. Ce qui aurait été modifié entre les deux (rien,
+   dans la boucle émise) est calculé ici plutôt que perdu. */
+void palette_commit(void) {
+    palette_update();
+    for (int pool = 0; pool < 2; pool++) {
+        int first = g_palette_ready_first[pool], last = g_palette_ready_last[pool];
+        if (first > last) continue;
+        copy16((pool == PAL_POOL_BG ? PAL_BG_RAM : PAL_OBJ_RAM) + first,
+               g_palette_final[pool] + first, (u32)(last - first + 1) * 2);
+        g_palette_ready_first[pool] = 256;
+        g_palette_ready_last[pool]  = -1;
     }
 }
 
@@ -404,11 +442,11 @@ void palette_scene_start(const u16 *bg, const u16 *obj) {
     g_palette_scene[PAL_POOL_BG]  = bg;
     g_palette_scene[PAL_POOL_OBJ] = obj;
     for (int slot = 0; slot < 34; slot++) {
-        const PaletteEffect *e = &g_palette_effect[slot];
         int rotating = slot < 32 && g_palette_rotation[slot].count;
-        if (!e->fade && !e->grayscale && !e->invert && !rotating) continue;
+        if (!g_palette_effect[slot].active && !rotating) continue;
         PaletteEffect *cleared = palette_effect_slot(slot);   /* marque sa plage */
         cleared->fade = cleared->grayscale = cleared->invert = 0;
+        palette_effect_rebuild(cleared);
         if (rotating) g_palette_rotation[slot].count = 0;
     }
 }
@@ -456,16 +494,21 @@ static void palette_effect_fade(int slot, int color, int amount) {
     if (!e) return;
     e->fade_color = (u16)(color & 0x7FFF);
     e->fade = palette_amount(amount);
+    palette_effect_rebuild(e);
 }
 
 static void palette_effect_grayscale(int slot, int amount) {
     PaletteEffect *e = palette_effect_slot(slot);
-    if (e) e->grayscale = palette_amount(amount);
+    if (!e) return;
+    e->grayscale = palette_amount(amount);
+    palette_effect_rebuild(e);
 }
 
 static void palette_effect_invert(int slot, int amount) {
     PaletteEffect *e = palette_effect_slot(slot);
-    if (e) e->invert = palette_amount(amount);
+    if (!e) return;
+    e->invert = palette_amount(amount);
+    palette_effect_rebuild(e);
 }
 
 /* Une référence de banque hors bornes vaut -1 ; un pool hors bornes est refusé

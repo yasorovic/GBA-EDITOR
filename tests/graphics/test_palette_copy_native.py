@@ -176,6 +176,11 @@ def test_une_nouvelle_scene_arrete_la_rotation(etapes):
     assert _plage(etapes["rotation_nouvelle_scene"]) == ("0000", "001f", "03e0")
 
 
+def test_le_calcul_n_ecrit_pas_la_memoire_de_palettes_seule_la_recopie_le_fait(etapes):
+    assert etapes["calculee"] == etapes["rotation_nouvelle_scene"]
+    assert all(etapes["calculee_recopiee"][(0, i)] == "7fff" for i in range(47, 65))
+
+
 class _Journal:
     def __call__(self, event, *args):
         pass
@@ -188,7 +193,7 @@ def test_le_main_emis_ecrit_les_palettes_par_la_copie_et_les_recopie_apres_le_vb
     assert main_gen.generate_main(p, data, None, [], [], _Journal()) is True
     main_c = (p.src_dir / "main.c").read_text(encoding="utf-8")
 
-    assert "VBlankIntrWait();\n        palette_commit();" in main_c
+    assert "palette_update();\n        VBlankIntrWait();\n        palette_commit();" in main_c
     assert "palette_write(PAL_POOL_BG, 0, &backdrop, 1);" in main_c
     assert "PAL_BG_RAM" not in main_c and "PAL_OBJ_RAM" not in main_c
     assert "palette_scene_start(" in main_c
