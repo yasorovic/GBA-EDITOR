@@ -78,22 +78,24 @@ def test_get_actor_dans_un_script_partage_resout_au_runtime():
 
 
 def test_get_actor_par_index_dynamique():
-    """actor:get(i) — adressage dynamique 1-based → slot 0-based borné
-    (`actor_at`), même repli 1→0 que data.Table[i]."""
+    """actor:get(i) — adressage dynamique 1-based → rang 0-based parmi les
+    vivants (`actor_nth`), même repli 1→0 que data.Table[i]."""
     code = _gen('    local u = actor:get(i)', scene_sym="Arena")
-    assert "actor_at((i) - 1)" in code
+    assert "actor_nth((i) - 1)" in code
     assert "Actor* u" in code           # typé Actor*, pas int
 
 
 def test_get_actor_index_litteral_est_replie():
-    """Un index littéral est replié tout de suite : actor:get(2) → actor_at(1)."""
+    """Un index littéral est replié tout de suite : actor:get(2) → actor_nth(1)."""
     code = _gen('    local u = actor:get(2)', scene_sym="Arena")
-    assert "actor_at(1)" in code
+    assert "actor_nth(1)" in code
 
 
-def test_actor_count_rend_le_compte_de_la_scene_active():
+def test_actor_count_compte_tous_les_acteurs_vivants():
+    """Posés et nés : le compte lit les bits de vie, pas le nombre de posés."""
     code = _gen('    local n = actor:count()', scene_sym="Arena")
-    assert "g_scene_placed" in code
+    assert "actor_count()" in code
+    assert "g_scene_placed" not in code
 
 
 def test_symbole_dacteur_pose_est_qualifie_par_la_scene():

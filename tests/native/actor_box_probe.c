@@ -438,6 +438,26 @@ int main(void) {
         /* Le bloc d'état d'un emplacement : un bloc de OBJ_STATE_STRIDE octets par `inst`. */
         x->slot_index = 0; y->slot_index = 1;
         printf("pool_etat %d\n", (int)((char*)(g_obj_state + (int)y->slot_index * (OBJ_STATE_STRIDE / 4)) - (char*)g_obj_state) == OBJ_STATE_STRIDE);
+        /* `actor:count()` et `actor:get(i)` : tous les acteurs vivants de la scène, posés (0, 1) puis nés (2, 40, dans le
+           second bloc de 32), dans l'ordre des emplacements ; un détruit (1) ne compte pas et ne laisse pas de trou. */
+        {
+            for (int i = 0; i < 64; i++) { g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; }
+            for (int i = 0; i < 16; i++) g_alive_bits[i] = 0;
+            g_spool_start = 2; g_spool_end = 64; g_actor_slot_end = 41; g_spool_free = 3;
+            const int vivants[4] = {0, 1, 2, 40};
+            for (int k = 0; k < 4; k++) {
+                g_actors[vivants[k]].alive = 1; g_actors[vivants[k]].active = 1; alive_bit_set(vivants[k]);
+            }
+            printf("scene_count %d\n", actor_count());
+            actor_destroy_internal(&g_actors[1]);
+            printf("scene_detruit %d\n", actor_count());
+            printf("scene_nth %d %d %d %d %d\n", actor_nth(0) == &g_actors[0], actor_nth(1) == &g_actors[2],
+                   actor_nth(2) == &g_actors[40], actor_nth(3) == 0, actor_nth(-1) == 0);
+            g_actor_slot_end = 0;
+            printf("scene_vide %d %d\n", actor_count(), actor_nth(0) == 0);
+            for (int i = 0; i < 64; i++) { g_actors[i] = (Actor){0}; g_actors[i].slot_index = i; }
+            for (int i = 0; i < 16; i++) g_alive_bits[i] = 0;
+        }
         /* Un modèle à PARTIES : la racine (type 2) a un groupe de 3 aux emplacements 2..4, ses parties les types 3 et 4. */
         {
             static const u8 part[5] = {0, 0, 0, 1, 2};

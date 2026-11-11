@@ -593,6 +593,11 @@ def _check_sprite(ctx, actor, comp):
                          " PNG.")
     if sprite.frame_w <= 0 or sprite.frame_h <= 0:
         ctx.error(actor, f"Sprite '{sprite.name}' : invalid frame_w/h ({sprite.frame_w}×{sprite.frame_h}).")
+    # Un sprite créé depuis son PNG naît avec une image VIDE, que l'éditeur de sprite compose : tant qu'aucune image
+    # n'a de tuile, la ROM ne dessine rien, et rien d'autre ne le dit.
+    if not any(frame.tiles for state in sprite.states for direction in state.directions for frame in direction.frames):
+        ctx.warn(actor, f"Sprite '{sprite.name}': no animation frame has any tile, so the actor draws nothing. "
+                        "Compose its frames in the Sprite editor.")
 
 
 def _check_collision(ctx, actor, comp):

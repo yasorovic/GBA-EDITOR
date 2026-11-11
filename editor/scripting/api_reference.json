@@ -774,7 +774,7 @@
         {
           "label": "actor:get(\"name\")",
           "snippet": "actor:get(\"Player\")",
-          "description": "An actor of the active scene, by NAME (literal) or by dynamic 1-based INDEX (actor:get(i), from 1 to actor:count(), in scene order). Returns nil if absent or destroyed.",
+          "description": "An actor of the active scene, by NAME (literal) or by dynamic 1-based INDEX (actor:get(i), from 1 to actor:count(): the i-th live actor, placed then spawned). Returns nil if absent or destroyed.",
           "params": [
             {
               "name": "name",
@@ -788,9 +788,9 @@
         {
           "label": "actor:count()",
           "snippet": "actor:count()",
-          "description": "Returns the number of actors placed in the active scene. Use it as a bound with `actor:get(i)`.",
+          "description": "Returns the number of live actors in the active scene, placed or spawned. Use it as a bound with `actor:get(i)`.",
           "params": [],
-          "returns": "int: number of placed actors",
+          "returns": "int: number of live actors",
           "doc_anchor": "actor-count"
         },
         {

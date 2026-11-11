@@ -56,6 +56,20 @@ def test_un_sprite_dont_le_png_manque_est_une_erreur_une_seule_fois(project):
     assert not says(per_actor, "warning", "not found") and not says(per_actor, "error", "not found")
 
 
+def test_un_sprite_sans_aucune_tuile_avertit_que_l_acteur_ne_dessine_rien(project):
+    """Un sprite créé depuis son PNG naît avec une image vide, que l'éditeur de sprite compose. Tant qu'aucune image
+    n'a de tuile, la ROM ne dessine rien : constaté en construisant `Project Test/Palettes`, sans un mot du build."""
+    from core.models.sprite import TilePlacement
+    vide = SpriteAsset(name="Vide", asset="assets/vide.png", frame_w=16, frame_h=16)
+    plein = SpriteAsset(name="Plein", asset="assets/plein.png", frame_w=16, frame_h=16)
+    plein.states[0].directions[0].frames[0].tiles = [TilePlacement()]
+    project.sprites.items = [vide, plein]
+    sans = run(project, validator._check_sprite, Actor(name="A"), SpriteComponent(sprite_name="Vide"))
+    avec = run(project, validator._check_sprite, Actor(name="B"), SpriteComponent(sprite_name="Plein"))
+    assert says(sans, "warning", "Sprite 'Vide': no animation frame has any tile, so the actor draws nothing")
+    assert not says(avec, "warning", "no animation frame has any tile")
+
+
 # ── Mélange de couleurs ───────────────────────────────────────────────────
 
 

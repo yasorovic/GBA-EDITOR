@@ -2714,11 +2714,11 @@ class CodeGen:
             même fonction que celle qui définit les macros ACTOR_*
             (headers.py::generate_actor_types, via codegen.c_names.sym).
 
-        actor:get(i)  →  actor_at((i) - 1)
+        actor:get(i)  →  actor_nth((i) - 1)
             Index DYNAMIQUE (« L'acteur appartient à sa scène ») : l'auteur
             compte à partir de 1 comme partout dans le langage (data.T[1],
-            global.x[1]) ; `_index` replie vers le 0-based du C. `actor_at`
-            borne à la scène et filtre les détruits (nil sinon).
+            global.x[1]) ; `_index` replie vers le 0-based du C. `actor_nth`
+            rend le i-ème acteur VIVANT de la scène, posé ou né (nil au-delà).
         """
         from codegen.c_names import sym as c_sym
         if not args:
@@ -2730,8 +2730,8 @@ class CodeGen:
                 return "/* actor:get(model, i): a scene is needed */(Actor*)0"
             return f"actor_model_nth({pool}, {self._index(args[1])})"
         if not isinstance(args[0], ExprString):
-            # Index dynamique 1-based → slot 0-based, borné par actor_at.
-            return f"actor_at({self._index(args[0])})"
+            # Index dynamique 1-based → rang 0-based parmi les vivants.
+            return f"actor_nth({self._index(args[0])})"
         sym = c_sym(args[0].value)
         # Un acteur appartient à sa scène : le TAG est qualifié par la scène qui
         # compile ce script (« L'acteur appartient à sa scène »). Le nom reste
@@ -2747,14 +2747,14 @@ class CodeGen:
         return f"runtime_get_actor(ACTORNAME_{sym.upper()})"
 
     def _emit_actor_count(self, args: list) -> str:
-        """actor:count() → g_scene_placed : les acteurs posés de la scène active,
-        la borne de actor:get(i) (« L'acteur appartient à sa scène »).
+        """actor:count() → actor_count() : les acteurs vivants de la scène active, posés
+        ou nés, la borne de actor:get(i) (« L'acteur appartient à sa scène »).
         actor:count("Bullet") → les instances vivantes de ce modèle, la borne de
         actor:get("Bullet", i)."""
         if args and isinstance(args[0], ExprString):
             pool = self._pool_macro(args[0].value)
             return f"actor_model_count({pool})" if pool else "0 /* actor:count(model): a scene is needed */"
-        return "g_scene_placed"
+        return "actor_count()"
 
     def _emit_actor_clear(self, args: list) -> str:
         """actor:clear("Bullet") → actor_model_clear(<table des posés>, <nombre>, <identité dans le pool>) : détruit

@@ -528,6 +528,13 @@ def test_c_le_pool_partage_se_parcourt_par_le_modele_de_chaque_emplacement(sorti
     assert sortie_sonde["pool_etat"] == [1]              # un bloc d'état par `inst`
 
 
+def test_c_actor_count_et_get_i_voient_tous_les_acteurs_vivants(sortie_sonde):
+    assert sortie_sonde["scene_count"] == [4]            # posés et nés, au-delà du premier bloc de 32
+    assert sortie_sonde["scene_detruit"] == [3]          # un détruit ne compte plus
+    assert sortie_sonde["scene_nth"] == [1, 1, 1, 1, 1]  # les vivants dans l'ordre, sans trou ; nil au-delà et avant
+    assert sortie_sonde["scene_vide"] == [0, 1]          # scène vide : 0, et nil
+
+
 def test_c_un_groupe_garde_sa_partie_detruite_et_rend_tout_avec_sa_racine(sortie_sonde):
     assert sortie_sonde["grp_occupe"] == [0, 0, 0, 1]      # le groupe est occupé, l'emplacement suivant libre
     assert sortie_sonde["grp_partie"] == [0, 0, 3]         # la partie détruite n'est PAS libre ; le curseur recule jusqu'à elle

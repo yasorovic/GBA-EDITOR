@@ -499,10 +499,30 @@ static inline int actor_active_warn(const Actor* a, const char* what) {
     return 0;
 }
 
-/* get_actor(i) — adressage DYNAMIQUE par index (« L'acteur appartient à sa
-   scène »). `i0` est déjà 0-based (le codegen a replié le 1-based du langage,
-   comme pour data.Table[i]). Borné à [0, g_scene_placed) puis filtré par
-   `actor_live` : un index hors de la scène, ou un acteur détruit, rend nil. */
+/* `actor:count()` et `actor:get(i)` : les acteurs VIVANTS de la scène, d'où qu'ils viennent (posés au build, nés au jeu,
+   parties comprises), dans l'ordre des emplacements. Un bit de `g_alive_bits` par emplacement : compter, c'est additionner
+   les bits des blocs de 32 jusqu'à `g_actor_slot_end` (8 mots pour 256 emplacements), sans cache. `n0` est déjà 0-based
+   (le codegen a replié le 1-based du langage). Comme pour `actor:get("Bullet", i)`, l'indice est celui des vivants :
+   détruire un acteur en cours de boucle décale les suivants, et aucun trou ne rend nil au milieu de la boucle. */
+static inline int actor_count(void) {
+    int c = 0;
+    for (int w = 0; w <= (g_actor_slot_end - 1) >> 5; w++) c += __builtin_popcount(g_alive_bits[w]);
+    return c;
+}
+static inline Actor* actor_nth(int n0) {
+    if (n0 < 0) return (Actor*)0;
+    for (int w = 0; w <= (g_actor_slot_end - 1) >> 5; w++) {
+        u32 b = g_alive_bits[w];
+        int c = __builtin_popcount(b);
+        if (n0 >= c) { n0 -= c; continue; }
+        while (n0--) b &= b - 1;                     /* efface les n0 vivants les plus bas du bloc */
+        return &g_actors[(w << 5) + __builtin_ctz(b)];
+    }
+    return (Actor*)0;
+}
+
+/* Un export `actor_ref` range l'EMPLACEMENT d'un acteur posé, fixé au build (-1 : aucun). Borné à
+   [0, g_scene_placed) puis filtré par `actor_live` : un emplacement vide, ou un acteur détruit, rend nil. */
 static inline Actor* actor_at(int i0) {
     return (i0 >= 0 && i0 < g_scene_placed) ? actor_live(&g_actors[i0]) : (Actor*)0;
 }

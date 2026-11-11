@@ -102,7 +102,7 @@ if cible ~= nil then
 end
 ```
 
-On peut aussi adresser un acteur **par son index**, à partir de 1 (comme `data.Table[1]`), dans l'ordre où il est posé dans la scène. `actor:count()` donne le nombre d'acteurs posés — la borne de la boucle :
+On peut aussi adresser un acteur **par son index**, à partir de 1 (comme `data.Table[1]`) : `actor:get(i)` rend le i-ème acteur **vivant** de la scène, d'abord ceux posés dans l'ordre de la scène, puis ceux nés par `spawn`. `actor:count()` donne leur nombre, la borne de la boucle. Comme pour un prefab, détruire un acteur en cours de boucle décale les suivants :
 
 ```lua
 for i = 1, actor:count() do

@@ -737,8 +737,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
         ret="actor",
         doc=("An actor of the scene, by NAME (literal, resolved at compile time: "
              "actor:get(\"PADDLE_AUTO\"):move_to(vec2(120,80),2)) or by dynamic 1-based "
-             "INDEX (actor:get(i), from 1 to actor:count(), in scene order). Returns "
-             "nil if absent or destroyed, to be tested. To read a position, go "
+             "INDEX (actor:get(i), from 1 to actor:count(): the i-th LIVE actor, placed "
+             "then spawned, in slot order). Returns nil if absent or destroyed, to be tested. To read a position, go "
              "through a local: local p = actor:get(i); then p.position.x. A state "
              "name (play_anim, activate_sprite, .anim) is judged in the sprites of "
              "the named actor; with an index the actor is only known at run time, so "
@@ -751,8 +751,9 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "actor.count": ApiFunc(
         lua_name="actor.count", c_func="_actor_count",   # résolu par codegen
         params=[], variadic=True, ret="int",
-        doc=("Number of actors PLACED in the active scene: the bound of actor:get(i)."
-             " Ex: for i=1,actor:count() do local a=actor:get(i) ... end. "
+        doc=("Number of LIVE actors in the active scene, placed or spawned: the bound of actor:get(i)."
+             " Ex: for i=1,actor:count() do local a=actor:get(i) ... end. Destroying one in the"
+             " middle of the loop shifts the next ones, like removing from a list. "
              "actor:count(\"Bullet\") is the number of LIVE instances of a prefab this scene "
              "spawns: the bound of actor:get(\"Bullet\", i)."),
     ),
