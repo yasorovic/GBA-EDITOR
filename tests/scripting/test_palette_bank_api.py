@@ -53,3 +53,39 @@ def test_une_couleur_ecrite_en_0_255_est_refusee():
 
 def test_une_palette_inconnue_est_refusee_par_replace():
     assert any("Nope" in m for m in _errors('palette:bg_bank(0):replace("Nope")'))
+
+
+# ── Les effets de palette ────────────────────────────────────────────────────
+
+def test_les_effets_se_traduisent_sur_une_banque_et_sur_un_pool():
+    body = ('local ciel = palette:bg_bank(3)\n'
+            'ciel:fade(palette:rgb(31, 31, 31), 8)\n'
+            'ciel:grayscale(16)\n'
+            'ciel:invert(0)\n'
+            'local ecran = palette:bg_pool()\n'
+            'ecran:fade(palette:rgb(0, 0, 0), 16)\n'
+            'palette:obj_pool():grayscale(4)\n'
+            'palette:obj_pool():invert(2)')
+    assert _errors(body) == []
+    assert _c_body(body) == [
+        "int ciel = palette_bg_bank(3);",
+        "palette_bank_fade(ciel, palette_rgb(31, 31, 31), 8);",
+        "palette_bank_grayscale(ciel, 16);",
+        "palette_bank_invert(ciel, 0);",
+        "int ecran = palette_bg_pool();",
+        "palette_pool_fade(ecran, palette_rgb(0, 0, 0), 16);",
+        "palette_pool_grayscale(palette_obj_pool(), 4);",
+        "palette_pool_invert(palette_obj_pool(), 2);",
+    ]
+
+
+def test_une_intensite_ecrite_en_clair_hors_de_0_16_est_refusee():
+    erreurs = _errors("palette:bg_pool():fade(palette:rgb(0, 0, 0), 255)")
+    assert any("palette_pool:fade(…): 255 is outside 0-16" in m for m in erreurs)
+    erreurs = _errors("local b = palette:obj_bank(2)\nb:grayscale(17)")
+    assert any("palette_bank:grayscale(…): 17 is outside 0-16" in m for m in erreurs)
+    assert _errors("local n = 40\npalette:bg_pool():invert(n)") == []     # un nombre calculé n'est pas jugé
+
+
+def test_un_pool_n_a_pas_les_methodes_d_une_banque():
+    assert _errors("palette:bg_pool():set_color(1, 0)") != []

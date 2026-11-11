@@ -161,6 +161,16 @@ ciel:set_color(5, palette:rgb(31, 16, 0))
 ciel:reset()   -- les couleurs du début de la scène
 ```
 
+Les effets de palette se posent sur une banque, ou sur un pool entier avec `palette:bg_pool()` et `palette:obj_pool()`. Ce sont `fade(couleur, intensité)` (un fondu vers une couleur), `grayscale(intensité)` et `invert(intensité)`. L'intensité va de 0 (aucun effet) à 16 (effet complet), comme le fondu matériel du mélange. Un effet est un réglage : il reste posé jusqu'à ce qu'on le remette à 0, et il s'applique aussi aux couleurs écrites après lui. `get_color` rend toujours la couleur d'origine. L'effet d'une banque épargne son index 0, alors que celui d'un pool l'atteint : un fondu de tout le pool BG fond aussi la couleur de fond de l'écran. L'effet de la banque passe avant celui du pool. Une nouvelle scène part sans effet.
+
+```lua
+palette:obj_bank(2):fade(palette:rgb(31, 0, 0), 12)   -- un sprite touché vire au rouge
+palette:bg_pool():grayscale(16)                        -- le décor en noir et blanc
+palette:bg_pool():grayscale(0)                         -- retiré
+```
+
+Un effet vise une banque, pas un acteur : tout ce qui cite la banque le reçoit, y compris d'autres sprites qui la partagent.
+
 ## Son
 
 Effets, musique et jingles. Voir le panneau **API**, section **Son**.

@@ -2171,6 +2171,17 @@ class Checker:
                     f"{module_call_form(key)}(…): {arg.value} is outside 0-{high}, the range of "
                     f"{what} on the GBA."))
 
+    def _check_palette_amount(self, key: str, api, args: list):
+        """L'intensité d'un effet de palette écrite en clair : 0-16, l'échelle du fondu matériel.
+        Le moteur borne en silence ; un `fade(c, 255)` écrit pour du 0-255 donnerait l'effet
+        complet sans le dire. Un nombre calculé n'est pas jugé."""
+        for param, arg in zip(api.params, args):
+            if param.name == "amount" and isinstance(arg, ExprNumber) and not 0 <= arg.value <= 16:
+                self.errors.append(CheckError(
+                    "error",
+                    f"{key}(…): {arg.value} is outside 0-16, the strength of a palette effect "
+                    "(0 = none, 16 = full)."))
+
     def _check_layer_number(self, args: list):
         """`layer:get(n)` : cette scène a-t-elle le fond `n` ? Un numéro écrit en clair est jugé au
         build (`BuildContext.layer_numbers`, dérivé de `api.LAYERS_BY_MODE` et du mode de la scène) ;
@@ -2385,6 +2396,8 @@ class Checker:
                 f"{key}(): {expected} argument(s) expected, {got} given.",
             ))
             return
+        if api.c_func.startswith(("palette_bank_", "palette_pool_")):
+            self._check_palette_amount(key, api, args)
 
         for i, (param, arg) in enumerate(zip(api.params, args)):
             if self._is_bare_constructor(arg):

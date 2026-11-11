@@ -123,7 +123,8 @@ def test_le_type_c_de_chaque_type_reel_vient_de_la_table():
         "sfx": "mm_sfxhand", "collision_shape": "int", "area": "int", "ui_element": "int",
         "physics_body": "Actor*",
         "image": "int", "textBox": "int",
-        "background_layer": "int", "window_region": "int", "palette_bank": "int", "actor": "Actor*"}
+        "background_layer": "int", "window_region": "int", "palette_bank": "int", "palette_pool": "int",
+        "actor": "Actor*"}
 
 
 

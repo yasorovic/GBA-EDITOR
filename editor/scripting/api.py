@@ -48,6 +48,7 @@ REF_ACTOR = "actor"
 REF_LAYER = "background_layer"    # un fond tuilé : son numéro matériel (bg_slot)
 REF_WINDOW_REGION = "window_region"  # une région du pochoir : son rang (WINR_*)
 REF_PALETTE_BANK = "palette_bank"    # une banque matérielle de palette : pool * 16 + banque
+REF_PALETTE_POOL = "palette_pool"    # un pool de palettes entier : 0 = BG, 1 = OBJ
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,10 @@ REF_TYPE_TABLE: dict[str, RefType] = {
         c_type="int", prefix="palette",
         hint="A palette bank is numbered by the hardware, from 0 to 15, in each pool: "
              "`palette:bg_bank(n)` or `palette:obj_bank(n)`."),
+    REF_PALETTE_POOL: RefType(
+        c_type="int", prefix="palette",
+        hint="A palette pool is one of the two halves of the palette memory: "
+             "`palette:bg_pool()` or `palette:obj_pool()`."),
     REF_ACTOR: RefType(
         c_type="Actor*", prefix="self",
         hint="An actor is called as `self:method()` on the actor running the script, "
@@ -1571,7 +1576,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name=f"{REF_PALETTE_BANK}:get_color", c_func="palette_bank_get_color",
         params=[Param("index", PARAM_INT, doc="Colour index in the bank (0-15)")], ret="int",
         self_first=True,
-        doc="The current colour `index` of the bank, as palette:rgb() builds it.",
+        doc="Colour `index` of the bank as written, before any palette effect, as "
+            "palette:rgb() builds it.",
     ),
     f"{REF_PALETTE_BANK}:set_color": ApiFunc(
         lua_name=f"{REF_PALETTE_BANK}:set_color", c_func="palette_bank_set_color",
@@ -1592,6 +1598,57 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name=f"{REF_PALETTE_BANK}:reset", c_func="palette_bank_reset",
         params=[], self_first=True,
         doc="Gives the bank back the colours it had when the scene started.",
+    ),
+    # Les effets de palette : un RÉGLAGE posé sur une banque ou sur un pool, qui
+    # reste jusqu'à ce qu'on le remette à 0. Ils s'appliquent aux couleurs
+    # d'origine au moment du VBlank : `get_color` rend toujours l'origine. Échelle
+    # 0-16, celle du fondu matériel (BLDY), pour que la future pile d'effets passe
+    # d'un étage à l'autre sans conversion. Les mêmes verbes sur la banque et sur
+    # le pool ; l'effet de la banque passe avant celui du pool.
+    f"{REF_PALETTE_BANK}:fade": ApiFunc(
+        lua_name=f"{REF_PALETTE_BANK}:fade", c_func="palette_bank_fade",
+        params=[Param("color", PARAM_INT, doc="A colour from palette:rgb()"), Param("amount", PARAM_INT, doc="Strength, 0 (none) to 16 (full)")],
+        self_first=True,
+        doc="Fades colours 1-15 of the bank toward `color`, by `amount` (0-16); 0 removes "
+            "the fade. Ex: palette:obj_bank(2):fade(palette:rgb(31, 31, 31), 8)",
+    ),
+    f"{REF_PALETTE_BANK}:grayscale": ApiFunc(
+        lua_name=f"{REF_PALETTE_BANK}:grayscale", c_func="palette_bank_grayscale",
+        params=[Param("amount", PARAM_INT, doc="Strength, 0 (none) to 16 (full)")], self_first=True,
+        doc="Turns colours 1-15 of the bank toward grey, by `amount` (0-16).",
+    ),
+    f"{REF_PALETTE_BANK}:invert": ApiFunc(
+        lua_name=f"{REF_PALETTE_BANK}:invert", c_func="palette_bank_invert",
+        params=[Param("amount", PARAM_INT, doc="Strength, 0 (none) to 16 (full)")], self_first=True,
+        doc="Turns colours 1-15 of the bank toward their negative, by `amount` (0-16).",
+    ),
+    "palette.bg_pool": ApiFunc(
+        lua_name="palette.bg_pool", c_func="palette_bg_pool",
+        params=[], ret=REF_PALETTE_POOL,
+        doc="All 16 BACKGROUND banks at once, backdrop included. "
+            "Ex: palette:bg_pool():fade(palette:rgb(0, 0, 0), 16)",
+    ),
+    "palette.obj_pool": ApiFunc(
+        lua_name="palette.obj_pool", c_func="palette_obj_pool",
+        params=[], ret=REF_PALETTE_POOL,
+        doc="All 16 SPRITE banks at once. Ex: palette:obj_pool():grayscale(16)",
+    ),
+    f"{REF_PALETTE_POOL}:fade": ApiFunc(
+        lua_name=f"{REF_PALETTE_POOL}:fade", c_func="palette_pool_fade",
+        params=[Param("color", PARAM_INT, doc="A colour from palette:rgb()"), Param("amount", PARAM_INT, doc="Strength, 0 (none) to 16 (full)")],
+        self_first=True,
+        doc="Fades every colour of the pool toward `color`, by `amount` (0-16), after "
+            "the effects of each bank; 0 removes the fade.",
+    ),
+    f"{REF_PALETTE_POOL}:grayscale": ApiFunc(
+        lua_name=f"{REF_PALETTE_POOL}:grayscale", c_func="palette_pool_grayscale",
+        params=[Param("amount", PARAM_INT, doc="Strength, 0 (none) to 16 (full)")], self_first=True,
+        doc="Turns every colour of the pool toward grey, by `amount` (0-16).",
+    ),
+    f"{REF_PALETTE_POOL}:invert": ApiFunc(
+        lua_name=f"{REF_PALETTE_POOL}:invert", c_func="palette_pool_invert",
+        params=[Param("amount", PARAM_INT, doc="Strength, 0 (none) to 16 (full)")], self_first=True,
+        doc="Turns every colour of the pool toward its negative, by `amount` (0-16).",
     ),
 
     # ── Sauvegarde (SRAM) ──────────────────────────────────────────

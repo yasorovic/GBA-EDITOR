@@ -227,28 +227,99 @@ static void __attribute__((unused)) bg_anim_update(BgAnim *list, int n) {
 
    En EWRAM : 1 Kio, que l'IWRAM (déjà serrée) n'a pas à payer. Un pool = les 256
    couleurs de PAL_BG_RAM ou de PAL_OBJ_RAM. Plage modifiée par pool, bornes
-   incluses ; `first > last` = rien à recopier. */
+   incluses ; `first > last` = rien à recopier.
+
+   Deux tampons : `g_palette_copy`, les couleurs d'ORIGINE (ce qu'écrivent la scène
+   et les scripts, ce que relit `get_color`), et `g_palette_final`, ces couleurs
+   après les effets de palette, que le commit recopie. Un effet ne détruit donc
+   jamais une couleur : le retirer rend l'origine. */
 #define PAL_POOL_BG   0
 #define PAL_POOL_OBJ  1
 
 static u16 g_palette_copy[2][256] EWRAM_BSS;
+static u16 g_palette_final[2][256] EWRAM_BSS;
 static int g_palette_dirty_first[2] = {256, 256};
 static int g_palette_dirty_last[2]  = {-1, -1};
+
+/* Les effets de palette : l'étage « tôt » de la chaîne vidéo, avant la mosaïque,
+   les fenêtres et le mélange. Un effet par banque (index pool * 16 + banque, les
+   mêmes que la référence `palette_bank`) et un par pool (32 + pool), appliqués dans
+   cet ordre. Intensités 0-16, l'échelle du fondu matériel (BLDY) : 0 = aucun
+   effet, 16 = effet complet. Dans un effet, l'ordre est fixe : inversion, gris,
+   puis fondu vers `fade_color`. */
+typedef struct {
+    u16 fade_color;
+    u8  fade, grayscale, invert;
+} PaletteEffect;
+
+#define PAL_EFFECT_POOL  32
+static PaletteEffect g_palette_effect[34] EWRAM_BSS;
+
+static void palette_mark(int pool, int first, int last) {
+    if (first < g_palette_dirty_first[pool]) g_palette_dirty_first[pool] = first;
+    if (last > g_palette_dirty_last[pool])   g_palette_dirty_last[pool] = last;
+}
+
+/* L'effet d'un emplacement, dont la plage est marquée à recalculer : on ne le
+   prend que pour le changer. NULL hors de 0-33. */
+static PaletteEffect *palette_effect_slot(int slot) {
+    if (slot < 0 || slot > 33) return 0;
+    if (slot >= PAL_EFFECT_POOL) palette_mark(slot - PAL_EFFECT_POOL, 0, 255);
+    else                         palette_mark(slot >> 4, (slot & 15) * 16, (slot & 15) * 16 + 15);
+    return &g_palette_effect[slot];
+}
 
 static void palette_write(int pool, int first, const u16 *colors, int count) {
     if (pool < 0 || pool > 1 || first < 0 || count <= 0 || first + count > 256) return;
     for (int i = 0; i < count; i++) g_palette_copy[pool][first + i] = colors[i];
-    if (first < g_palette_dirty_first[pool]) g_palette_dirty_first[pool] = first;
-    if (first + count - 1 > g_palette_dirty_last[pool]) g_palette_dirty_last[pool] = first + count - 1;
+    palette_mark(pool, first, first + count - 1);
 }
 
-/* Appelée une fois par frame, juste après VBlankIntrWait() (gen_main_loop). */
+/* Un canal amené de `from` vers `to` de `amount` seizièmes. */
+static inline int palette_toward(int from, int to, int amount) {
+    return from + (((to - from) * amount) >> 4);
+}
+
+static u16 palette_effect_apply(u16 color, const PaletteEffect *e) {
+    if (!e->fade && !e->grayscale && !e->invert) return color;
+    int r = color & 31, g = (color >> 5) & 31, b = (color >> 10) & 31;
+    if (e->invert) {
+        r = palette_toward(r, 31 - r, e->invert);
+        g = palette_toward(g, 31 - g, e->invert);
+        b = palette_toward(b, 31 - b, e->invert);
+    }
+    if (e->grayscale) {
+        int luma = (r * 77 + g * 151 + b * 28) >> 8;   /* poids de la luminance, somme 256 */
+        r = palette_toward(r, luma, e->grayscale);
+        g = palette_toward(g, luma, e->grayscale);
+        b = palette_toward(b, luma, e->grayscale);
+    }
+    if (e->fade) {
+        int c = e->fade_color;
+        r = palette_toward(r, c & 31, e->fade);
+        g = palette_toward(g, (c >> 5) & 31, e->fade);
+        b = palette_toward(b, (c >> 10) & 31, e->fade);
+    }
+    return (u16)(r | (g << 5) | (b << 10));
+}
+
+/* Appelée une fois par frame, juste après VBlankIntrWait() (gen_main_loop). Seule
+   la plage modifiée est recalculée puis recopiée : chaque couleur ne dépend que
+   d'elle-même et des effets de sa banque et de son pool. L'index 0 d'une banque
+   échappe à l'effet de la banque (transparent, ou le backdrop en banque 0 du BG),
+   pas à celui du pool : un fondu de tout l'écran fond aussi le backdrop. */
 void palette_commit(void) {
     for (int pool = 0; pool < 2; pool++) {
         int first = g_palette_dirty_first[pool], last = g_palette_dirty_last[pool];
         if (first > last) continue;
+        const PaletteEffect *pool_effect = &g_palette_effect[PAL_EFFECT_POOL + pool];
+        for (int i = first; i <= last; i++) {
+            u16 c = g_palette_copy[pool][i];
+            if (i & 15) c = palette_effect_apply(c, &g_palette_effect[pool * 16 + (i >> 4)]);
+            g_palette_final[pool][i] = palette_effect_apply(c, pool_effect);
+        }
         copy16((pool == PAL_POOL_BG ? PAL_BG_RAM : PAL_OBJ_RAM) + first,
-               g_palette_copy[pool] + first, (u32)(last - first + 1) * 2);
+               g_palette_final[pool] + first, (u32)(last - first + 1) * 2);
         g_palette_dirty_first[pool] = 256;
         g_palette_dirty_last[pool]  = -1;
     }
@@ -298,12 +369,21 @@ int palette_rgb(int r, int g, int b) {
    Posées par scene_init. */
 static const u16 *g_palette_scene[2];
 
+/* Une nouvelle scène part sans effet de palette : chaque effet encore actif est
+   retiré, et sa plage recalculée au prochain commit. */
 void palette_scene_start(const u16 *bg, const u16 *obj) {
     g_palette_scene[PAL_POOL_BG]  = bg;
     g_palette_scene[PAL_POOL_OBJ] = obj;
+    for (int slot = 0; slot < 34; slot++) {
+        const PaletteEffect *e = &g_palette_effect[slot];
+        if (!e->fade && !e->grayscale && !e->invert) continue;
+        PaletteEffect *cleared = palette_effect_slot(slot);   /* marque sa plage */
+        cleared->fade = cleared->grayscale = cleared->invert = 0;
+    }
 }
 
-/* La couleur COURANTE, lue dans la copie : ce que la prochaine image affichera. */
+/* La couleur d'ORIGINE, lue dans la copie : ce que la scène ou le script a écrit,
+   avant les effets de palette. */
 int palette_bank_get_color(int ref, int index) {
     if (ref < 0 || ref > 31 || index < 0 || index > 15) return 0;
     return g_palette_copy[ref >> 4][(ref & 15) * 16 + index];
@@ -329,6 +409,44 @@ void palette_bank_reset(int ref) {
     const u16 *scene = g_palette_scene[pool];
     palette_write(pool, first + 1, (scene ? scene + first : zeros) + 1, 15);
 }
+
+/* ── Effets de palette (`palette_bank:fade`, `palette:bg_pool():fade`…) ── */
+/* Un effet est un RÉGLAGE, pas une écriture : il reste posé jusqu'à ce qu'on le
+   remette à 0, et s'applique aussi aux couleurs écrites après lui. L'intensité est
+   bornée à 0-16. Un effet de banque vise un `palette_bank` (0-31), un effet de pool
+   un `palette_pool` (0 = BG, 1 = OBJ). */
+int palette_bg_pool(void)  { return PAL_POOL_BG; }
+int palette_obj_pool(void) { return PAL_POOL_OBJ; }
+
+static u8 palette_amount(int amount) { return (u8)(amount < 0 ? 0 : amount > 16 ? 16 : amount); }
+
+static void palette_effect_fade(int slot, int color, int amount) {
+    PaletteEffect *e = palette_effect_slot(slot);
+    if (!e) return;
+    e->fade_color = (u16)(color & 0x7FFF);
+    e->fade = palette_amount(amount);
+}
+
+static void palette_effect_grayscale(int slot, int amount) {
+    PaletteEffect *e = palette_effect_slot(slot);
+    if (e) e->grayscale = palette_amount(amount);
+}
+
+static void palette_effect_invert(int slot, int amount) {
+    PaletteEffect *e = palette_effect_slot(slot);
+    if (e) e->invert = palette_amount(amount);
+}
+
+/* Une référence de banque hors bornes vaut -1 ; un pool hors bornes est refusé
+   avant de devenir un emplacement. */
+void palette_bank_fade(int ref, int color, int amount) { palette_effect_fade(ref < 0 || ref > 31 ? -1 : ref, color, amount); }
+void palette_bank_grayscale(int ref, int amount)       { palette_effect_grayscale(ref < 0 || ref > 31 ? -1 : ref, amount); }
+void palette_bank_invert(int ref, int amount)          { palette_effect_invert(ref < 0 || ref > 31 ? -1 : ref, amount); }
+
+static int palette_pool_slot(int pool) { return (pool == 0 || pool == 1) ? PAL_EFFECT_POOL + pool : -1; }
+void palette_pool_fade(int pool, int color, int amount) { palette_effect_fade(palette_pool_slot(pool), color, amount); }
+void palette_pool_grayscale(int pool, int amount)       { palette_effect_grayscale(palette_pool_slot(pool), amount); }
+void palette_pool_invert(int pool, int amount)          { palette_effect_invert(palette_pool_slot(pool), amount); }
 
 /* Raccourcis de `palette:bg_bank(n):replace(nom)`. Ils écrivaient aussi l'index 0,
    ce qui effaçait le backdrop en banque 0 du BG. */

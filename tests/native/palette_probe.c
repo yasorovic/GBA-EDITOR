@@ -112,5 +112,29 @@ int main(void) {
     palette_bank_reset(banque); palette_commit();       imprimer("reset");
     palette_bank_reset(palette_obj_bank(3)); palette_commit(); imprimer("reset_obj_sans_table");
     printf("lu rgb %04x\n", (unsigned)palette_rgb(40, 16, -2));
+
+    /* Les effets de palette. Banque 3 du BG : couleur 5 = noir, 6 = rouge pur, le reste vient du début de scène
+       (0x05nn, après le reset ci-dessus). */
+    palette_bank_set_color(banque, 5, palette_rgb(0, 0, 0));
+    palette_bank_set_color(banque, 6, palette_rgb(31, 0, 0));
+    palette_bank_fade(banque, palette_rgb(31, 31, 31), 8);    palette_commit(); imprimer("fondu_moitie");
+    printf("lu fondu %04x\n", (unsigned)palette_bank_get_color(banque, 5));   /* l'origine, pas le fondu */
+    palette_bank_fade(banque, 0, 0);
+    palette_bank_grayscale(banque, 16);                       palette_commit(); imprimer("gris");
+    palette_bank_grayscale(banque, 0);
+    palette_bank_invert(banque, 99);                          palette_commit(); imprimer("inverse");  /* borné à 16 */
+    palette_bank_invert(banque, 0);                           palette_commit(); imprimer("sans_effet");
+    palette_bank_fade(32, palette_rgb(31, 31, 31), 16);       /* pas une banque : le pool BG n'est pas touché */
+    palette_pool_fade(7, palette_rgb(31, 31, 31), 16);        /* pas un pool */
+    palette_commit();                                         imprimer("hors_bornes");
+
+    /* L'effet de la banque passe avant celui du pool ; le pool atteint aussi l'index 0 des banques. */
+    palette_bank_fade(banque, palette_rgb(0, 0, 0), 16);
+    palette_pool_fade(palette_bg_pool(), palette_rgb(31, 31, 31), 8); palette_commit(); imprimer("pool_blanc");
+    palette_pool_fade(palette_bg_pool(), 0, 0);               palette_commit(); imprimer("pool_retire");
+
+    /* Une nouvelle scène part sans effet : la banque blanchie revient à ses couleurs d'origine. */
+    palette_pool_invert(palette_obj_pool(), 16);              palette_commit();
+    palette_scene_start(scene_bg, 0);                         palette_commit(); imprimer("nouvelle_scene");
     return 0;
 }

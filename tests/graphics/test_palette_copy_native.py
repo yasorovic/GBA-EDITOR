@@ -99,6 +99,53 @@ def test_rgb_borne_chaque_canal_a_0_31(etapes):
     assert etapes["lu"]["rgb"] == "021f"                    # (31, 16, 0)
 
 
+# ── Les effets de palette ────────────────────────────────────────────────────
+# Banque 3 du BG (index 48 à 63) : couleur 5 (53) noire, couleur 6 (54) rouge pur, 55 = 0x0537 du début de scène.
+
+def test_un_fondu_a_moitie_amene_chaque_canal_a_mi_chemin(etapes):
+    fondu = etapes["fondu_moitie"]
+    assert fondu[(0, 53)] == "3def"          # noir → (15, 15, 15)
+    assert fondu[(0, 54)] == "3dff"          # rouge → (31, 15, 15)
+
+
+def test_get_color_rend_la_couleur_d_origine_sous_un_effet(etapes):
+    assert etapes["lu"]["fondu"] == "0000"
+
+
+def test_gris_et_inversion(etapes):
+    assert etapes["gris"][(0, 54)] == "2529"        # rouge pur → luminance 9 sur les trois canaux
+    assert etapes["gris"][(0, 53)] == "0000"
+    assert etapes["inverse"][(0, 53)] == "7fff"     # intensité 99 bornée à 16 : effet complet
+    assert etapes["inverse"][(0, 54)] == "7fe0"
+
+
+def test_remettre_l_effet_a_zero_rend_l_origine(etapes):
+    sans = etapes["sans_effet"]
+    assert (sans[(0, 53)], sans[(0, 54)], sans[(0, 55)]) == ("0000", "001f", "0537")
+
+
+def test_une_banque_ou_un_pool_hors_bornes_n_a_aucun_effet(etapes):
+    assert etapes["hors_bornes"] == etapes["sans_effet"]
+
+
+def test_l_effet_de_la_banque_passe_avant_celui_du_pool(etapes):
+    # Banque noircie, puis pool à mi-chemin du blanc : tout finit gris moyen, l'index 0 des banques compris.
+    blanc = etapes["pool_blanc"]
+    assert all(blanc[(0, i)] == "3def" for i in range(47, 65))
+    assert all(blanc[(1, i)] == etapes["sans_effet"][(1, i)] for i in range(47, 65))   # l'autre pool n'y est pour rien
+
+
+def test_retirer_l_effet_du_pool_garde_celui_de_la_banque(etapes):
+    retire = etapes["pool_retire"]
+    assert all(retire[(0, i)] == "0000" for i in range(48, 64))
+
+
+def test_une_nouvelle_scene_part_sans_effet(etapes):
+    scene = etapes["nouvelle_scene"]
+    assert (scene[(0, 53)], scene[(0, 54)], scene[(0, 55)]) == ("0000", "001f", "0537")
+    assert scene[(1, 55)] == "0000"          # l'inversion du pool OBJ est retirée elle aussi
+
+
 class _Journal:
     def __call__(self, event, *args):
         pass
