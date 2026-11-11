@@ -90,6 +90,10 @@ def main_lines(p, sprite_offsets: dict, start_idx: int, start_scene: str, n_scen
             "        }",
         ]
     L.append("        VBlankIntrWait();")
+    # Premier geste du VBlank : les palettes changées pendant la frame passée
+    # (scene_init, scripts, police) arrivent en PAL RAM avant que l'image suivante
+    # ne se dessine.
+    L.append("        palette_commit();")
     # la fenêtre mesurée est EXACTEMENT le travail d'une frame —
     # de la reprise après ce VBlankIntrWait() à l'entrée du suivant. Hors build
     # debug, `debug_budget_start` est un stub vide éliminé à l'inlining (-O2) :

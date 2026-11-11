@@ -82,4 +82,10 @@ void CpuFastSet(const void *source, void *dest, u32 mode);
 #define KEY_R       0x0100
 #define KEY_L       0x0200
 
+/* Section EWRAM de libgba (gba_base.h) : hors GBA, de la mémoire ordinaire. Gardé
+   par #ifndef : des sondes la définissent déjà elles-mêmes avant d'inclure le moteur. */
+#ifndef EWRAM_BSS
+#define EWRAM_BSS
+#endif
+
 #endif /* GBA_SHIM_COMMON_H */

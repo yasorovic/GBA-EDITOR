@@ -278,21 +278,23 @@ def _background_lines(p, scene, sym: str, bgi: list[dict], scene_actors: list, s
         ss = f"sprite_{c_sym(sprite.name)}"
         L.append(f"    copy16(OBJ_VRAM+{bt}*16, {ss}Tiles, {ss}TilesLen);")
     # Palettes OBJ — chaque banque occupée du layout (référencée OU palette
-    # propre auto-allouée, cf. palette_alloc) est copiée dans PAL_OBJ_RAM.
+    # propre auto-allouée, cf. palette_alloc) est écrite dans la copie des
+    # palettes, que `palette_commit()` recopie dans PAL_OBJ_RAM au VBlank.
     for i, colors in enumerate(obj_layout.slot_colors):
         if colors:
-            L.append(f"    copy16(PAL_OBJ_RAM+{i}*16, g_pal_obj_{sym}+{i}*16, 32);")
+            L.append(f"    palette_write(PAL_POOL_OBJ, {i}*16, g_pal_obj_{sym}+{i}*16, 16);")
     # Palette BG — chaque banque occupée du layout (référencée, bloc de fond
-    # compressé, ou palette propre auto-allouée, cf. palette_alloc) est copiée
-    # dans PAL_BG_RAM.
+    # compressé, ou palette propre auto-allouée, cf. palette_alloc), même chemin
+    # vers PAL_BG_RAM.
     for i, colors in enumerate(bg_layout.slot_colors):
         if colors:
-            L.append(f"    copy16(PAL_BG_RAM+{i}*16, g_pal_bg_{sym}+{i}*16, 32);")
+            L.append(f"    palette_write(PAL_POOL_BG, {i}*16, g_pal_bg_{sym}+{i}*16, 16);")
     # Backdrop — écrit inconditionnellement (indépendant de bgi/de
     # l'occupation du slot 0 ci-dessus, qui ne copie que les slots occupés :
     # une scène sans aucune palette BG active doit quand même pouvoir
     # afficher une couleur de fond).
-    L.append(f"    PAL_BG_RAM[0] = 0x{resolve_backdrop_color(p, scene):04X};")
+    L.append(f"    {{ static const u16 backdrop = 0x{resolve_backdrop_color(p, scene):04X}; "
+             "palette_write(PAL_POOL_BG, 0, &backdrop, 1); }")
     return L
 
 

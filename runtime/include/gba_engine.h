@@ -23,9 +23,11 @@
 #ifndef MAP_RAM   /* une sonde de test hôte y substitue un tableau : la vraie VRAM n'existe pas sur cette machine */
 #define MAP_RAM(sbb)   ((vu16*)(0x06000000+(sbb)*0x800))
 #endif
+#ifndef PAL_BG_RAM   /* une sonde de test hôte y substitue un tableau, comme pour MAP_RAM */
 #define PAL_BG_RAM     ((vu16*)0x05000000)
-#define OBJ_VRAM       ((vu16*)0x06010000)
 #define PAL_OBJ_RAM    ((vu16*)0x05000200)
+#endif
+#define OBJ_VRAM       ((vu16*)0x06010000)
 #define BGOFS(n)       (*((vu16*)(0x04000010+(n)*4)))
 #define BGVOFS(n)      (*((vu16*)(0x04000012+(n)*4)))
 
@@ -216,6 +218,42 @@ static void __attribute__((unused)) bg_anim_update(BgAnim *list, int n) {
     }
 }
 
+/* ── Copie des palettes en RAM ───────────────────────────────────── */
+/* Personne n'écrit directement dans la mémoire de palettes : chaque écrivain
+   (scene_init, palette_set_*, text_set_font) modifie cette copie, et
+   `palette_commit()` en recopie la plage modifiée juste après le VBlank, quand
+   la console ne dessine pas. La copie garde ainsi les couleurs courantes
+   lisibles, et une couleur changée en cours de frame ne coupe plus l'image.
+
+   En EWRAM : 1 Kio, que l'IWRAM (déjà serrée) n'a pas à payer. Un pool = les 256
+   couleurs de PAL_BG_RAM ou de PAL_OBJ_RAM. Plage modifiée par pool, bornes
+   incluses ; `first > last` = rien à recopier. */
+#define PAL_POOL_BG   0
+#define PAL_POOL_OBJ  1
+
+static u16 g_palette_copy[2][256] EWRAM_BSS;
+static int g_palette_dirty_first[2] = {256, 256};
+static int g_palette_dirty_last[2]  = {-1, -1};
+
+static void palette_write(int pool, int first, const u16 *colors, int count) {
+    if (pool < 0 || pool > 1 || first < 0 || count <= 0 || first + count > 256) return;
+    for (int i = 0; i < count; i++) g_palette_copy[pool][first + i] = colors[i];
+    if (first < g_palette_dirty_first[pool]) g_palette_dirty_first[pool] = first;
+    if (first + count - 1 > g_palette_dirty_last[pool]) g_palette_dirty_last[pool] = first + count - 1;
+}
+
+/* Appelée une fois par frame, juste après VBlankIntrWait() (gen_main_loop). */
+void palette_commit(void) {
+    for (int pool = 0; pool < 2; pool++) {
+        int first = g_palette_dirty_first[pool], last = g_palette_dirty_last[pool];
+        if (first > last) continue;
+        copy16((pool == PAL_POOL_BG ? PAL_BG_RAM : PAL_OBJ_RAM) + first,
+               g_palette_copy[pool] + first, (u32)(last - first + 1) * 2);
+        g_palette_dirty_first[pool] = 256;
+        g_palette_dirty_last[pool]  = -1;
+    }
+}
+
 /* ── Palettes au runtime ─────────────────────────────────────────── */
 /* Remplacer les seize couleurs d'une banque matérielle : c'est ce qui permet de
    changer l'ambiance d'un décor en cours de jeu — la nuit qui tombe, une saison
@@ -241,12 +279,12 @@ extern const int g_palette_count;
    la palette a été supprimée du catalogue entre deux builds. */
 void palette_set_bg(int bank, int idx) {
     if (bank < 0 || bank > 15 || idx < 0 || idx >= g_palette_count) return;
-    copy16(PAL_BG_RAM + bank * 16, g_palettes[idx], 32);
+    palette_write(PAL_POOL_BG, bank * 16, g_palettes[idx], 16);
 }
 
 void palette_set_obj(int bank, int idx) {
     if (bank < 0 || bank > 15 || idx < 0 || idx >= g_palette_count) return;
-    copy16(PAL_OBJ_RAM + bank * 16, g_palettes[idx], 32);
+    palette_write(PAL_POOL_OBJ, bank * 16, g_palettes[idx], 16);
 }
 
 /* ── Sauvegarde (SRAM) ───────────────────────────────────────────── */
@@ -2169,14 +2207,14 @@ void text_set_font(int f) {
                palette BG est transparente et n'est jamais dessinée, donc la
                recopier ici ne servirait qu'à écraser le backdrop. On préserve
                l'index 0 et on ne charge que les couleurs 1..15. */
-            copy16(PAL_BG_RAM + 1, fi->pal + 1, 30);
+            palette_write(PAL_POOL_BG, 1, fi->pal + 1, 15);
         } else {
-            copy16(PAL_BG_RAM + g_pal_bank_bg * 16, fi->pal, 32);
+            palette_write(PAL_POOL_BG, g_pal_bank_bg * 16, fi->pal, 16);
         }
         /* Même palette côté sprites : une bande de texte OBJ lit PAL_OBJ_RAM.
-           32 octets copiés toujours, moins cher que de savoir si une zone
+           16 couleurs copiées toujours, moins cher que de savoir si une zone
            OBJ existe. */
-        copy16(PAL_OBJ_RAM + g_pal_bank_obj * 16, fi->pal, 32);
+        palette_write(PAL_POOL_OBJ, g_pal_bank_obj * 16, fi->pal, 16);
     }
 }
 
