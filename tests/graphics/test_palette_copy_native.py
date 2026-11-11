@@ -146,6 +146,36 @@ def test_une_nouvelle_scene_part_sans_effet(etapes):
     assert scene[(1, 55)] == "0000"          # l'inversion du pool OBJ est retirée elle aussi
 
 
+# ── La rotation d'une plage ──────────────────────────────────────────────────
+# Couleurs 5, 6, 7 de la banque 3 (index 53 à 55) : noir, rouge pur, 0x0537.
+
+def _plage(etape) -> tuple:
+    return tuple(etape[(0, i)] for i in (53, 54, 55))
+
+
+def test_la_rotation_decale_ce_qu_on_voit_dans_la_plage_seulement(etapes):
+    rotation = etapes["rotation"]
+    assert _plage(rotation) == ("0537", "0000", "001f")       # un cran : la dernière passe en tête
+    assert rotation[(0, 52)] == "0534" and rotation[(0, 56)] == "0538"
+    assert etapes["lu"]["rotation"] == "0000"                  # get_color rend l'origine
+
+
+def test_une_couleur_ecrite_pendant_la_rotation_s_affiche_a_sa_place_tournee(etapes):
+    assert _plage(etapes["rotation_ecrite"]) == ("03e0", "0000", "001f")
+
+
+def test_un_cran_negatif_tourne_vers_l_arriere(etapes):
+    assert _plage(etapes["rotation_arriere"]) == ("001f", "03e0", "0000")
+
+
+def test_une_plage_qui_toucherait_l_index_0_arrete_la_rotation(etapes):
+    assert _plage(etapes["rotation_index_0"]) == ("0000", "001f", "03e0")
+
+
+def test_une_nouvelle_scene_arrete_la_rotation(etapes):
+    assert _plage(etapes["rotation_nouvelle_scene"]) == ("0000", "001f", "03e0")
+
+
 class _Journal:
     def __call__(self, event, *args):
         pass

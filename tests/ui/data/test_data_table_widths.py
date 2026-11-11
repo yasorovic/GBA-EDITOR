@@ -1,7 +1,7 @@
 """Les largeurs de colonnes tirées par l'auteur survivent aux rechargements de la grille."""
 from core.models.data_table import DataColumn, DataTable
 from core.project import Project
-from ui.data_editor import data_grid_panel
+from ui.data_editor import data_table_panel
 
 
 def _panel(tmp_path):
@@ -9,7 +9,7 @@ def _panel(tmp_path):
     table = DataTable(name="Items", columns=[DataColumn("price", "int"), DataColumn("rare", "bool")],
                       rows=[{"price": 12}, {"price": 30}])
     project.data_tables.append(table)
-    panel = data_grid_panel.DataGridPanel()
+    panel = data_table_panel.DataTablePanel()
     panel.resize(900, 500)
     panel.load_project(project)
     panel.show_table(table.name)

@@ -8,7 +8,7 @@ from core.models.data_table import DataColumn, DataTable
 from core.project import Project
 from ui.common.color_menu import add_color_actions
 from ui.common.disk_folder_colors import COLORS
-from ui.data_editor import data_grid_panel
+from ui.data_editor import data_table_panel
 
 
 def test_le_menu_partage_propose_les_couleurs_et_la_remise_a_zero(qapp):
@@ -25,12 +25,12 @@ def test_le_menu_partage_propose_les_couleurs_et_la_remise_a_zero(qapp):
 
 def test_la_couleur_survit_a_la_reouverture_et_s_annule(qapp, tmp_path, monkeypatch):
     history = CommandHistory()
-    monkeypatch.setattr(data_grid_panel, "get_history", lambda: history)
+    monkeypatch.setattr(data_table_panel, "get_history", lambda: history)
     project = Project.create(tmp_path / "Game", "Game")
     table = DataTable(name="Items", columns=[DataColumn("price", "int")],
                       rows=[{"price": 12}])
     project.data_tables.append(table)
-    panel = data_grid_panel.DataGridPanel()
+    panel = data_table_panel.DataTablePanel()
     panel.load_project(project)
     panel.show_table(table.name)
     column = table.columns[0]

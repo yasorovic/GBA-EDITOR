@@ -93,7 +93,7 @@ _ENGINE_KEYS: frozenset[str] = frozenset({
     # la tenir couleur par couleur est le moteur.
     "palette.bg_bank", "palette.obj_bank", "palette.rgb",
     "palette_bank:get_color", "palette_bank:set_color", "palette_bank:replace", "palette_bank:reset",
-    "palette_bank:fade", "palette_bank:grayscale", "palette_bank:invert",
+    "palette_bank:fade", "palette_bank:grayscale", "palette_bank:invert", "palette_bank:rotate",
     "palette.bg_pool", "palette.obj_pool",
     "palette_pool:fade", "palette_pool:grayscale", "palette_pool:invert",
     # Le son ne replie pas ses trois boîtes ici. Elles sont peu fréquentes,
@@ -220,7 +220,7 @@ _FUNC_HOME: dict[str, str] = {
     "palette_bank:get_color": "Palette", "palette_bank:set_color": "Palette",
     "palette_bank:replace": "Palette", "palette_bank:reset": "Palette",
     "palette_bank:fade": "Palette", "palette_bank:grayscale": "Palette",
-    "palette_bank:invert": "Palette",
+    "palette_bank:invert": "Palette", "palette_bank:rotate": "Palette",
     "palette_pool:fade": "Palette", "palette_pool:grayscale": "Palette",
     "palette_pool:invert": "Palette",
     "window_region:show": "Window", "window_region:hide": "Window", "window_region:set": "Window",

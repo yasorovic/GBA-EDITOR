@@ -1,4 +1,4 @@
-"""ui/data_editor/data_grid_panel.py : panneau central : la grille d'une table.
+"""ui/data_editor/data_table_panel.py : panneau central : la table active.
 
 Deux objets d'édition dans un seul widget, et c'est le point délicat de cet
 écran : les COLONNES (le schéma) et les LIGNES (les données). Ils se
@@ -180,7 +180,7 @@ class _CellDelegate(QStyledItemDelegate):
     colonne de référence n'offre que des noms qui existent, là où un nom tapé
     au clavier ne se voyait qu'au build."""
 
-    def __init__(self, panel: "DataGridPanel"):
+    def __init__(self, panel: "DataTablePanel"):
         super().__init__(panel)
         self._panel = panel
 
@@ -243,7 +243,7 @@ class _CellDelegate(QStyledItemDelegate):
             entries.append(PickerEntry(name, name, entry_icon))
         creatable = column.type == "text" or column.type in CREATABLE_REFERENCES
         popup = PickerPopup(entries, C.ACCENT, parent=parent,
-                             new_label=label("datagrid.create_reference") if creatable else None)
+                             new_label=label("datatable.create_reference") if creatable else None)
         popup.setFixedWidth(max(260, min(420, option.rect.width())))
         popup.new_requested.connect(lambda: self._panel.create_reference(target, column))
 
@@ -272,7 +272,7 @@ class _CellDelegate(QStyledItemDelegate):
             model.setData(index, str(editor.value()), Qt.ItemDataRole.EditRole)
 
 
-class DataGridPanel(QWidget):
+class DataTablePanel(QWidget):
     """La grille : colonnes en en-tête, lignes en dessous."""
 
     # (colonne, valeur de la cellule) — l'inspecteur détaille la sélection.
@@ -304,7 +304,7 @@ class DataGridPanel(QWidget):
         heading = QVBoxLayout()
         heading.setContentsMargins(0, 0, 0, 0)
         heading.setSpacing(S.SM)
-        self._table_title = QLabel(label("datagrid.table_bar"))
+        self._table_title = QLabel(label("datatable.table_bar"))
         self._table_title.setStyleSheet(
             f"color:{C.TEXT_HI}; font-family:{T.UI_STACK}; font-size:{T.XXL}px; font-weight:600;")
         self._table_meta = QLabel("")
@@ -318,16 +318,16 @@ class DataGridPanel(QWidget):
         heading.addWidget(self._link_label)
         bar_layout.addLayout(heading, 1)
 
-        self._btn_row = QPushButton(label("datagrid.add_row_action"))
+        self._btn_row = QPushButton(label("datatable.add_row_action"))
         self._btn_row.setStyleSheet(QSS.button_primary)
         self._btn_row.setMinimumHeight(32)
         self._btn_row.setIcon(icons.get("add", C.BTN_PRIMARY_TEXT))
         self._btn_row.setIconSize(QSize(15, 15))
-        self._btn_row.setToolTip(tooltip(title=label("datagrid.add_row")))
+        self._btn_row.setToolTip(tooltip(title=label("datatable.add_row")))
         self._btn_row.clicked.connect(lambda: self._insert_row(len(self._table.rows)
                                                                if self._table else 0))
         bar_layout.addWidget(self._btn_row)
-        self._btn_duplicate = QPushButton(label("datagrid.duplicate_row"))
+        self._btn_duplicate = QPushButton(label("datatable.duplicate_row"))
         secondary_style = QSS.button_ghost + f"QPushButton {{ font-size:{T.MD}px; padding:4px 10px; }}"
         self._btn_duplicate.setStyleSheet(secondary_style)
         self._btn_duplicate.setMinimumHeight(32)
@@ -335,15 +335,15 @@ class DataGridPanel(QWidget):
         self._btn_duplicate.setIconSize(QSize(15, 15))
         self._btn_duplicate.clicked.connect(self._duplicate_selected_row)
         bar_layout.addWidget(self._btn_duplicate)
-        self._btn_delete = QPushButton(label("datagrid.delete_row"))
+        self._btn_delete = QPushButton(label("datatable.delete_row"))
         self._btn_delete.setStyleSheet(secondary_style + f"QPushButton:hover {{ color:{C.ACCENT_RED}; }}")
         self._btn_delete.setMinimumHeight(32)
         self._btn_delete.setIcon(icons.get("clear", C.TEXT_DIM))
         self._btn_delete.setIconSize(QSize(15, 15))
         self._btn_delete.clicked.connect(self._delete_selected_row)
         bar_layout.addWidget(self._btn_delete)
-        self._btn_link = QPushButton(label("datagrid.link_action"))
-        self._btn_unlink = QPushButton(label("datagrid.unlink_action"))
+        self._btn_link = QPushButton(label("datatable.link_action"))
+        self._btn_unlink = QPushButton(label("datatable.unlink_action"))
         for button, handler in ((self._btn_link, self._link_menu), (self._btn_unlink, self._unlink)):
             button.setStyleSheet(secondary_style)
             button.setMinimumHeight(32)
@@ -353,12 +353,12 @@ class DataGridPanel(QWidget):
         separator.setFixedSize(1, 20)
         separator.setStyleSheet(f"background:{C.BORDER};")
         bar_layout.addWidget(separator)
-        self._btn_col = QPushButton(label("datagrid.add_column_action"))
+        self._btn_col = QPushButton(label("datatable.add_column_action"))
         self._btn_col.setStyleSheet(secondary_style)
         self._btn_col.setMinimumHeight(32)
         self._btn_col.setIcon(icons.get("add", C.TEXT_DIM))
         self._btn_col.setIconSize(QSize(15, 15))
-        self._btn_col.setToolTip(tooltip(title=label("datagrid.add_column"), body=label("datagrid.add_column_tip")))
+        self._btn_col.setToolTip(tooltip(title=label("datatable.add_column"), body=label("datatable.add_column_tip")))
         self._btn_col.clicked.connect(self._add_column)
         bar_layout.addWidget(self._btn_col)
         root.addWidget(self._bar)
@@ -380,7 +380,7 @@ class DataGridPanel(QWidget):
         self._tbl.setHorizontalHeader(self._header)
         self._header.rename_requested.connect(self._rename_column)
         self._header.setToolTip(tooltip(
-            title=label("datagrid.column_title"), body=label("datagrid.column_tip"),
+            title=label("datatable.column_title"), body=label("datatable.column_tip"),
         ))
         self._header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._header.customContextMenuRequested.connect(self._column_menu)
@@ -398,15 +398,15 @@ class DataGridPanel(QWidget):
         self._tbl.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._tbl.customContextMenuRequested.connect(self._row_menu)
         self._tbl.selectionModel().currentChanged.connect(self._on_current_index)
-        self._grid_host = QWidget()
-        self._grid_host.setStyleSheet(f"background:{C.BG_BASE};")
-        grid_layout = QVBoxLayout(self._grid_host)
-        grid_layout.setContentsMargins(S.XL, S.XL, S.XL, S.XL)
-        grid_layout.setSpacing(0)
-        grid_layout.addWidget(self._tbl, 1)
-        root.addWidget(self._grid_host, 1)
+        self._table_host = QWidget()
+        self._table_host.setStyleSheet(f"background:{C.BG_BASE};")
+        table_layout = QVBoxLayout(self._table_host)
+        table_layout.setContentsMargins(S.XL, S.XL, S.XL, S.XL)
+        table_layout.setSpacing(0)
+        table_layout.addWidget(self._tbl, 1)
+        root.addWidget(self._table_host, 1)
 
-        self._empty = W.empty_state(label("datagrid.empty"))
+        self._empty = W.empty_state(label("datatable.empty"))
         root.addWidget(self._empty)
         self._show_empty(True)
 
@@ -480,14 +480,14 @@ class DataGridPanel(QWidget):
 
     def _show_empty(self, empty: bool):
         self._empty.setVisible(empty)
-        self._grid_host.setVisible(not empty)
+        self._table_host.setVisible(not empty)
         self._bar.setVisible(not empty)
 
     def _update_table_header(self):
         if not self._table:
             return
         self._table_title.setText(self._table.name)
-        self._table_meta.setText(label("datagrid.table_summary",
+        self._table_meta.setText(label("datatable.table_summary",
                                        rows=len(self._table.rows),
                                        columns=len(self._table.columns)))
         self._sync_link_ui()
@@ -512,9 +512,9 @@ class DataGridPanel(QWidget):
         state = link_state(self._project, self._table) if self._is_linked() else None
         self._link_label.setVisible(state is not None)
         if state:
-            self._link_label.setText(label("datagrid.link_" + state,
+            self._link_label.setText(label("datatable.link_" + state,
                                            group=self._table.text_link["prefix"]))
-        self._link_label.setToolTip(label("datagrid.link_locked"))
+        self._link_label.setToolTip(label("datatable.link_locked"))
         self._btn_link.setVisible(state is None)
         self._btn_unlink.setVisible(state is not None)
 
@@ -526,7 +526,7 @@ class DataGridPanel(QWidget):
             return
         column = self._text_column()
         if column is None:
-            QMessageBox.information(self, label("datagrid.link_title"), label("datagrid.link_no_text_column"))
+            QMessageBox.information(self, label("datatable.link_title"), label("datatable.link_no_text_column"))
             return
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
@@ -534,15 +534,15 @@ class DataGridPanel(QWidget):
         for prefix in groups:
             menu.addAction(prefix).setData(prefix)
         if not groups:
-            menu.addAction(label("datagrid.link_no_group")).setEnabled(False)
+            menu.addAction(label("datatable.link_no_group")).setEnabled(False)
         action = menu.exec(self._btn_link.mapToGlobal(QPoint(0, self._btn_link.height())))
         if action is not None and action.data() is not None:
             self._apply_link(action.data(), column.name)
 
     def _confirm_link(self, prefix, added, lost) -> bool:
         return QMessageBox.question(
-            self, label("datagrid.link_title"),
-            label("datagrid.link_confirm", group=prefix, added=added, lost=lost),
+            self, label("datatable.link_title"),
+            label("datatable.link_confirm", group=prefix, added=added, lost=lost),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         ) == QMessageBox.StandardButton.Yes
 
@@ -639,7 +639,7 @@ class DataGridPanel(QWidget):
         entry = next((x for x in getattr(self._project, "texts", [])
                       if x.key == key), None)
         if entry is None:
-            return label("datagrid.text_not_found", name=key)
+            return label("datatable.text_not_found", name=key)
         try:
             from core.text_markup import parse, resolve
             consts = {c.name: c.value for c in getattr(self._project, "constants", [])}
@@ -649,7 +649,7 @@ class DataGridPanel(QWidget):
         body = body.replace(chr(10), " ")
         if len(body) > 160:
             body = body[:157] + "…"
-        return label("datagrid.text_preview", name=key, body=body)
+        return label("datatable.text_preview", name=key, body=body)
 
     # ── Écriture d'une cellule ────────────────────────────────────
 
@@ -684,8 +684,8 @@ class DataGridPanel(QWidget):
         if not self._table or self._is_linked():
             return
         if not self._table.columns:
-            QMessageBox.information(self, label("datagrid.no_column_title"),
-                                    label("datagrid.no_column_text"))
+            QMessageBox.information(self, label("datatable.no_column_title"),
+                                    label("datatable.no_column_text"))
             return
         if not self._confirm_index_shift(index, inserting=True):
             return
@@ -723,10 +723,10 @@ class DataGridPanel(QWidget):
         shifts = index < len(self._table.rows) if inserting else index < len(self._table.rows) - 1
         if not shifts:
             return True
-        message = label("datagrid.insert_shifts_indices" if inserting
-                        else "datagrid.delete_shifts_indices", index=index + 1)
+        message = label("datatable.insert_shifts_indices" if inserting
+                        else "datatable.delete_shifts_indices", index=index + 1)
         return QMessageBox.question(
-            self, label("datagrid.index_shift_title"), message,
+            self, label("datatable.index_shift_title"), message,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         ) == QMessageBox.StandardButton.Yes
 
@@ -736,11 +736,11 @@ class DataGridPanel(QWidget):
         r = self._tbl.rowAt(pos.y())
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
-        a_above = menu.addAction(label("datagrid.row_above")) if r >= 0 else None
-        a_below = menu.addAction(label("datagrid.row_below")) if r >= 0 else None
-        a_end   = menu.addAction(label("datagrid.row_end"))
+        a_above = menu.addAction(label("datatable.row_above")) if r >= 0 else None
+        a_below = menu.addAction(label("datatable.row_below")) if r >= 0 else None
+        a_end   = menu.addAction(label("datatable.row_end"))
         menu.addSeparator()
-        a_del   = menu.addAction(label("datagrid.row_delete")) if r >= 0 else None
+        a_del   = menu.addAction(label("datatable.row_delete")) if r >= 0 else None
         act = menu.exec(self._tbl.viewport().mapToGlobal(pos))
         if act is None:
             return
@@ -774,8 +774,8 @@ class DataGridPanel(QWidget):
         self.reload()
         if new_name != col.name:
             QMessageBox.warning(
-                self, label("datagrid.rename_title"),
-                label("datagrid.rename_text", name=new_name,
+                self, label("datatable.rename_title"),
+                label("datatable.rename_text", name=new_name,
                       table=self._table.name, col=col.name))
 
     def set_column_type(self, column: DataColumn, new_type: str):
@@ -794,7 +794,7 @@ class DataGridPanel(QWidget):
             return
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
-        type_menu = menu.addMenu(label("datagrid.type"))
+        type_menu = menu.addMenu(label("datatable.type"))
         actions = {}
         for t in COLUMN_CHOICES:
             a = type_menu.addAction(t)
@@ -802,8 +802,8 @@ class DataGridPanel(QWidget):
             a.setChecked(t == col.type)
             actions[a] = t
         menu.addSeparator()
-        a_add = menu.addAction(label("datagrid.add_column_menu"))
-        a_del = menu.addAction(label("datagrid.delete_column"))
+        a_add = menu.addAction(label("datatable.add_column_menu"))
+        a_del = menu.addAction(label("datatable.delete_column"))
         add_color_actions(menu, col.color,
                           lambda color: self._set_column_color(col, color))
         act = menu.exec(self._header.mapToGlobal(pos))

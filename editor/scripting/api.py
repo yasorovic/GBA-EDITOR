@@ -1528,10 +1528,11 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # dessous (side 1, ce avec quoi : situé derrière selon les priorités).
     # window.set_blend() décide ensuite des RÉGIONS où tout ceci s'applique.
     # ── Palettes au runtime ────────────────────────────────────────
-    # Remplacer les seize couleurs d'une banque matérielle. C'est l'ÉCHANGE, pas
-    # le cycle : faire tourner les couleurs d'une palette a été écarté (une lave
-    # dessinée puis exportée en planche a des index différents d'une image à
-    # l'autre : elle emprunte le chemin ordinaire des fonds animés).
+    # Remplacer les seize couleurs d'une banque matérielle. La rotation d'une plage
+    # (`palette_bank:rotate`) est revenue avec le pipeline de palettes : elle sert
+    # une eau ou des néons dessinés pour tourner. Une lave dessinée puis exportée
+    # en planche, elle, a des index différents d'une image à l'autre et reste sur
+    # le chemin ordinaire des fonds animés.
     #
     # Deux fonctions et non un paramètre de cible : les deux pools sont
     # PHYSIQUEMENT distincts sur GBA (PAL_BG_RAM / PAL_OBJ_RAM), la scène les
@@ -1621,6 +1622,16 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name=f"{REF_PALETTE_BANK}:invert", c_func="palette_bank_invert",
         params=[Param("amount", PARAM_INT, doc="Strength, 0 (none) to 16 (full)")], self_first=True,
         doc="Turns colours 1-15 of the bank toward their negative, by `amount` (0-16).",
+    ),
+    f"{REF_PALETTE_BANK}:rotate": ApiFunc(
+        lua_name=f"{REF_PALETTE_BANK}:rotate", c_func="palette_bank_rotate",
+        params=[Param("first", PARAM_INT, doc="First index of the range (1-15)"),
+                Param("count", PARAM_INT, doc="Number of colours in the range"),
+                Param("shift", PARAM_INT, doc="Steps of the rotation, negative backwards")],
+        self_first=True,
+        doc="Shows colours first..first+count-1 shifted by `shift` steps, without changing them. "
+            "Raise `shift` over time to make water flow; count 0 stops it. "
+            "Ex: palette:bg_bank(2):rotate(1, 4, scene.frame / 8)",
     ),
     "palette.bg_pool": ApiFunc(
         lua_name="palette.bg_pool", c_func="palette_bg_pool",

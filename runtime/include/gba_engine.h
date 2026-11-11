@@ -255,6 +255,18 @@ typedef struct {
 #define PAL_EFFECT_POOL  32
 static PaletteEffect g_palette_effect[34] EWRAM_BSS;
 
+/* La rotation d'une plage de couleurs d'une banque (eau, lave, néons) : l'index
+   `first + k` affiche la couleur d'origine `first + (k - shift)`, modulo `count`.
+   Un réglage aussi : il déplace ce qu'on voit, jamais les couleurs d'origine, si
+   bien qu'un `replace` pendant la rotation continue de tourner. `shift` est déjà
+   ramené dans 0..count-1 ; `count` = 0, pas de rotation. Par banque seulement :
+   une rotation sur le pool entier attendra la palette 256 du mode 4. */
+typedef struct {
+    u8 first, count, shift;
+} PaletteRotation;
+
+static PaletteRotation g_palette_rotation[32] EWRAM_BSS;
+
 static void palette_mark(int pool, int first, int last) {
     if (first < g_palette_dirty_first[pool]) g_palette_dirty_first[pool] = first;
     if (last > g_palette_dirty_last[pool])   g_palette_dirty_last[pool] = last;
@@ -307,14 +319,31 @@ static u16 palette_effect_apply(u16 color, const PaletteEffect *e) {
    la plage modifiée est recalculée puis recopiée : chaque couleur ne dépend que
    d'elle-même et des effets de sa banque et de son pool. L'index 0 d'une banque
    échappe à l'effet de la banque (transparent, ou le backdrop en banque 0 du BG),
-   pas à celui du pool : un fondu de tout l'écran fond aussi le backdrop. */
+   pas à celui du pool : un fondu de tout l'écran fond aussi le backdrop.
+
+   La rotation fait exception à « chaque couleur ne dépend que d'elle-même » : une
+   couleur écrite dans une banque qui tourne s'affiche à un autre index. La plage
+   s'étend donc à toute banque qui tourne à ses deux bouts. Rotation puis effet de
+   la banque : l'effet est le même pour toutes les couleurs de la banque, l'ordre
+   ne change pas l'image. */
+static int palette_rotated_source(int pool, int i) {
+    const PaletteRotation *r = &g_palette_rotation[pool * 16 + (i >> 4)];
+    int k = (i & 15) - r->first;
+    if (k < 0 || k >= r->count) return i;
+    k -= r->shift;
+    if (k < 0) k += r->count;
+    return (i & ~15) + r->first + k;
+}
+
 void palette_commit(void) {
     for (int pool = 0; pool < 2; pool++) {
         int first = g_palette_dirty_first[pool], last = g_palette_dirty_last[pool];
         if (first > last) continue;
+        if (g_palette_rotation[pool * 16 + (first >> 4)].count) first &= ~15;
+        if (g_palette_rotation[pool * 16 + (last >> 4)].count)  last |= 15;
         const PaletteEffect *pool_effect = &g_palette_effect[PAL_EFFECT_POOL + pool];
         for (int i = first; i <= last; i++) {
-            u16 c = g_palette_copy[pool][i];
+            u16 c = g_palette_copy[pool][palette_rotated_source(pool, i)];
             if (i & 15) c = palette_effect_apply(c, &g_palette_effect[pool * 16 + (i >> 4)]);
             g_palette_final[pool][i] = palette_effect_apply(c, pool_effect);
         }
@@ -376,9 +405,11 @@ void palette_scene_start(const u16 *bg, const u16 *obj) {
     g_palette_scene[PAL_POOL_OBJ] = obj;
     for (int slot = 0; slot < 34; slot++) {
         const PaletteEffect *e = &g_palette_effect[slot];
-        if (!e->fade && !e->grayscale && !e->invert) continue;
+        int rotating = slot < 32 && g_palette_rotation[slot].count;
+        if (!e->fade && !e->grayscale && !e->invert && !rotating) continue;
         PaletteEffect *cleared = palette_effect_slot(slot);   /* marque sa plage */
         cleared->fade = cleared->grayscale = cleared->invert = 0;
+        if (rotating) g_palette_rotation[slot].count = 0;
     }
 }
 
@@ -447,6 +478,22 @@ static int palette_pool_slot(int pool) { return (pool == 0 || pool == 1) ? PAL_E
 void palette_pool_fade(int pool, int color, int amount) { palette_effect_fade(palette_pool_slot(pool), color, amount); }
 void palette_pool_grayscale(int pool, int amount)       { palette_effect_grayscale(palette_pool_slot(pool), amount); }
 void palette_pool_invert(int pool, int amount)          { palette_effect_invert(palette_pool_slot(pool), amount); }
+
+/* `palette_bank:rotate(first, count, shift)` : la plage first..first+count-1 (dans
+   1-15) tourne de `shift` crans, négatif vers l'arrière. Un script qui incrémente
+   `shift` à son rythme fait couler l'eau ; `count` = 0 arrête la rotation. Une
+   plage qui sort de 1-15 arrête aussi la rotation plutôt que de toucher l'index 0. */
+void palette_bank_rotate(int ref, int first, int count, int shift) {
+    PaletteEffect *e = palette_effect_slot(ref < 0 || ref > 31 ? -1 : ref);   /* marque la banque */
+    if (!e) return;
+    PaletteRotation *r = &g_palette_rotation[ref];
+    if (count < 2 || first < 1 || first + count > 16) { r->count = 0; return; }
+    shift %= count;
+    if (shift < 0) shift += count;
+    r->first = (u8)first;
+    r->count = (u8)count;
+    r->shift = (u8)shift;
+}
 
 /* Raccourcis de `palette:bg_bank(n):replace(nom)`. Ils écrivaient aussi l'index 0,
    ce qui effaçait le backdrop en banque 0 du BG. */

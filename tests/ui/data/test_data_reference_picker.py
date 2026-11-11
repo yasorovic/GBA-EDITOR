@@ -7,18 +7,18 @@ from core.history import CommandHistory
 from core.models.data_table import DataColumn, DataTable
 from core.project import Project
 from ui.common.widgets import PickerPopup
-from ui.data_editor import data_grid_panel
+from ui.data_editor import data_table_panel
 
 
 @pytest.fixture
-def grid(qapp, tmp_path, monkeypatch):
+def table_panel(qapp, tmp_path, monkeypatch):
     history = CommandHistory()
-    monkeypatch.setattr(data_grid_panel, "get_history", lambda: history)
+    monkeypatch.setattr(data_table_panel, "get_history", lambda: history)
     project = Project.create(tmp_path / "Game", "Game")
     table = DataTable(name="Items", columns=[DataColumn("visual", "sprite")],
                       rows=[{"visual": "Missing"}])
     project.data_tables.append(table)
-    panel = data_grid_panel.DataGridPanel()
+    panel = data_table_panel.DataTablePanel()
     panel.load_project(project)
     panel.show_table(table.name)
     monkeypatch.setattr(panel, "choices_for", lambda _: ["Hero", "Enemy"])
@@ -43,8 +43,8 @@ def _pick(popup, value):
     popup._list.itemClicked.emit(popup._list.item(row))
 
 
-def test_filtrer_et_choisir_passe_par_l_historique(grid, qapp):
-    panel, table, history = grid
+def test_filtrer_et_choisir_passe_par_l_historique(table_panel, qapp):
+    panel, table, history = table_panel
     popup = _open(panel, qapp)
     assert popup._search.hasFocus()
     popup._search.setText("ene")
@@ -56,23 +56,23 @@ def test_filtrer_et_choisir_passe_par_l_historique(grid, qapp):
     assert table.rows[0]["visual"] == "Missing"
 
 
-def test_fermer_preserve_une_reference_absente(grid, qapp):
-    panel, table, _ = grid
+def test_fermer_preserve_une_reference_absente(table_panel, qapp):
+    panel, table, _ = table_panel
     popup = _open(panel, qapp)
     popup.close()
     qapp.processEvents()
     assert table.rows[0]["visual"] == "Missing"
 
 
-def test_le_choix_vide_efface_la_reference(grid, qapp):
-    panel, table, _ = grid
+def test_le_choix_vide_efface_la_reference(table_panel, qapp):
+    panel, table, _ = table_panel
     popup = _open(panel, qapp)
     _pick(popup, "")
     assert table.rows[0]["visual"] == ""
 
 
-def test_un_popup_obsolete_n_ecrit_pas_apres_rechargement(grid, qapp):
-    panel, table, _ = grid
+def test_un_popup_obsolete_n_ecrit_pas_apres_rechargement(table_panel, qapp):
+    panel, table, _ = table_panel
     popup = _open(panel, qapp)
     panel.reload()
     _pick(popup, "Enemy")
@@ -83,8 +83,8 @@ def _create_button(popup):
     return next(b for b in popup.findChildren(QPushButton) if b is popup._btn_new)
 
 
-def test_creer_un_texte_depuis_la_cellule_en_un_seul_pas(grid, qapp):
-    panel, table, history = grid
+def test_creer_un_texte_depuis_la_cellule_en_un_seul_pas(table_panel, qapp):
+    panel, table, history = table_panel
     table.columns[0].type = "text"
     panel.reload()
     popup = _open(panel, qapp)
@@ -100,19 +100,19 @@ def test_creer_un_texte_depuis_la_cellule_en_un_seul_pas(grid, qapp):
     assert table.rows[0]["visual"] == "text_Items_01" and project.get_text("text_Items_01") is not None
 
 
-def test_creer_un_asset_cite_le_nom_cree(grid, qapp, monkeypatch):
-    panel, table, history = grid
+def test_creer_un_asset_cite_le_nom_cree(table_panel, qapp, monkeypatch):
+    panel, table, history = table_panel
     table.columns[0].type = "palette"
     panel.reload()
-    monkeypatch.setattr(data_grid_panel, "create_referenced_asset", lambda project, kind: "NewPalette")
+    monkeypatch.setattr(data_table_panel, "create_referenced_asset", lambda project, kind: "NewPalette")
     popup = _open(panel, qapp)
     _create_button(popup).click()
     qapp.processEvents()
     assert table.rows[0]["visual"] == "NewPalette"
 
 
-def test_pas_de_creation_pour_un_sprite(grid, qapp):
-    panel, _table, _history = grid
+def test_pas_de_creation_pour_un_sprite(table_panel, qapp):
+    panel, _table, _history = table_panel
     assert _open(panel, qapp)._btn_new is None
 
 
@@ -124,8 +124,8 @@ def _click(panel, qapp, row=0, column=0):
     qapp.processEvents()
 
 
-def test_premier_clic_selectionne_second_clic_edite(grid, qapp):
-    panel, _table, _history = grid
+def test_premier_clic_selectionne_second_clic_edite(table_panel, qapp):
+    panel, _table, _history = table_panel
     _click(panel, qapp)
     assert panel._tbl.currentIndex().row() == 0 and panel._tbl.findChild(PickerPopup) is None
     _click(panel, qapp)
@@ -133,11 +133,11 @@ def test_premier_clic_selectionne_second_clic_edite(grid, qapp):
     assert popup is not None and popup.isVisible()
 
 
-def test_double_clic_ouvre_un_seul_selecteur(grid, qapp):
+def test_double_clic_ouvre_un_seul_selecteur(table_panel, qapp):
     """La suite réelle d'un double clic : appui, relâchement, double-clic, relâchement."""
     from PyQt6.QtCore import QEvent, QPointF
     from PyQt6.QtGui import QMouseEvent
-    panel, _table, _history = grid
+    panel, _table, _history = table_panel
     viewport = panel._tbl.viewport()
     position = QPointF(panel._tbl.visualRect(panel._model.index(0, 0)).center())
     left, none = Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier

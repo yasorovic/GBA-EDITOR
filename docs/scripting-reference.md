@@ -171,6 +171,12 @@ palette:bg_pool():grayscale(0)                         -- retiré
 
 Un effet vise une banque, pas un acteur : tout ce qui cite la banque le reçoit, y compris d'autres sprites qui la partagent.
 
+`rotate(premier, nombre, crans)` fait tourner une plage de couleurs d'une banque : les index `premier` à `premier + nombre - 1` montrent leurs couleurs décalées de `crans`, vers l'arrière si le nombre est négatif. C'est un réglage, comme un effet : les couleurs d'origine ne bougent pas, et une couleur changée pendant la rotation continue de tourner. Pour faire couler de l'eau, on augmente les crans au fil du temps. Un nombre de 0 arrête la rotation. La plage reste dans 1-15, l'index 0 ne tourne jamais. Une nouvelle scène arrête toutes les rotations.
+
+```lua
+palette:bg_bank(2):rotate(1, 4, scene.frame / 8)   -- quatre bleus qui tournent toutes les 8 images
+```
+
 ## Son
 
 Effets, musique et jingles. Voir le panneau **API**, section **Son**.

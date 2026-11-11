@@ -2182,6 +2182,23 @@ class Checker:
                     f"{key}(…): {arg.value} is outside 0-16, the strength of a palette effect "
                     "(0 = none, 16 = full)."))
 
+    def _check_rotation_range(self, key: str, args: list):
+        """La plage d'une rotation écrite en clair : elle commence dans 1-15 et finit au plus à 15.
+        L'index 0 est transparent (ou le backdrop) ; le moteur arrête en silence une rotation qui
+        le toucherait. Un nombre calculé n'est pas jugé."""
+        first, count = args[0], args[1]
+        if isinstance(first, ExprNumber) and not 1 <= first.value <= 15:
+            self.errors.append(CheckError(
+                "error",
+                f"{key}(…): the range starts at {first.value}, outside 1-15: index 0 is transparent "
+                "and never rotates."))
+        elif (isinstance(first, ExprNumber) and isinstance(count, ExprNumber)
+              and first.value + count.value > 16):
+            self.errors.append(CheckError(
+                "error",
+                f"{key}(…): {count.value} colours from index {first.value} go past index 15, the "
+                "last colour of a bank."))
+
     def _check_layer_number(self, args: list):
         """`layer:get(n)` : cette scène a-t-elle le fond `n` ? Un numéro écrit en clair est jugé au
         build (`BuildContext.layer_numbers`, dérivé de `api.LAYERS_BY_MODE` et du mode de la scène) ;
@@ -2398,6 +2415,8 @@ class Checker:
             return
         if api.c_func.startswith(("palette_bank_", "palette_pool_")):
             self._check_palette_amount(key, api, args)
+        if api.c_func == "palette_bank_rotate":
+            self._check_rotation_range(key, args)
 
         for i, (param, arg) in enumerate(zip(api.params, args)):
             if self._is_bare_constructor(arg):

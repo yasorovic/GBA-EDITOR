@@ -74,7 +74,7 @@ class DataTableModel(QAbstractTableModel):
             return QColor(C.SYNTAX_NUMBER)
         if (role == Qt.ItemDataRole.ToolTipRole and column.type == "text"
                 and value):
-            return tooltip(title=label("datagrid.text_preview_title"),
+            return tooltip(title=label("datatable.text_preview_title"),
                            body=self._text_preview(str(value)))
         return None
 

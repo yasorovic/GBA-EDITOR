@@ -136,5 +136,14 @@ int main(void) {
     /* Une nouvelle scène part sans effet : la banque blanchie revient à ses couleurs d'origine. */
     palette_pool_invert(palette_obj_pool(), 16);              palette_commit();
     palette_scene_start(scene_bg, 0);                         palette_commit(); imprimer("nouvelle_scene");
+
+    /* La rotation : couleurs 5, 6, 7 de la banque 3 (index 53 à 55 : noir, rouge, 0x0537). */
+    palette_bank_rotate(banque, 5, 3, 1);                     palette_commit(); imprimer("rotation");
+    printf("lu rotation %04x\n", (unsigned)palette_bank_get_color(banque, 5));   /* l'origine */
+    palette_bank_set_color(banque, 7, palette_rgb(0, 31, 0)); palette_commit(); imprimer("rotation_ecrite");
+    palette_bank_rotate(banque, 5, 3, -1);                    palette_commit(); imprimer("rotation_arriere");
+    palette_bank_rotate(banque, 0, 3, 1);                     palette_commit(); imprimer("rotation_index_0");
+    palette_bank_rotate(banque, 5, 3, 1);                     palette_commit();
+    palette_scene_start(scene_bg, 0);                         palette_commit(); imprimer("rotation_nouvelle_scene");
     return 0;
 }

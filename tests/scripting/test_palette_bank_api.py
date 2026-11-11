@@ -89,3 +89,18 @@ def test_une_intensite_ecrite_en_clair_hors_de_0_16_est_refusee():
 
 def test_un_pool_n_a_pas_les_methodes_d_une_banque():
     assert _errors("palette:bg_pool():set_color(1, 0)") != []
+
+
+# ── La rotation d'une plage ──────────────────────────────────────────────────
+
+def test_la_rotation_se_traduit_terme_a_terme():
+    body = 'local n = 3\npalette:bg_bank(2):rotate(1, 4, n)'
+    assert _errors(body) == []
+    assert _c_body(body)[-1] == "palette_bank_rotate(palette_bg_bank(2), 1, 4, n);"
+
+
+def test_une_plage_de_rotation_ecrite_en_clair_hors_de_1_15_est_refusee():
+    assert any("starts at 0, outside 1-15" in m for m in _errors("palette:bg_bank(2):rotate(0, 4, 1)"))
+    assert any("4 colours from index 13 go past index 15" in m
+               for m in _errors("palette:bg_bank(2):rotate(13, 4, 1)"))
+    assert _errors("palette:bg_bank(2):rotate(12, 4, -1)") == []

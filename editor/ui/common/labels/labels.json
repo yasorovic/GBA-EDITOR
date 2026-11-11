@@ -1783,22 +1783,22 @@
     "comped.rotation_title": { "text": "Local rotation" },
     "comped.offset_x_title": { "text": "Local offset X" },
     "comped.offset_y_title": { "text": "Local offset Y" },
-    "datagrid.table_bar": {
+    "datatable.table_bar": {
       "text": "Table"
     },
-    "datagrid.add_row": {
+    "datatable.add_row": {
       "text": "Add a row"
     },
-    "datagrid.add_row_action": {
+    "datatable.add_row_action": {
       "text": "Row"
     },
-    "datagrid.add_column": {
+    "datatable.add_column": {
       "text": "Add a column"
     },
-    "datagrid.add_column_action": {
+    "datatable.add_column_action": {
       "text": "Column"
     },
-    "datagrid.duplicate_row": {
+    "datatable.duplicate_row": {
       "text": "Duplicate"
     },
     "txtseq.link_table": {
@@ -1816,94 +1816,94 @@
     "txtseq.no_free_table": {
       "text": "No free table"
     },
-    "datagrid.link_action": {
+    "datatable.link_action": {
       "text": "Link to text sequence"
     },
-    "datagrid.unlink_action": {
+    "datatable.unlink_action": {
       "text": "Unlink"
     },
-    "datagrid.link_current": {
+    "datatable.link_current": {
       "text": "Linked to {group} · up to date"
     },
-    "datagrid.link_different": {
+    "datatable.link_different": {
       "text": "Linked to {group} · out of sync"
     },
-    "datagrid.link_missing_column": {
+    "datatable.link_missing_column": {
       "text": "Linked to {group} · key column missing"
     },
-    "datagrid.link_title": {
+    "datatable.link_title": {
       "text": "Link to a text group"
     },
-    "datagrid.link_no_group": {
+    "datatable.link_no_group": {
       "text": "No text group"
     },
-    "datagrid.link_no_text_column": {
+    "datatable.link_no_text_column": {
       "text": "This table needs a text column to hold the page keys."
     },
-    "datagrid.link_confirm": {
+    "datatable.link_confirm": {
       "text": "{group}: {added} row(s) added, {lost} row(s) removed. Continue?"
     },
-    "datagrid.link_locked": {
+    "datatable.link_locked": {
       "text": "Rows follow the pages of the linked text group."
     },
     "akind.table_linked_tip": {
       "text": "Linked to text group {group}"
     },
-    "datagrid.delete_row": {
+    "datatable.delete_row": {
       "text": "Delete"
     },
-    "datagrid.table_summary": {
+    "datatable.table_summary": {
       "text": "{rows} rows · {columns} columns · indexed from 1"
     },
-    "datagrid.index_shift_title": {
+    "datatable.index_shift_title": {
       "text": "Row order"
     },
-    "datagrid.insert_shifts_indices": {
+    "datatable.insert_shifts_indices": {
       "text": "Inserting at row {index} shifts the indices of every following row used by scripts. Continue?\n\nYou can undo this action."
     },
-    "datagrid.delete_shifts_indices": {
+    "datatable.delete_shifts_indices": {
       "text": "Deleting row {index} shifts the indices of every following row used by scripts. Continue?\n\nYou can undo this action."
     },
-    "datagrid.add_column_menu": {
+    "datatable.add_column_menu": {
       "text": "Add column"
     },
-    "datagrid.delete_column": {
+    "datatable.delete_column": {
       "text": "Delete column"
     },
-    "datagrid.type": {
+    "datatable.type": {
       "text": "Type"
     },
-    "datagrid.empty": {
+    "datatable.empty": {
       "text": "No table selected.\n\nA data table is read from a script as data.Name[i].column. Its rows are numbered from 1, like every array in Lua."
     },
-    "datagrid.text_not_found": {
+    "datatable.text_not_found": {
       "text": "{name}  (not found in the text table)"
     },
-    "datagrid.text_preview": {
+    "datatable.text_preview": {
       "text": "{name}\n« {body} »"
     },
-    "datagrid.no_column_title": {
+    "datatable.no_column_title": {
       "text": "Row"
     },
-    "datagrid.no_column_text": {
+    "datatable.no_column_text": {
       "text": "Add a column first. A row has nowhere to go."
     },
-    "datagrid.row_above": {
+    "datatable.row_above": {
       "text": "Insert row above"
     },
-    "datagrid.row_below": {
+    "datatable.row_below": {
       "text": "Insert row below"
     },
-    "datagrid.row_end": {
+    "datatable.row_end": {
       "text": "Add row at end"
     },
-    "datagrid.row_delete": {
+    "datatable.row_delete": {
       "text": "Delete row"
     },
-    "datagrid.rename_title": {
+    "datatable.rename_title": {
       "text": "Rename"
     },
-    "datagrid.rename_text": {
+    "datatable.rename_text": {
       "text": "'{name}' is not usable: a column is written as code in scripts (data.{table}[i].{col}), so it must be a plain identifier (letters, digits and _, not starting with a digit) and unique within the table."
     },
     "datainsp.column": {
@@ -1921,7 +1921,7 @@
     "datainsp.value": {
       "text": "value"
     },
-    "datagrid.create_reference": { "text": "Create new" },
+    "datatable.create_reference": { "text": "Create new" },
     "datainsp.image_size": { "text": "Image: {w} × {h} px" },
     "datainsp.sound_source": { "text": "Source: {file}" },
     "datainsp.open_target": { "text": "Open" },
@@ -4856,10 +4856,10 @@
     "vartbl.type_string_tip": { "text": "Text shown by text.draw. Held in the game as an entry of the text table, so it can be drawn and compared but not edited character by character." },
     "vartbl.type_string_note": { "text": "A global of this type cannot be saved." },
     "vartbl.string_value_tip": { "text": "The text, or the key of an existing text of the project." },
-    "datagrid.add_column_tip": { "text": "Adds an integer column to this table." },
-    "datagrid.column_title": { "text": "Table column" },
-    "datagrid.column_tip": { "text": "A double-click on a name renames it. A right-click changes its type or removes it." },
-    "datagrid.text_preview_title": { "text": "Referenced text" },
+    "datatable.add_column_tip": { "text": "Adds an integer column to this table." },
+    "datatable.column_title": { "text": "Table column" },
+    "datatable.column_tip": { "text": "A double-click on a name renames it. A right-click changes its type or removes it." },
+    "datatable.text_preview_title": { "text": "Referenced text" },
     "datainsp.type_title": { "text": "Column type" },
     "datainsp.type_tip": { "text": "Controls the values accepted by this column. Changing it clears the existing values (Undo restores them)." },
     "palgrid.export_title": { "text": "Export palette" },
