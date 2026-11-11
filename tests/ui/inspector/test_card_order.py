@@ -1,8 +1,9 @@
 """Cartes repliables réordonnées par leur poignée, ordre retenu par panneau."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QPoint
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ui.common import card_order
 from ui.common.widgets import CollapsibleCard
@@ -61,3 +62,27 @@ def test_a_lone_card_shows_no_grip(qapp, monkeypatch):
     panel.show()
     qapp.processEvents()
     assert not panel.cards[0]._grip.isVisible()
+
+
+def test_fleche_apres_les_actions_et_clics_independants(qapp):
+    card = CollapsibleCard("Components")
+    add = QPushButton("+")
+    remove = QPushButton("-")
+    card.add_header_widget(add)
+    card.add_header_widget(remove)
+    clicks = []
+    add.clicked.connect(lambda: clicks.append("add"))
+    card.resize(320, 120)
+    card.show()
+    qapp.processEvents()
+
+    assert add.mapTo(card, QPoint()).x() < remove.mapTo(card, QPoint()).x()
+    assert remove.mapTo(card, QPoint()).x() < card._arrow.mapTo(card, QPoint()).x()
+    QTest.mouseClick(add, Qt.MouseButton.LeftButton)
+    assert clicks == ["add"] and card._expanded
+    QTest.mouseClick(card._arrow, Qt.MouseButton.LeftButton)
+    assert not card._expanded
+    QTest.mouseClick(card._title_lbl.parentWidget(), Qt.MouseButton.LeftButton)
+    assert card._expanded
+    card.close()
+    card.deleteLater()

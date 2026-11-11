@@ -1,10 +1,37 @@
 """Enchaîner les ajouts de composants sans pause ne perd rien : chaque ajout est entier avant le suivant."""
 from __future__ import annotations
 
+from PyQt6.QtWidgets import QMenu
+
 from core.history import get_history
 from core.models.scene import Actor, Scene
 from core.project import Project
 from ui.scene_manager.inspectors.actor_inspector import ActorInspector
+from ui.common.labels import label
+
+
+def test_menu_ajout_masque_la_physique_desactivee(qapp, tmp_path, monkeypatch):
+    project = Project(tmp_path / "jeu")
+    actor = Actor(name="Hero")
+    scene = Scene(name="Village", actors=[actor], physics_enabled=False)
+    insp = ActorInspector()
+    insp.load(actor, project=project, scene=scene)
+    menus = []
+    monkeypatch.setattr(QMenu, "exec", lambda menu, *args: menus.append(
+        {action.text(): action.isEnabled() for action in menu.actions()}))
+
+    for enabled in (False, True, False):
+        scene.physics_enabled = enabled
+        insp._show_add_menu()
+        entries = menus[-1]
+        for key in ("actorinsp.comp.physics_body", "actorinsp.comp.physic_material"):
+            assert (label(key) in entries) == enabled
+            if enabled:
+                assert entries[label(key)]
+        assert label("actorinsp.comp.collision_shape") in entries
+
+    insp.close()
+    insp.deleteLater()
 
 
 def test_des_ajouts_enchaines_sans_pause_sont_tous_pris(qapp, tmp_path):

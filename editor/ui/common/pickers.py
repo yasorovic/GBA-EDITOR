@@ -273,7 +273,7 @@ def font_picker_slot(
 
 
 def collision_tag_slot(
-    tags: list[str],
+    tags: Callable[[], list[str]],
     current_tag: str,
     accent: str,
     on_picked: Callable[[str], None],
@@ -290,7 +290,7 @@ def collision_tag_slot(
         return PickerEntry(tag, tag, icon)
 
     slot = PickerSlot(label('pick.choose_a_tag'), accent,
-                      lambda: [describe(t) for t in tags], describe, on_picked,
+                      lambda: [describe(t) for t in tags()], describe, on_picked,
                       new_label=label('pick.create_tag_named', name='{name}'),
                       on_new=on_created, create_named=True, parent=parent)
     slot.set_value(current_tag)

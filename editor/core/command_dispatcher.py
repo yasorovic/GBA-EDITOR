@@ -189,12 +189,12 @@ class CommandDispatcher(EventEmitter):
 
     # ── Actor ─────────────────────────────────────────────────────
 
-    def add_actor(self, name: str, x: int = 0, y: int = 0) -> Optional[Actor]:
-        """Ajoute un actor vide à la scène active aux coordonnées données (avec historique)."""
+    def add_actor(self, name: str, x: int = 0, y: int = 0, *, parent: str | None = None) -> Optional[Actor]:
+        """Ajoute un acteur avec son parent avant de notifier les vues et de le sélectionner."""
         if not self._project or not self._project.active_scene:
             return None
         scene = self._project.active_scene
-        actor = Actor(name=name, x=x, y=y)
+        actor = Actor(name=name, x=x, y=y, parent=parent)
 
         def persist():
             self._save_scene()

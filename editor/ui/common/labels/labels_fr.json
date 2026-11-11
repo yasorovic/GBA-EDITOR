@@ -2037,6 +2037,7 @@
     "actorinsp.rel.parent": { "text": "Parent" },
     "actorinsp.rel.children": { "text": "Enfants" },
     "actorinsp.rel.parent_tip": { "text": "Ouvre le parent de cet élément." },
+    "actorinsp.rel.detach_child_tip": { "text": "Détache l’enfant sélectionné sans supprimer l’acteur." },
     "actorinsp.children_tip": { "text": "Les enfants de cet élément. Pour un prefab, ses parties, comme les segments d’un boss : chaque partie est un acteur complet, avec son sprite, ses boîtes et sa transformation locale." },
     "actorinsp.children_note": { "text": "Un double-clic ouvre un enfant ; faire glisser une partie de prefab sur une autre la rattache à celle-ci. Le pool réserve instances maximum × (1 + parties) entrées." },
     "actorinsp.index_title": { "text": "Index de l’acteur" },

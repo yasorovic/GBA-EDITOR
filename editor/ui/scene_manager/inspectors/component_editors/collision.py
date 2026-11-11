@@ -15,6 +15,7 @@ from ui.common.pickers import collision_tag_slot
 from ui.common.icons import COLOR_SPRITE
 from core.history import get_history, AddListItemCmd
 from core.models.components import ONE_WAY_MODES, PhysicMaterialComponent
+from core.models.field_value import variables_from_project
 from core.models.scene import Area
 from scripting.api import box_tag_constant
 
@@ -23,6 +24,8 @@ from scripting.api import box_tag_constant
 class CollisionEditor(BaseComponentEditor):
 
     def build(self, comp, row, layout):
+        self.comp = comp
+        self._built_context = self._context()
         is_solid = getattr(comp, "solid", True)
 
         # ── Tag ─────────────────────────────────────────────────────
@@ -38,7 +41,7 @@ class CollisionEditor(BaseComponentEditor):
         current = getattr(comp, "tag", "body") or "body"
 
         def _commit_tag(name: str):
-            self.set_field(comp, "tag", name.strip() or "body")
+            self.set_field(self.comp, "tag", name.strip() or "body")
 
         def _create_tag(name: str):
             # Création = déclaration au niveau projet (Project Settings >
@@ -57,7 +60,7 @@ class CollisionEditor(BaseComponentEditor):
             _commit_tag(name)
 
         tag_slot = collision_tag_slot(
-            proj.collision_tags(), current, COLOR_SPRITE, _commit_tag, _create_tag, parent=self.insp)
+            proj.collision_tags, current, COLOR_SPRITE, _commit_tag, _create_tag, parent=self.insp)
         notice("collision.tag", tag_slot, layout)
         self.register_syncer("tag", lambda v, w=tag_slot: w.set_value(str(v) or "body"))
         W.row(label("comped.tag"), tag_slot, layout, LABEL_WIDTH)
@@ -76,6 +79,7 @@ class CollisionEditor(BaseComponentEditor):
         vf_y = W.value_field(getattr(comp, "y", 0), project=proj)
         vf_w = W.value_field(getattr(comp, "w", 16), project=proj, min_px=1)
         vf_h = W.value_field(getattr(comp, "h", 16), project=proj, min_px=1)
+        self._value_fields = (vf_x, vf_y, vf_w, vf_h)
 
         # La clé de notice est ÉCRITE, pas construite : `f"collision.{fname}"`
         # se lit bien mais échappe au contrôle catalogue ↔ code, qui ne sait
@@ -84,12 +88,27 @@ class CollisionEditor(BaseComponentEditor):
                                (vf_y, "y", "collision.y"),
                                (vf_w, "w", "collision.w"),
                                (vf_h, "h", "collision.h")):
-            vf.changed.connect(lambda raw, f=fname: self.set_field(comp, f, raw))
+            vf.changed.connect(lambda raw, f=fname: self.set_field(self.comp, f, raw))
             self.register_syncer(fname, lambda v, w=vf: w.set_raw(v))
             notice(key, vf, layout)
 
         W.pair(label("comped.offset"), "X", C.AXIS_X, vf_x, "Y", C.AXIS_Y, vf_y, layout, LABEL_WIDTH)
         W.pair(label("common.size"), "W", C.AXIS_X, vf_w, "H", C.AXIS_Y, vf_h, layout, LABEL_WIDTH)
+
+    def _context(self):
+        sensor_only = isinstance(getattr(self.insp, "_actor", None), Area)
+        scene = getattr(self.insp, "_scene", None)
+        return self.insp._project, sensor_only, not sensor_only and (scene is None or scene.physics_enabled)
+
+    def reload(self, comp) -> bool:
+        if self._context() != self._built_context:
+            return False
+        self.comp = comp
+        variables = variables_from_project(self.insp._project)
+        for field in self._value_fields:
+            field.set_variables(variables)
+        # L'inspecteur repeuple ensuite ses syncers existants, aussi utilisés par les Areas.
+        return True
 
     def _build_response_fields(self, comp, layout, is_solid):
         """Mode (carte), blocage entre acteurs, puis sens unique et matériau : ce qui dit comment la forme répond."""
@@ -105,7 +124,7 @@ class CollisionEditor(BaseComponentEditor):
         lbl.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent; border:none;")
         hl.addWidget(chk_solid); hl.addWidget(lbl); hl.addStretch()
         W.row(label("common.mode"), mode_lbl, layout, LABEL_WIDTH)
-        chk_solid.toggled.connect(lambda v: self.set_field(comp, "solid", v))
+        chk_solid.toggled.connect(lambda v: self.set_field(self.comp, "solid", v))
         self.register_syncer("solid", lambda v, w=chk_solid: (
             w.blockSignals(True), w.setChecked(bool(v)), w.blockSignals(False)))
 
@@ -119,7 +138,7 @@ class CollisionEditor(BaseComponentEditor):
         chk_blocks.setToolTip(tooltip(title=label("comped.collision_blocks"),
                                       body=label("comped.collision_blocks_tip")))
         W.row(label("comped.collision_blocks_row"), chk_blocks, layout, LABEL_WIDTH)
-        chk_blocks.toggled.connect(lambda v: self.set_field(comp, "response", "block" if v else "sensor"))
+        chk_blocks.toggled.connect(lambda v: self.set_field(self.comp, "response", "block" if v else "sensor"))
         self.register_syncer("response", lambda v, w=chk_blocks: (
             w.blockSignals(True), w.setChecked(v == "block"), w.blockSignals(False)))
 
@@ -138,26 +157,27 @@ class CollisionEditor(BaseComponentEditor):
         one_way.setToolTip(tooltip(title=label("comped.collision_one_way"),
                                    body=label("comped.collision_one_way_tip")))
         W.row(label("comped.collision_one_way"), one_way, layout, LABEL_WIDTH)
-        one_way.currentIndexChanged.connect(lambda _: self.set_field(comp, "one_way", one_way.currentData()))
+        one_way.currentIndexChanged.connect(lambda _: self.set_field(self.comp, "one_way", one_way.currentData()))
         self.register_syncer("one_way", lambda v, w=one_way: (
             w.blockSignals(True), w.setCurrentIndex(max(0, w.findData(v))), w.blockSignals(False)))
 
         # ── Matériau : un PhysicMaterialComponent du même acteur, désigné par son id ──
-        owner = getattr(self.insp, "_actor", None)
-        materials = [c for c in getattr(owner, "components", []) if isinstance(c, PhysicMaterialComponent)]
+        def materials():
+            owner = getattr(self.insp, "_actor", None)
+            return [c for c in getattr(owner, "components", []) if isinstance(c, PhysicMaterialComponent)]
         material_icon = icons.get("view_collision", C.TEXT_DIM)
         def describe_material(value):
             if not value:
                 return PickerEntry(label("comped.collision_material_none"), "", material_icon)
-            if any(m.id == value for m in materials):
+            if any(m.id == value for m in materials()):
                 return PickerEntry(value, value, material_icon)
             return PickerEntry(label("comped.collision_material_missing", name=value), value, missing=True)
 
         material = PickerSlot(
             label("comped.collision_choose_material"), C.ACCENT,
-            lambda: [describe_material(m.id) for m in materials], describe_material,
-            lambda value: self.set_field(comp, "material_id", value),
-            on_cleared=lambda: self.set_field(comp, "material_id", ""), cleared_value="")
+            lambda: [describe_material(m.id) for m in materials()], describe_material,
+            lambda value: self.set_field(self.comp, "material_id", value),
+            on_cleared=lambda: self.set_field(self.comp, "material_id", ""), cleared_value="")
         material.setToolTip(tooltip(title=label("comped.collision_material"),
                                     body=label("comped.collision_material_tip")))
         W.row(label("comped.collision_material"), material, layout, LABEL_WIDTH)

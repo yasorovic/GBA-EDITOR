@@ -1364,8 +1364,8 @@ class CollapsibleCard(QFrame):
     `color` teinte le titre (TEXT_NORM par défaut, via title_section) —
     réservé aux cartes dont le contexte donne une signification à cette
     couleur. `add_header_widget()` ajoute
-    un bouton (+, −...) à droite du titre, en dehors de la zone cliquable
-    de bascule.
+    un bouton (+, −...) entre le titre et la flèche, en dehors de la zone
+    cliquable de bascule. La flèche reste toujours à droite.
     """
 
     toggled = pyqtSignal(bool)   # état déplié après le clic
@@ -1395,7 +1395,7 @@ class CollapsibleCard(QFrame):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── En-tête : zone cliquable (titre + flèche à droite) + boutons à part ──
+        # En-tête : titre cliquable, boutons d'action, puis flèche à droite.
         # La carte a le fond du corps (QSS.card) ; l'en-tête se peint plus
         # sombre par-dessus, le filet sépare les deux. La règle sans sélecteur
         # rend les enfants transparents (ils ne repeignent pas le fond global
@@ -1433,16 +1433,16 @@ class CollapsibleCard(QFrame):
         self._title_lbl = QLabel(title)
         self._title_lbl.setFont(_FONT_UI_SM)
         self._title_lbl.setStyleSheet(QSS.title_section(color or C.TEXT_NORM))
-        # Sans ça, survoler flèche/titre enverrait un Leave à toggle_area.
-        for w in (self._arrow, self._title_lbl):
-            w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._title_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         ta_layout.addWidget(self._title_lbl, 1)
-        ta_layout.addWidget(self._arrow)
         self._set_arrow()
         toggle_area.mousePressEvent = lambda e: self.set_expanded(not self._expanded)
+        self._arrow.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._arrow.mousePressEvent = toggle_area.mousePressEvent
 
         hl.addWidget(toggle_area, 1)
-        self._header_row = hl   # add_header_widget y ajoute après toggle_area
+        hl.addWidget(self._arrow)
+        self._header_row = hl
         root.addWidget(hdr)
 
         self._sep = QFrame(); self._sep.setFrameShape(QFrame.Shape.HLine)
@@ -1555,8 +1555,8 @@ class CollapsibleCard(QFrame):
             card_order.save(key, [c._title_lbl.text() for c in ordered])
 
     def add_header_widget(self, w: QWidget):
-        """Bouton (+ / −...) à droite du titre, hors zone de bascule."""
-        self._header_row.addWidget(w)
+        """Bouton (+ / −...) après le titre, avant la flèche, hors zone de bascule."""
+        self._header_row.insertWidget(self._header_row.indexOf(self._arrow), w)
 
     def set_expanded(self, expanded: bool):
         self._expanded = expanded
