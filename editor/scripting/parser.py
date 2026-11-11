@@ -10,6 +10,7 @@ fichier doit changer.
 from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import lru_cache
+import re
 from typing import Any, Optional
 
 
@@ -313,6 +314,7 @@ class _Converter:
         # Numérote les `local` cachés d'une affectation multiple (`_multi_assign`) :
         # deux échanges dans un même corps ne déclarent pas deux fois le même nom C.
         self._multi_count = 0
+        self._source_names = set(re.findall(r"\b[A-Za-z_]\w*\b", source))
 
     def _line(self, node) -> int:
         """Ligne 1-indexée du noeud, ou 0 si son offset est inconnu."""
@@ -520,15 +522,31 @@ class _Converter:
         if len(node.values or []) != len(node.targets):
             return StmtUnsupported(node="MultiAssign", line=self._line(node))
         temps, assigns = [], []
-        for i, (t, v) in enumerate(zip(node.targets, node.values)):
-            value = self._expr(v)
-            if i > 0 and not isinstance(value, (ExprNumber, ExprBool, ExprString, ExprNil)):
+
+        def remember(value):
+            while True:
                 self._multi_count += 1
                 name = f"_multi_{self._multi_count}"
-                local_scope.add(name)
-                temps.append(StmtLocalAssign(name=name, value=value))
-                value = ExprName(name)
-            assigns.append(StmtAssign(target=self._expr(t), value=value))
+                if name not in self._source_names:
+                    break
+            local_scope.add(name)
+            temps.append(StmtLocalAssign(name=name, value=value))
+            return ExprName(name)
+
+        def freeze_indices(target):
+            # Les indices de TOUTES les cibles sont lus avant la première écriture.
+            if isinstance(target, (ExprIndex, ExprIndexAt)):
+                target.obj = freeze_indices(target.obj)
+                if isinstance(target, ExprIndexAt) and not isinstance(target.index, ExprNumber):
+                    target.index = remember(target.index)
+            return target
+
+        targets = [freeze_indices(self._expr(t)) for t in node.targets]
+        for i, (target, v) in enumerate(zip(targets, node.values)):
+            value = self._expr(v)
+            if i > 0 and not isinstance(value, (ExprNumber, ExprBool, ExprString, ExprNil)):
+                value = remember(value)
+            assigns.append(StmtAssign(target=target, value=value))
         return temps + assigns
 
     def _if(self, node, local_scope) -> StmtIf:

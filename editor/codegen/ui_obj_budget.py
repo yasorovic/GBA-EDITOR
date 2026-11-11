@@ -4,7 +4,7 @@ Bandes de texte en cible OBJ, images d'UI, fonds de conteneur en sprites. `oam_a
 poste « UI » du budget OAM d'une scène ; `gen_text.obj_text_alloc` en lit le placement."""
 from __future__ import annotations
 
-from codegen.grit_conversion import count_frames
+from codegen.sprite_frames import count_frames
 from core.models.scene import Scene
 from core.project import Project
 

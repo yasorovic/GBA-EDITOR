@@ -40,7 +40,7 @@ class AnimFrame:
     # est une seconde porte, pas le propriétaire.
     #
     # LIMITE ASSUMÉE DU MODÈLE : les frames sont dédupliquées au niveau
-    # SÉQUENCE (cf. grit_conversion.sprite_unique_frames). Deux directions
+    # SÉQUENCE (cf. sprite_frames.sprite_unique_frames). Deux directions
     # identiques — une source et son miroir, une source et son omni — partagent
     # donc le même bloc, et l'effet se déclenche pour les deux. C'est ce qu'on
     # VEUT d'un miroir : le pas est le même à gauche et à droite. Deux états

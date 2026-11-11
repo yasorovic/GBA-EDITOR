@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from core.models.components import CollisionShapeComponent
 from codegen.grit_conversion import (bg_layer_sym, bg_layer_sym_for,
-                                     bg_map_geometry, bg_map_sbb_count,
-                                     count_frames)
+                                     bg_map_geometry, bg_map_sbb_count)
+from codegen.sprite_frames import count_frames
 from core.models.scene import Actor
 from typing import Optional
 

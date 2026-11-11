@@ -608,16 +608,21 @@ def test_un_groupe_ne_depasse_pas_quinze_couleurs(projet):
     assert scene_bank_layout(projet, scene, "obj").bank_count() == 2
 
 
-def test_la_conversion_recale_les_pixels_sur_l_englobante(projet, monkeypatch):
+@pytest.mark.parametrize("palette_fixe", [False, True])
+def test_la_conversion_recale_les_pixels_sur_l_englobante(projet, monkeypatch, palette_fixe):
     """Les tuiles d'un sprite sont converties une fois pour tout le projet : elles
     doivent viser les positions de ses couleurs DANS l'englobante, celle que sa
     banque recevra. grit est remplacé par un .c au format qu'il écrit, dont la
     palette suit l'ordre propre du sprite (index 1 = ROUGE, 2 = BLEU)."""
     from PIL import Image
     from codegen import grit_conversion
+    from core.models.scene import Actor
+    from codegen.palette_alloc import effective_palette_colors
 
     petit = _sprite(projet, "Petit", [ROUGE, BLEU])
     _sprite(projet, "Grand", [VERT, ROUGE, BLEU])
+    acteur = Actor(name="Hero", pal_bank=0 if palette_fixe else OWN_PAL_BANK)
+    projet.palettes.append(PaletteBank(name="Fixe", colors=[RESERVED_SLOT_COLOR, ROUGE, BLEU]))
     png = projet.asset_abs(petit.asset)
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGBA", (8, 8), (255, 0, 0, 255)).save(png)
@@ -633,6 +638,8 @@ def test_la_conversion_recale_les_pixels_sur_l_englobante(projet, monkeypatch):
         return True
 
     conversion = grit_conversion.GritSprites(Path("grit"), lambda *_a: None, grit)
-    assert conversion.run(projet, [(None, petit, [RESERVED_SLOT_COLOR, ROUGE, BLEU])]) is True
+    couleurs = effective_palette_colors(projet, acteur.pal_bank, png, ["Fixe"], own_pal=petit.own_palette)
+    assert conversion.run(projet, [(acteur, petit, couleurs)]) is True
     texte = (projet.grit_out_dir / "sprite_Petit.c").read_text(encoding="utf-8")
-    assert "0x00000032" in texte    # ROUGE est en 2, BLEU en 3 dans [réservé, VERT, ROUGE, BLEU]
+    # La banque fixe garde ses index, même si ses couleurs sont celles de la palette propre.
+    assert ("0x00000021" if palette_fixe else "0x00000032") in texte

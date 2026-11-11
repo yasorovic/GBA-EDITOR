@@ -846,7 +846,7 @@ class UIInspector(QWidget):
         chaque fois que les deux ne tombent pas d'accord."""
         if sprite is None or self._project is None:
             return 1
-        from codegen.grit_conversion import count_frames
+        from codegen.sprite_frames import count_frames
         return count_frames(self._project, sprite)
 
     def _sync_image_note(self):

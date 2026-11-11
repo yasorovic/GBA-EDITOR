@@ -20,7 +20,7 @@ from core.models.sprite import SpriteAsset
 from core.models.scene import Actor
 from core.project import Project
 from codegen.c_names import sym as c_sym
-from codegen.grit_conversion import sprite_unique_frames, seq_key
+from codegen.sprite_frames import sprite_unique_frames, seq_key
 from codegen.runtime_codegen.gen_affine import affine_oam_lines, oam_window_open, oam_window_close, pool_affine
 from codegen.runtime_codegen.shared_pool_gen import owners, shared_models
 from codegen.actor_appearance import initial_appearance, owner_appearances

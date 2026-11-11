@@ -56,7 +56,8 @@ def test_des_constantes_n_ont_pas_besoin_de_local_cache():
 def test_c_un_echange_emis_echange_vraiment(tmp_path):
     """Sonde native : le C réellement émis pour `on_update` est compilé et
     exécuté. Échange d'entiers, valeur calculée sur les ANCIENNES valeurs,
-    échange de composantes d'un vec2."""
+    échange de composantes d'un vec2 et indices des cibles lus avant les écritures,
+    même en deux dimensions et avec un nom voisin des variables générées."""
     import subprocess
     from native_toolchain import compilateur_hote, environnement
     from scripting.parser import parse
@@ -66,10 +67,14 @@ def test_c_un_echange_emis_echange_vraiment(tmp_path):
     if cc is None:
         pytest.skip("aucun compilateur C hôte")
     src = ("local a = 1\nlocal b = 2\nlocal c = 0\nlocal d = 0\nlocal p = vec2(3, 4)\n"
+           "local i = 1\nlocal t = array(3)\nlocal m = array(3, 3)\n"
            "function on_update(self)\n"
            "  a, b = b, a\n"
            "  c, d = 10, c + a\n"
            "  p.x, p.y = p.y, p.x\n"
+           "  local _multi_4 = 17\n"
+           "  i, t[i], m[i][i] = 2, 99, 42\n"
+           "  t[3] = _multi_4\n"
            "end\n")
     code, _, _ = generate(parse(src), CodegenContext(
         actor_name="Ball", actor_sym="Ball", anim_names=["idle"], sfx_names=[],
@@ -81,7 +86,9 @@ def test_c_un_echange_emis_echange_vraiment(tmp_path):
              + code[debut:fin] +
              "\nint main(void) {\n  Ball_on_update(NULL);\n"
              "  assert(a == 2 && b == 1);\n  assert(c == 10 && d == 2);\n"
-             "  assert(p.x == 4 && p.y == 3);\n  return 0;\n}\n")
+             "  assert(p.x == 4 && p.y == 3);\n"
+             "  assert(i == 2 && t[0] == 99 && t[1] == 0 && t[2] == 17);\n"
+             "  assert(m[0][0] == 42 && m[1][1] == 0);\n  return 0;\n}\n")
     (tmp_path / "probe.c").write_text(sonde, encoding="utf-8")
     binaire = tmp_path / "probe"
     build = subprocess.run([cc, "-std=gnu11", "-O0", "-o", str(binaire), str(tmp_path / "probe.c")],
