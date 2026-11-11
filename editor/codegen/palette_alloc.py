@@ -167,32 +167,77 @@ def _sprite_own_palette(sp) -> list[int]:
     return list(getattr(sp, "own_palette", None) or []) if sp else []
 
 
-def _sprite_palettes_by_size(p: Project) -> list[tuple]:
-    """(couleurs, ensemble) des palettes propres distinctes des sprites du projet,
-    la plus grande d'abord, puis par ordre des couleurs : la première qui en
-    contient une autre est sa palette englobante (cf. `enclosing_sprite_palette`)."""
+SPRITE_BANK_COLORS = 15   # couleurs utiles d'une banque 4 bpp, l'index 0 étant transparent
+
+
+def _palettes_seen_together(p: Project) -> list[set]:
+    """Pour chaque scène et chaque pool, l'ensemble des palettes propres de sprites
+    (en `frozenset`) qui y prennent une banque : celles qu'il vaut la peine de
+    grouper, puisqu'elles se disputent les mêmes 16 banques."""
+    out = []
+    for scene in p.scenes:
+        obj = (_actor_own_palettes(p, scene) + _scene_prefab_own_palettes(p, scene)
+               + ui_image_own_palettes(p, scene, "obj"))
+        for pairs in (obj, ui_image_own_palettes(p, scene, "bg")):
+            together = {frozenset(cols) for _owner, cols in pairs if cols}
+            if len(together) > 1:
+                out.append(together)
+    return out
+
+
+def _group_sprite_palettes(p: Project) -> dict[tuple, list[int]]:
+    """Range les palettes propres distinctes des sprites du projet en groupes de 15
+    couleurs au plus, de la plus grande à la plus petite (puis par ordre des
+    couleurs). Une palette rejoint :
+    1. le premier groupe qui contient déjà toutes ses couleurs (l'inclusion) ;
+    2. sinon un groupe où l'union tient et qu'elle croise dans au moins une scène,
+       pour un même pool : celui qu'elle croise le plus souvent, puis celui qui
+       gagne le moins de couleurs, puis le premier. Grouper deux palettes qui ne
+       se croisent jamais ne libérerait aucune banque ;
+    3. sinon un groupe à elle.
+    La palette d'un groupe garde l'ordre de son premier membre, puis les couleurs
+    ajoutées à la suite."""
     distinct = {tuple(cols) for cols in (_sprite_own_palette(sp) for sp in p.sprites) if cols}
-    return [(cols, frozenset(cols))
-            for cols in sorted(distinct, key=lambda cols: (-len(set(cols)), cols))]
+    together = _palettes_seen_together(p)
+    groups: list[tuple[list[int], set, list]] = []   # (couleurs, ensemble, membres)
+    group_of: dict[tuple, list[int]] = {}
+    for cols in sorted(distinct, key=lambda cols: (-len(set(cols)), cols)):
+        own = frozenset(cols)
+        group = next((g for g in groups if own <= g[1]), None)
+        if group is None:
+            best_rank = None
+            for i, g in enumerate(groups):
+                added = len(own - g[1])
+                if len(g[1]) + added > SPRITE_BANK_COLORS:
+                    continue
+                shared = sum(1 for seen in together
+                             if own in seen and any(member in seen for member in g[2]))
+                if shared and (best_rank is None or (-shared, added, i) < best_rank):
+                    group, best_rank = g, (-shared, added, i)
+        if group is None:
+            group = ([], set(), [])
+            groups.append(group)
+        for color in cols:
+            if color not in group[1]:
+                group[0].append(color)
+                group[1].add(color)
+        group[2].append(own)
+        group_of[cols] = group[0]
+    return {cols: list(colors) for cols, colors in group_of.items()}
 
 
-def enclosing_sprite_palette(p: Project, cols) -> list[int]:
-    """La palette propre de sprite qui remplace `cols` partout dans le projet : la
-    plus grande palette de sprite du projet qui contient toutes ses couleurs (à
-    taille égale, la première par ordre des couleurs), `cols` elle-même sinon.
+def sprite_palette_groups(p: Project) -> dict[tuple, list[int]]:
+    """{palette propre d'un sprite : palette de son groupe}, pour tout le projet.
 
-    Un sprite dont la palette est contenue dans une autre partage ainsi sa banque :
-    ses tuiles sont recalées par couleur sur l'englobante (`GritSprites`), et sa
-    banque en reçoit les couleurs, même dans une scène où l'autre sprite est
-    absent. Le choix vaut pour tout le projet parce que les tuiles d'un sprite
-    sont converties une seule fois ; une scène n'y perd aucune banque, puisque
-    deux palettes ne donnent jamais deux englobantes là où elles n'en prenaient
-    qu'une. Idempotente : l'englobante d'une englobante est elle-même."""
-    if not cols:
-        return list(cols or [])
-    own = set(cols)
-    candidates = layout_memo("sprite_palettes", (p,), lambda: _sprite_palettes_by_size(p))
-    return list(next((colors for colors, colors_set in candidates if own <= colors_set), cols))
+    Les sprites d'un même groupe partagent une banque : leurs tuiles sont recalées
+    par couleur sur la palette du groupe (`GritSprites`), et la banque en reçoit
+    les couleurs, même dans une scène où les autres membres sont absents. Le
+    choix vaut pour tout le projet parce que les tuiles d'un sprite sont
+    converties une seule fois ; une scène n'y perd aucune banque, puisque chaque
+    palette n'appartient qu'à un groupe. Lue une fois par appelant (allocation,
+    inspecteur, conversion) : `groups.get(tuple(cols)) or list(cols)`, une palette
+    absente du projet restant elle-même."""
+    return layout_memo("sprite_palette_groups", (p,), lambda: _group_sprite_palettes(p))
 
 
 def ui_image_own_palettes(p: Project, scene: Scene, pool: str) -> list[tuple]:
@@ -532,13 +577,15 @@ def bg_map_banks(p: Project, scene: Scene, ba) -> tuple:
 def _allocate_scene_banks(p: Project, scene: Scene, pool: str) -> SceneBankLayout:
     # (propriétaire, couleurs brutes, clé de dédup, contenu de banque) : `bank_index`
     # reçoit les couleurs BRUTES de ses appelants, et chacune est rattachée à la
-    # banque de sa clé ; la clé d'un sprite est sa palette englobante
-    # (`enclosing_sprite_palette`), celle des autres sources leurs couleurs. Le
+    # banque de sa clé ; la clé d'un sprite est la palette de son groupe
+    # (`sprite_palette_groups`), celle des autres sources leurs couleurs. Le
     # contenu écrit dans la banque dépend de la FORME de la source : une palette de
     # sprite n'a pas son slot 0 (`_sprite_bank_content`), l'extraction d'un BG legacy l'a déjà.
+    groups = sprite_palette_groups(p)
+
     def _sprite_request(owner, cols, content):
-        enclosing = enclosing_sprite_palette(p, cols)
-        return owner, cols, enclosing, content(enclosing)
+        group = groups.get(tuple(cols)) or list(cols)
+        return owner, cols, group, content(group)
 
     if pool == "obj":
         active = list(getattr(scene, "active_obj_palettes", []))[:16]
@@ -807,6 +854,7 @@ def _obj_instance_pairs(p: Project, scene: Scene) -> list[tuple[tuple, InstanceR
     ayant une palette propre. La clé est la forme banque hardware (préfixe slot
     0 réservé) — cohérente avec scene_bank_layout."""
     out: list[tuple[tuple, InstanceRef]] = []
+    groups = sprite_palette_groups(p)
     for a in scene.actors:
         if not getattr(a, "active", True):
             continue
@@ -814,7 +862,7 @@ def _obj_instance_pairs(p: Project, scene: Scene) -> list[tuple[tuple, InstanceR
             cols = _sprite_own_palette(sp)
             if not cols:
                 continue
-            key = tuple(_sprite_bank_content(enclosing_sprite_palette(p, cols)))
+            key = tuple(_sprite_bank_content(groups.get(tuple(cols)) or cols))
             out.append((key, InstanceRef("actor", a, a.name,
                                          getattr(a, "pal_bank", OWN_PAL_BANK))))
     return out
@@ -904,6 +952,7 @@ def _ui_image_pairs(p: Project, scene: Scene, pool: str) -> list[tuple[tuple, In
     rm = int(getattr(scene, "render_mode", 0) or 0)
     want_bg = (pool == "bg")
     out: list[tuple[tuple, InstanceRef]] = []
+    groups = sprite_palette_groups(p)
     for lay, im in p.scene_ui_images(scene):
         if (lay.resolved_target(im, rm) == TARGET_BG) != want_bg:
             continue
@@ -912,7 +961,7 @@ def _ui_image_pairs(p: Project, scene: Scene, pool: str) -> list[tuple[tuple, In
             continue
         # Palette de SPRITE dans les deux pools — cf. `_sprite_bank_content` ;
         # la vue montre alors la banque 16 slots que la ROM écrit vraiment.
-        key = tuple(_sprite_bank_content(enclosing_sprite_palette(p, cols)))
+        key = tuple(_sprite_bank_content(groups.get(tuple(cols)) or cols))
         label = f"{im.name} (conteneur)" if can_fill(im) \
                 else f"{im.name} (image UI)"
         out.append((key, InstanceRef("ui_image", im, label, OWN_PAL_BANK)))

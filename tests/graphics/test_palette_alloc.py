@@ -482,7 +482,7 @@ def _sprite(p: Project, nom: str, couleurs: list[int]):
     return sp
 
 
-def _scene_avec_acteurs(*sprites: str) -> Scene:
+def _scene_avec_acteurs(*sprites: str, nom_scene: str = "Test") -> Scene:
     from core.models.components import SpriteComponent
     from core.models.scene import Actor
     acteurs = []
@@ -490,7 +490,7 @@ def _scene_avec_acteurs(*sprites: str) -> Scene:
         a = Actor(name=f"Acteur{nom}")
         a.components.append(SpriteComponent(id="s0", sprite_name=nom, active=True))
         acteurs.append(a)
-    return Scene(name="Test", actors=acteurs)
+    return Scene(name=nom_scene, actors=acteurs)
 
 
 ROUGE, VERT, BLEU, JAUNE = 0x001F, 0x03E0, 0x7C00, 0x03FF
@@ -541,15 +541,71 @@ def test_une_scene_sans_l_englobante_ne_prend_pas_plus_de_banques(projet):
         [RESERVED_SLOT_COLOR, VERT, ROUGE, BLEU, JAUNE]
 
 
-def test_l_englobante_d_une_englobante_est_elle_meme(projet):
-    from codegen.palette_alloc import enclosing_sprite_palette
+def test_un_groupe_garde_l_ordre_de_son_premier_membre(projet):
+    from codegen.palette_alloc import sprite_palette_groups
     _sprite(projet, "A", [ROUGE])
     _sprite(projet, "B", [VERT, ROUGE])
     _sprite(projet, "C", [ROUGE, VERT])          # même taille, autre ordre : l'ordre des couleurs tranche
-    englobante = enclosing_sprite_palette(projet, [ROUGE])
-    assert englobante == [ROUGE, VERT]
-    assert enclosing_sprite_palette(projet, englobante) == englobante
-    assert enclosing_sprite_palette(projet, [BLEU]) == [BLEU]   # aucune ne la contient
+    _sprite(projet, "D", [BLEU])                 # ne croise personne : reste seul
+    groupes = sprite_palette_groups(projet)
+    assert groupes[(ROUGE,)] == groupes[(VERT, ROUGE)] == groupes[(ROUGE, VERT)] == [ROUGE, VERT]
+    assert groupes[(BLEU,)] == [BLEU]
+
+
+# ── Regroupement : de petites palettes qui se croisent partagent une banque ──
+
+def _couleurs_distinctes(debut: int, nombre: int) -> list[int]:
+    return [0x0400 + debut + i for i in range(nombre)]
+
+
+def test_deux_petites_palettes_qui_se_croisent_partagent_une_banque(projet):
+    _sprite(projet, "A", [ROUGE, VERT])
+    _sprite(projet, "B", [BLEU, JAUNE])
+    scene = _scene_avec_acteurs("A", "B")
+    projet.scenes.items = [scene]
+
+    lay = scene_bank_layout(projet, scene, "obj")
+    assert lay.bank_count() == 1
+    assert lay.slot_colors[15] == [RESERVED_SLOT_COLOR, ROUGE, VERT, BLEU, JAUNE]
+
+
+def test_deux_palettes_qui_ne_se_croisent_jamais_ne_sont_pas_groupees(projet):
+    """Les grouper ne libérerait aucune banque, et forcerait la reconversion de
+    leurs tuiles pour rien."""
+    from codegen.palette_alloc import sprite_palette_groups
+    _sprite(projet, "A", [ROUGE, VERT])
+    _sprite(projet, "B", [BLEU, JAUNE])
+    projet.scenes.items = [_scene_avec_acteurs("A", nom_scene="Un"),
+                           _scene_avec_acteurs("B", nom_scene="Deux")]
+
+    groupes = sprite_palette_groups(projet)
+    assert groupes[(ROUGE, VERT)] == [ROUGE, VERT]
+    assert groupes[(BLEU, JAUNE)] == [BLEU, JAUNE]
+
+
+def test_le_regroupement_suit_les_palettes_qui_se_croisent(projet):
+    """La scène 1 a A et B (8 couleurs chacun, ils ne tiennent pas ensemble), la
+    scène 2 a C et D (4 couleurs). Grouper A avec C ne libérerait rien : c'est C
+    avec D qu'il faut grouper, et la scène 2 n'utilise plus qu'une banque."""
+    _sprite(projet, "A", _couleurs_distinctes(0, 8))
+    _sprite(projet, "B", _couleurs_distinctes(8, 8))
+    _sprite(projet, "C", _couleurs_distinctes(16, 4))
+    _sprite(projet, "D", _couleurs_distinctes(20, 4))
+    un = _scene_avec_acteurs("A", "B", nom_scene="Un")
+    deux = _scene_avec_acteurs("C", "D", nom_scene="Deux")
+    projet.scenes.items = [un, deux]
+
+    assert scene_bank_layout(projet, un, "obj").bank_count() == 2
+    assert scene_bank_layout(projet, deux, "obj").bank_count() == 1
+
+
+def test_un_groupe_ne_depasse_pas_quinze_couleurs(projet):
+    _sprite(projet, "A", _couleurs_distinctes(0, 8))
+    _sprite(projet, "B", _couleurs_distinctes(8, 8))
+    scene = _scene_avec_acteurs("A", "B")
+    projet.scenes.items = [scene]
+
+    assert scene_bank_layout(projet, scene, "obj").bank_count() == 2
 
 
 def test_la_conversion_recale_les_pixels_sur_l_englobante(projet, monkeypatch):

@@ -505,6 +505,8 @@ class GritSprites:
         if not self._grit:
             self._emit("diagnostic", build_error("not found", "grit")); return False
 
+        from codegen.palette_alloc import sprite_palette_groups
+        groups = sprite_palette_groups(p)
         done: set[str] = set()
         cache_hits = 0
         for actor_or_pf, sprite, colors in sprites:
@@ -530,16 +532,15 @@ class GritSprites:
             # palette_alloc.effective_palette_colors), ce fallback ne sert que si
             # la résolution en amont a échoué.
             from core.models.gba_color import RESERVED_SLOT_COLOR
-            from codegen.palette_alloc import enclosing_sprite_palette
             bank_colors = list(colors) if colors else ([RESERVED_SLOT_COLOR] + own_pal if own_pal else [])
             # Palette propre : les pixels se calent d'abord sur elle (`direct_index`),
-            # puis `remap_tiles_to_bank` les recale PAR COULEUR sur sa palette
-            # englobante, celle que la banque recevra (cf. `enclosing_sprite_palette`).
+            # puis `remap_tiles_to_bank` les recale PAR COULEUR sur la palette de
+            # son groupe, celle que la banque recevra (cf. `sprite_palette_groups`).
             # Une palette de scène garde son recoloriage par index : les deux étapes
             # visent alors la même banque.
             target_colors = bank_colors
             if own_pal and bank_colors == [RESERVED_SLOT_COLOR] + own_pal:
-                target_colors = [RESERVED_SLOT_COLOR] + enclosing_sprite_palette(p, own_pal)
+                target_colors = [RESERVED_SLOT_COLOR] + (groups.get(tuple(own_pal)) or own_pal)
 
             sym = f"sprite_{c_sym(sprite.name)}"
             outputs = [p.grit_out_dir / f"{sym}.c", p.grit_out_dir / f"{sym}.h"]
