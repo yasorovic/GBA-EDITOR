@@ -110,15 +110,17 @@ class AreaInspector(QWidget):
         self._layout.addWidget(area_card)
 
         # La forme, les effets et le script partent repliés : la note et l'Area suffisent à l'ouverture.
-        # La forme : reconstruite à chaque chargement (le composant change avec l'Area).
+        # La forme garde ses champs quand une autre Area devient la cible.
         self._shape_card = CollapsibleCard(label('areainsp.shape'), expanded=False)
         self._layout.addWidget(self._shape_card)
         self._shape_container: Optional[QWidget] = None
+        self._shape_editor: Optional[CollisionEditor] = None
         self._build_effects_card()
-        # Le script : reconstruit à chaque chargement, comme la forme.
+        # Le script conserve ses champs tant que ses exports restent identiques.
         self._script_card = CollapsibleCard(label('areainsp.script'), expanded=False)
         self._layout.addWidget(self._script_card)
         self._script_container: Optional[QWidget] = None
+        self._script_editor: Optional[ScriptEditor] = None
         self._layout.addStretch()
 
     # ── Effets physiques ──────────────────────────────────────────
@@ -253,9 +255,9 @@ class AreaInspector(QWidget):
             self._refresh_parent_choices()
             self._notes_edit.set_text_silent(area.notes)
             self._sync_effects()
+            self._build_shape()
         finally:
             self._blocking = False
-        self._build_shape(area)
         self._build_script(area)
 
     def _refresh_parent_choices(self) -> None:
@@ -277,35 +279,44 @@ class AreaInspector(QWidget):
     def _on_parent_changed(self, _index: int) -> None:
         self._set_area("parent", self._cmb_parent.currentData())
 
-    def _build_shape(self, area: Area) -> None:
+    def _build_shape(self) -> None:
+        shape = self._shape()
+        if shape is not None and self._shape_editor is not None and self._shape_editor.reload(shape):
+            for field_name, sync in self._field_syncers.items():
+                sync(getattr(shape, field_name))
+            return
+        if shape is None and self._shape_editor is None and self._shape_container is not None:
+            return
         if self._shape_container is not None:
             self._shape_card.body_layout.removeWidget(self._shape_container)
             self._shape_container.deleteLater()
         self._field_syncers = {}
+        self._shape_editor = None
         container = QWidget()
         container.setStyleSheet(f"background:{C.BG_BASE};")
         layout = QVBoxLayout(container)
         layout.setContentsMargins(8, 6, 8, 8)
         layout.setSpacing(6)
-        shape = self._shape()
         if shape is not None:
-            CollisionEditor(self).build(shape, None, layout)
+            self._shape_editor = CollisionEditor(self)
+            self._shape_editor.build(shape, None, layout)
         self._shape_card.body_layout.addWidget(container)
         self._shape_container = container
 
     def _build_script(self, area: Area) -> None:
         """Le `ScriptComponent` de l'Area, ou un composant neuf, pas encore rangé : il n'entre dans l'Area qu'au premier
         script choisi (cf. `_save_component_change`), pour qu'une Area sans script ne gagne pas de composant vide."""
-        if self._script_container is not None:
-            self._script_card.body_layout.removeWidget(self._script_container)
-            self._script_container.deleteLater()
         self._script_comp = area.get_component("script") or ScriptComponent()
+        if self._script_editor is not None:
+            self._script_editor.reload(self._script_comp)
+            return
         container = QWidget()
         container.setStyleSheet(f"background:{C.BG_BASE};")
         layout = QVBoxLayout(container)
         layout.setContentsMargins(8, 6, 8, 8)
         layout.setSpacing(6)
-        ScriptEditor(self).build(self._script_comp, None, layout)
+        self._script_editor = ScriptEditor(self)
+        self._script_editor.build(self._script_comp, None, layout)
         self._script_card.body_layout.addWidget(container)
         self._script_container = container
 
@@ -350,10 +361,8 @@ class AreaInspector(QWidget):
             self._spin_y.setValue(area.y)
             self._refresh_parent_choices()
             self._sync_effects()
-            shape = self._shape()
-            if shape is not None:
-                for field_name, sync in self._field_syncers.items():
-                    sync(getattr(shape, field_name))
+            self._build_shape()
+            self._build_script(area)
         finally:
             self._blocking = False
 
