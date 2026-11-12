@@ -615,8 +615,17 @@ class SceneInspector(QWidget):
         if not scene:
             self._content.setVisible(False); self._empty.setVisible(True); return
         self._empty.setVisible(False); self._content.setVisible(True)
-        self._blocking = True
         self._notes_edit.set_text_silent(getattr(scene, "notes", ""))
+        self.refresh()
+
+    def refresh(self):
+        """Actualise la scène courante en conservant les contrôles encore valides."""
+        scene = self._scene
+        if scene is None:
+            return
+        self._blocking = True
+        if self._notes_edit._baseline != getattr(scene, "notes", ""):
+            self._notes_edit.set_text_silent(getattr(scene, "notes", ""))
         self._chk_scroll_h.setChecked(scene.scroll_h)
         self._chk_scroll_v.setChecked(scene.scroll_v)
         self._refresh_physics()
@@ -843,6 +852,7 @@ class SceneInspector(QWidget):
         for row in self._bg_layer_rows:
             row.hide(); row.setParent(None); row.deleteLater()
         self._bg_layer_rows.clear()
+        self._bg_row_layers = []
 
     def _refresh_bitmap_slot(self, info: dict):
         """Met à jour le slot « fond bitmap » (modes 3/4/5) depuis la scène."""
@@ -891,10 +901,10 @@ class SceneInspector(QWidget):
         self._mode_hint.setText(label(info["tip"]))
         # BACKGROUND : rangées tuilées vs slot bitmap.
         self._bitmap_box.setVisible(not is_tiled)
-        self._clear_layer_rows()
         if is_tiled:
             self._rebuild_layer_rows()
         else:
+            self._clear_layer_rows()
             self._refresh_bitmap_slot(info)
         # Paramètres (texte TTE + scroll) : tuilé seulement — la carte User
         # Interface sélectionne un BG comme layer HUD, qui n'existe pas en
@@ -906,17 +916,7 @@ class SceneInspector(QWidget):
         self._pal_grids["bg"].setVisible(is_tiled)
 
     def _rebuild_layer_rows(self):
-        """Reconstruit les BgLayerRow depuis les layers de la SCÈNE."""
-        for row in self._bg_layer_rows:
-            # hide() avant setParent(None) : un widget visible détaché de son
-            # parent redevient une fenêtre top-level à part entière (c'est le
-            # popup flottant "Backstage" observé au Ctrl+S) ; deleteLater()
-            # pour le détruire proprement plutôt que le laisser orphelin.
-            row.hide()
-            row.setParent(None)
-            row.deleteLater()
-        self._bg_layer_rows.clear()
-
+        """Repeuple les lignes ; un remplacement des modèles reconnecte les signaux."""
         if not (self._project and self._scene):
             return
 
@@ -933,6 +933,14 @@ class SceneInspector(QWidget):
                 self._scene.background_layers.append(
                     BackgroundLayer(background_name="", bg_slot=slot, scroll_speed=1.0))
 
+        layers = sorted(self._scene.background_layers, key=lambda layer: layer.bg_slot)
+        previous = getattr(self, "_bg_row_layers", [])
+        rebuild = len(layers) != len(previous) or any(a is not b for a, b in zip(layers, previous))
+        rebuild = rebuild or any(row.slot_index != layer.bg_slot for row, layer in zip(self._bg_layer_rows, layers))
+        if rebuild:
+            self._clear_layer_rows()
+            self._bg_row_layers = layers
+
         active_names = self._scene.active_bg_palettes
         active_banks = [b for n in active_names if (b := self._project.get_palette(n))]
 
@@ -943,8 +951,8 @@ class SceneInspector(QWidget):
             self._project.load_backgrounds()
             return [b.name for b in self._project.backgrounds]
 
-        for layer in sorted(self._scene.background_layers, key=lambda L: L.bg_slot):
-            row = BgLayerRow(layer.bg_slot)
+        for index, layer in enumerate(layers):
+            row = BgLayerRow(layer.bg_slot) if rebuild else self._bg_layer_rows[index]
             row.set_backgrounds(_bg_names_provider, layer.background_name)
             if layer.background_name:
                 ba = self._project.get_background(layer.background_name)
@@ -953,23 +961,26 @@ class SceneInspector(QWidget):
                     row.set_asset(str(ap))
                 else:
                     row.set_missing(layer.background_name)      # choisi, mais le fond ou son image n'existe plus
+            else:
+                row.clear_asset()
             row.set_speed(layer.scroll_speed)
             current_pal_name = (
                 active_names[layer.pal_bank]
                 if 0 <= layer.pal_bank < len(active_names) else None
             )
             row.set_pal_banks(active_banks, current_pal_name)
-            row.asset_changed.connect(lambda _, name, l=layer: self._on_layer_image(l, name))
-            row.speed_changed.connect(lambda _, v, l=layer: self._on_layer_speed(l, v))
-            row.pal_bank_changed.connect(lambda _, n, l=layer: self._on_layer_pal_bank(l, n))
-            row.bound_toggled.connect(lambda idx: self._on_bound_toggled(idx))
-            row.layer_swap_requested.connect(self._on_layer_swap)
-            row.visibility_toggled.connect(self._on_layer_visibility)
-            row.inpaint_layer_selected.connect(self._on_inpaint_layer)
+            if rebuild:
+                row.asset_changed.connect(lambda _, name, l=layer: self._on_layer_image(l, name))
+                row.speed_changed.connect(lambda _, v, l=layer: self._on_layer_speed(l, v))
+                row.pal_bank_changed.connect(lambda _, n, l=layer: self._on_layer_pal_bank(l, n))
+                row.bound_toggled.connect(self._on_bound_toggled)
+                row.layer_swap_requested.connect(self._on_layer_swap)
+                row.visibility_toggled.connect(self._on_layer_visibility)
+                row.inpaint_layer_selected.connect(self._on_inpaint_layer)
+                self._bg_layers_container.addWidget(row)
+                self._bg_layer_rows.append(row)
             row.set_visible_state(getattr(layer, "visible", True))
             row.set_inpaint_layer(layer.bg_slot == self._inpaint_layer_slot)
-            self._bg_layers_container.addWidget(row)
-            self._bg_layer_rows.append(row)
 
         self._refresh_bound_rows()
 
@@ -1499,8 +1510,8 @@ class SceneInspector(QWidget):
 
         Les slots VIDES sont listés quand même, mais dits comme tels : la
         sélection peut être remplie après coup, et masquer le slot ferait
-        disparaître un choix déjà fait dans le JSON. Reconstruit et non
-        repeuplé : le picker capture sa liste à la construction."""
+        disparaître un choix déjà fait dans le JSON. Une autre liste ou un
+        autre projet reconstruit le picker, sinon seule sa valeur change."""
         if not self._scene:
             return
         from ui.common.pickers import ui_pal_bank_slot
@@ -1509,6 +1520,11 @@ class SceneInspector(QWidget):
         # `font_pal_banks` — l'un des deux chemins vers le même réglage, l'autre
         # étant la grille de palettes.
         cur = int((getattr(self._scene, "font_pal_banks", {}) or {}).get("", -1))
+        context = self._project, tuple(active)
+        if self._ui_pal_slot is not None and context == getattr(self, "_ui_pal_context", None):
+            self._ui_pal_slot.set_value(cur)
+            return
+        self._ui_pal_context = context
         if self._ui_pal_slot is not None:
             self._ui_pal_box.removeWidget(self._ui_pal_slot)
             self._ui_pal_slot.deleteLater()
@@ -1553,13 +1569,20 @@ class SceneInspector(QWidget):
         except Exception:
             usable = {f.name for f in (getattr(p, "fonts", []) or [])} if p else set()
         cur = getattr(self._scene, "font_name", "") or ""
+        fonts = list(getattr(p, "fonts", []) or [])
+        default = getattr(p.settings, "default_font", "") if p else ""
+        context = p, tuple(f.name for f in fonts), frozenset(usable), default
+        if self._font_slot is not None and context == getattr(self, "_font_context", None):
+            self._font_slot.set_value(cur)
+            return
+        self._font_context = context
         if self._font_slot is not None:
             self._font_box.removeWidget(self._font_slot)
             self._font_slot.deleteLater()
         self._font_slot = font_picker_slot(
-            list(getattr(p, "fonts", []) or []), usable, cur, icons.COLOR_UI,
+            fonts, usable, cur, icons.COLOR_UI,
             on_picked=self._on_scene_font_changed, parent=self,
-            project_default=getattr(p.settings, "default_font", "") if p else "")
+            project_default=default)
         self._font_slot.setToolTip(tooltip(
             title=label("sceneinsp.ui_font_title"), body=label("sceneinsp.ui_font_tip"),
         ))
