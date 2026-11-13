@@ -56,6 +56,7 @@ from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, CollapsibleCard, PickerSlot, PickerEntry
 from ui.common.notice import note, notice, text
 from ui.common.labels import label
+from ui.common.field_binder import FieldBinder
 from ui.common.tooltip import tooltip
 from ui.common.pickers import ColorIndexSlot
 from ui.text_editor.colors import TEXT_COLOR as TEXT_ACCENT
@@ -147,6 +148,7 @@ class UIInspector(QWidget):
         self._element = None
         self._scene = None
         self._blocking = False
+        self._fields = FieldBinder(self._on_field_changed)
         scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
@@ -208,8 +210,7 @@ class UIInspector(QWidget):
             # Sans ça, taper « 120 » vaut trois valeurs (1, 12, 120) : trois
             # écritures disque et trois redessins du canvas pour un seul geste.
             s.setKeyboardTracking(False)
-            s.valueChanged.connect(lambda v, k=key: self._on_geom(k, v))
-            self._sp[key] = s
+            self._sp[key] = self._fields.bind(key, s)
         self._sp["x"].setRange(-512, 512)
         self._sp["y"].setRange(-512, 512)
         self._sp["w"].setRange(8, 512)
@@ -228,7 +229,7 @@ class UIInspector(QWidget):
         visible_card = CollapsibleCard(label("uiinsp.card.visibility"), expanded=False)
         self._visible = W.checkbox_row(label("uiinsp.visible.label"),
                                        label("uiinsp.visible.sub"), visible_card.body_layout)
-        self._visible.toggled.connect(self._on_visible)
+        self._fields.bind("visible", self._visible)
         self._visible_why = note(visible_card.body_layout, "ui.visible.hidden_parent")
         # Priorité OBJ — portée par CHAQUE élément (texte, image, fond de
         # conteneur), surchargeable, héritée par défaut. -1 = « Auto » : la
@@ -244,7 +245,7 @@ class UIInspector(QWidget):
         self._prio.setKeyboardTracking(False)
         self._prio.setToolTip(tooltip(
             title=label("uiinsp.priority.title"), body=label("uiinsp.priority.tip"), note=label("uiinsp.priority.note")))
-        self._prio.valueChanged.connect(self._on_prio)
+        self._fields.bind("priority", self._prio)
         self._prio_row = W.row(label("uiinsp.priority.label"), self._prio,
                                visible_card.body_layout).parentWidget()
         self._prio_why = note(visible_card.body_layout)
@@ -702,6 +703,13 @@ class UIInspector(QWidget):
             self._pages.clear_preview()
         self._layout_asset, self._element = layout_asset, element
         self._project, self._scene = project, scene
+        self.refresh()
+
+    def refresh(self):
+        """Actualise la sélection sans terminer la salve de texte en cours."""
+        element, layout_asset, project = self._element, self._layout_asset, self._project
+        if element is None or layout_asset is None:
+            return
         self._blocking = True
         try:
             kind = self._kind()
@@ -713,9 +721,7 @@ class UIInspector(QWidget):
             else:
                 self._layout_shared.clear()
 
-            for k in ("x", "y", "w", "h"):
-                self._sp[k].setValue(int(getattr(element, k, 0)))
-            self._prio.setValue(int(getattr(element, "priority", PRIORITY_INHERIT)))
+            self._fields.load(element)
             # La priorité OBJ n'agit qu'en cible OBJ : sous un nœud écran/monde
             # (BG), la profondeur est celle du layer. On le DIT plutôt que de
             # cacher un champ que l'auteur a demandé sur chaque élément.
@@ -723,7 +729,6 @@ class UIInspector(QWidget):
                 self._prio_why.clear()
             else:
                 self._prio_why.show_text("ui.priority.bg")
-            self._visible.setChecked(bool(getattr(element, "visible", True)))
             self._sync_visible_hint()
 
             # Sections par type — tout se montre/cache ICI, une seule fois.
@@ -921,13 +926,6 @@ class UIInspector(QWidget):
         self._set("playing", bool(self._img_play.currentData()), "Image playback")
         self._sync_image_note()
 
-    def _on_prio(self, v):
-        """Priorité OBJ de N'IMPORTE quel élément d'UI (texte, image, fond de
-        conteneur) — le champ vit dans Geometry. -1 = héritée."""
-        if self._blocking or not self._element:
-            return
-        self._set("priority", int(v), "Priority")
-
     # ── Contenu (édite l'entrée de table, pas l'élément) ──────────
     def _current_text(self):
         """L'entrée de table que cet élément affiche, ou None s'il n'en a pas
@@ -953,7 +951,6 @@ class UIInspector(QWidget):
         # (rechargement de l'inspecteur pendant la frappe).
         if self._content.toPlainText() != text:
             self._content.setPlainText(text)
-        self._content_baseline = None
         self._sync_key_badge()
 
     def _sync_text_rows(self):
@@ -1171,8 +1168,7 @@ class UIInspector(QWidget):
 
     def _reload_fill_palette(self):
         """(Re)construit le slot de palette du fond, filtré aux palettes BG
-        ACTIVES. Reconstruit et non repeuplé : `palette_picker_slot` capture sa
-        liste à la construction, et cette liste change avec la scène.
+        ACTIVES. Le slot est conservé tant que la liste capturée reste valable.
 
         Une palette DÉJÀ posée mais devenue inactive reste AFFICHÉE — l'effacer
         du slot cacherait la valeur qui est dans le fichier au lieu de dire
@@ -1183,6 +1179,14 @@ class UIInspector(QWidget):
         banks = [b for n in actifs
                  if (b := (self._project.get_palette(n) if self._project else None))]
         cur = getattr(self._element, "fill_palette", "") or ""
+        # L'identité suit les objets capturés par le slot (il les garde en vie, l'id
+        # ne peut donc pas être réutilisé) ; les couleurs suivent une palette
+        # retouchée sur place, dont les vignettes du slot seraient périmées.
+        context = self._project, tuple((id(bank), bank.name, tuple(bank.colors)) for bank in banks)
+        if self._fill_pal_slot is not None and context == getattr(self, "_fill_pal_context", None):
+            self._fill_pal_slot.set_value(cur or None)
+            return
+        self._fill_pal_context = context
         if self._fill_pal_slot is not None:
             self._fill_pal_box.removeWidget(self._fill_pal_slot)
             self._fill_pal_slot.deleteLater()
@@ -1463,17 +1467,14 @@ class UIInspector(QWidget):
             self.renamed.emit(applied)
         return applied
 
-    def _on_geom(self, key: str, val: int):
+    def _on_field_changed(self, field: str, value):
         if self._blocking or not self._element:
             return
-        self._set(key, int(val), "Geometry")
-        self._refresh_diagnostics()
-
-    def _on_visible(self, on: bool):
-        if self._blocking or not self._element:
-            return
-        self._set("visible", bool(on), "Visibility")
-        self._sync_visible_hint()
+        self._set(field, value, {"visible": "Visibility", "priority": "Priority"}.get(field, "Geometry"))
+        if field == "visible":
+            self._sync_visible_hint()
+        elif field != "priority":
+            self._refresh_diagnostics()
 
     def _on_align_toggled(self, i: int, checked: bool):
         """`idToggled` tire DEUX fois par changement — le bouton qui se relève
@@ -1582,8 +1583,7 @@ class UIInspector(QWidget):
         même ordre, que `SceneInspector._reload_ui_pal` : c'est le même choix
         pour une police donnée, il ne doit pas se présenter différemment selon
         l'écran d'où on le change.
-        Reconstruit et non repeuplé, pour la même raison que
-        `_reload_fill_palette` : le picker capture sa liste à la construction."""
+        Le bouton est conservé tant que sa valeur et les palettes montrées restent identiques."""
         from ui.common.pickers import ui_pal_bank_slot
         from ui.common import icons as _icons
         active = list(getattr(self._scene, "active_bg_palettes", []) or []) if self._scene else []
@@ -1594,6 +1594,12 @@ class UIInspector(QWidget):
             _index, default_font = scene_default_font(self._project, self._scene)
             selected_font = getattr(self._element, "font_name", "") or default_font
             cur = scene_font_pal_bank(self._scene, selected_font, default_font)
+        colors = tuple(tuple(bank.colors) if (bank := self._project.get_palette(name)) else ()
+                       for name in active) if self._project else ()
+        context = self._project, tuple(active), cur, colors
+        if self._ui_pal_slot is not None and context == getattr(self, "_ui_pal_context", None):
+            return
+        self._ui_pal_context = context
         self._clear_ui_pal_host()
         self._ui_pal_slot = ui_pal_bank_slot(
             active, cur, _icons.COLOR_UI, on_picked=self._on_ui_pal_bank,

@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from core.history import get_history
-from core.models.ui_region import UILayout, UIText
+from core.models.ui_region import UILayout, UIText, UIContainer, UIImage
 from ui.scene_manager.inspectors.ui_inspector import UIInspector
 
 
@@ -96,3 +96,47 @@ def test_frappes_fusionnees_une_seule_entree(qapp, history):
     history.undo()
     assert el.w == 32                    # l'origine, pas 96 ni 48
     assert not history.can_undo
+
+
+@pytest.mark.parametrize("kind", [UIText, UIContainer, UIImage])
+def test_changer_de_cible_charge_les_six_champs_sans_ecrire(qapp, history, kind):
+    first = kind(name="First", x=8, y=16, w=32, h=24, visible=True, priority=-1)
+    second = kind(name="Second", x=40, y=48, w=64, h=56, visible=False, priority=2)
+    layout = UILayout(name="HUD", elements=[first, second])
+    panel = UIInspector()
+    try:
+        panel.load(layout, first, None, None)
+        widgets = dict(panel._sp)
+        visible, priority = panel._visible, panel._prio
+        panel.load(layout, second, None, None)
+        assert panel._sp == widgets and panel._visible is visible and panel._prio is priority
+        assert [panel._sp[key].value() for key in ("x", "y", "w", "h")] == [40, 48, 64, 56]
+        assert not visible.isChecked() and priority.value() == 2
+        assert not history.can_undo
+
+        panel._sp["x"].setValue(72)
+        priority.setValue(3)
+        visible.setChecked(True)
+        assert (first.x, first.priority, first.visible) == (8, -1, True)
+        assert (second.x, second.priority, second.visible) == (72, 3, True)
+        assert history.undo_label == "Visibility"
+        history.undo()
+        panel.refresh()
+        assert not visible.isChecked()
+        assert history.undo_label == "Priority"
+        history.undo()
+        panel.refresh()
+        assert priority.value() == 2
+        history.undo()
+        panel.refresh()
+        assert panel._sp["x"].value() == 40 and not history.can_undo
+        for _ in range(3):
+            history.redo()
+        panel.refresh()
+        assert (panel._sp["x"].value(), priority.value(), visible.isChecked()) == (72, 3, True)
+        if kind is UIImage:
+            assert not panel._sp["w"].isEnabled() and not panel._sp["h"].isEnabled()
+    finally:
+        panel.close()
+        panel.deleteLater()
+        qapp.processEvents()

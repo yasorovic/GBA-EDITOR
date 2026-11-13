@@ -477,7 +477,7 @@ class DynamicInspector(QWidget):
         if self._stack.currentIndex() == self._MODE_SCENE:
             sc, pr = self._scene_insp._scene, self._scene_insp._project
             if sc and pr:
-                self._scene_insp.load(sc, pr)
+                self._scene_insp.refresh()
         elif self._stack.currentIndex() == self._MODE_PROJECT:
             # Compteurs d'assets + liste des scènes du sélecteur de démarrage
             self._project_insp.load(self._project)
@@ -490,7 +490,7 @@ class DynamicInspector(QWidget):
         elif self._stack.currentIndex() == self._MODE_UI and self._ui_insp is not None:
             insp = self._ui_insp
             if insp._layout_asset is not None and insp._element is not None:
-                insp.load(insp._layout_asset, insp._element, insp._project, insp._scene)
+                insp.refresh()
 
     def show_empty(self):
         self._set_header("empty", "", "")

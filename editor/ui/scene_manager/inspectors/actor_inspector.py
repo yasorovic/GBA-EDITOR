@@ -518,6 +518,7 @@ class ActorInspector(QWidget):
         self._rel_card = CollapsibleCard(label("actorinsp.card.relations"), color=icons.COLOR_PREFAB, expanded=False)
         self._rel_add = _W.btn_add(); self._rel_add.clicked.connect(self._add_child)
         self._rel_del = _W.btn_remove(); self._rel_del.clicked.connect(self._remove_selected_child)
+        self._rel_del.setEnabled(False)
         self._rel_card.add_header_widget(self._rel_add)
         self._rel_card.add_header_widget(self._rel_del)
 
@@ -542,6 +543,8 @@ class ActorInspector(QWidget):
         _clabel.setFont(QFont(T.UI, T.SM)); _clabel.setStyleSheet(f"color:{C.TEXT_DIM};")
         crow.addWidget(_clabel)
         self._children_tree = _ChildrenTree()
+        self._children_tree.currentItemChanged.connect(
+            lambda current, previous: self._rel_del.setEnabled(current is not None))
         self._children_tree.setFixedHeight(92)
         self._children_tree.setFont(QFont(T.UI, T.MD))
         self._children_tree.itemDoubleClicked.connect(self._open_selected_child)
@@ -811,10 +814,11 @@ class ActorInspector(QWidget):
         self._rel_parent_host.setVisible(bool(parent_name))
         self._rel_parent_btn.setText(parent_name or "")
         self._rel_children_host.setVisible(bool(kids) or template)
-        # Un acteur de scène ou une racine de prefab crée un enfant ; seule la racine retire une partie (un enfant
-        # d'acteur est un acteur de la scène : il se supprime dans l'arbre). Une partie ouverte ne fait que naviguer.
+        # Le moins détache un enfant de scène, ou retire une partie du prefab.
+        # Une partie ouverte ne fait que naviguer.
         self._rel_add.setVisible(not part_mode)
-        self._rel_del.setVisible(template)
+        self._rel_del.setVisible(not part_mode)
+        self._rel_del.setToolTip(label("wdg.remove") if template else label("actorinsp.rel.detach_child_tip"))
         self._children_tree.set_editable(template)
         self._children_tree.populate(self._rel_owner(kids))
         self._rel_card.setVisible(True)
@@ -888,17 +892,28 @@ class ActorInspector(QWidget):
         if not self._actor or not self._project or not self._project.active_scene:
             return
         taken = {a.name for a in self._project.active_scene.actors}
-        child = get_dispatcher().add_actor(unique_name("Child", taken), self._actor.x, self._actor.y)
-        if child is None:
-            return
-        child.parent = self._actor.name
-        get_dispatcher().save_scene()
-        get_dispatcher()._emit("actors_list_changed")
+        parent = self._actor
+        get_dispatcher().add_actor(unique_name("Child", taken), parent.x, parent.y, parent=parent.name)
 
     def _remove_selected_child(self):
-        if not self._is_prefab_template or not self._prefab:
-            return
         part = self._children_tree.current_part()
+        if not self._is_prefab_template:
+            if (self._child_owner is not None or self._actor is None or self._scene is None
+                    or part is None or part.parent != self._actor.name
+                    or not any(actor is part for actor in self._scene.actors)):
+                return
+
+            def persist():
+                self._persist()
+                self._refresh_relations()
+                get_dispatcher()._emit("actors_list_changed")
+
+            get_history().push(SetFieldCmd(part, "parent", part.parent, None,
+                                          label=f"{part.name}.parent", persist_fn=persist))
+            self.changed.emit()
+            return
+        if not self._prefab:
+            return
         parts = self._prefab.children or []
         if part not in parts:
             return
@@ -1191,16 +1206,15 @@ class ActorInspector(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
         for type_name, key in COMPONENT_LABEL_KEYS.items():
+            if self._component_ignored(type_name):
+                continue
             # Un seul composant par acteur pour ces types (le compilateur Lua->C ne lit qu'un
             # ScriptComponent actif ; un second Interactive ou PhysicsBody serait ignoré).
             if type_name in SINGLETON_COMPONENTS:
                 existing = self._actor.get_component(type_name)
                 if existing is not None and (type_name != "script" or existing.active):
                     continue
-            action = menu.addAction(label(key), lambda t=type_name: self._add_component(t))
-            if self._component_ignored(type_name):
-                action.setEnabled(False)
-                action.setToolTip(label("actorinsp.comp_ignored_tip"))
+            menu.addAction(label(key), lambda t=type_name: self._add_component(t))
         menu.exec(QCursor.pos())
 
     def _reveal_components(self):
@@ -1304,11 +1318,15 @@ class ActorInspector(QWidget):
     def _save_component_change(self, comp=None):
         """
         Persist sans reconstruire l'éditeur.
-        Si comp est le composant actuellement affiché, synce les widgets via _field_syncers.
-        Sinon (undo sur un autre comp), reconstruit l'éditeur complet.
+        Composant affiché : un éditeur réutilisable (`reload`) est repeuplé, y
+        compris après annulation ; les autres (Sprite, SoundFx) gardent leurs
+        widgets tels quels. Autre composant (annulation sur une ancienne cible) :
+        l'éditeur de la ligne sélectionnée est reconstruit.
         """
         self._persist()
         self._refresh_list_labels()
+        if comp is not None and comp is getattr(self, "_current_comp", None):
+            self._reload_component_editor(comp)
         if comp is not None and comp is not getattr(self, "_current_comp", None):
             row = self._comp_list.currentRow()
             self._build_editor(self._actor.components[row] if row >= 0 else None)
@@ -1351,8 +1369,24 @@ class ActorInspector(QWidget):
         old.setParent(None)  # type: ignore[arg-type]
         old.deleteLater()
 
+    def _reload_component_editor(self, comp) -> bool:
+        from ui.scene_manager.inspectors.component_editors import get_editor
+
+        editor = getattr(self, "_component_editor", None)
+        if comp is None or editor is None or type(editor) is not get_editor(component_type_name(comp)):
+            return False
+        if not editor.reload(comp):
+            return False
+        self._current_comp = comp
+        for field, sync in self._field_syncers.items():
+            sync(getattr(comp, field))
+        return True
+
     def _build_editor(self, comp):
+        if self._reload_component_editor(comp):
+            return
         self._clear_editor()
+        self._component_editor = None
         self._current_comp = comp
         # dict field → callable(value) pour resync les widgets sans rebuild
         self._field_syncers: dict[str, callable] = {}
@@ -1369,16 +1403,21 @@ class ActorInspector(QWidget):
         def row(label, widget):
             return _W.row(label, widget, self._editor_layout)
 
-        # ── Méta-header Id + Active (via W) ──────────────────────
-        _W.meta_bar(comp, self._field_syncers, self._set_comp, self._editor_layout,
-                    show_id=component_type_name(comp) not in SINGLETON_COMPONENTS)
-        _W.separator(self._editor_layout, margin_v=2)
-
         from ui.scene_manager.inspectors.component_editors import get_editor
         type_name = component_type_name(comp)
         EditorCls = get_editor(type_name)
-        if EditorCls:
-            EditorCls(self).build(comp, row, self._editor_layout)
+        editor = EditorCls(self) if EditorCls else None
+        if editor is not None:
+            editor.comp = comp
+        # L'en-tête suit la cible de CET éditeur, même après sa réutilisation.
+        set_comp = (lambda _comp, field, value: self._set_comp(editor.comp, field, value)) if editor else self._set_comp
+        _W.meta_bar(comp, self._field_syncers, set_comp, self._editor_layout,
+                    show_id=component_type_name(comp) not in SINGLETON_COMPONENTS)
+        _W.separator(self._editor_layout, margin_v=2)
+
+        if editor is not None:
+            self._component_editor = editor
+            editor.build(comp, row, self._editor_layout)
         else:
             lbl = QLabel(label("actorinsp.no_editor", type=type_name))
             lbl.setFont(QFont(T.UI, T.SM)); lbl.setStyleSheet(f"color:{C.TEXT_MUTED};")

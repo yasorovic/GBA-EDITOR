@@ -830,6 +830,7 @@
     "actorinsp.rel.parent": { "text": "Parent" },
     "actorinsp.rel.children": { "text": "Children" },
     "actorinsp.rel.parent_tip": { "text": "Opens the parent of this element." },
+    "actorinsp.rel.detach_child_tip": { "text": "Detaches the selected child without deleting the actor." },
     "actorinsp.children_tip": { "text": "The children of this element. For a prefab, its parts, such as the segments of a boss: each part is a full actor with its own sprite, boxes and local transform." },
     "actorinsp.children_note": { "text": "A double-click opens a child; dragging a prefab part onto another one reparents it. The pool reserves max instances × (1 + parts) entries." },
     "actorinsp.index": {

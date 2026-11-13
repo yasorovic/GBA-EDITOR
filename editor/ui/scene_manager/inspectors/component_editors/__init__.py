@@ -69,12 +69,21 @@ class BaseComponentEditor:
                         _save_component_change, _field_syncers, _editor_layout.
         """
         self.insp = inspector_ref
+        self.comp = None
 
     # ── À surcharger ─────────────────────────────────────────────────
 
     def build(self, comp, row: Callable, layout: "QVBoxLayout") -> None:
         """Construit les widgets de l'éditeur dans layout via row(label, widget)."""
         raise NotImplementedError
+
+    def reload(self, comp) -> bool:
+        """Reprend un composant sans reconstruire, seulement si l'éditeur le permet.
+
+        Une surcharge met aussi `self.comp` à jour : ses signaux doivent lire
+        cette cible, jamais capturer le composant de la première construction.
+        """
+        return False
 
     # ── Helpers partagés (délèguent à l'inspector) ───────────────────
 

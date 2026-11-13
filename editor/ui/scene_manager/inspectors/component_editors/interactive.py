@@ -10,6 +10,7 @@ from core.models.components import (
 from core.models.settings import INTERACTIVE_COLLISION_TAG
 from . import BaseComponentEditor, register
 from ui.common.labels import label
+from ui.common.field_binder import FieldBinder
 from ui.common.tooltip import tooltip
 from ui.common.theme import C
 from ui.common.unit_spin import UnitSpin
@@ -45,12 +46,13 @@ def _owner_box_tags(owner) -> list[str]:
 class InteractiveEditor(BaseComponentEditor):
 
     def build(self, comp, row, layout):
+        fields = FieldBinder(lambda field, value: self.set_field(comp, field, value))
         # ── Saisie : le geste sur l'entrée interne `interact` ─────────
         inputs = _input_labels()
         mode = QComboBox()
         for v in INTERACT_INPUT_MODES:
             mode.addItem(inputs[v], v)
-        mode.setCurrentIndex(max(0, mode.findData(comp.input_mode)))
+        fields.bind("input_mode", mode, values=list(INTERACT_INPUT_MODES))
         mode.setToolTip(tooltip(title=label("comped.interact_input"),
                                 body=label("comped.interact_input_tip")))
         row(label("comped.interact_input"), mode)
@@ -58,7 +60,7 @@ class InteractiveEditor(BaseComponentEditor):
         hold = UnitSpin()
         hold.setRange(1, 600)
         hold.setSuffix(" f")
-        hold.setValue(comp.hold_frames)
+        fields.bind("hold_frames", hold.field)
         hold.setToolTip(tooltip(title=label("comped.interact_hold_frames"),
                                 body=label("comped.interact_hold_frames_tip")))
         row(label("comped.interact_hold_frames"), hold)
@@ -69,7 +71,7 @@ class InteractiveEditor(BaseComponentEditor):
         area = QComboBox()
         for v in INTERACT_AREA_MODES:
             area.addItem(areas[v], v)
-        area.setCurrentIndex(max(0, area.findData(comp.interaction)))
+        fields.bind("interaction", area, values=list(INTERACT_AREA_MODES))
         area.setToolTip(tooltip(title=label("comped.interact_area"),
                                 body=label("comped.interact_area_tip")))
         row(label("comped.interact_area"), area)
@@ -94,10 +96,9 @@ class InteractiveEditor(BaseComponentEditor):
         auto_w, auto_h = interactive_box_size(
             InteractiveComponent(), sprite.frame_w if sprite else 0, sprite.frame_h if sprite else 0)
         size_w, size_h = QSpinBox(), QSpinBox()
-        for sp, value, auto in ((size_w, comp.box_w, auto_w), (size_h, comp.box_h, auto_h)):
+        for sp, auto in ((size_w, auto_w), (size_h, auto_h)):
             sp.setRange(0, 64)
             sp.setSpecialValueText(label("comped.interact_auto", n=auto))
-            sp.setValue(value)
             sp.setToolTip(tooltip(title=label("common.size"),
                                   body=label("comped.interact_size_tip")))
         W.pair(label("common.size"), "W", C.AXIS_X, size_w, "H", C.AXIS_Y, size_h, layout)
@@ -107,12 +108,9 @@ class InteractiveEditor(BaseComponentEditor):
             hold_row.setVisible(comp.input_mode == "hold")
             size_row.setVisible(comp.box_tag == "")        # la boîte d'un autre composant a sa taille
 
-        mode.currentIndexChanged.connect(lambda i: (
-            self.set_field(comp, "input_mode", mode.itemData(i)), _sync_visibility()))
-        hold.valueChanged.connect(lambda v: self.set_field(comp, "hold_frames", int(v)))
-        area.currentIndexChanged.connect(
-            lambda i: self.set_field(comp, "interaction", area.itemData(i)))
-        size_w.valueChanged.connect(lambda v: self.set_field(comp, "box_w", int(v)))
-        size_h.valueChanged.connect(lambda v: self.set_field(comp, "box_h", int(v)))
+        fields.bind("box_w", size_w)
+        fields.bind("box_h", size_h)
+        fields.load(comp)
+        mode.currentIndexChanged.connect(_sync_visibility)
         _sync_visibility()
 

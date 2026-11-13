@@ -67,6 +67,29 @@ def test_choisir_un_mode_ecrit_le_champ(qapp):
     assert (comp.input_mode, comp.interaction) == ("hold", "facing")
 
 
+def test_les_champs_lies_chargent_sans_ecrire_puis_modifient_leur_donnee(qapp):
+    comp = InteractiveComponent(input_mode="hold", interaction="facing", hold_frames=42, box_w=24, box_h=32)
+    host, written = _build(comp)
+    saisie, interaction = _combos(host)
+    maintien = host.findChild(UnitSpin)
+    largeur, hauteur = host.findChildren(QSpinBox)[1:]
+    assert (saisie.currentData(), interaction.currentData()) == ("hold", "facing")
+    assert (maintien.value(), largeur.value(), hauteur.value()) == (42, 24, 32)
+    assert written == []
+
+    maintien.setValue(60)
+    largeur.setValue(48)
+    hauteur.setValue(0)
+    saisie.setCurrentIndex(saisie.findData("released"))
+    interaction.setCurrentIndex(interaction.findData("hover"))
+    assert written == [("hold_frames", 60), ("box_w", 48), ("box_h", 0),
+                       ("input_mode", "released"), ("interaction", "hover")]
+    assert (comp.hold_frames, comp.box_w, comp.box_h) == (60, 48, 0)
+    assert maintien.parentWidget().isHidden()
+    host.close()
+    host.deleteLater()
+
+
 def test_le_maintien_n_apparait_que_pour_hold(qapp):
     comp = InteractiveComponent()
     host, _ = _build(comp)

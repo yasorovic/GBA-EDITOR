@@ -1,8 +1,10 @@
 """Éditeur du ScriptComponent."""
 from __future__ import annotations
 
+from copy import deepcopy
+
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QHBoxLayout, QLineEdit, QSlider, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLineEdit, QSlider, QVBoxLayout, QWidget
 from PyQt6.QtGui import QFont
 
 from . import BaseComponentEditor, register
@@ -31,15 +33,16 @@ def reveal_export_row(insp, scroll, export: str) -> None:
 class ScriptEditor(BaseComponentEditor):
 
     def build(self, comp, row, layout):
-        # Nom d'export -> sa ligne dans l'inspecteur : ce que `reveal_export_row` montre au clic d'un diagnostic.
-        self.insp._export_rows = {}
-        proj = self.insp._project
-        sp   = proj.asset_abs(comp.script) if comp.script else None
-
+        self.comp = comp
+        self._layout = layout
+        self._exports_container = None
+        self._variables = None
+        self._exports_project = None
+        self._loading = False
         slot = attached_script_slot(
             project     = lambda: self.insp._project,
-            on_assigned = lambda rel: self._assign_script(comp, rel),
-            on_cleared  = lambda: self._clear_script(comp),
+            on_assigned = lambda rel: self._assign_script(self.comp, rel),
+            on_cleared  = lambda: self._clear_script(self.comp),
             open_file   = self._open_file,
             template    = "actor",
             add_label   = label("comped.script_add"),
@@ -47,21 +50,47 @@ class ScriptEditor(BaseComponentEditor):
             hint        = label("comped.script_hint"),
             parent      = self.insp,
         )
-        slot.set_value(comp.script)
+        self._slot = slot
         layout.addWidget(slot)
+        self.reload(comp)
 
-        # ── Variables exposées du script ───────────────────────────
-        self._build_exports_panel(comp, sp, layout)
+    def reload(self, comp) -> bool:
+        from scripting.exports_parser import parse_exports
+
+        same_comp = self.comp is comp
+        self.comp = comp
+        proj = self.insp._project
+        path = proj.asset_abs(comp.script) if proj and comp.script else None
+        variables = parse_exports(path) if path else []
+        self._slot.set_value(comp.script)
+        self._loading = True
+        try:
+            if variables != self._variables or proj is not self._exports_project:
+                if self._exports_container is not None:
+                    self._layout.removeWidget(self._exports_container)
+                    self._exports_container.deleteLater()
+                self._variables = variables
+                self._exports_project = proj
+                self._export_loaders = []
+                self.insp._export_rows = {}
+                self._exports_container = QWidget()
+                layout = QVBoxLayout(self._exports_container)
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(self._layout.spacing())
+                self._build_exports_panel(comp, variables, layout)
+                self._layout.addWidget(self._exports_container)
+                self._exports_container.setVisible(bool(variables))
+            elif not same_comp or comp.exports_values != self._loaded_values:
+                for var, load in self._export_loaders:
+                    load(comp.exports_values.get(var["name"], var["default"]))
+            self._loaded_values = deepcopy(comp.exports_values)
+        finally:
+            self._loading = False
+        return True
 
     # ── Panneau variables exposées ────────────────────────────────────
 
-    def _build_exports_panel(self, comp, script_path, layout):
-        from scripting.exports_parser import parse_exports
-
-        if not script_path:
-            return
-
-        variables = parse_exports(script_path)
+    def _build_exports_panel(self, comp, variables, layout):
         if not variables:
             return
 
@@ -119,10 +148,12 @@ class ScriptEditor(BaseComponentEditor):
         typ     = var["type"]
         title   = var.get("label", name)
         current = comp.exports_values.get(name, var["default"])
-        proj    = self.insp._project
 
         def save(value, _name=name):
-            comp.exports_values[_name] = value
+            if self._loading:
+                return
+            self.comp.exports_values[_name] = value
+            self._loaded_values = deepcopy(self.comp.exports_values)
             self.insp._save_component_change(None)
 
         # ── bool ──────────────────────────────────────────────────
@@ -130,6 +161,7 @@ class ScriptEditor(BaseComponentEditor):
             chk = W.checkbox_row(title, "", layout)
             chk.setChecked(bool(current))
             chk.toggled.connect(save)
+            load = lambda v: chk.setChecked(bool(v))
 
         # ── int ───────────────────────────────────────────────────
         elif typ == "int":
@@ -141,19 +173,25 @@ class ScriptEditor(BaseComponentEditor):
             else:
                 W.row(title, sp, layout)
             sp.valueChanged.connect(save)
+            load = lambda v: sp.setValue(int(v) if v != "" else 0)
 
         # ── float ─────────────────────────────────────────────────
         elif typ == "float":
             mn = float(var["min"]) if var["min"] is not None else -9999.0
             mx = float(var["max"]) if var["max"] is not None else  9999.0
-            try:   val = float(current)
-            except: val = 0.0
+            def as_float(value):
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return 0.0
+            val = as_float(current)
             sp = W.double_spinbox(val, mn, mx)
             if var["min"] is not None and var["max"] is not None:
                 self._row_with_slider(title, sp, sp.value(), mn, mx, float, layout)
             else:
                 W.row(title, sp, layout)
             sp.valueChanged.connect(save)
+            load = lambda v: sp.setValue(as_float(v))
 
         # ── string ────────────────────────────────────────────────
         elif typ == "string":
@@ -162,6 +200,7 @@ class ScriptEditor(BaseComponentEditor):
             le.setStyleSheet(QSS.lineedit)
             W.row(title, le, layout)
             le.editingFinished.connect(lambda w=le: save(w.text()))
+            load = lambda v: le.setText(str(v))
 
         # ── vec2 ──────────────────────────────────────────────────
         elif typ == "vec2":
@@ -171,6 +210,10 @@ class ScriptEditor(BaseComponentEditor):
             W.pair(title, "X", C.AXIS_X, sp_x, "Y", C.AXIS_Y, sp_y, layout)
             sp_x.valueChanged.connect(lambda _, sx=sp_x, sy=sp_y: save([sx.value(), sy.value()]))
             sp_y.valueChanged.connect(lambda _, sx=sp_x, sy=sp_y: save([sx.value(), sy.value()]))
+            def load(value):
+                vals = value if isinstance(value, (list, tuple)) and len(value) >= 2 else [0, 0]
+                sp_x.setValue(int(vals[0]))
+                sp_y.setValue(int(vals[1]))
 
         # ── rect ──────────────────────────────────────────────────
         elif typ == "rect":
@@ -186,6 +229,10 @@ class ScriptEditor(BaseComponentEditor):
                 save([sx.value(), sy.value(), sw.value(), sh.value()])
             for sp in (sp_x, sp_y, sp_w, sp_h):
                 sp.valueChanged.connect(_save_rect)
+            def load(value):
+                vals = value if isinstance(value, (list, tuple)) and len(value) >= 4 else [0, 0, 16, 16]
+                for widget, val in zip((sp_x, sp_y, sp_w, sp_h), vals):
+                    widget.setValue(int(val))
 
         # ── enum ──────────────────────────────────────────────────
         elif typ == "enum":
@@ -193,24 +240,31 @@ class ScriptEditor(BaseComponentEditor):
             cb = W.combobox(values, str(current))
             W.row(title, cb, layout)
             cb.currentTextChanged.connect(save)
+            load = lambda v: cb.setCurrentIndex(max(0, cb.findText(str(v))))
 
         # ── scene_ref / sfx_ref / actor_ref : un nom parmi ceux du projet ──
         elif typ in ("scene_ref", "sfx_ref", "actor_ref"):
-            if typ == "scene_ref":
-                names = [s.name for s in proj.scenes] if proj else []
-            elif typ == "sfx_ref":
-                if proj:
-                    proj.load_audio()   # catalogue différé (v0.24)
-                names = [s.name for s in proj.sfx] if proj else []
-            else:
-                names = ([a.name for a in proj.active_scene.actors if a is not self.insp._actor]
-                         if proj and proj.active_scene else [])
+            def names():
+                project = self.insp._project
+                if typ == "scene_ref":
+                    return [s.name for s in project.scenes] if project else []
+                if typ == "sfx_ref":
+                    if project:
+                        project.load_audio()   # catalogue différé
+                    return [s.name for s in project.sfx] if project else []
+                scene = getattr(self.insp, "_scene", None) or (project.active_scene if project else None)
+                return [a.name for a in scene.actors if a is not self.insp._actor] if scene else []
             kind = typ[:-4]
             slot = name_picker_slot(
-                lambda: names, str(current or ""), icons.COLOR_SCRIPT, on_picked=save,
+                names, str(current or ""), icons.COLOR_SCRIPT, on_picked=save,
                 add_label=title, icon=icons.get(kind, C.TEXT_DIM) if kind != "actor" else None,
                 none_label=label("common.none_dash"))
             W.row(title, slot, layout)
+            load = lambda v: slot.set_value(str(v or ""))
+        else:
+            return
+
+        self._export_loaders.append((var, load))
 
     # ── Actions ───────────────────────────────────────────────────────
 
@@ -222,9 +276,11 @@ class ScriptEditor(BaseComponentEditor):
     def _assign_script(self, comp, rel: str):
         comp.script = rel
         comp.exports_values = {}   # les valeurs de l'ancien script ne valent pas pour le nouveau
+        self.reload(comp)
         self.insp._save_component_change(None)
 
     def _clear_script(self, comp):
         comp.script = None
         comp.exports_values = {}
+        self.reload(comp)
         self.insp._save_component_change(None)
