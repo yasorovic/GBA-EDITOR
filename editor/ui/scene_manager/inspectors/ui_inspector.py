@@ -56,6 +56,7 @@ from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, CollapsibleCard, PickerSlot, PickerEntry
 from ui.common.notice import note, notice, text
 from ui.common.labels import label
+from ui.common.field_binder import FieldBinder
 from ui.common.tooltip import tooltip
 from ui.common.pickers import ColorIndexSlot
 from ui.text_editor.colors import TEXT_COLOR as TEXT_ACCENT
@@ -147,6 +148,7 @@ class UIInspector(QWidget):
         self._element = None
         self._scene = None
         self._blocking = False
+        self._fields = FieldBinder(self._on_field_changed)
         scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
@@ -208,8 +210,7 @@ class UIInspector(QWidget):
             # Sans ça, taper « 120 » vaut trois valeurs (1, 12, 120) : trois
             # écritures disque et trois redessins du canvas pour un seul geste.
             s.setKeyboardTracking(False)
-            s.valueChanged.connect(lambda v, k=key: self._on_geom(k, v))
-            self._sp[key] = s
+            self._sp[key] = self._fields.bind(key, s)
         self._sp["x"].setRange(-512, 512)
         self._sp["y"].setRange(-512, 512)
         self._sp["w"].setRange(8, 512)
@@ -228,7 +229,7 @@ class UIInspector(QWidget):
         visible_card = CollapsibleCard(label("uiinsp.card.visibility"), expanded=False)
         self._visible = W.checkbox_row(label("uiinsp.visible.label"),
                                        label("uiinsp.visible.sub"), visible_card.body_layout)
-        self._visible.toggled.connect(self._on_visible)
+        self._fields.bind("visible", self._visible)
         self._visible_why = note(visible_card.body_layout, "ui.visible.hidden_parent")
         # Priorité OBJ — portée par CHAQUE élément (texte, image, fond de
         # conteneur), surchargeable, héritée par défaut. -1 = « Auto » : la
@@ -244,7 +245,7 @@ class UIInspector(QWidget):
         self._prio.setKeyboardTracking(False)
         self._prio.setToolTip(tooltip(
             title=label("uiinsp.priority.title"), body=label("uiinsp.priority.tip"), note=label("uiinsp.priority.note")))
-        self._prio.valueChanged.connect(self._on_prio)
+        self._fields.bind("priority", self._prio)
         self._prio_row = W.row(label("uiinsp.priority.label"), self._prio,
                                visible_card.body_layout).parentWidget()
         self._prio_why = note(visible_card.body_layout)
@@ -720,9 +721,7 @@ class UIInspector(QWidget):
             else:
                 self._layout_shared.clear()
 
-            for k in ("x", "y", "w", "h"):
-                self._sp[k].setValue(int(getattr(element, k, 0)))
-            self._prio.setValue(int(getattr(element, "priority", PRIORITY_INHERIT)))
+            self._fields.load(element)
             # La priorité OBJ n'agit qu'en cible OBJ : sous un nœud écran/monde
             # (BG), la profondeur est celle du layer. On le DIT plutôt que de
             # cacher un champ que l'auteur a demandé sur chaque élément.
@@ -730,7 +729,6 @@ class UIInspector(QWidget):
                 self._prio_why.clear()
             else:
                 self._prio_why.show_text("ui.priority.bg")
-            self._visible.setChecked(bool(getattr(element, "visible", True)))
             self._sync_visible_hint()
 
             # Sections par type — tout se montre/cache ICI, une seule fois.
@@ -927,13 +925,6 @@ class UIInspector(QWidget):
             return
         self._set("playing", bool(self._img_play.currentData()), "Image playback")
         self._sync_image_note()
-
-    def _on_prio(self, v):
-        """Priorité OBJ de N'IMPORTE quel élément d'UI (texte, image, fond de
-        conteneur) — le champ vit dans Geometry. -1 = héritée."""
-        if self._blocking or not self._element:
-            return
-        self._set("priority", int(v), "Priority")
 
     # ── Contenu (édite l'entrée de table, pas l'élément) ──────────
     def _current_text(self):
@@ -1473,17 +1464,14 @@ class UIInspector(QWidget):
             self.renamed.emit(applied)
         return applied
 
-    def _on_geom(self, key: str, val: int):
+    def _on_field_changed(self, field: str, value):
         if self._blocking or not self._element:
             return
-        self._set(key, int(val), "Geometry")
-        self._refresh_diagnostics()
-
-    def _on_visible(self, on: bool):
-        if self._blocking or not self._element:
-            return
-        self._set("visible", bool(on), "Visibility")
-        self._sync_visible_hint()
+        self._set(field, value, {"visible": "Visibility", "priority": "Priority"}.get(field, "Geometry"))
+        if field == "visible":
+            self._sync_visible_hint()
+        elif field != "priority":
+            self._refresh_diagnostics()
 
     def _on_align_toggled(self, i: int, checked: bool):
         """`idToggled` tire DEUX fois par changement — le bouton qui se relève
