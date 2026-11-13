@@ -416,14 +416,6 @@ class BgPropertiesPanel(QWidget):
         self._pal_grid.asset_override.connect(self._on_pal_override)
         self._pal_grid.asset_restore.connect(self._on_pal_restore)
         pal_card.body_layout.addWidget(self._pal_grid)
-        # Promeut les sous-palettes déduites du PNG en PaletteBank partagées du catalogue (visibles et éditables depuis
-        # le Palette Editor) et les assigne à ce fond.
-        self._btn_extract = self._footer_btn(
-            label("bgedit.extract"),
-            tooltip(title=label("bgedit.extract_title"), body=label("bgedit.extract_tip"),
-                    warning=label("bgedit.extract_warning")))
-        self._btn_extract.clicked.connect(self._on_extract_palette)
-        pal_card.body_layout.addWidget(self._btn_extract)
         # Les ajustements passent avant la compression : ils dirigent ce qu'elle reçoit. Chaque carte se replie
         # d'elle-même (CollapsibleCard) ; son pli suit `_adj_open` / `_tune_open` (cf. `_refresh_tune_visibility`).
         self._adj_card = self._card(label("bgedit.adj_title"), root)
@@ -1628,7 +1620,6 @@ class BgPropertiesPanel(QWidget):
         view = background_palette_view(self._ba, read_only=read_only)
         catalog = list(self._project.palettes) if self._project else []
         self._pal_grid.load(view, catalog)
-        self._btn_extract.setEnabled(bool(self._ba and self._ba.palettes))
         self._emit_overlays()
 
     def _refresh_pal_count(self):
@@ -1838,46 +1829,6 @@ class BgPropertiesPanel(QWidget):
         self.changed.emit()
         self.palettes_changed.emit()
 
-    def _on_extract_palette(self):
-        """Promeut les sous-palettes déduites (`ba.palettes`) en PaletteBank
-        partagées du catalogue projet, sous un nom stable dérivé du fond. Les
-        palettes créées deviennent visibles/éditables depuis le Palette Editor
-        et restent celles utilisées par ce fond (elles EN sont l'origine — le
-        rendu du fond est inchangé). Une ré-extraction (après recompression)
-        met à jour les mêmes banques."""
-        if not self._project or not self._ba:
-            return
-        ba = self._ba
-        pals = [list(p) for p in ba.palettes]
-        if not pals:
-            QMessageBox.information(
-                self, label("bgedit.no_extract_title"),
-                label("bgedit.no_extract_text"))
-            return
-        # 256 couleurs (une banque unique) en 8bpp / bitmap ; 16 en 4bpp tuilé.
-        size = 256 if (ba.mode == "bitmap" or ba.bpp == 8) else 16
-        single = len(pals) == 1
-        created: list[str] = []
-        for i, cols in enumerate(pals):
-            name = f"pal_{ba.name}" if single else f"pal_{ba.name}_{i}"
-            existing = self._project.palettes.get(name)
-            if existing:
-                # Ré-extraction : on écrase les couleurs de la banque déjà générée
-                # (action explicite, régénération attendue — cf. Sprite Editor).
-                existing.colors = list(cols)
-                existing.size = size
-                bank = existing
-            else:
-                bank = PaletteBank(name=name, colors=list(cols), size=size)
-            # Passe par le dispatcher : persistance (watcher suspendu) + événement
-            # « palettes_changed » pour rafraîchir le Palette Editor / les libraries.
-            get_dispatcher().save_palette(bank)
-            created.append(bank.name)
-        QMessageBox.information(
-            self, label("bgedit.extracted_title"),
-            label("bgedit.extracted_text", n=len(created), name=ba.name,
-                  list="\n  ".join(created)))
-
     def _on_replace(self):
         if not self._project or not self._ba:
             return
@@ -1916,6 +1867,8 @@ class BackgroundEditorScreen(QWidget):
             label('bgedit.background_library'),
             [BACKGROUNDS_SCENE, BACKGROUNDS_UI, BACKGROUNDS_ANIM],
             min_width=180, max_width=420)
+        for kind in (BACKGROUNDS_SCENE, BACKGROUNDS_UI, BACKGROUNDS_ANIM):
+            self._library.add_action(kind.label, label("common.extract_palette"), self._extract_palette)
         self._canvas = BgInpaintCanvas()
         self._props = BgPropertiesPanel()
         self.body = ThreeColumnBody(self._library, self._canvas, self._props,
@@ -2201,6 +2154,45 @@ class BackgroundEditorScreen(QWidget):
             self._show_encoding_state(ba)
         else:
             self._canvas.set_encoding_state("none")
+
+    def _extract_palette(self, ba):
+        """Clic droit « Extraire la palette » : promeut les sous-palettes déduites
+        (`ba.palettes`) en PaletteBank partagées du catalogue projet, sous un nom
+        stable dérivé du fond. Les palettes créées deviennent visibles/éditables
+        depuis le Palette Editor et restent celles utilisées par ce fond (elles EN
+        sont l'origine — le rendu du fond est inchangé). Une ré-extraction (après
+        recompression) met à jour les mêmes banques."""
+        if not self._project:
+            return
+        pals = [list(p) for p in ba.palettes]
+        if not pals:
+            QMessageBox.information(
+                self, label("bgedit.no_extract_title"),
+                label("bgedit.no_extract_text"))
+            return
+        # 256 couleurs (une banque unique) en 8bpp / bitmap ; 16 en 4bpp tuilé.
+        size = 256 if (ba.mode == "bitmap" or ba.bpp == 8) else 16
+        single = len(pals) == 1
+        created: list[str] = []
+        for i, cols in enumerate(pals):
+            name = f"pal_{ba.name}" if single else f"pal_{ba.name}_{i}"
+            existing = self._project.palettes.get(name)
+            if existing:
+                # Ré-extraction : on écrase les couleurs de la banque déjà générée
+                # (action explicite, régénération attendue — cf. Sprite Editor).
+                existing.colors = list(cols)
+                existing.size = size
+                bank = existing
+            else:
+                bank = PaletteBank(name=name, colors=list(cols), size=size)
+            # Passe par le dispatcher : persistance (watcher suspendu) + événement
+            # « palettes_changed » pour rafraîchir le Palette Editor / les libraries.
+            get_dispatcher().save_palette(bank)
+            created.append(bank.name)
+        QMessageBox.information(
+            self, label("bgedit.extracted_title"),
+            label("bgedit.extracted_text", n=len(created), name=ba.name,
+                  list="\n  ".join(created)))
 
     def _on_renamed(self):
         # Renommage validé depuis l'en-tête de l'inspecteur : réaligner la library

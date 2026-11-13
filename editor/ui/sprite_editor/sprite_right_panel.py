@@ -154,14 +154,6 @@ class SpriteRightPanel(QWidget):
         self._btn_import.clicked.connect(self._on_replace_image)
         lay.addWidget(self._btn_import)
 
-        self._btn_extract = W.btn_accent(label("sprpanel.extract"))
-        self._btn_extract.setToolTip(tooltip(
-            title=label("sprpanel.extract_title"), body=label("sprpanel.extract_tip"),
-            warning=label("sprpanel.extract_warning"),
-        ))
-        self._btn_extract.clicked.connect(self._on_extract_palette)
-        lay.addWidget(self._btn_extract)
-
     def refresh_palette_catalog(self):
         """Re-lit le catalogue de palettes du projet dans la grille — appelé
         quand l'écran redevient visible, une palette ayant pu changer dans
@@ -286,31 +278,6 @@ class SpriteRightPanel(QWidget):
             self.sprite_changed.emit()
 
     # ── Slots ─────────────────────────────────────────────────────
-
-    def _on_extract_palette(self):
-        if not self._sprite or not self._project or not self._sprite.asset:
-            return
-        ap = self._project.root / self._sprite.asset
-        if not ap.exists():
-            get_dispatcher().status(label("sprpanel.extract_no_image"))
-            return
-        from core.models.gba_color import extract_palette_from_image
-        from core.models.palette import PaletteBank
-        colors = extract_palette_from_image(ap)
-        name = f"pal_{self._sprite.name}"
-        existing = self._project.palettes.get(name)
-        if existing:
-            # Ré-extraction d'une palette déjà générée : on écrase ses couleurs
-            # (action explicite "extraire", régénération attendue).
-            existing.colors = colors
-            bank = existing
-        else:
-            bank = PaletteBank(name=name, colors=colors)
-        # Passe par le dispatcher : persistance (watcher suspendu) + événement
-        # "palettes_changed" pour que le Palette Library se rafraîchisse.
-        get_dispatcher().save_palette(bank)
-        # Le geste n'a pas d'autre retour visible : on dit ce qui s'est passé et où le retrouver.
-        get_dispatcher().status(label("sprpanel.extract_updated" if existing else "sprpanel.extract_created", name=bank.name))
 
     def _on_name_changed(self, new_name: str):
         if self._blocking or not self._sprite or not self._project:

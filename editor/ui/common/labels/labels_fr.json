@@ -1368,12 +1368,6 @@
     "bgedit.restore_tip_warning": {
       "text": "Les palettes ajoutées et la peinture seront perdues."
     },
-    "bgedit.extract": {
-      "text": "Extraire la palette de la source"
-    },
-    "bgedit.extract_title": { "text": "Extraire la palette de la source" },
-    "bgedit.extract_tip": { "text": "Crée des palettes de catalogue partagées à partir du PNG et les assigne à ce fond. Elles restent modifiables dans l’éditeur de palettes." },
-    "bgedit.extract_warning": { "text": "Si ces palettes existent déjà, leurs couleurs sont remplacées." },
     "bgedit.margin_left": { "text": "Marge gauche" },
     "bgedit.margin_right": { "text": "Marge droite" },
     "bgedit.margin_top": { "text": "Marge haute" },
@@ -1685,8 +1679,6 @@
     "sprpanel.loop_tip": { "text": "Fait boucler l'animation : après la dernière image, elle repart de la première." },
     "sprpanel.import_replace_title": { "text": "Importer ou remplacer l’image" },
     "sprpanel.import_replace_tip": { "text": "Choisit une image, la valide et l’encode pour la GBA, puis l’attache au sprite actif. Le fichier source n’est pas modifié." },
-    "sprpanel.extract_title": { "text": "Extraire la palette du PNG" },
-    "sprpanel.extract_tip": { "text": "Crée une palette dans le catalogue à partir des couleurs du PNG. L’index 0 est transparent." },
     "sprframe.timeline_title": { "text": "  Timeline" },
     "sprsheet.title": { "text": "Spritesheet" },
     "sprsheet.edit": { "text": "Éditer le fichier" },
@@ -1695,7 +1687,6 @@
     "dirwidget.mirror_h_tip": { "text": "Génère les directions O, NO et SO à partir de E, NE et SE." },
     "dirwidget.v_mirror_title": { "text": "Miroiter les directions verticalement" },
     "dirwidget.mirror_v_tip": { "text": "Génère les directions S, SE et SO à partir de N, NE et NO." },
-    "sprpanel.extract_warning": { "text": "Si cette palette existe déjà, ses couleurs sont remplacées." },
     "palslot.slot": { "text": "Emplacement de palette {slot}" },
     "palslot.slot_tip": { "text": "Utilise la palette {name} ; un clic la remplace et un clic droit la retire." },
     "palslot.override": { "text": "Remplacement de palette" },
@@ -2595,6 +2586,7 @@
     "disk.move_refused_protected": { "text": "{name} n’a pas été déplacé : palettes, textes, variables, scripts et images de fonds restent là où l’éditeur les cherche." },
     "disk.move_refused_failed": { "text": "{name} n’a pas été déplacé : le système a refusé (fichier ouvert ailleurs, ou droit refusé)." },
     "disk.no_editor": { "text": "{name} n’a pas d’écran d’édition dédié." },
+    "common.extract_palette": { "text": "Extraire la palette" },
     "common.locate": { "text": "Localiser" },
     "disk.locate_missing": { "text": "{name} n’a pas de fichier dans Assets à localiser." },
     "disk.prefab_created": { "text": "Prefab {name} créé dans ce dossier." },

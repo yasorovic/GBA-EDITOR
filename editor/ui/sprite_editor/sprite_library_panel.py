@@ -91,6 +91,7 @@ class SpriteLibraryPanel(QWidget):
                                     min_width=180, max_width=420)
         self._sprites.selected.connect(lambda _kind, sp: self._on_sprite_chosen(sp))
         self._sprites.add_requested.connect(lambda _label: self._show_sprite_add_menu())
+        self._sprites.add_action(SPRITES.label, label("common.extract_palette"), self._extract_palette)
         self._sprites.emptied.connect(lambda _label: self._on_sprite_chosen(None))
         root.addWidget(self._sprites, 1)
 
@@ -318,6 +319,33 @@ class SpriteLibraryPanel(QWidget):
                        lambda: self._sprites._trees[SPRITES.label]._create_folder(scheme, None))
         menu.exec(self._sprites._sections[SPRITES.label]._btn_add.mapToGlobal(
             self._sprites._sections[SPRITES.label]._btn_add.rect().bottomLeft()))
+
+    def _extract_palette(self, sprite: SpriteAsset):
+        """Clic droit « Extraire la palette » : crée (ou met à jour) la banque
+        `pal_<sprite>` du catalogue avec les couleurs du PNG du sprite."""
+        if not self._project or not sprite.asset:
+            return
+        ap = self._project.root / sprite.asset
+        if not ap.exists():
+            get_dispatcher().status(label("sprpanel.extract_no_image"))
+            return
+        from core.models.gba_color import extract_palette_from_image
+        from core.models.palette import PaletteBank
+        colors = extract_palette_from_image(ap)
+        name = f"pal_{sprite.name}"
+        existing = self._project.palettes.get(name)
+        if existing:
+            # Ré-extraction d'une palette déjà générée : on écrase ses couleurs
+            # (action explicite "extraire", régénération attendue).
+            existing.colors = colors
+            bank = existing
+        else:
+            bank = PaletteBank(name=name, colors=colors)
+        # Passe par le dispatcher : persistance (watcher suspendu) + événement
+        # "palettes_changed" pour que le Palette Library se rafraîchisse.
+        get_dispatcher().save_palette(bank)
+        # Le geste n'a pas d'autre retour visible : on dit ce qui s'est passé et où le retrouver.
+        get_dispatcher().status(label("sprpanel.extract_updated" if existing else "sprpanel.extract_created", name=bank.name))
 
     def _import_sprite(self):
         """Le « + » de la library délègue ici : le dialogue d'import a besoin d'un

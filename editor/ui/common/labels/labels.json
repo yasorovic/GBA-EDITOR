@@ -1388,12 +1388,6 @@
     "bgedit.restore_tip_warning": {
       "text": "Added palettes and painting will be lost."
     },
-    "bgedit.extract": {
-      "text": "Extract palette from source"
-    },
-    "bgedit.extract_title": { "text": "Extract palette from source" },
-    "bgedit.extract_tip": { "text": "Creates shared catalog palettes from the PNG and assigns them to this background. They stay editable in the Palette Editor." },
-    "bgedit.extract_warning": { "text": "If these palettes already exist, their colors are replaced." },
     "bgedit.limit_title": {
       "text": "Limit reached"
     },
@@ -1655,12 +1649,6 @@
     "sprpanel.extract_created": { "text": "Palette “{name}” created from the image. It is in the Palettes screen." },
     "sprpanel.extract_updated": { "text": "Palette “{name}” updated from the image. It is in the Palettes screen." },
     "sprpanel.extract_no_image": { "text": "This sprite has no image file to read a palette from." },
-    "sprpanel.extract": {
-      "text": "⟐  Extract from PNG"
-    },
-    "sprpanel.extract_tip": { "text": "Creates a palette in the catalog from the colors of the PNG. Index 0 is transparent." },
-    "sprpanel.extract_title": { "text": "Extract palette from PNG" },
-    "sprpanel.extract_warning": { "text": "If this palette already exists, its colors are replaced." },
     "common.palette_i": {
       "text": "Palette {i}"
     },
@@ -4990,6 +4978,7 @@
     "disk.move_refused_protected": { "text": "{name} was not moved: palettes, texts, variables, scripts and background images stay where the editor looks for them." },
     "disk.move_refused_failed": { "text": "{name} was not moved: the system refused (file open elsewhere, or no permission)." },
     "disk.no_editor": { "text": "{name} has no dedicated editor." },
+    "common.extract_palette": { "text": "Extract palette" },
     "common.locate": { "text": "Locate" },
     "disk.locate_missing": { "text": "{name} has no file in Assets to locate." },
     "disk.prefab_created": { "text": "Prefab {name} created in this folder." },
