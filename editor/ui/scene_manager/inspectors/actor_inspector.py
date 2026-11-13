@@ -1318,8 +1318,10 @@ class ActorInspector(QWidget):
     def _save_component_change(self, comp=None):
         """
         Persist sans reconstruire l'éditeur.
-        Repeuple l'éditeur réutilisable courant, y compris après annulation.
-        Sinon, garde le chemin des éditeurs construits pour un seul composant.
+        Composant affiché : un éditeur réutilisable (`reload`) est repeuplé, y
+        compris après annulation ; les autres (Sprite, SoundFx) gardent leurs
+        widgets tels quels. Autre composant (annulation sur une ancienne cible) :
+        l'éditeur de la ligne sélectionnée est reconstruit.
         """
         self._persist()
         self._refresh_list_labels()

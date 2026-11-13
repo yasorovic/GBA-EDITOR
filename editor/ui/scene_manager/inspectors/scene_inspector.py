@@ -624,7 +624,7 @@ class SceneInspector(QWidget):
         if scene is None:
             return
         self._blocking = True
-        if self._notes_edit._baseline != getattr(scene, "notes", ""):
+        if self._notes_edit.baseline() != getattr(scene, "notes", ""):
             self._notes_edit.set_text_silent(getattr(scene, "notes", ""))
         self._chk_scroll_h.setChecked(scene.scroll_h)
         self._chk_scroll_v.setChecked(scene.scroll_v)

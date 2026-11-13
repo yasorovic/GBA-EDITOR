@@ -1179,7 +1179,10 @@ class UIInspector(QWidget):
         banks = [b for n in actifs
                  if (b := (self._project.get_palette(n) if self._project else None))]
         cur = getattr(self._element, "fill_palette", "") or ""
-        context = self._project, tuple((id(bank), bank.name) for bank in banks)
+        # L'identité suit les objets capturés par le slot (il les garde en vie, l'id
+        # ne peut donc pas être réutilisé) ; les couleurs suivent une palette
+        # retouchée sur place, dont les vignettes du slot seraient périmées.
+        context = self._project, tuple((id(bank), bank.name, tuple(bank.colors)) for bank in banks)
         if self._fill_pal_slot is not None and context == getattr(self, "_fill_pal_context", None):
             self._fill_pal_slot.set_value(cur or None)
             return

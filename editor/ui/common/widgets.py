@@ -674,6 +674,10 @@ class NotesEdit(QPlainTextEdit):
         self.setPlainText(self._baseline)
         self.blockSignals(False)
 
+    def baseline(self) -> str:
+        """Dernière valeur chargée ou validée ; la frappe en cours n'en fait pas partie."""
+        return self._baseline
+
     def focusOutEvent(self, e):
         super().focusOutEvent(e)
         text = self.toPlainText()
