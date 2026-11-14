@@ -31,7 +31,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QScrollArea,
-    QPushButton,
+    QPushButton, QFrame,
 )
 from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QFontMetrics
@@ -74,16 +74,28 @@ class CameraInspector(QWidget):
         self._blocking = False
         self._script_open_fn = None
 
+        fixed = QVBoxLayout(self)
+        fixed.setContentsMargins(12, 8, 12, 8)
+        fixed.setSpacing(6)
+
+        # La note reste sous le nom, hors des cartes défilantes, comme pour un acteur ou une scène.
+        self._notes_edit = NotesEdit()
+        self._notes_edit.committed.connect(self._on_notes_changed)
+        fixed.addWidget(self._notes_edit)
+
         scroll = InspectorScrollArea()
+        self._scroll = scroll
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
+        separator = QFrame()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet(f"background:{C.BORDER}; border:none;")
+        fixed.addWidget(separator)
+        fixed.addWidget(scroll, 1)
 
         inner = QWidget()
         layout = QVBoxLayout(inner)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         scroll.setWidget(inner)
 
@@ -110,13 +122,6 @@ class CameraInspector(QWidget):
         camera_card.body_layout.addLayout(start_row)
 
         layout.addWidget(camera_card)
-
-        # ── Note libre — même carte partagée qu'Actor/Scène ───────
-        notes_card = CollapsibleCard(label('common.note'))
-        self._notes_edit = NotesEdit()
-        self._notes_edit.committed.connect(self._on_notes_changed)
-        notes_card.body_layout.addWidget(self._notes_edit)
-        layout.addWidget(notes_card)
 
         # Largeur de colonne des libellés, mesurée sur le plus long du panneau —
         # même approche que l'ActorInspector (une valeur fixe tronquerait selon

@@ -57,18 +57,9 @@ class ScriptInspector(QWidget):
         self._focus_var: Optional[str] = None   # nom de la ligne à focus après refresh
         self.setStyleSheet(f"background:{C.BG_PANEL};")
 
-        scroll = InspectorScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
-
-        inner = QWidget()
-        layout = QVBoxLayout(inner)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(6)
-        scroll.setWidget(inner)
 
         self._empty = QLabel(label('scrinsp.empty'))
         self._empty.setFont(QFont(T.UI, T.MD))
@@ -76,16 +67,29 @@ class ScriptInspector(QWidget):
         layout.addWidget(self._empty)
 
         self._content = QWidget()
-        cl = QVBoxLayout(self._content)
-        cl.setContentsMargins(0, 0, 0, 0)
-        cl.setSpacing(6)
+        fixed = QVBoxLayout(self._content)
+        fixed.setContentsMargins(0, 0, 0, 0)
+        fixed.setSpacing(6)
 
-        # ── Carte Note ────────────────────────────────────────────
-        notes_card = CollapsibleCard(label('common.note'))
+        # La note reste sous le nom, hors des cartes défilantes, comme pour un acteur ou une scène.
         self._notes_edit = NotesEdit()
         self._notes_edit.committed.connect(self._on_note_committed)
-        notes_card.body_layout.addWidget(self._notes_edit)
-        cl.addWidget(notes_card)
+        fixed.addWidget(self._notes_edit)
+
+        scroll = InspectorScrollArea()
+        self._scroll = scroll
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
+        separator = QFrame()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet(f"background:{C.BORDER}; border:none;")
+        fixed.addWidget(separator)
+        fixed.addWidget(scroll, 1)
+        inner = QWidget()
+        cl = QVBoxLayout(inner)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+        scroll.setWidget(inner)
 
         # ── Carte Variables exposées ──────────────────────────────
         vars_card = CollapsibleCard(label('scrinsp.exposed_variables'))
@@ -105,7 +109,7 @@ class ScriptInspector(QWidget):
 
         cl.addWidget(vars_card)
         cl.addStretch()
-        layout.addWidget(self._content)
+        layout.addWidget(self._content, 1)
         self._content.setVisible(False)
 
     # ── Chargement ──────────────────────────────────────────────────

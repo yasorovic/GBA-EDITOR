@@ -144,3 +144,32 @@ def test_ui_palettes_conservees_puis_actualisees_et_nouvelle_cible(inspector, tm
     get_history().undo()
     inspector.refresh_current()
     assert second.fill_palette == panel._fill_pal_slot.value() == "A"
+
+
+def test_note_scene_reste_sous_le_nom_pendant_le_defilement(inspector, tmp_path, qapp):
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtWidgets import QWidget
+
+    project, scene = _project(tmp_path)
+    scene.notes = "Note fixe"
+    inspector.set_project(project)
+    inspector.show_scene(scene, project)
+    inspector.resize(400, 500)
+    inspector.show()
+    panel = inspector._scene_insp
+    spacer = QWidget()
+    spacer.setFixedHeight(1200)
+    panel._scroll.widget().layout().addWidget(spacer)
+    qapp.processEvents()
+    note = panel._notes_edit
+    before = note.mapTo(inspector, QPoint())
+    assert not panel._scroll.isAncestorOf(note)
+    assert note.toPlainText() == "Note fixe"
+    assert before.y() >= inspector._header.height()
+    bar = panel._scroll.verticalScrollBar()
+    assert bar.maximum() > 0
+    bar.setValue(bar.maximum())
+    qapp.processEvents()
+    assert note.isVisible() and note.mapTo(inspector, QPoint()) == before
+    panel.load(None, project)
+    assert not note.isVisible()

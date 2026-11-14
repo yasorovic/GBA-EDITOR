@@ -179,19 +179,9 @@ class SceneInspector(QWidget):
         self._blocking = False
         self.setStyleSheet(f"background:{C.BG_PANEL};")
 
-        scroll = InspectorScrollArea()
-        self._scroll = scroll
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
-
-        inner = QWidget()
-        layout = QVBoxLayout(inner)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(6)
-        scroll.setWidget(inner)
 
         self._empty = QLabel(label("sceneinsp.empty"))
         self._empty.setFont(QFont(T.UI, T.MD))
@@ -200,20 +190,32 @@ class SceneInspector(QWidget):
         layout.addWidget(self._empty)
 
         self._content = QWidget()
-        cl = QVBoxLayout(self._content)
-        cl.setContentsMargins(0, 0, 0, 0)
-        cl.setSpacing(6)
+        fixed = QVBoxLayout(self._content)
+        fixed.setContentsMargins(0, 0, 0, 0)
+        fixed.setSpacing(6)
 
-        # ── Carte Note libre ───────────────────────────────────────
-        notes_card = CollapsibleCard(label("common.note"))
-        notes_inner = notes_card.body_layout
+        # La note reste sous le nom, hors des cartes défilantes.
         self._notes_edit = NotesEdit()
         self._notes_edit.setToolTip(tooltip(
             title=label("common.note"), body=label("sceneinsp.notes_tip"),
         ))
         self._notes_edit.committed.connect(lambda text: self._set_scene_field("notes", text))
-        notes_inner.addWidget(self._notes_edit)
-        cl.addWidget(notes_card)
+        fixed.addWidget(self._notes_edit)
+
+        scroll = InspectorScrollArea()
+        self._scroll = scroll
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
+        separator = QFrame()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet(f"background:{C.BORDER}; border:none;")
+        fixed.addWidget(separator)
+        fixed.addWidget(scroll, 1)
+        inner = QWidget()
+        cl = QVBoxLayout(inner)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+        scroll.setWidget(inner)
 
         # ── Carte Mode vidéo (Scene Mode) — mode + paramètres + script ─────
         # Fusion des anciennes cartes SCENE MODE / PARAMÈTRES / SCRIPT : un seul
@@ -597,8 +599,7 @@ class SceneInspector(QWidget):
         cl.addWidget(budget_card)
 
         cl.addStretch()
-        layout.addWidget(self._content)
-        layout.addStretch()
+        layout.addWidget(self._content, 1)
         self._content.setVisible(False)
 
     def focus_background_slot(self, slot: int):

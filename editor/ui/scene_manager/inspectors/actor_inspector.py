@@ -6,7 +6,7 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QCheckBox, QListWidget, QListWidgetItem, QMenu, QScrollArea,
-    QTreeWidget, QTreeWidgetItem, QAbstractItemView,
+    QTreeWidget, QTreeWidgetItem, QAbstractItemView, QSizePolicy,
 )
 from PyQt6.QtGui import QColor, QFont, QCursor, QPixmap, QPainter
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
@@ -209,19 +209,9 @@ class ActorInspector(QWidget):
         self._fields = FieldBinder(self._set)
         self.setStyleSheet(f"background:{C.BG_PANEL};")
 
-        scroll = InspectorScrollArea()
-        self._scroll = scroll
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
-
-        inner = QWidget()
-        layout = QVBoxLayout(inner)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(6)
-        scroll.setWidget(inner)
 
         self._empty = QLabel(label("actorinsp.empty"))
         self._empty.setFont(QFont(T.UI, T.MD))
@@ -231,22 +221,20 @@ class ActorInspector(QWidget):
 
         self._content = QWidget()
         self._content.setStyleSheet(f"background:{C.BG_PANEL};")
-        cl = QVBoxLayout(self._content)
-        cl.setContentsMargins(0, 0, 0, 0)
-        cl.setSpacing(5)
+        fixed = QVBoxLayout(self._content)
+        fixed.setContentsMargins(0, 0, 0, 0)
+        fixed.setSpacing(5)
 
-        # ── NOTE card — partagée Actor/Prefab ────────────────────
-        notes_card = CollapsibleCard(label("common.note"))
+        # La note et l'identité restent sous le nom, hors des cartes défilantes.
         self._notes_edit = NotesEdit()
         self._notes_edit.committed.connect(lambda text: self._set("notes", text))
-        notes_card.body_layout.addWidget(self._notes_edit)
 
         # ── Header : preview sprite + nom ────────────────────────
         header_frame = QFrame()
         header_frame.setStyleSheet(
             f"background:{C.BG_BASE}; border-bottom:1px solid {C.BORDER}; border-radius:0;"
         )
-        header_frame.setFixedHeight(60)
+        header_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         hl = QHBoxLayout(header_frame)
         hl.setContentsMargins(8, 6, 8, 6)
         hl.setSpacing(10)
@@ -274,8 +262,8 @@ class ActorInspector(QWidget):
             title=label("actorinsp.index_title"), body=label("actorinsp.index_tip")))
         name_col.addWidget(self._tag_lbl)
         hl.addLayout(name_col, 1)
-        cl.addWidget(header_frame)
-        cl.addWidget(notes_card)
+        fixed.addWidget(header_frame)
+        fixed.addWidget(self._notes_edit)
 
         # ── Badge prefab (visible seulement si actor.prefab_name) ──
         self._prefab_badge = QFrame()
@@ -341,7 +329,7 @@ class ActorInspector(QWidget):
         btn_unlink.clicked.connect(self._unlink_prefab)
         pb_layout.addWidget(btn_unlink)
         self._prefab_badge.setVisible(False)
-        cl.addWidget(self._prefab_badge)
+        fixed.addWidget(self._prefab_badge)
 
         # ── Ligne « Expose to prefab » (acteur ORDINAIRE, pas déjà une
         # instance) : promeut cet acteur en nouveau template réutilisable —
@@ -369,7 +357,7 @@ class ActorInspector(QWidget):
         btn_expose_new.clicked.connect(self._expose_new_prefab)
         er_layout.addWidget(btn_expose_new)
         self._expose_row.setVisible(False)
-        cl.addWidget(self._expose_row)
+        fixed.addWidget(self._expose_row)
 
         self._active = QCheckBox(label("actorinsp.active"))
         self._active.setFont(QFont(T.UI, T.MD))
@@ -378,9 +366,10 @@ class ActorInspector(QWidget):
             f"background:{C.BG_BASE}; border-radius:3px;"
         )
         self._active.toggled.connect(lambda v: self._set("active", v))
-        notice("actor.active", self._active, cl)
+        notice("actor.active", self._active, name_col)
         # « Active on start » et « Player » côte à côte, l'un sous l'autre quand la place manque.
         self._flags_row = QWidget()
+        self._flags_row.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self._flags_flow = FlowLayout(self._flags_row, spacing=6)
         self._flags_flow.addWidget(self._active)
 
@@ -397,7 +386,22 @@ class ActorInspector(QWidget):
         self._tplayer.setToolTip(tooltip(
             title=label("actorinsp.is_player"), body=label("actorinsp.is_player_tip")))
         self._flags_flow.addWidget(self._tplayer)
-        cl.addWidget(self._flags_row)
+        name_col.addWidget(self._flags_row)
+
+        scroll = InspectorScrollArea()
+        self._scroll = scroll
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
+        separator = QFrame()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet(f"background:{C.BORDER}; border:none;")
+        fixed.addWidget(separator)
+        fixed.addWidget(scroll, 1)
+        inner = QWidget()
+        cl = QVBoxLayout(inner)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(5)
+        scroll.setWidget(inner)
 
         # ── TRANSFORM card ───────────────────────────────────────────
         self._transform_group = CollapsibleCard(label("actorinsp.card.transform"), expanded=False)
@@ -569,8 +573,7 @@ class ActorInspector(QWidget):
 
         cl.addStretch()
 
-        layout.addWidget(self._content)
-        layout.addStretch()
+        layout.addWidget(self._content, 1)
         self._content.setVisible(False)
 
         # Pont canvas → carte Transform. Le canvas déplace un acteur en écrivant
@@ -1218,7 +1221,7 @@ class ActorInspector(QWidget):
         menu.exec(QCursor.pos())
 
     def _reveal_components(self):
-        """Fait défiler l'inspecteur jusqu'à la carte Components : l'éditeur du composant choisi vit sous les cartes Note et
+        """Fait défiler l'inspecteur jusqu'à la carte Components : l'éditeur du composant choisi vit sous la note et la carte
         Transform, et sans cela il fallait les replier à la main pour le voir. Appelé sur un geste de l'auteur (clic, ajout),
         jamais au chargement d'un acteur."""
         def go():

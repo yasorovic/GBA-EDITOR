@@ -145,3 +145,82 @@ def test_une_partie_de_prefab_n_a_pas_la_case_joueur(qapp):
     insp.load_child(part, prefab, project=None, scene=None)
     qapp.processEvents()
     assert not insp._tplayer.isVisible()
+
+
+@pytest.mark.parametrize("mode", ["actor", "instance", "prefab", "part"])
+def test_note_et_identite_restent_fixes_pendant_le_defilement(qapp, monkeypatch, mode):
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtWidgets import QWidget
+    from core.models.scene import Prefab
+    from ui.common import card_order
+    from ui.common.labels import label
+    from ui.common.widgets import CollapsibleCard
+
+    monkeypatch.setattr(card_order, "load", lambda panel: [
+        label("actorinsp.card.components"), label("common.note"),
+        label("actorinsp.card.transform"), label("actorinsp.card.relations"),
+    ])
+    monkeypatch.setattr(card_order, "save", lambda *args: None)
+    insp = ActorInspector()
+    actor = Actor(name="Hero", notes="Une note")
+    prefab = Prefab(name="Hero", actor=actor)
+    if mode == "prefab":
+        insp.load_prefab(prefab, project=None)
+    elif mode == "part":
+        prefab.children.append(actor := Actor(name="Part", notes="Une note"))
+        insp.load_child(actor, prefab, project=None)
+    else:
+        if mode == "instance":
+            actor.prefab_name = "Hero"
+        insp.load(actor, project=None)
+    insp.resize(400, 450)
+    insp.show()
+    insp._transform_group.set_expanded(True)
+    insp._comp_card.set_expanded(True)
+    insp._comp_card.body_layout.addWidget(spacer := QWidget())
+    spacer.setMinimumHeight(900)
+    qapp.processEvents()
+    header = insp._sprite_preview.parentWidget()
+    assert header.isAncestorOf(insp._active)
+    assert header.isAncestorOf(insp._tplayer)
+    widgets = [insp._notes_edit, insp._sprite_preview, insp._tag_lbl, insp._active]
+    if mode != "part":
+        widgets.append(insp._tplayer)
+    if mode == "actor":
+        widgets.append(insp._expose_row)
+    elif mode == "instance":
+        widgets.append(insp._prefab_badge)
+    assert all(not insp._scroll.isAncestorOf(w) for w in widgets)
+    before = [w.mapTo(insp, QPoint()) for w in widgets]
+    assert insp._notes_edit.toPlainText() == "Une note"
+    assert not insp._scroll.isAncestorOf(insp._notes_edit)
+    assert all(c._title_lbl.text() != label("common.note")
+               for c in insp.findChildren(CollapsibleCard))
+    insp._comp_card._drop_at(0)
+    qapp.processEvents()
+    bar = insp._scroll.verticalScrollBar()
+    assert bar.maximum() > 0
+    bar.setValue(bar.maximum())
+    qapp.processEvents()
+    assert [w.mapTo(insp, QPoint()) for w in widgets] == before
+    assert all(w.isVisible() for w in widgets)
+    insp.load(None, project=None)
+    assert all(not w.isVisible() for w in widgets)
+    insp.close()
+
+
+def test_identite_avant_note_et_aucun_vide_avant_les_cartes(qapp):
+    from PyQt6.QtCore import QPoint
+
+    insp = ActorInspector()
+    insp.resize(450, 900)
+    insp.load(Actor(name="Hero"), project=None)
+    insp.show()
+    qapp.processEvents()
+    qapp.processEvents()
+    assert insp._sprite_preview.mapTo(insp, QPoint()).y() < insp._notes_edit.y()
+    assert insp._flags_row.height() == insp._flags_flow.heightForWidth(insp._flags_row.width())
+    cards = [insp._transform_group, insp._comp_card, insp._rel_card]
+    first = min((c for c in cards if c.isVisible()), key=lambda c: c.y())
+    assert first.y() == 0
+    insp.close()

@@ -9,7 +9,7 @@ from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QCheckBox, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QFrame, QSpinBox, QVBoxLayout, QWidget
 
 from core.command_dispatcher import get_dispatcher
 from core.history import AddListItemCmd, SetFieldCmd, get_history
@@ -62,25 +62,29 @@ class AreaInspector(QWidget):
         self._script_open_fn = None      # injecté par l'inspecteur dynamique (ouvre un script dans l'éditeur)
         self._script_comp: Optional[ScriptComponent] = None
 
+        fixed = QVBoxLayout(self)
+        fixed.setContentsMargins(12, 8, 12, 8)
+        fixed.setSpacing(6)
+
+        # La note reste sous le nom, hors des cartes défilantes, comme dans l'inspecteur d'un acteur.
+        self._notes_edit = NotesEdit()
+        self._notes_edit.committed.connect(lambda text: self._set_area("notes", text))
+        fixed.addWidget(self._notes_edit)
+
         scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         self._scroll = scroll
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
+        separator = QFrame()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet(f"background:{C.BORDER}; border:none;")
+        fixed.addWidget(separator)
+        fixed.addWidget(scroll, 1)
         inner = QWidget()
         self._layout = QVBoxLayout(inner)
-        self._layout.setContentsMargins(8, 8, 8, 8)
+        self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(10)
         scroll.setWidget(inner)
-
-        # La note, en tête comme dans l'inspecteur d'un acteur.
-        notes_card = CollapsibleCard(label('common.note'))
-        self._notes_edit = NotesEdit()
-        self._notes_edit.committed.connect(lambda text: self._set_area("notes", text))
-        notes_card.body_layout.addWidget(self._notes_edit)
-        self._layout.addWidget(notes_card)
 
         # Position et état de départ.
         area_card = CollapsibleCard(label('common.area'))
