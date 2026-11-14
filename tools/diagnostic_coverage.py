@@ -17,7 +17,7 @@ La liste est courte et ne se périme pas seule : ajouter un diagnostic sans test
 
 Voir les sites jamais atteints :
 
-    python tools/diagnostic_coverage.py            # lance pytest, imprime le rapport
+    .venv-build312/Scripts/python.exe tools/diagnostic_coverage.py            # lance pytest, imprime le rapport
 """
 from __future__ import annotations
 

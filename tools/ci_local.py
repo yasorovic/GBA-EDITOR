@@ -1,10 +1,10 @@
 """
 tools/ci_local.py — rejouer en local ce que `tests.yml` rejoue sur GitHub.
 
-    python tools/ci_local.py             # ruff + architecture + pytest ciblé
-    python tools/ci_local.py --slow      # + les tests `-m slow` (quelques minutes)
-    python tools/ci_local.py --linux     # le même contrôle, dans WSL (Ubuntu)
-    python tools/ci_local.py --all-tests # pytest sur toute la suite, pas seulement le ciblé
+    .venv-build312/Scripts/python.exe tools/ci_local.py             # ruff + architecture + pytest ciblé
+    .venv-build312/Scripts/python.exe tools/ci_local.py --slow      # + les tests `-m slow` (quelques minutes)
+    .venv-build312/Scripts/python.exe tools/ci_local.py --linux     # le même contrôle, dans WSL (Ubuntu)
+    .venv-build312/Scripts/python.exe tools/ci_local.py --all-tests # pytest sur toute la suite, pas seulement le ciblé
 
 Les étapes sont celles de `.github/workflows/tests.yml`, dans le même ordre :
 elles s'arrêtent à la première qui échoue. Ce que ce script ne couvre PAS : les jobs

@@ -3,7 +3,7 @@
 Source unique : editor/ui/common/CustomIcons/Backstage_icon.svg (aussi chargé à l'exécution
 par main.py pour l'icône de fenêtre). À relancer quand le SVG change :
 
-    QT_QPA_PLATFORM=offscreen python -X utf8 tools/generate_app_icon.py
+    QT_QPA_PLATFORM=offscreen .venv-build312/Scripts/python.exe -X utf8 tools/generate_app_icon.py
 """
 import sys
 from pathlib import Path

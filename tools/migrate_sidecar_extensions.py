@@ -4,8 +4,8 @@ Avant : tout asset stocké s'appelait `<nom>.json`. Après : son extension dit s
 `boom.sfx`, `Scene_01.scene`…) — le contenu reste du JSON, seul le nom du fichier change. La table des
 extensions est `editor/core/models/asset_extensions.py`.
 
-    python tools/migrate_sidecar_extensions.py "Project Test/PongAdvanced" "Project Demo/Platformer"
-    python tools/migrate_sidecar_extensions.py --dry-run <projet>
+    .venv-build312/Scripts/python.exe tools/migrate_sidecar_extensions.py "Project Test/PongAdvanced" "Project Demo/Platformer"
+    .venv-build312/Scripts/python.exe tools/migrate_sidecar_extensions.py --dry-run <projet>
 
 Ce qui est renommé : chaque `*.json` d'un dossier de famille de `assets/` (sprites, backgrounds, sfx, music,
 jingles, fonts, palettes, scenes, prefab, ui_layouts, music_boxes, jingle_boxes, sound_boxes, data,

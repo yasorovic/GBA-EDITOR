@@ -5,7 +5,7 @@ Chaque curseur est un gris neutre (0-255). « Tout décaler » assombrit ou écl
 l'ensemble d'un coup ; les curseurs fins règlent chaque surface. Le bouton « Copier »
 met dans le presse-papiers les lignes à coller dans `_LIGHT` : rien n'est écrit dans le dépôt.
 
-    python -X utf8 tools/light_theme_tuner.py
+    .venv-build312/Scripts/python.exe -X utf8 tools/light_theme_tuner.py
 """
 import re
 import sys

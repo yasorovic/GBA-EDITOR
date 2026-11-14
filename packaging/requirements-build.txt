@@ -1,4 +1,4 @@
-# Outils du build de distribution (Nuitka) — `pip install -r packaging/requirements-build.txt`.
+# Outils du build de distribution (Nuitka) — `.venv-build312/Scripts/python.exe -m pip install -r packaging/requirements-build.txt`.
 #
 # Version EXACTE, à la différence de requirements.txt : une nouvelle version de
 # Nuitka change ce qu'il embarque (cf. les notes de nuitka_build.py sur plugins/ et

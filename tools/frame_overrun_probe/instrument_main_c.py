@@ -1,7 +1,7 @@
 """
 tools/frame_overrun_probe/instrument_main_c.py — compte les VBlanks RÉELS dans la ROM.
 
-    python tools/frame_overrun_probe/instrument_main_c.py <projet>/build/src/main.c
+    .venv-build312/Scripts/python.exe tools/frame_overrun_probe/instrument_main_c.py <projet>/build/src/main.c
 
 Patche le `main.c` GÉNÉRÉ d'un projet déjà construit (jamais le générateur) :
 

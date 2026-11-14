@@ -1,7 +1,7 @@
 """
 tools/check_architecture.py — les règles d'architecture, rendues exécutables.
 
-    python tools/check_architecture.py
+    .venv-build312/Scripts/python.exe tools/check_architecture.py
 
 Une règle écrite dans un document ne se vérifie que si quelqu'un la relit. Les
 six contrôles ci-dessous sont les mêmes règles, mais qui répondent tout seuls.

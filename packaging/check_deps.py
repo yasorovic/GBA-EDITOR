@@ -5,7 +5,7 @@ Garde-fou dépendances — à lancer AVANT le build Nuitka.
 Parcourt tous les .py de editor/ et runtime/, relève les imports de premier
 niveau, retire la stdlib et les modules locaux, puis vérifie que tout le
 reste est bien installé dans l'environnement courant. Sur une machine où
-l'on vient de faire `pip install -r requirements.txt`, un import manquant
+l'on vient de faire `.venv-build312/Scripts/python.exe -m pip install -r packaging/requirements.txt`, un import manquant
 signifie donc : paquet absent de requirements.txt.
 
 C'est le filet qui manquait pour la release 1 (luaparser était importé par
@@ -13,7 +13,7 @@ editor/scripting/ mais absent de requirements.txt : l'éditeur démarrait et
 plantait au premier script Lua ouvert).
 
 Usage :
-    python packaging/check_deps.py
+    .venv-build312/Scripts/python.exe packaging/check_deps.py
 
 Sortie : 0 si tout est couvert, 1 sinon (liste des modules manquants).
 

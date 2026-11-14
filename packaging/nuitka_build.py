@@ -11,8 +11,8 @@ Nom, auteur et version viennent de `editor/core/app_info.py` (source unique) :
 fait échouer une release dont le tag n'est pas celui du dépôt.
 
 Usage :
-    python packaging/nuitka_build.py --output-dir build-out
-    python packaging/nuitka_build.py --print-version     # pour le workflow
+    .venv-build312/Scripts/python.exe packaging/nuitka_build.py --output-dir build-out
+    .venv-build312/Scripts/python.exe packaging/nuitka_build.py --print-version     # pour le workflow
 
 Produit un dossier <output-dir>/Backstage/ contenant l'exécutable et ses
 données. C'est ce dossier qui est ensuite zippé (portable) et empaqueté
@@ -22,7 +22,7 @@ Mode standalone et non onefile : l'installateur pose de toute façon un
 dossier, et le onefile ré-extrait tout dans un dossier temporaire à chaque
 lancement, ce qui ne fait que ralentir le démarrage sans rien apporter ici.
 
-Prérequis : `pip install nuitka` + un compilateur C (MSVC sous Windows,
+Prérequis : `.venv-build312/Scripts/python.exe -m pip install nuitka` + un compilateur C (MSVC sous Windows,
 gcc sous Linux ; à défaut Nuitka télécharge MinGW64 avec
 --assume-yes-for-downloads).
 """

@@ -1,9 +1,9 @@
-# Dépendances Python de l'éditeur — `pip install -r requirements.txt`.
+# Dépendances Python de l'éditeur — `.venv-build312/Scripts/python.exe -m pip install -r packaging/requirements.txt`.
 #
 # Ne lister ici que les paquets importés DIRECTEMENT par editor/ : les
 # dépendances transitives sont tirées par pip toutes seules (antlr4 et
 # multimethod pour luaparser, PyQt6-Qt6/PyQt6-sip pour PyQt6, qtpy pour
-# qtawesome). `python packaging/check_deps.py` vérifie que cette liste
+# qtawesome). `.venv-build312/Scripts/python.exe packaging/check_deps.py` vérifie que cette liste
 # couvre bien tous les imports du code — la CI le lance avant le build.
 # Les bornes majeures empêchent qu'une mise à jour incompatible modifie une
 # release sans changement du dépôt. Les bornes basses correspondent à

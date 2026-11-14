@@ -2,7 +2,7 @@
 tools/frame_overrun_probe/analyze_probe_log.py — lit la sortie de mgba-sdl.
 
     mgba-sdl -l 8 rom.gba > log.txt          (fermer la fenêtre pour vider le tampon)
-    python tools/frame_overrun_probe/analyze_probe_log.py log.txt
+    .venv-build312/Scripts/python.exe tools/frame_overrun_probe/analyze_probe_log.py log.txt
 
 Rapproche, pour chaque tour N, le travail mesuré par le moteur (`frame us=`, ligne
 du budget de frame) du nombre de VBlanks écoulés avant le tour N+1 (`dv=`, ligne

@@ -9,11 +9,11 @@ la navigation, les modes clair/sombre et la recherche locale.
 Depuis la racine du dépôt, avec Python 3.12 ou plus récent :
 
 ```bat
-python -m venv .venv-docs
+py -3.12 -m venv .venv-docs
 .venv-docs\Scripts\python.exe -m pip install -r packaging\requirements-docs.txt
 ```
 
-Sous Linux/macOS, remplacer `.venv-docs\Scripts\python.exe` par `.venv-docs/bin/python`.
+Sous Linux/macOS, remplacer `py -3.12` par `python3`, et `.venv-docs\Scripts\python.exe` par `.venv-docs/bin/python`.
 
 ## Construire et consulter
 
@@ -25,7 +25,7 @@ Sous Windows, `docs\build.bat` construit le site et ouvre directement la page d�
 
 Ouvrir ensuite `docs/_build/html/index.html`. Les pages, styles et l'index de recherche sont locaux :
 aucun serveur n'est nécessaire pour consulter la documentation. Pour prévisualiser avec un
-serveur, exécuter `python -m http.server --directory docs/_build/html`, puis ouvrir `http://localhost:8000`.
+serveur, exécuter `.venv-docs\Scripts\python.exe -m http.server --directory docs/_build/html`, puis ouvrir `http://localhost:8000`.
 
 `-W --keep-going` fait échouer la construction en cas d'avertissement tout en vérifiant
 l'ensemble des pages. Après une modification de configuration, ajouter `-E -a` pour

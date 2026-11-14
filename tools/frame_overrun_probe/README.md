@@ -91,7 +91,7 @@ repasser par `VBlankIntrWait()`.
 2. Instrumenter puis recompiler, sans repasser par l'éditeur (il régénérerait `main.c`) :
 
    ```
-   python tools/frame_overrun_probe/instrument_main_c.py <projet>/build/src/main.c
+   .venv-build312/Scripts/python.exe tools/frame_overrun_probe/instrument_main_c.py <projet>/build/src/main.c
    cd <projet>/build
    make EXTRA_CFLAGS=-DGBA_DEBUG_BUILD
    ```
@@ -101,7 +101,7 @@ repasser par `VBlankIntrWait()`.
 3. Lancer `mgba-sdl -l 8 <projet>/build/rom.gba > journal.txt`. **Fermer la fenêtre**
    (ne pas tuer le processus) : la sortie est mise en tampon par paquets d'environ 130
    lignes, et un arrêt brutal perd le dernier.
-4. `python tools/frame_overrun_probe/analyze_probe_log.py journal.txt`
+4. `.venv-build312/Scripts/python.exe tools/frame_overrun_probe/analyze_probe_log.py journal.txt`
 
 La mesure à l'horloge murale (lignes par seconde) n'est **pas** fiable : l'émulateur ne
 tourne pas toujours en temps réel, et la sortie arrive par paquets. C'est pour cela que

@@ -1,6 +1,6 @@
 """tools/run_pool_ingame.py : joue le scénario de `Project Test/PoolIngame` dans mGBA et rend son verdict.
 
-    python tools/run_pool_ingame.py [--project PoolIngame|PoolPlaced] [--mgba CHEMIN] [--seconds 15]
+    .venv-build312/Scripts/python.exe tools/run_pool_ingame.py [--project PoolIngame|PoolPlaced] [--mgba CHEMIN] [--seconds 15]
 
 Copie le projet dans un dossier temporaire (le build ne touche jamais le projet source), le construit comme
 l'éditeur, lance `mgba-sdl -l 8` pendant quelques secondes, puis lit les lignes PASS / FAIL que le scénario

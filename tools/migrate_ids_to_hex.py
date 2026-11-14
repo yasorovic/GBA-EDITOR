@@ -4,8 +4,8 @@ Avant : variables et textes portaient un entier de 12 chiffres décimaux, les
 dossiers et les notes un `uuid4().hex` de 32 caractères. Après : tous portent
 12 chiffres hexadécimaux (cf. `editor/core/models/ids.py`).
 
-    python tools/migrate_ids_to_hex.py "Project Test/PongAdvanced" "Project Demo/Platformer"
-    python tools/migrate_ids_to_hex.py --dry-run <projet>
+    .venv-build312/Scripts/python.exe tools/migrate_ids_to_hex.py "Project Test/PongAdvanced" "Project Demo/Platformer"
+    .venv-build312/Scripts/python.exe tools/migrate_ids_to_hex.py --dry-run <projet>
 
 Ce qui est réécrit, dans `<projet>/project/` :
   - `variables.json`            — l'`id` de chaque global et constante ;

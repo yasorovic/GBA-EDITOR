@@ -1,6 +1,6 @@
 """
 Backstage — point d'entrée
-Usage : python main.py
+Usage : .venv-build312/Scripts/python.exe editor/main.py
 """
 
 from ui.common.labels import label

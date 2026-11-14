@@ -20,7 +20,7 @@ def compilateur_hote() -> str | None:
     `CC` l'emporte sur le PATH — c'est la variable conventionnelle, et sous
     Windows elle évite d'avoir à mettre msys2 dans le PATH de la session :
 
-        CC=C:/msys64/ucrt64/bin/gcc.exe python -m pytest tests
+        CC=C:/msys64/ucrt64/bin/gcc.exe .venv-build312/Scripts/python.exe -m pytest tests
     """
     declare = os.environ.get("CC")
     if declare:

@@ -1,6 +1,6 @@
 """Convertit des morceaux hUGETracker (``.uge``) en modules ProTracker (``.mod``) à 4 canaux.
 
-    python tools/convert_uge_to_mod.py <fichier.uge | dossier> [--output DOSSIER]
+    .venv-build312/Scripts/python.exe tools/convert_uge_to_mod.py <fichier.uge | dossier> [--output DOSSIER]
 
 Sans ``--output``, les ``.mod`` sont écrits dans un sous-dossier ``mod`` à côté des sources, qui ne sont
 jamais modifiées. Sert à obtenir des modules réalistes pour essayer l'écran Son et le build audio quand on

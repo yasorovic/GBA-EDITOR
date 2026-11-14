@@ -1,6 +1,6 @@
 """tools/run_perf_bench.py : mesure le coût CPU des fonctions et des patrons de l'API Lua dans mGBA.
 
-    python tools/run_perf_bench.py [--mgba CHEMIN] [--seconds 22] [--output FICHIER.json]
+    .venv-build312/Scripts/python.exe tools/run_perf_bench.py [--mgba CHEMIN] [--seconds 22] [--output FICHIER.json]
 
 Copie `Project Test/PerfBench` dans un dossier temporaire, le construit comme l'éditeur (build debug, le seul qui
 porte le chronomètre `frame us=`), lance `mgba-sdl -l 8`, puis lit le log. Le scénario (`assets/scripts/Bench.lua`) joue des

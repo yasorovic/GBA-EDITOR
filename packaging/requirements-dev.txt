@@ -1,4 +1,4 @@
-# Dépendances de DÉVELOPPEMENT — `pip install -r requirements-dev.txt`.
+# Dépendances de DÉVELOPPEMENT — `.venv-build312/Scripts/python.exe -m pip install -r packaging/requirements-dev.txt`.
 #
 # Séparées de requirements.txt, qui ne liste que ce dont l'éditeur a besoin pour
 # tourner : ce fichier n'entre ni dans le build Nuitka ni dans l'installateur, et
