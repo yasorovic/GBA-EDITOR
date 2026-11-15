@@ -883,6 +883,14 @@ def _offending_text(exc) -> str:
     return getattr(tok, "text", "") or ""
 
 
+def _offending_column(exc) -> Optional[int]:
+    """La colonne du jeton sur lequel antlr a buté (0 au début de la ligne)."""
+    ctx = getattr(exc, "__context__", None)
+    inner = ctx.args[0] if (ctx is not None and getattr(ctx, "args", None)) else None
+    tok = getattr(inner, "offendingToken", None)
+    return getattr(tok, "column", None)
+
+
 def _message_detail(exc) -> tuple[Optional[int], str]:
     """(line, antlr message) read from "line L:C: message" in the exception text."""
     import re
@@ -1002,6 +1010,39 @@ def _offending_line(source: str, reported: int, quoted: str) -> int:
     return reported
 
 
+# Les mots-clés qui n'ouvrent aucune expression : dans une table, après eux,
+# c'est autre chose qu'une virgule qui manque.
+_NO_EXPRESSION = frozenset((
+    "and", "break", "do", "else", "elseif", "end", "for", "goto", "if", "in",
+    "local", "or", "repeat", "return", "then", "until", "while",
+))
+
+
+def _starts_an_entry(token: str) -> bool:
+    """Whether `token` could open one more table entry: what is missing before
+    it is then the comma, not the closing brace."""
+    import re
+    if re.match(r"""^[\d"'\[{(#-]""", token):
+        return True
+    return bool(re.match(r"^[A-Za-z_]\w*$", token)) and token not in _NO_EXPRESSION
+
+
+def _entry_line(source: str, exc, reported: Optional[int]) -> int:
+    """The line of the entry that PRECEDES the token antlr stopped at, the one
+    the comma belongs to: that token's own line when code comes before it there
+    (`{ type = "int" default = 2 }`), the last non-empty line above otherwise
+    (one entry per line)."""
+    lignes = source.splitlines()
+    n = reported or 1
+    if 1 <= n <= len(lignes):
+        colonne = _offending_column(exc)
+        if colonne and lignes[n - 1][:colonne].strip():
+            return n
+    code = _code_lines(source)
+    return next((p for p in range(min(n - 1, len(code)), 0, -1)
+                 if code[p - 1].strip()), n)
+
+
 def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
     """The message of a syntax error, and its line."""
     import re
@@ -1036,6 +1077,24 @@ def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
         else:
             msg = (f"unexpected `{offending}`: it does not start a valid statement here "
                    "(the block expected a statement or its `end`)")
+    elif attendu == "'}'":
+        # antlr n'attend `}` qu'à l'intérieur d'un `{ ... }`. L'accolade n'est
+        # OUBLIÉE que si le jeton fautif est la fin du fichier : la table n'a
+        # alors jamais été fermée. Si ce jeton ouvre une entrée de plus, c'est
+        # la virgule qui la sépare de la précédente qui manque, et la ligne à
+        # corriger est celle de cette entrée précédente, non celle où antlr a
+        # renoncé.
+        offending = _offending_text(exc)
+        if offending in ("", "<EOF>"):
+            msg = "missing `}`: a `{ ... }` table is never closed"
+        elif _starts_an_entry(offending):
+            line = _entry_line(source, exc, line)
+            msg = ("missing `,` after this entry: inside `{ ... }` entries are "
+                   "separated by a comma (the parser stopped at the next "
+                   f"`{offending}`)")
+        else:
+            msg = (f"unexpected `{offending}` inside `{{ ... }}`: an entry, a `,` "
+                   "or the closing `}` was expected here")
     elif attendu:
         msg = f"`{attendu.strip(chr(39))}` expected here"
     elif antlr_msg.startswith("token recognition error"):

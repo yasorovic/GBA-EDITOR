@@ -6,7 +6,11 @@
     `end` oublié que lorsque le jeton fautif est la fin du fichier ;
   - une récursion directe était dite deux fois ;
   - `team == RED` suggérait `local RED = 0` pour une étiquette d'`enum` ;
-  - un type d'export inconnu répondait « not applied at build yet ».
+  - un type d'export inconnu répondait « not applied at build yet » ;
+  - « `}` expected here » répondait à une VIRGULE oubliée entre deux entrées
+    d'une table : antlr attend `}` partout où seule la fermeture pouvait
+    suivre, mais ce n'est l'accolade qui manque que si le jeton fautif est la
+    fin du fichier.
 """
 from __future__ import annotations
 
@@ -120,3 +124,77 @@ def test_les_types_connus_restent_valides():
     for typ, default in (("int", "1"), ("bool", "false"), ("float", "1")):
         assert _errors(f'exports = {{\n  a = {{ type = "{typ}", default = {default} }},\n}}\n'
                        + _in_handler("")) == []
+
+
+# ── La virgule oubliée entre deux entrées d'une table ────────────
+
+VIRGULE_OUBLIEE = """exports = {
+    power = { type = "int", default = 3 }
+    jump  = { type = "int", default = 5 },
+}
+"""
+
+VIRGULE_MEME_LIGNE = """exports = {
+    speed = { type = "int" default = 2 },
+}
+"""
+
+LISTE_SANS_VIRGULE = """local t = {
+    1,
+    2
+    3,
+}
+"""
+
+TABLE_JAMAIS_FERMEE = """local t = {
+    1,
+    2,
+"""
+
+TABLE_FERMEE_PAR_UN_END = """function on_update()
+    local t = { a = 1,
+end
+"""
+
+
+def test_une_virgule_oubliee_dans_exports_nomme_la_virgule():
+    """Le cas signalé : antlr réclame `}` sur la ligne de l'entrée SUIVANTE,
+    alors que c'est la virgule de l'entrée d'avant qui manque. Le message
+    nomme la virgule, et se pose sur l'entrée à corriger."""
+    exc = _syntax_error(VIRGULE_OUBLIEE)
+    assert "missing `,`" in str(exc)
+    assert "expected here" not in str(exc)
+    assert exc.line == 2
+
+
+def test_une_virgule_oubliee_sur_la_meme_ligne_reste_sur_sa_ligne():
+    """Deux entrées sur une seule ligne : la virgule manque là où antlr a
+    buté, pas sur la ligne au-dessus."""
+    exc = _syntax_error(VIRGULE_MEME_LIGNE)
+    assert "missing `,`" in str(exc)
+    assert exc.line == 2
+
+
+def test_une_virgule_oubliee_dans_une_liste_de_valeurs_est_dite_de_meme():
+    exc = _syntax_error(LISTE_SANS_VIRGULE + _in_handler(""))
+    assert "missing `,`" in str(exc)
+    assert exc.line == 3
+
+
+def test_une_accolade_vraiment_oubliee_garde_son_message():
+    """Le jeton fautif est la fin du fichier : là, c'est bien `}` qui manque."""
+    exc = _syntax_error(TABLE_JAMAIS_FERMEE)
+    assert "missing `}`" in str(exc)
+    assert "missing `,`" not in str(exc)
+
+
+def test_un_jeton_impossible_dans_une_table_ne_reclame_pas_de_virgule():
+    """`end` n'ouvre aucune entrée : aucune virgule ne réparerait la table."""
+    exc = _syntax_error(TABLE_FERMEE_PAR_UN_END)
+    assert "unexpected `end`" in str(exc)
+    assert "missing `,`" not in str(exc)
+
+
+def test_une_table_correcte_reste_valide():
+    from scripting.parser import parse
+    parse(ENUM + _in_handler(""))
