@@ -431,7 +431,13 @@ class _ActiveSceneTree(_Tree):
         (self._folder_items.get(folder_id) or self._folder_items[None]).addChild(item)
 
     def _root_actor(self, actor):
-        """Retourne la racine runtime, avec garde contre une parenté invalide."""
+        """Retourne la racine runtime, avec garde contre une parenté invalide.
+
+        SOURCE UNIQUE de la remontée de `Actor.parent` dans cet arbre : le
+        rangement en dossier et le dépôt passent ici. Une parenté cyclique
+        (un acteur son propre parent, ou deux acteurs qui se désignent) est
+        une scène que le Build refuse, mais elle s'écrit : la relire sans
+        `seen` gelait l'éditeur dans une boucle infinie."""
         actors = {a.name: a for a in self._scene.actors}
         seen = set()
         while getattr(actor, "parent", None) in actors and actor.name not in seen:
@@ -700,9 +706,7 @@ class _ActiveSceneTree(_Tree):
                 dtype in (T_ACTOR, T_CAMERA, T_AREA, T_UI_LAYOUT):
             obj = dragged.data(0, _ROLE_OBJ)
             if dtype == T_ACTOR and getattr(obj, "parent", None):
-                actors = {a.name: a for a in self._scene.actors}
-                while getattr(obj, "parent", None) in actors:
-                    obj = actors[obj.parent]
+                obj = self._root_actor(obj)
             member = _content_member(dtype, obj)
             state = self._panel._content_state
             if state and member:
@@ -1029,10 +1033,7 @@ class _ActiveSceneTree(_Tree):
     def _folder_member_for(self, node_type: str, obj) -> str | None:
         if node_type != T_ACTOR or not getattr(obj, "parent", None):
             return _content_member(node_type, obj)
-        actors = {a.name: a for a in self._scene.actors}
-        while getattr(obj, "parent", None) in actors:
-            obj = actors[obj.parent]
-        return _content_member(T_ACTOR, obj)
+        return _content_member(T_ACTOR, self._root_actor(obj))
 
     def _add_folder_actions(self, menu: QMenu, node_type: str, obj) -> None:
         """Ajoute un déplacement accessible sans glisser-déposer."""
