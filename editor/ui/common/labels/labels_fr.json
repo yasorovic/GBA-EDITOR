@@ -2471,6 +2471,8 @@
     "pick.color_index_title": { "text": "Couleur de palette {_index}" },
     "valfield.number_int": { "text": "Valeur entière" },
     "valfield.number_float": { "text": "Valeur décimale" },
+    "valfield.unit_title": { "text": "Unité de saisie" },
+    "valfield.unit_tip": { "text": "Le script lit des {base} ; une valeur saisie en {unit} est multipliée par {factor} au build." },
     "valfield.reference_title": { "text": "Valeur référencée" },
     "valfield.reference_tip": { "text": "Lit {symbol} pendant l’exécution du projet." },
     "valfield.var_button": { "text": "var" },

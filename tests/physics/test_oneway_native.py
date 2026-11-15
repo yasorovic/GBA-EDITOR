@@ -31,7 +31,7 @@ static u8 carte[10 * 8];
 static Actor mk(int x, int y, int vx, int vy){
     Actor a = (Actor){0};
     a.x = x << 8; a.y = y << 8; a.vx = vx; a.vy = vy;
-    a.collision.last_x = x;
+    a.collision.last_x = x; a.collision.last_y = y;
     a.collision.box_count = 1;
     a.collision.boxes[0] = (CollisionShape){-7, 11, 17, 4, 1, 1, 0, 0};
     return a;

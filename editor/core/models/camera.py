@@ -85,8 +85,10 @@ class Camera(Resource):
     # n'en possède qu'une). Un nom qui n'y correspond à aucun acteur laisse la
     # caméra immobile, et le validateur le dit.
     follow_target: str = ""
-    # Zone morte : la caméra ne bouge que lorsque la cible s'éloigne de plus de
-    # ça du bord de l'écran. 0 = recentrage permanent.
+    # Zone morte : la bande que le CADRE du sprite suivi n'entre jamais ; la
+    # caméra ne bouge que lorsque la cible l'atteint. 0 = recentrage permanent.
+    # C'est le cadre, pas la position de l'acteur (son coin haut-gauche) : la
+    # marge se lit alors pareil des quatre côtés (cf. `camera_follow_lines`).
     margin_x: Raw = 40
     margin_y: Raw = 20
     # Bornes du monde en pixels, appliquées à l'activation ; None = axe

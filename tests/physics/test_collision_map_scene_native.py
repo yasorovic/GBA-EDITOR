@@ -62,7 +62,7 @@ static void joue(const char* nom, int x, int y, int vx, int vy, int cx, int cy){
     appels_carte = appels_ecrase = 0; g_alive_bits[0] = 0;
     Actor* a = &g_actors[s];
     a->x = x << 8; a->y = y << 8; a->vx = vx; a->vy = vy;
-    a->collision.last_x = x;
+    a->collision.last_x = x; a->collision.last_y = y;
     a->collision.box_count = 1;
     a->collision.boxes[0] = (CollisionShape){-7, 11, 17, 4, 1, 1, 0, 0};
     a->active = 1; a->alive = 1; a->type_id = @TYPE@;

@@ -298,6 +298,7 @@ class GBAScene(QGraphicsScene):
         fh = camera.px('frame_h', project) if camera else GBA_H
         self._camera = CameraItem(self._canvas_w, self._canvas_h, cam_x, cam_y,
                                   frame_w=fw, frame_h=fh, camera=camera)
+        self._camera.refresh_follow_margins(project)
         self.addItem(self._camera)
         for it in self._sprite_items:
             self.sync_sprite_space(it)
@@ -337,6 +338,7 @@ class GBAScene(QGraphicsScene):
             it = CameraItem(self._canvas_w, self._canvas_h, cam.px('x', project), cam.px('y', project),
                             frame_w=cam.px('frame_w', project),
                             frame_h=cam.px('frame_h', project), camera=cam)
+            it.refresh_follow_margins(project)
             self.addItem(it)
             self._extra_cameras.append(it)
 

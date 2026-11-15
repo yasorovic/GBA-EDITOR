@@ -414,8 +414,11 @@ class CameraInspector(QWidget):
         if self._blocking:
             return
         cam = self._camera
-        if cam is not None:
-            self._edit([(cam, "mode", _MODES[idx][0])], "Camera mode")
+        if cam is not None and self._edit([(cam, "mode", _MODES[idx][0])],
+                                          "Camera mode"):
+            # Le passepartout de la zone morte n'existe qu'en mode « suivre un
+            # acteur » : le canvas doit le poser ou le retirer.
+            self.camera_moved.emit(cam)
 
     def _on_follow_changed(self, text: str):
         if self._blocking:
@@ -430,10 +433,13 @@ class CameraInspector(QWidget):
         if self._blocking:
             return
         cam = self._camera
-        if cam is not None:
-            self._edit([(cam, "margin_x", self._margin_x.raw()),
-                        (cam, "margin_y", self._margin_y.raw())],
-                       "Camera margins", refresh=False)
+        if cam is not None and self._edit(
+                [(cam, "margin_x", self._margin_x.raw()),
+                 (cam, "margin_y", self._margin_y.raw())],
+                "Camera margins", refresh=False):
+            # Les marges SE VOIENT sur le canvas (passepartout de la zone
+            # morte) : même signal que la position et le frame.
+            self.camera_moved.emit(cam)
 
     def _on_bounds_changed(self):
         if self._blocking:

@@ -68,6 +68,11 @@ class LuaLocal:
     # d'instance (lua_compiler._export_inits) reste sur le MÊME arbre que le
     # codegen : pas un second parseur (cf. chantier « Les exports de script »).
     export_values: list = field(default_factory=list)
+    # Unité déclarée d'un export entier (`unit = "px/f"`) : ce que la valeur MESURE.
+    # Le build multiplie par son facteur vers l'unité du matériel, une seule fois
+    # (cf. exports_parser.EXPORT_UNITS). "" quand rien n'est déclaré : la valeur est
+    # alors déjà dans l'unité de base, comme avant.
+    export_unit: str = ""
 
 
 # ── Statements ────────────────────────────────────────────────────
@@ -357,6 +362,7 @@ class _Converter:
                         # doit pas devenir un `int`), cf. codegen._local_decl.
                         default_val = None
                         decl_type   = None
+                        decl_unit   = ""
                         enum_values: list = []
                         if type(field_node.value).__name__ == "Table":
                             for sub in field_node.value.fields:
@@ -367,6 +373,13 @@ class _Converter:
                                     typ_expr = self._expr(sub.value)
                                     if isinstance(typ_expr, ExprString):
                                         decl_type = typ_expr.value
+                                elif sub_key == "unit" and sub.value is not None:
+                                    # Captée ICI comme le reste de la déclaration : le build
+                                    # convertit sur le MÊME arbre que le codegen, jamais par
+                                    # un second parseur (cf. `export_values` ci-dessus).
+                                    unit_expr = self._expr(sub.value)
+                                    if isinstance(unit_expr, ExprString):
+                                        decl_unit = unit_expr.value
                                 elif sub_key == "values" and \
                                         type(sub.value).__name__ == "Table":
                                     # Les étiquettes d'un enum, dans l'ordre : leur
@@ -377,7 +390,8 @@ class _Converter:
                                             enum_values.append(lbl.value)
                         locals_.append(LuaLocal(name=key, value=default_val,
                                                 export_type=decl_type,
-                                                export_values=enum_values))
+                                                export_values=enum_values,
+                                                export_unit=decl_unit))
             else:
                 stray.append((t, self._line(stmt)))
 

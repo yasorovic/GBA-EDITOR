@@ -373,9 +373,12 @@ class Checker:
     def _check_export_values(self, script: LuaScript) -> None:
         """Ce qu'un export déclare doit tenir debout : un `enum` a des étiquettes
         distinctes et son défaut en fait partie ; un `int` n'a pas un texte pour
-        défaut. Avant, tout passait, et le C comparait un index arbitraire : ou
-        une chaîne, pour un `enum` sans `values`."""
+        défaut ; une unité existe et porte sur un entier. Avant, tout passait, et le
+        C comparait un index arbitraire : ou une chaîne, pour un `enum` sans
+        `values`."""
         for loc in script.locals:
+            if loc.export_unit:
+                self._check_export_unit(loc)
             if loc.export_type == "enum":
                 labels = list(loc.export_values or [])
                 if not labels:
@@ -401,6 +404,25 @@ class Checker:
                     "error",
                     f"export \"{loc.name}\": a '{loc.export_type}' takes a number as default, "
                     f"not the text \"{loc.value.value}\"."))
+
+    def _check_export_unit(self, loc) -> None:
+        """`unit` dit ce que l'entier MESURE : elle doit exister, et porter sur un
+        entier. Une unité inconnue était ignorée en silence, et l'auteur ne voyait
+        ni le champ promis dans l'inspecteur, ni la conversion au build."""
+        from .exports_parser import EXPORT_UNITS, UNIT_TYPES, normalize_unit
+        if not normalize_unit(loc.export_unit):
+            import difflib
+            close = difflib.get_close_matches(loc.export_unit, sorted(EXPORT_UNITS), n=1)
+            hint = f" Did you mean '{close[0]}'?" if close else ""
+            self.errors.append(CheckError(
+                "error",
+                f"export \"{loc.name}\": unknown unit '{loc.export_unit}'.{hint} The units are: "
+                f"{', '.join(sorted(EXPORT_UNITS))}."))
+        elif loc.export_type not in UNIT_TYPES:
+            self.errors.append(CheckError(
+                "error",
+                f"export \"{loc.name}\": a unit only applies to an "
+                f"{' or '.join(sorted(UNIT_TYPES))} export, not to a '{loc.export_type}'."))
 
     def _check_duplicate_functions(self, script: LuaScript) -> None:
         """Deux `function on_update()` : le C n'en émettait qu'un, et le second

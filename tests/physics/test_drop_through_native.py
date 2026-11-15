@@ -62,7 +62,7 @@ int main(void){
     g_ow_rows = rangees; g_ow_cols = colonnes; g_ow_any = 0x1E;
     for(int vx = 0; vx <= 512; vx += 512){
         g_actors[0] = (Actor){0}; Actor* a = &g_actors[0];
-        a->active = 1; a->alive = 1; a->slot_index = 0; a->x = 16 << 8; a->y = (32 - 15) << 8; a->collision.last_x = 16;
+        a->active = 1; a->alive = 1; a->slot_index = 0; a->x = 16 << 8; a->y = (32 - 15) << 8; a->collision.last_x = 16; a->collision.last_y = 32 - 15;
         a->collision.box_count = 1; a->collision.boxes[0] = (CollisionShape){-7, 11, 17, 4, 1, 1, 0, 0};
         floor_store[0] = 0; drop_store[0] = 0;
         for(int f = 0; f < 6; f++) frame(a, 0, 0);          /* se pose sur la face haute */

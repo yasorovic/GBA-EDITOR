@@ -219,3 +219,71 @@ def test_area_sans_script_ajout_annulation_et_retablissement(tmp_path, qapp, mon
         get_history().clear()
         panel.deleteLater()
         qapp.processEvents()
+
+
+# ── Un export à unité : deux lectures, un seul entier ─────────────
+
+UNIT_EXPORTS = '''exports = {
+    speed = { type = "int", unit = "px/f", default = 2, min = 0, max = 8 },
+}'''
+
+
+def test_script_export_a_unite_saisie_dans_les_deux_unites(panel, tmp_path):
+    from ui.common.value_field import UnitModeField
+    project = Project(tmp_path / "game")
+    rel, path = _script(project, UNIT_EXPORTS)
+    comp = ScriptComponent(script=rel)
+    panel.load(_owner(panel, name="Hero", components=[comp]), project, None)
+    field = panel._export_rows["speed"].findChild(UnitModeField)
+
+    # Sans valeur d'instance : le défaut du script, dans l'unité qu'il déclare.
+    assert field.findChild(QSpinBox).value() == 2
+    assert field._reading.text() == "= 512 Q8"
+    assert comp.exports_values == {}
+
+    # Une saisie dans l'unité déclarée garde son unité dans la scène.
+    field.findChild(QSpinBox).setValue(3)
+    assert comp.exports_values == {"speed": {"unit": "px/f", "n": 3}}
+    assert field._reading.text() == "= 768 Q8"
+
+    # Le mode Q8 donne la valeur fine, et s'écrit en entier nu.
+    field._set_mode("base")
+    assert comp.exports_values == {"speed": 768}
+    field.findChild(QSpinBox).setValue(279)
+    assert comp.exports_values == {"speed": 279}
+    assert field._reading.text() == "= 1.09 px/f"
+
+
+def test_script_export_a_unite_relit_un_entier_nu_en_unite_de_base(panel, tmp_path):
+    """La forme historique d'`exports_values` : un projet d'avant la clé `unit` garde
+    sa valeur, et le champ s'ouvre dans l'unité du matériel pour le dire."""
+    from ui.common.value_field import UnitModeField
+    project = Project(tmp_path / "game")
+    rel, path = _script(project, UNIT_EXPORTS)
+    comp = ScriptComponent(script=rel, exports_values={"speed": 279})
+    panel.load(_owner(panel, name="Hero", components=[comp]), project, None)
+    field = panel._export_rows["speed"].findChild(UnitModeField)
+    assert field.findChild(QSpinBox).value() == 279
+    assert field._reading.text() == "= 1.09 px/f"
+
+
+def test_script_export_a_unite_borne_a_son_slider(panel, tmp_path):
+    """Bornée, la ligne garde le slider d'un entier ordinaire, et sa plage suit le
+    mode : 0 à 8 px/f, ou 0 à 2048 en Q8."""
+    from ui.common.value_field import UnitModeField
+    project = Project(tmp_path / "game")
+    rel, path = _script(project, UNIT_EXPORTS)
+    comp = ScriptComponent(script=rel)
+    panel.load(_owner(panel, name="Hero", components=[comp]), project, None)
+    field = panel._export_rows["speed"].findChild(UnitModeField)
+    slider = field.findChild(QSlider)
+    assert (slider.minimum(), slider.maximum(), slider.value()) == (0, 8, 2)
+
+    slider.setValue(5)
+    assert comp.exports_values == {"speed": {"unit": "px/f", "n": 5}}
+    assert field._reading.text() == "= 1280 Q8"
+
+    field._set_mode("base")
+    assert (slider.minimum(), slider.maximum(), slider.value()) == (0, 2048, 1280)
+    slider.setValue(279)
+    assert comp.exports_values == {"speed": 279}

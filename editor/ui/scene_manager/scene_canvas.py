@@ -1471,14 +1471,15 @@ class SceneEditor(QWidget):
 
     def move_camera_item(self, camera):
         """Repositionne/redimensionne l'item Qt d'une caméra sans recréer la
-        scène — appelé quand la position ou le frame ont été édités dans
-        l'inspecteur (cf. CameraInspector.camera_moved), symétrique de
-        `move_actor_item`."""
+        scène — appelé quand la position, le frame, le mode ou les marges du
+        suivi ont été édités dans l'inspecteur (cf.
+        CameraInspector.camera_moved), symétrique de `move_actor_item`."""
         for item in self._gba_scene.camera_items():
             if item.camera is camera:
                 item.setPos(camera.px('x', self._project), camera.px('y', self._project))
                 item.set_frame_size(camera.px('frame_w', self._project),
                                     camera.px('frame_h', self._project))
+                item.refresh_follow_margins(self._project)
                 return
 
     # ── Caméras : (re)construction et sauvegarde de position ───────

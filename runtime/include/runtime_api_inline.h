@@ -320,6 +320,11 @@ static inline void slot_local_from_world(const Actor* s) {
 }
 static inline void actor_set_position(Actor* s, Vec2 p) {
     s->x=p.x<<8; s->y=p.y<<8; s->physics_sleep=0;
+    /* Un téléport n'est pas un déplacement : l'acteur est ICI, et la frame
+       précédente aussi. Sans cette remise à jour, la résolution de la frame
+       suivante chercherait murs et sol entre l'ancienne position et la
+       nouvelle. */
+    s->collision.last_x = p.x; s->collision.last_y = p.y;
     slot_local_from_world(s);
 }
 static inline Vec2 actor_get_position(const Actor* s)   { return (Vec2){ s->x>>8, s->y>>8 }; }
@@ -836,6 +841,11 @@ static inline void __attribute__((unused, noinline)) actor_init_slot(
     actor->gen = generation;
     actor->slot_index = slot;
     actor->oam_entry = entry;
+    /* La frame précédente d'un acteur qui naît, c'est l'endroit où il naît :
+       sans ça, `resolve_actor_tiles` résoudrait sa première frame contre une
+       position nulle (le haut-gauche de la carte). */
+    actor->collision.last_x = actor->x >> 8;
+    actor->collision.last_y = actor->y >> 8;
     actor_slot_tables_clear(slot);
     g_slot_link[slot].parent = -1; g_slot_link[slot].depth = 0;   /* racine, jusqu'à `actor_link_slot` */
     if (entry >= 0) g_oam_entries[entry] = *display;

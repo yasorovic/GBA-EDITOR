@@ -267,6 +267,35 @@ end
 - **Le nom d'un export ne peut pas être** celui d'un champ d'acteur (`position`, `velocity`…), d'une variable globale, ni d'un mot de l'API (`input`, `wait`…) — le build le refuse.
 - **Une variable seulement LUE ne coûte rien** (acteur posé) : le build la fond dans le code. Seule une variable réécrite occupe de la mémoire. Régler `speed` sur dix gardes qui ne font que la lire n'ajoute aucun octet.
 
+#### Déclarer l'unité d'un entier (`unit`)
+
+Un entier qui mesure une vitesse, une distance ou une durée peut dire **ce qu'il mesure**. L'inspecteur le règle alors dans cette unité, affiche à côté ce que la valeur vaut dans l'unité du matériel, et le build applique le facteur une seule fois. Le script, lui, lit toujours l'unité du matériel : la multiplication ne s'écrit plus dans le code.
+
+```lua
+exports = {
+    move_speed = { type = "int", unit = "px/f", default = 2, min = 0, max = 8 },
+}
+
+function on_update()
+    local body = self:physics_body()
+    body.velocity = vec2(move_speed, body.velocity.y)   -- déjà en Q8 : pas de « * 256 »
+    body:apply_velocity()
+end
+```
+
+| `unit` | ce que la valeur mesure | unité du matériel |
+| --- | --- | --- |
+| `px` | une distance | le pixel |
+| `tile` | une distance | 8 pixels |
+| `px/f` | une vitesse | le Q8 (256 = 1 pixel par frame) |
+| `px/f²` | une accélération | le Q8 |
+| `s` | une durée | la frame (60 par seconde) |
+
+- **`default`, `min` et `max` sont dans l'unité déclarée** : une vitesse de 2 px/f atteint le jeu à 512.
+- **Le bouton de mode du champ** passe de l'unité déclarée à celle du matériel. La valeur ne change pas, seule l'unité de saisie change : une valeur intermédiaire (279, soit 1,09 px/f) se pose dans l'unité du matériel, qui la montre traduite.
+- **`unit` ne s'applique qu'à un `int`**, et `px/f2` est accepté à la place de `px/f²` pour un clavier qui n'a pas le caractère.
+- Une valeur réglée avant la déclaration de l'unité, ou saisie dans l'unité du matériel, reste lue telle quelle : elle est déjà dans la bonne unité.
+
 #### Utiliser un export `actor_ref`
 
 Dans le script qui le déclare, `Rock` se lit comme une référence d'acteur. On peut appeler `Rock:hide()`, lire `Rock.position` ou stocker la référence dans une variable locale avec `local r = Rock` dans un événement. Un champ vide (`default = ""`) ou un acteur détruit donne `nil`. Le test `if Rock then` permet d'agir seulement si l'acteur existe.

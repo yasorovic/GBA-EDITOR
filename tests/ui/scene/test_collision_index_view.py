@@ -1,9 +1,13 @@
 """La vue « index de tuile » : l'index de chaque tuile de collision non vide s'écrit sur l'overlay, et la carte reste visible."""
 from __future__ import annotations
 
-from PyQt6.QtGui import QImage, QPainter
+from PyQt6.QtCore import QRectF
+from PyQt6.QtGui import QColor, QImage, QPainter
+from PyQt6.QtWidgets import QStyleOptionGraphicsItem
 
-from core.models.collision_tiles import TILE_ONEWAY_UP, TILE_SOLID
+from core.models.collision_tiles import (
+    TILE_EMPTY, TILE_ONEWAY_UP, TILE_SLOPE_L_HI, TILE_SLOPE_L_LO, TILE_SOLID,
+)
 from ui.scene_manager.canvas.canvas_items import CollisionOverlay
 from ui.scene_manager.canvas.canvas_scene import GBAScene
 
@@ -28,6 +32,38 @@ def test_les_indices_ajoutent_du_texte_sur_les_tuiles_non_vides(qapp):
     overlay.set_show_indices(True)
     avec = _rendu(scene)
     assert sans != avec
+
+
+def test_les_tuiles_voisines_forment_des_masses_continues_sur_un_voile_sombre(qapp):
+    overlay = CollisionOverlay()
+    overlay.load([[TILE_SOLID, TILE_SOLID]])
+    image = QImage(16, 8, QImage.Format.Format_ARGB32)
+    image.fill(QColor("white"))
+    painter = QPainter(image)
+    option = QStyleOptionGraphicsItem()
+    option.exposedRect = QRectF(0, 0, 16, 8)
+    overlay.paint(painter, option)
+    painter.end()
+
+    # Pas de bordure au joint x=7/8, mais un contour sur le bord extérieur.
+    assert image.pixelColor(7, 4) == image.pixelColor(8, 4)
+    assert image.pixelColor(0, 4) != image.pixelColor(7, 4)
+    # Même fusion pour deux index qui composent une pente douce continue.
+    overlay.load([[TILE_SLOPE_L_LO, TILE_SLOPE_L_HI]])
+    slope = QImage(16, 8, QImage.Format.Format_ARGB32)
+    slope.fill(QColor("white"))
+    painter = QPainter(slope)
+    overlay.paint(painter, option)
+    painter.end()
+    assert slope.pixelColor(7, 6) == slope.pixelColor(8, 6)
+    # Une zone vide reste assombrie par le mode collision.
+    overlay.load([[TILE_EMPTY]])
+    empty = QImage(8, 8, QImage.Format.Format_ARGB32)
+    empty.fill(QColor("white"))
+    painter = QPainter(empty)
+    overlay.paint(painter, option)
+    painter.end()
+    assert empty.pixelColor(4, 4).red() < 200
 
 
 def test_la_vue_index_rend_la_carte_visible_puis_la_rend_a_son_etat(qapp):

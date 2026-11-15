@@ -72,7 +72,16 @@ def camera_follow_lines(p, scene, scene_actors: list, actor_offset: int) -> list
     Un `switch` plutôt qu'une table de cibles lue au runtime : la cible et la
     zone morte deviennent des constantes. Un seul cas par caméra DE CETTE
     SCÈNE (une caméra n'en possède qu'une, cf. `camera_target_index`) ; une
-    scène où aucune caméra n'a de cible n'émet rien du tout."""
+    scène où aucune caméra n'a de cible n'émet rien du tout.
+
+    La marge borne le CADRE du sprite suivi, pas la position de l'acteur : la
+    position d'un acteur est le coin haut-gauche de son cadre, borner ce point
+    laisserait le personnage entrer dans la bande de droite et du bas de toute
+    sa largeur et de toute sa hauteur. `camera_follow` ne sait borner qu'un
+    point : on lui donne donc le CENTRE du cadre et la marge grossie d'une
+    demi-largeur — c'est exactement la même chose, et sans toucher à la
+    fonction que `camera.follow` expose aux scripts (où la cible est un vec2
+    quelconque, qui n'a pas de cadre). Les deux constantes sont cuites ici."""
     index_of = {id(c): i for i, c in enumerate(project_cameras(p)) if c is not None}
     cases: list[str] = []
     for cam in scene.cameras:
@@ -80,14 +89,23 @@ def camera_follow_lines(p, scene, scene_actors: list, actor_offset: int) -> list
         if t < 0:
             continue
         i = index_of[id(cam)]
+        # Demi-cadre de la cible — son sprite AFFICHÉ (`scene_actors`), le même
+        # que le writer OAM dessine. Un acteur sans sprite (contrôleur,
+        # marqueur) n'a pas de cadre : sa position EST le point suivi.
+        sprite = scene_actors[t - actor_offset][1]
+        hw = int(getattr(sprite, "frame_w", 0) or 0) // 2
+        hh = int(getattr(sprite, "frame_h", 0) or 0) // 2
         # Axe désactivé (scroll_h/scroll_v) : la cible sur cet axe devient
-        # cam_x/cam_y lui-même → écart nul → camera_follow ne le bouge pas.
-        # cam_x/cam_y restent en pixels.
-        tx = f"(g_actors[{t}].x>>8)" if scene.scroll_h else "cam_x"
-        ty = f"(g_actors[{t}].y>>8)" if scene.scroll_v else "cam_y"
+        # cam_x/cam_y lui-même, AVEC une marge nulle — sans ça l'écart (0)
+        # serait sous la marge et `camera_follow` reculerait la caméra d'une
+        # marge par frame. cam_x/cam_y restent en pixels.
+        tx = f"((g_actors[{t}].x>>8)+{hw})" if scene.scroll_h else "cam_x"
+        ty = f"((g_actors[{t}].y>>8)+{hh})" if scene.scroll_v else "cam_y"
+        mx = f"g_cam_margin_x+{hw}" if scene.scroll_h else "0"
+        my = f"g_cam_margin_y+{hh}" if scene.scroll_v else "0"
         cases.append(f"        case {i}: camera_follow((Vec2){{{tx}, {ty}}}, "
-                     f"g_cam_margin_x, g_cam_margin_y); break;"
-                     f"   /* {cam.name} → {cam.follow_target} */")
+                     f"{mx}, {my}); break;"
+                     f"   /* {cam.name} → {cam.follow_target}, cadre {hw * 2}×{hh * 2} */")
     if not cases:
         return []
     return ["    switch(g_cam_active){"] + cases + ["        default: break;", "    }"]

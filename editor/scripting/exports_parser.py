@@ -14,10 +14,16 @@ Convention dans le .lua :
         sfx     = { type = "sfx_ref",   default = "",   label = "Sound" },
         next    = { type = "scene_ref", default = "",   label = "Next Scene" },
         target  = { type = "actor_ref", default = "",   label = "Target" },
+        jump    = { type = "int", unit = "px/f", default = 4, label = "Jump", min = 0, max = 8 },
     }
 
+`unit` (entiers seulement) dit ce que la valeur mesure : le champ se saisit dans
+cette unité, le build multiplie vers l'unité du matériel, et le script continue de
+lire l'unité de base (`-jump` vaut -1024). Cf. `EXPORT_UNITS` plus bas ; `default`,
+`min` et `max` sont alors dans l'unité déclarée.
+
 Retourne une liste ordonnée de dicts :
-    { name, type, default, label, min, max, values }
+    { name, type, default, label, min, max, values, unit }
 """
 from __future__ import annotations
 import re
@@ -34,6 +40,70 @@ KNOWN_TYPES = {
     "enum",
     "actor_ref", "scene_ref", "sfx_ref",
 }
+
+
+# ── Unités déclarables (clé `unit`) ────────────────────────────────
+#
+# Une unité ne convertit rien par elle-même : elle DIT ce que l'entier mesure.
+# L'éditeur en tire le facteur vers l'unité du MATÉRIEL (l'unité de base), montre
+# la lecture dans l'autre unité, et le build multiplie une seule fois
+# (`lua_compiler._export_inits`). Le script, lui, lit toujours l'unité de base :
+# `move_dir * move_speed`, jamais `* 256`.
+#
+# L'éditeur ne manipule que des entiers : une unité ne sert pas à saisir une
+# fraction, elle sert à saisir le même entier dans l'unité qui se lit. Un auteur
+# qui veut la valeur fine la pose dans l'unité de base, en la voyant traduite.
+#
+#   unité déclarée -> (facteur vers l'unité de base, nom de l'unité de base)
+EXPORT_UNITS: dict[str, tuple[int, str]] = {
+    "px":    (1,   "px"),    # une distance : aucune conversion, l'unité se lit seulement
+    "tile":  (8,   "px"),
+    "px/f":  (256, "Q8"),    # une vitesse : 256 = 1 pixel par frame
+    "px/f²": (256, "Q8"),    # une accélération : même échelle Q8
+    "s":     (60,  "f"),     # une durée : le tick du matériel est la frame
+}
+
+# Deux formes lues, une seule écrite (même règle que `core/models/field_value.py`) :
+# `px/f2` s'écrit au clavier sans peine, `px/f²` est ce que le fichier garde.
+_UNIT_ALIASES = {"px/f2": "px/f²"}
+
+# Les types qui acceptent une unité : un entier, et rien d'autre. Une unité sur une
+# string ou un enum ne voudrait rien dire ; sur un vec2, elle attend que le besoin
+# existe (cf. la fiche « Déclarer l'unité d'un export de script »).
+UNIT_TYPES = frozenset({"int"})
+
+
+def normalize_unit(unit: Any) -> str:
+    """L'unité canonique d'une déclaration, ou "" si elle est absente ou inconnue."""
+    u = str(unit or "").strip()
+    u = _UNIT_ALIASES.get(u, u)
+    return u if u in EXPORT_UNITS else ""
+
+
+def unit_factor(unit: Any) -> int:
+    """Combien d'unités de base vaut une unité de l'auteur (1 si elle est inconnue)."""
+    return EXPORT_UNITS.get(normalize_unit(unit), (1, ""))[0]
+
+
+def unit_base(unit: Any) -> str:
+    """Le nom de l'unité du matériel derrière une unité déclarée ("" si inconnue)."""
+    return EXPORT_UNITS.get(normalize_unit(unit), (1, ""))[1]
+
+
+def base_value(raw: Any, unit: Any) -> int:
+    """L'entier dans l'unité de BASE, quelle que soit la forme stockée.
+
+    Deux formes lues : un entier nu est déjà dans l'unité de base (c'est la forme
+    historique, et celle que le bouton de mode écrit quand l'auteur saisit en Q8),
+    `{"unit": u, "n": n}` est une saisie dans l'unité `u`. C'est la forme STOCKÉE
+    qui dit son unité, pas la déclaration : un script qui change d'unité ne doit
+    pas réinterpréter en silence ce qu'une scène garde."""
+    if isinstance(raw, dict):
+        return int(raw.get("n", 0)) * unit_factor(raw.get("unit") or unit)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
 
 
 def parse_exports(lua_path: Path) -> list[dict]:
@@ -114,12 +184,20 @@ def _parse_entry(entry: str) -> dict | None:
         "min":     None,
         "max":     None,
         "values":  [],
+        "unit":    "",
     }
 
     # type
     t = re.search(r'\btype\s*=\s*"(\w+)"', inner)
     if t and t.group(1) in KNOWN_TYPES:
         var["type"] = t.group(1)
+
+    # unit : ce que l'entier mesure. Une unité inconnue est ignorée ici (le champ
+    # reste un entier nu) ; c'est le checker qui la dit à l'auteur, avec le reste
+    # des erreurs de son script.
+    u = re.search(r'\bunit\s*=\s*"([^"]*)"', inner)
+    if u:
+        var["unit"] = normalize_unit(u.group(1))
 
     # label
     lb = re.search(r'\blabel\s*=\s*"([^"]*)"', inner)
@@ -312,8 +390,10 @@ def _format_entry(name: str, var: dict) -> str:
     default = var.get("default")
     if default is None:
         default = default_value(typ)
-    parts = [
-        f'type = "{typ}"',
+    parts = [f'type = "{typ}"']
+    if normalize_unit(var.get("unit")):
+        parts.append(f'unit = "{normalize_unit(var["unit"])}"')
+    parts += [
         f'default = {_lua_literal(default, typ)}',
         f'label = "{var.get("label") or name}"',
     ]

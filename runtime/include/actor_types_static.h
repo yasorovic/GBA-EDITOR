@@ -290,8 +290,19 @@ typedef struct Actor {
                         s'en déduit, quelle que soit la façon dont le script
                         bouge l'acteur (vélocité, move(), move_to(),
                         set_position()) — c'est lui qui donne la distance de
-                        collage en descente, sans réglage à exposer. */
+                        collage en descente, sans réglage à exposer ;
+             last_y   : ordonnée à la fin de la frame précédente, même unité et
+                        même raison. La passe X se résout à CETTE hauteur (un
+                        acteur qui vient d'atterrir a déjà les pieds dans le sol,
+                        qui passerait pour un mur). Elle était déduite de la
+                        vitesse (`y - vy`), ce qui donnait un pixel de trop ou de
+                        moins : la gravité est ajoutée à `vy` APRÈS le
+                        déplacement, et la fraction sous-pixel accumulée décide
+                        de l'arrondi. Sur une pente à 45°, ce pixel est la tuile
+                        pleine sous la pente, et l'acteur s'y bloquait dès qu'une
+                        chute avait laissé une fraction. */
         s16 last_x;
+        s16 last_y;
         /* Reste de la correction de vitesse en pente, en 1/256 de pixel. Sans ce
            report, un pas de 2 px sur une pente à 45° tomberait toujours sur 1 px
            (troncature) et le personnage ramperait au lieu d'aller 1,41 fois

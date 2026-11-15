@@ -1436,6 +1436,13 @@ class CodeGen:
             # résolveur remplit désormais export_inits pour tout export câblé.)
             if isinstance(loc.value, ExprString):
                 return c_type, none, f"value '{loc.value.value or 'empty'}' not resolved at build"
+            # Un défaut à `unit` est écrit dans l'unité déclarée : il porte le même
+            # facteur que par `export_inits` (lua_compiler._unit_scaled), sinon ce
+            # repli émettrait 4 là où l'éditeur montre 4 px/f, c'est-à-dire 1024.
+            if loc.export_unit and isinstance(loc.value, ExprNumber):
+                from .exports_parser import UNIT_TYPES, unit_factor
+                if typ in UNIT_TYPES:
+                    return c_type, str(int(loc.value.value) * unit_factor(loc.export_unit)), ""
             # Les littéraux flottants sont déjà tronqués par le parser
             # (ExprNumber(int(...)) : le moteur n'a pas de flottants).
             return c_type, init, ""

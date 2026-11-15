@@ -488,3 +488,94 @@ def test_le_build_refuse_et_cible_le_champ_de_linspecteur():
     # Le clic mène au champ de l'export dans l'inspecteur de l'Area, pas à la ligne du script.
     assert (msg.target.kind, msg.target.scene, msg.target.name, msg.target.export) == (
         "script_export", "Scene_02", "Trigger", "rock")
+
+
+# ── L'unité déclarée d'un export entier (`unit = "px/f"`) ─────────
+# L'éditeur ne manipule que des entiers : l'unité ne sert pas à saisir une
+# fraction, elle dit ce que l'entier mesure. Le facteur s'applique une seule fois,
+# au build. Un nombre se lit dans l'unité écrite à côté de lui ; sans unité écrite,
+# il est déjà dans celle du matériel.
+
+_SRC_UNIT = (
+    "exports = {\n"
+    '    speed = { type = "int", unit = "px/f", default = 2, min = 0, max = 8 },\n'
+    '    jump  = { type = "int", unit = "px/f", default = 4, min = 0, max = 8 },\n'
+    "}\n"
+    "function on_update()\n"
+    "    speed = speed + 1\n"
+    "end\n"
+)
+
+
+def _unit_inits(values: dict) -> dict:
+    from scripting.parser import parse
+    from codegen.runtime_codegen.lua_compiler import _export_inits
+    comp = SimpleNamespace(exports_values=values)
+    actor = SimpleNamespace(get_component=lambda k: comp if k == "script" else None)
+    return _export_inits(actor, parse(_SRC_UNIT), _int_resolver())
+
+
+def test_unite_le_defaut_du_script_est_dans_lunite_declaree():
+    # `default = 2` avec unit = "px/f" : 2 pixels par frame, donc 512 en Q8.
+    inits = _unit_inits({})
+    assert inits["speed"] == "512"
+    assert inits["jump"] == "1024"
+
+
+def test_unite_une_valeur_dinstance_porte_la_sienne():
+    inits = _unit_inits({"speed": {"unit": "px/f", "n": 3}})
+    assert inits["speed"] == "768"
+
+
+def test_unite_un_entier_nu_reste_dans_lunite_de_base():
+    # La forme historique d'`exports_values` : aucun projet existant ne bouge, et
+    # c'est aussi ce que le mode Q8 du champ écrit quand l'auteur vise 279.
+    inits = _unit_inits({"speed": 279})
+    assert inits["speed"] == "279"
+
+
+def test_unite_le_repli_du_codegen_applique_le_meme_facteur():
+    # Sans `export_inits` (prefab poolé sans init), le défaut est émis depuis
+    # l'arbre : il doit porter le même facteur, sinon l'écran et la ROM divergent.
+    from scripting.parser import parse
+    from scripting.codegen import generate, CodegenContext
+    code, _w, _n = generate(parse(_SRC_UNIT), CodegenContext(
+        actor_name="Guard", actor_sym="Scene_Guard", anim_names=[], sfx_names=[],
+        music_names=[], global_names=set(), const_names=set(),
+        all_actor_syms=["Scene_Guard"], is_pooled=False, export_inits={}))
+    assert "speed = 512;" in code
+
+
+def test_unite_inconnue_est_une_erreur():
+    msgs = _errors('exports = { speed = { type = "int", unit = "px/s", default = 1 } }\n')
+    assert any("unknown unit" in m and "px/s" in m for m in msgs)
+
+
+def test_unite_seulement_sur_un_entier():
+    msgs = _errors('exports = { name = { type = "string", unit = "px/f", default = "x" } }\n')
+    assert any("unit" in m and "int" in m for m in msgs)
+
+
+def test_unite_connue_passe():
+    assert _errors('exports = { speed = { type = "int", unit = "px/f", default = 2 } }\n') == []
+    # La forme ASCII est acceptée à la lecture, pour un clavier sans « ² ».
+    assert _errors('exports = { g = { type = "int", unit = "px/f2", default = 1 } }\n') == []
+
+
+def test_unite_sur_une_vraie_scene(tmp_path):
+    """Le chemin complet, d'un projet sur disque jusqu'au littéral C : l'acteur règle
+    3 px/f dans l'inspecteur, la ROM reçoit 768."""
+    from core.models.components import ScriptComponent
+    from core.models.scene import Actor, Scene
+    from core.project import Project
+    from codegen.runtime_codegen.lua_compiler import member_export_inits
+
+    p = Project(tmp_path / "game")
+    (p.root / "assets").mkdir(parents=True, exist_ok=True)
+    (p.root / "assets" / "Hero.lua").write_text(_SRC_UNIT, encoding="utf-8")
+    comp = ScriptComponent(script="assets/Hero.lua",
+                           exports_values={"speed": {"unit": "px/f", "n": 3}})
+    actor = Actor(name="Hero", components=[comp])
+    scene = Scene(name="Scene", actors=[actor])
+    assert member_export_inits(p, scene, actor) == [("speed", "int", "768"),
+                                                    ("jump", "int", "1024")]

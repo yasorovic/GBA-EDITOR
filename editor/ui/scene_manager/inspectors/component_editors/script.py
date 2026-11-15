@@ -13,6 +13,7 @@ from ui.common import icons
 from ui.common.pickers import attached_script_slot, name_picker_slot
 from ui.common.labels import label
 from ui.common.theme import C, T, QSS
+from ui.common.value_field import UnitModeField
 
 
 def reveal_export_row(insp, scroll, export: str) -> None:
@@ -167,13 +168,32 @@ class ScriptEditor(BaseComponentEditor):
         elif typ == "int":
             mn = int(var["min"]) if var["min"] is not None else -9999
             mx = int(var["max"]) if var["max"] is not None else  9999
-            sp = W.spinbox(int(current) if current != "" else 0, mn, mx)
-            if var["min"] is not None and var["max"] is not None:
-                self._row_with_slider(title, sp, sp.value(), mn, mx, int, layout)
+
+            # Un export à `unit` se saisit dans l'unité déclarée ou dans celle du
+            # matériel, au choix du bouton de mode ; `min`/`max` sont dans l'unité
+            # déclarée. Bornée, la ligne a son slider comme un entier sans unité,
+            # mais c'est le champ qui le porte : sa plage change avec le mode.
+            if var.get("unit"):
+                # Sans valeur d'instance, le défaut du script s'affiche dans l'unité
+                # qu'il déclare : c'est là qu'il est écrit.
+                default_raw = {"unit": var["unit"], "n": int(var["default"] or 0)}
+                field = UnitModeField(comp.exports_values.get(name, default_raw),
+                                      var["unit"], mn, mx,
+                                      slider=var["min"] is not None and var["max"] is not None)
+                W.row(title, field, layout)
+                field.changed.connect(save)
+
+                def load(_v, f=field, d=default_raw, nm=name):
+                    raw = self.comp.exports_values.get(nm)
+                    f.set_raw(d if raw is None else raw)
             else:
-                W.row(title, sp, layout)
-            sp.valueChanged.connect(save)
-            load = lambda v: sp.setValue(int(v) if v != "" else 0)
+                sp = W.spinbox(int(current) if current != "" else 0, mn, mx)
+                if var["min"] is not None and var["max"] is not None:
+                    self._row_with_slider(title, sp, sp.value(), mn, mx, int, layout)
+                else:
+                    W.row(title, sp, layout)
+                sp.valueChanged.connect(save)
+                load = lambda v: sp.setValue(int(v) if v != "" else 0)
 
         # ── float ─────────────────────────────────────────────────
         elif typ == "float":

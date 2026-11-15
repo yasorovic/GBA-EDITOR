@@ -40,7 +40,7 @@ static u8 carte[@W@ * @H@];
 
 static Actor boite(int x, int y, int type){
     Actor a = (Actor){0};
-    a.x = x << 8; a.y = y << 8; a.collision.last_x = x;
+    a.x = x << 8; a.y = y << 8; a.collision.last_x = x; a.collision.last_y = y;
     a.collision.box_count = 1;
     a.collision.boxes[0] = (CollisionShape){0, 0, 8, 8, 1, 1, 0, 0};
     a.active = 1; a.alive = 1; a.type_id = type;

@@ -8,7 +8,7 @@ l'ordre du hardware), le placeholder des acteurs sans sprite, `_screen_scale`.
 
 Ne dépend que du modèle, du thème, de `canvas_const` et de Qt — aucun ne remonte
 vers la scène/vue/façade (les items dialoguent avec leur scène via `self.scene()`
-+ `hasattr`, sans l'importer). `_screen_scale`/`_draw_placeholder`/`_slope_path`/
++ `hasattr`, sans l'importer). `_screen_scale`/`_draw_placeholder`/`_tile_path`/
 `_WIN_COLORS` et les constantes de couleur restent privés (usage interne) ;
 `hw_layer_z`/`make_placeholder_pixmap` et les classes traversent (façade + scène).
 """
@@ -20,6 +20,7 @@ from typing import Optional
 
 from core.history import MoveActorCmd, MoveActorGroupCmd, ResizeCollisionShapeCmd, get_history
 from core.models.scene import Actor
+from core.models.camera import CAM_FOLLOW
 from core.models.field_value import number_value
 from core.models import collision_tiles as CT
 from core.models.collision_tiles import (
@@ -45,8 +46,8 @@ from PyQt6.QtGui import (
     QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QTransform,
 )
 from PyQt6.QtWidgets import (
-    QGraphicsItem, QGraphicsLineItem, QGraphicsPixmapItem, QGraphicsRectItem,
-    QStyle, QStyleOptionGraphicsItem,
+    QGraphicsItem, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem,
+    QGraphicsRectItem, QStyle, QStyleOptionGraphicsItem,
 )
 
 
@@ -633,6 +634,28 @@ class CameraItem(QGraphicsItem):
         self._view.setAcceptHoverEvents(False)
         self._view.setVisible(False)
 
+        # Passepartout de la zone morte (mode « suivre un acteur ») — les
+        # bandes que la cible traverse sans que la caméra bouge. Deux enfants
+        # du cadre de vue : le voile sur les bandes, puis le trait de la zone
+        # morte elle-même. `None` = pas de suivi, rien à montrer.
+        self._margin_px: Optional[tuple[int, int]] = None
+        self._deadzone_veil = QGraphicsPathItem(self._view)
+        self._deadzone_veil.setPen(QPen(Qt.PenStyle.NoPen))
+        self._deadzone_veil.setBrush(QBrush(QColor(0, 0, 0, 96)))
+        edge_pen = QPen(QColor(255, 221, 68, 150))
+        edge_pen.setWidth(0)
+        edge_pen.setCosmetic(True)
+        edge_pen.setStyle(Qt.PenStyle.DotLine)
+        self._deadzone_edge = QGraphicsRectItem(self._view)
+        self._deadzone_edge.setPen(edge_pen)
+        self._deadzone_edge.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        for it in (self._deadzone_veil, self._deadzone_edge):
+            it.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            it.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+            it.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            it.setAcceptHoverEvents(False)
+            it.setVisible(False)
+
         # Windows (WIN0/WIN1) — enfants de la caméra : une window est en espace
         # ÉCRAN, elle suit donc la vue automatiquement (position locale = position
         # dans l'écran GBA), sans recalcul à chaque déplacement de caméra.
@@ -664,7 +687,43 @@ class CameraItem(QGraphicsItem):
         self._frame_w, self._frame_h = w, h
         self.prepareGeometryChange()
         self._view.setRect(0, 0, w, h)
+        self._rebuild_deadzone()
         self.setToolTip(self._tooltip())
+
+    # ── Zone morte du suivi (passepartout) ────────────────────────
+
+    def refresh_follow_margins(self, project=None):
+        """Relit la zone morte du suivi sur le modèle : le creux est la zone
+        que le CADRE du sprite suivi ne quitte pas, les bandes voilées sont
+        celles où il n'entre jamais (cf. `camera_follow_lines`, qui borne le
+        cadre et non la position de l'acteur). Hors du mode « suivre un
+        acteur », il n'y a pas de zone morte à montrer."""
+        cam = self.camera
+        if cam is None or cam.mode != CAM_FOLLOW:
+            self._margin_px = None
+        else:
+            self._margin_px = (cam.px('margin_x', project),
+                               cam.px('margin_y', project))
+        self._rebuild_deadzone()
+        self._sync_view_visibility()
+
+    def _rebuild_deadzone(self):
+        if self._margin_px is None:
+            return
+        mx, my = self._margin_px
+        # Mêmes bornes que `camera_set_margin()` au runtime, et sur l'ÉCRAN
+        # (240×160) : le suivi se cale sur SCREEN_W/SCREEN_H, pas sur le frame
+        # de la caméra. Un frame plus petit découpe donc le voile sans
+        # déplacer la zone morte.
+        mx = max(0, min(int(mx), GBA_W // 2))
+        my = max(0, min(int(my), GBA_H // 2))
+        dead = QRectF(mx, my, GBA_W - 2 * mx, GBA_H - 2 * my)
+        veil = QPainterPath()
+        veil.addRect(QRectF(0, 0, self._frame_w, self._frame_h))
+        hole = QPainterPath()
+        hole.addRect(dead)
+        self._deadzone_veil.setPath(veil.subtracted(hole))
+        self._deadzone_edge.setRect(dead)
 
     # ── Windows (aperçu) ──────────────────────────────────────────
 
@@ -791,6 +850,9 @@ class CameraItem(QGraphicsItem):
     def _sync_view_visibility(self):
         """Aperçu 240×160 visible seulement sélectionnée ou survolée."""
         self._view.setVisible(self.isSelected() or self._hovered or self._view_forced)
+        on = self._margin_px is not None
+        self._deadzone_veil.setVisible(on)
+        self._deadzone_edge.setVisible(on)
 
     @property
     def view_forced(self) -> bool:
@@ -1279,21 +1341,22 @@ _C_NORMAL = QColor(90, 225, 255, 235)   # cyan : ni le plein (orange), ni le pla
 _NORMAL_LENGTH = 4                      # pixels
 _TEXT_SCALE = 8            # facteur de composition du texte des index (cf. CollisionOverlay._draw_indices)
 
-_C_SOLID = QColor(255, 126, 88, 42)
+_C_COLLISION_VEIL = QColor(0, 0, 0, 102)
+_C_SOLID = QColor(255, 126, 88, 112)
 # Surbrillance de survol : neutre, pour ne pas se confondre avec un type de tuile.
 _C_HOVER = QColor(255, 255, 255, 46)
 _B_HOVER = QColor(255, 255, 255, 200)
-_C_STEEP = QColor(255, 183, 77, 48)
-_C_GENTLE = QColor(255, 211, 102, 48)
+_C_STEEP = QColor(255, 183, 77, 105)
+_C_GENTLE = QColor(255, 211, 102, 105)
 _B_SOLID = QColor(255, 126, 88, 175)
 _B_STEEP = QColor(255, 183, 77, 185)
 _B_GENTLE = QColor(255, 211, 102, 185)
 # Plafond — teinte bleue/violette pour distinguer visuellement
 # Face à sens unique : violet, distinct du plein (orange) et du plafond (bleu).
-_C_ONEWAY = QColor(190, 130, 255, 90)
+_C_ONEWAY = QColor(190, 130, 255, 112)
 _B_ONEWAY = QColor(190, 130, 255, 215)
-_C_STEEP_INV = QColor(110, 168, 255, 48)
-_C_GENTLE_INV = QColor(152, 194, 255, 48)
+_C_STEEP_INV = QColor(110, 168, 255, 105)
+_C_GENTLE_INV = QColor(152, 194, 255, 105)
 _B_STEEP_INV = QColor(110, 168, 255, 185)
 _B_GENTLE_INV = QColor(152, 194, 255, 185)
 
@@ -1322,7 +1385,7 @@ _CEIL_GENTLE = (
 )
 
 
-def _slope_path(x: int, y: int, tile_type: int) -> QPainterPath:
+def _tile_path(x: int, y: int, tile_type: int) -> QPainterPath:
     """Le contour de la matière d'une tuile de collision, posé en (x, y).
 
     Dérivé de `collision_tiles.polygon()` : la forme est décrite UNE fois, là où
@@ -1355,7 +1418,7 @@ class CollisionOverlay(QGraphicsItem):
         # Surbrillance sous la souris : (col, row, largeur, hauteur) en tuiles —
         # l'empreinte que le prochain geste de peinture va couvrir.
         self._hover: Optional[tuple[int, int, int, int]] = None
-        self._cache: Optional[QPixmap] = None  # cache rendu hors-écran (map seule)
+        self._path_cache: Optional[list[tuple[QPainterPath, QColor, QColor]]] = None
         # Vue « index de tuile » : l'index du type de chaque tuile non vide, pour déboguer la carte lue par le runtime.
         self._show_indices = False
         # Vue « normales » : la normale de chaque surface, tracée depuis le centre de sa face comme les outils 3D.
@@ -1373,7 +1436,7 @@ class CollisionOverlay(QGraphicsItem):
         self._map = collision_map
         self._rows = len(collision_map)
         self._cols = len(collision_map[0]) if self._rows else 0
-        self._cache = None
+        self._path_cache = None
         self.update()
 
     def get_map(self) -> list[list[int]]:
@@ -1390,7 +1453,7 @@ class CollisionOverlay(QGraphicsItem):
     def set_tile(self, col: int, row: int, tile_type: int):
         if 0 <= row < self._rows and 0 <= col < self._cols:
             self._map[row][col] = tile_type
-            self._cache = None
+            self._path_cache = None
             self.update()
 
     def tile_at(self, col: int, row: int) -> int:
@@ -1424,36 +1487,22 @@ class CollisionOverlay(QGraphicsItem):
         return QRectF(0, 0, max(1, self._cols) * _T, max(1, self._rows) * _T)
 
     def paint(self, painter: QPainter, option, widget=None):
-        # Reconstruire le cache si invalidé
-        w = max(1, self._cols) * _T
-        h = max(1, self._rows) * _T
-        if self._cache is None or self._cache.width() != w or self._cache.height() != h:
-            self._cache = QPixmap(w, h)
-            self._cache.fill(Qt.GlobalColor.transparent)
-            cp = QPainter(self._cache)
-            cp.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-            for row in range(self._rows):
-                for col in range(self._cols):
-                    self._draw_tile(cp, col, row, self._map[row][col], alpha_mul=1.0)
-            cp.end()
-
-        # Les collisions sont une information de tuile : elles restent nettes
-        # à tous les zooms, sans halos ni faux coins arrondis.
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-        painter.drawPixmap(0, 0, self._cache)
+        painter.fillRect(self.boundingRect(), _C_COLLISION_VEIL)
+        if self._path_cache is None:
+            tiles = ((col, row, self._map[row][col])
+                     for row in range(self._rows) for col in range(self._cols))
+            self._path_cache = self._group_paths(tiles)
+        self._draw_paths(painter, self._path_cache)
 
         if self._show_normals:
             self._draw_normals(painter, option.exposedRect)
         if self._show_indices:
             self._draw_indices(painter, option.exposedRect)
 
-        # Preview slope au-dessus du cache (pas mis en cache — éphémère)
+        # Preview au-dessus de la carte : les cases du geste forment elles
+        # aussi une seule forme, mais restent hors cache car elles sont éphémères.
         if self._preview:
-            painter.save()
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-            for col, row, t in self._preview:
-                self._draw_tile(painter, col, row, t, alpha_mul=1.55)
-            painter.restore()
+            self._draw_paths(painter, self._group_paths(self._preview), alpha_mul=1.55)
 
         if self._hover:
             col, row, w, h = self._hover
@@ -1463,6 +1512,65 @@ class CollisionOverlay(QGraphicsItem):
             painter.setPen(QPen(_B_HOVER, 0))
             painter.drawRect(col * _T, row * _T, w * _T - 1, h * _T - 1)
             painter.restore()
+
+    @staticmethod
+    def _style_index(tile_type: int) -> int:
+        if tile_type == TILE_SOLID:
+            return 0
+        if CT.kind_of(tile_type) == CT.KIND_ONEWAY:
+            return 1
+        if tile_type in _FLOOR_SLOPES:
+            return 2
+        if tile_type in _FLOOR_GENTLE:
+            return 3
+        if tile_type in _CEIL_SLOPES:
+            return 4
+        if tile_type in _CEIL_GENTLE:
+            return 5
+        return -1
+
+    @classmethod
+    def _group_paths(cls, tiles) -> list[tuple[QPainterPath, QColor, QColor]]:
+        """Fusionne les tuiles de même famille avant de les dessiner.
+
+        Le cache contient de la géométrie vectorielle, pas une image à la
+        résolution GBA : les diagonales suivent donc le zoom sans escalier.
+        """
+        styles = (
+            (_C_SOLID, _B_SOLID),
+            (_C_ONEWAY, _B_ONEWAY),
+            (_C_STEEP, _B_STEEP),
+            (_C_GENTLE, _B_GENTLE),
+            (_C_STEEP_INV, _B_STEEP_INV),
+            (_C_GENTLE_INV, _B_GENTLE_INV),
+        )
+        paths = [QPainterPath() for _ in styles]
+        for col, row, tile_type in tiles:
+            style = cls._style_index(tile_type)
+            if style >= 0:
+                paths[style].addPath(_tile_path(col * _T, row * _T, tile_type))
+        return [(path.simplified(), *styles[index])
+                for index, path in enumerate(paths) if not path.isEmpty()]
+
+    @staticmethod
+    def _draw_paths(
+        painter: QPainter,
+        paths: list[tuple[QPainterPath, QColor, QColor]],
+        alpha_mul: float = 1.0,
+    ):
+        def color(base: QColor) -> QColor:
+            result = QColor(base)
+            result.setAlpha(min(255, int(base.alpha() * alpha_mul)))
+            return result
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        for path, fill, _border in paths:
+            painter.fillPath(path, color(fill))
+        for path, _fill, border in paths:
+            painter.setPen(QPen(color(border), 0))
+            painter.drawPath(path)
+        painter.restore()
 
     def _tile_kind_at(self, col: int, row: int) -> int:
         if 0 <= row < self._rows and 0 <= col < self._cols:
@@ -1529,64 +1637,4 @@ class CollisionOverlay(QGraphicsItem):
                 painter.drawText(cell, Qt.AlignmentFlag.AlignCenter, str(t))
                 painter.restore()
         painter.restore()
-
-    def _draw_tile(
-        self, painter: QPainter, col: int, row: int, t: int, alpha_mul: float
-    ):
-        if t == TILE_EMPTY:
-            return
-        x, y = col * _T, row * _T
-
-        def _colored(base_fill, base_bord):
-            f = QColor(base_fill)
-            f.setAlpha(int(base_fill.alpha() * alpha_mul))
-            b = QColor(base_bord)
-            b.setAlpha(int(base_bord.alpha() * alpha_mul))
-            return f, b
-
-        if t == TILE_SOLID:
-            fill, bord = _colored(_C_SOLID, _B_SOLID)
-            painter.fillRect(x, y, _T, _T, fill)
-            painter.setPen(QPen(bord, 0))
-            painter.drawRect(x, y, _T - 1, _T - 1)
-            # Hachure pixelisée, plus lisible qu'une masse rouge opaque.
-            hatch = QColor(bord)
-            hatch.setAlpha(max(24, hatch.alpha() // 3))
-            painter.save()
-            painter.setClipRect(x, y, _T, _T)
-            painter.setPen(QPen(hatch, 0))
-            for offset in range(-_T, _T * 2, 4):
-                painter.drawLine(x + offset, y + _T, x + offset + _T, y)
-            painter.restore()
-        elif CT.kind_of(t) == CT.KIND_ONEWAY:
-            fill, bord = _colored(_C_ONEWAY, _B_ONEWAY)
-            path = _slope_path(x, y, t)
-            painter.fillPath(path, fill)
-            painter.setPen(QPen(bord, 0))
-            painter.drawPath(path)
-        elif t in _FLOOR_SLOPES:
-            fill, bord = _colored(_C_STEEP, _B_STEEP)
-            path = _slope_path(x, y, t)
-            painter.fillPath(path, fill)
-            painter.setPen(QPen(bord, 0))
-            painter.drawPath(path)
-        elif t in _FLOOR_GENTLE:
-            fill, bord = _colored(_C_GENTLE, _B_GENTLE)
-            path = _slope_path(x, y, t)
-            painter.fillPath(path, fill)
-            painter.setPen(QPen(bord, 0))
-            painter.drawPath(path)
-        elif t in _CEIL_SLOPES:
-            fill, bord = _colored(_C_STEEP_INV, _B_STEEP_INV)
-            path = _slope_path(x, y, t)
-            painter.fillPath(path, fill)
-            painter.setPen(QPen(bord, 0))
-            painter.drawPath(path)
-        elif t in _CEIL_GENTLE:
-            fill, bord = _colored(_C_GENTLE_INV, _B_GENTLE_INV)
-            path = _slope_path(x, y, t)
-            painter.fillPath(path, fill)
-            painter.setPen(QPen(bord, 0))
-            painter.drawPath(path)
-
 

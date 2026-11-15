@@ -123,8 +123,30 @@ def _export_inits(owner, script, resolver) -> dict:
         if typ not in _SETTABLE_EXPORTS:
             continue
         val = overrides[loc.name] if loc.name in overrides else _default_pyval(loc.value)
+        val = _unit_scaled(loc, val, from_editor=loc.name in overrides)
         out[loc.name] = resolver(typ, val, loc.export_values)
     return out
+
+
+def _unit_scaled(loc, val, from_editor: bool):
+    """La valeur d'un export à `unit`, ramenée à l'unité du MATÉRIEL : c'est ici,
+    et nulle part ailleurs, que le facteur s'applique (cf. exports_parser.EXPORT_UNITS).
+
+    Une règle, deux endroits : un nombre se lit dans l'unité écrite à côté de lui,
+    et sans unité écrite il est déjà dans l'unité de base. Le `default` du script a
+    la déclaration pour voisine, il est donc dans l'unité déclarée ; une valeur
+    d'éditeur porte la sienne (`{"unit": …, "n": …}`), et un entier nu, forme
+    historique d'`exports_values`, n'en a aucune : il reste tel quel. C'est ce qui
+    permet à un projet existant de ne pas bouger d'un pixel."""
+    from scripting.exports_parser import UNIT_TYPES, base_value, unit_factor
+    if not loc.export_unit or loc.export_type not in UNIT_TYPES:
+        return val
+    if from_editor:
+        return base_value(val, loc.export_unit)
+    try:
+        return int(val) * unit_factor(loc.export_unit)
+    except (TypeError, ValueError):
+        return val
 
 
 def _nodes(node, line=0):

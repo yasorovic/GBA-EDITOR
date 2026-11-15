@@ -46,7 +46,7 @@ from __future__ import annotations
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QSpinBox, QToolButton, QLabel, QMenu,
+    QWidget, QHBoxLayout, QSpinBox, QSlider, QToolButton, QLabel, QMenu,
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -54,6 +54,23 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import QuietDoubleSpin, QuietSpin
 from core.models.field_value import FieldValue, TILE_SIZE, is_ref_raw
+
+
+def _mode_button(width: int) -> QToolButton:
+    """Le bouton de mode des champs de ce fichier : il montre le mode courant (px,
+    t, ƒ, px/f…) et ouvre son menu. Un seul endroit pour son allure, les trois
+    champs l'avaient recopiée."""
+    btn = QToolButton()
+    btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+    btn.setFixedWidth(width)
+    btn.setStyleSheet(
+        f"QToolButton{{color:{C.TEXT_DIM};background:{C.BG_INPUT};"
+        f"border:1px solid {C.BORDER};border-radius:3px;"
+        f"font-family:{T.MONO};font-size:{T.SM}px;}}"
+        f"QToolButton:hover{{color:{C.TEXT_HI};border-color:{C.ACCENT};}}"
+        f"QToolButton::menu-indicator{{image:none;width:0;}}"
+    )
+    return btn
 
 
 class ValueField(QWidget):
@@ -87,16 +104,7 @@ class ValueField(QWidget):
         self._chip.setVisible(False)
         lay.addWidget(self._chip, 1)
 
-        self._btn = QToolButton()
-        self._btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self._btn.setFixedWidth(30)
-        self._btn.setStyleSheet(
-            f"QToolButton{{color:{C.TEXT_DIM};background:{C.BG_INPUT};"
-            f"border:1px solid {C.BORDER};border-radius:3px;"
-            f"font-family:{T.MONO};font-size:{T.SM}px;}}"
-            f"QToolButton:hover{{color:{C.TEXT_HI};border-color:{C.ACCENT};}}"
-            f"QToolButton::menu-indicator{{image:none;width:0;}}"
-        )
+        self._btn = _mode_button(30)
         self._menu = QMenu(self._btn)
         self._menu.setStyleSheet(QSS.menu)
         self._menu.setFont(QFont(T.UI, T.MD))
@@ -271,16 +279,7 @@ class NumberField(QWidget):
         self._chip.setVisible(False)
         lay.addWidget(self._chip, 1)
 
-        self._btn = QToolButton()
-        self._btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self._btn.setFixedWidth(38)
-        self._btn.setStyleSheet(
-            f"QToolButton{{color:{C.TEXT_DIM};background:{C.BG_INPUT};"
-            f"border:1px solid {C.BORDER};border-radius:3px;"
-            f"font-family:{T.MONO};font-size:{T.SM}px;}}"
-            f"QToolButton:hover{{color:{C.TEXT_HI};border-color:{C.ACCENT};}}"
-            f"QToolButton::menu-indicator{{image:none;width:0;}}"
-        )
+        self._btn = _mode_button(38)
         self._menu = QMenu(self._btn)
         self._menu.setStyleSheet(QSS.menu)
         self._menu.setFont(QFont(T.UI, T.MD))
@@ -386,3 +385,168 @@ class NumberField(QWidget):
                                     else self._ref.var_name == name))
                 act.triggered.connect(
                     lambda _=False, s=src, n=name, i=vid: self._set_ref(s, n, i))
+
+
+class UnitModeField(QWidget):
+    """Champ ENTIER dont le bouton de mode choisit l'UNITÉ DE SAISIE : celle que le
+    script a déclarée sur son export (`unit = "px/f"`), ou l'unité du matériel qui
+    est derrière (Q8). La valeur ne change pas de nature en changeant de mode : elle
+    reste un entier, et l'autre lecture s'affiche à côté du champ.
+
+    Trois champs voisins, trois rôles : `ValueField` tient une valeur SPATIALE de
+    composant (pixels, tiles, variable), `UnitSpin` (ui/common/unit_spin.py) tient
+    un entier dont l'unité est fixe et seulement affichée, et celui-ci tient un
+    entier que deux unités expriment, parce que le matériel compte autrement que
+    l'auteur.
+
+    API
+        UnitModeField(raw, unit, min_v, max_v)
+            raw   : int (unité de base) ou {"unit": u, "n": n} (unité déclarée)
+            unit  : une clé de scripting.exports_parser.EXPORT_UNITS
+        .changed(raw)       signal : la forme sérialisable (int | dict)
+        .raw() -> int|dict  forme courante
+        .set_raw(raw)       MAJ silencieuse (n'émet pas)
+    """
+    changed = pyqtSignal(object)
+
+    def __init__(self, raw=0, unit: str = "", min_v: int = -9999, max_v: int = 9999,
+                 slider: bool = False, parent=None):
+        super().__init__(parent)
+        from scripting.exports_parser import normalize_unit, unit_base, unit_factor
+        self._unit = normalize_unit(unit)
+        self._factor = unit_factor(self._unit)
+        self._base = unit_base(self._unit)
+        self._min, self._max = int(min_v), int(max_v)
+        self._mode = "unit"
+        self._blocking = False
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(3)
+
+        # Le slider d'une valeur bornée, comme pour un entier sans unité. Il vit ICI
+        # et non dans la ligne de l'inspecteur : sa plage suit le mode (0 à 8 px/f,
+        # ou 0 à 2048 en Q8), et le champ est seul à savoir quand elle change.
+        self._slider = QSlider(Qt.Orientation.Horizontal) if slider else None
+        if self._slider is not None:
+            self._slider.valueChanged.connect(self._on_slider)
+            lay.addWidget(self._slider, 1)
+
+        self._spin = QuietSpin()
+        self._spin.setFont(QFont(T.MONO, T.MD))
+        self._spin.setStyleSheet(QSS.spinbox)
+        self._spin.valueChanged.connect(self._on_spin)
+        lay.addWidget(self._spin, 1)
+
+        # La seconde lecture : ce que la même valeur vaut dans l'autre unité. C'est
+        # elle qui rend le Q8 lisible sans le remplacer.
+        self._reading = QLabel()
+        self._reading.setFont(QFont(T.MONO, T.SM))
+        self._reading.setStyleSheet(f"QLabel{{color:{C.TEXT_DIM};}}")
+        lay.addWidget(self._reading)
+
+        self._btn = _mode_button(44)
+        self._menu = QMenu(self._btn)
+        self._menu.setStyleSheet(QSS.menu)
+        self._menu.setFont(QFont(T.UI, T.MD))
+        self._menu.aboutToShow.connect(self._rebuild_menu)
+        self._btn.setMenu(self._menu)
+        self._btn.setToolTip(tooltip(
+            title=label('valfield.unit_title'),
+            body=label('valfield.unit_tip', unit=self._unit or "?",
+                       base=self._base or "?", factor=self._factor)))
+        # Une unité de facteur 1 (px) ne nomme qu'elle-même : rien à choisir, le
+        # bouton ne ferait qu'ouvrir un menu d'une seule ligne.
+        self._btn.setEnabled(self._factor != 1)
+        lay.addWidget(self._btn)
+
+        self.set_raw(raw)
+
+    # ── API publique ──────────────────────────────────────────────
+    def raw(self):
+        n = self._spin.value()
+        return {"unit": self._unit, "n": n} if self._mode == "unit" else int(n)
+
+    def set_raw(self, raw):
+        self._mode = "unit" if isinstance(raw, dict) else "base"
+        if isinstance(raw, dict):
+            n = int(raw.get("n", 0))
+        else:
+            try:
+                n = int(raw)
+            except (TypeError, ValueError):
+                n = 0
+        self._refresh(n)
+
+    # ── Rendu ─────────────────────────────────────────────────────
+    def _refresh(self, n: int):
+        self._blocking = True
+        if self._mode == "unit":
+            lo, hi = self._min, self._max
+            self._btn.setText(self._unit or "?")
+        else:
+            lo, hi = self._min * self._factor, self._max * self._factor
+            self._btn.setText(self._base or "?")
+        self._spin.setRange(lo, hi)
+        self._spin.setValue(n)
+        if self._slider is not None:
+            self._slider.setRange(lo, hi)
+            self._slider.setValue(self._spin.value())
+        self._blocking = False
+        self._update_reading()
+
+    def _update_reading(self):
+        if self._factor == 1:
+            self._reading.setVisible(False)
+            return
+        n = self._spin.value()
+        if self._mode == "unit":
+            text = f"= {n * self._factor} {self._base}"
+        else:
+            text = f"= {_trim(n / self._factor)} {self._unit}"
+        self._reading.setVisible(True)
+        self._reading.setText(text)
+
+    # ── Handlers ──────────────────────────────────────────────────
+    def _on_spin(self, v):
+        if self._blocking:
+            return
+        if self._slider is not None and self._slider.value() != v:
+            self._blocking = True
+            self._slider.setValue(v)
+            self._blocking = False
+        self._update_reading()
+        self.changed.emit(self.raw())
+
+    def _on_slider(self, v):
+        # Le spinbox reste la source de la valeur : le slider le pilote, et c'est
+        # lui qui notifie (même partage que `_row_with_slider` côté inspecteur).
+        if not self._blocking:
+            self._spin.setValue(v)
+
+    def _set_mode(self, mode: str):
+        if mode == self._mode:
+            return
+        n = self._spin.value()
+        self._mode = mode
+        # La valeur SUIT le changement de mode : c'est la même quantité, dite
+        # autrement. Le passage vers l'unité déclarée arrondit, puisqu'elle est
+        # plus grosse que celle du matériel.
+        self._refresh(n * self._factor if mode == "base" else round(n / self._factor))
+        self.changed.emit(self.raw())
+
+    def _rebuild_menu(self):
+        m = self._menu
+        m.clear()
+        for mode, name in (("unit", self._unit), ("base", self._base)):
+            act = m.addAction(name or "?")
+            act.setCheckable(True)
+            act.setChecked(self._mode == mode)
+            act.triggered.connect(lambda _=False, md=mode: self._set_mode(md))
+
+
+def _trim(value: float) -> str:
+    """La lecture d'une valeur fractionnaire : deux décimales, sans les zéros de
+    fin. Un AFFICHAGE, jamais une valeur stockée : l'éditeur ne manipule que des
+    entiers."""
+    return f"{value:.2f}".rstrip("0").rstrip(".")

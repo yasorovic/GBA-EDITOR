@@ -2867,6 +2867,8 @@
     },
     "valfield.number_int": { "text": "Integer value" },
     "valfield.number_float": { "text": "Decimal value" },
+    "valfield.unit_title": { "text": "Unit of entry" },
+    "valfield.unit_tip": { "text": "The script reads {base}; a value entered in {unit} is multiplied by {factor} at build." },
     "wdg.active": {
       "text": "Active"
     },
