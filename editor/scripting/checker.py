@@ -1706,8 +1706,32 @@ class Checker:
     # Instructions
 
     def _check_block(self, stmts: list, seq_top: bool = False):
+        self._check_duplicate_locals(stmts)
         for s in stmts:
             self._check_stmt(s, seq_top)
+
+    def _check_duplicate_locals(self, stmts: list) -> None:
+        """Deux `local` de même nom dans le MÊME bloc.
+
+        En Lua le second masque le premier, et les deux coexistent. Le C émis
+        n'a qu'une portée par bloc : il redéclarait le nom, et gcc répondait
+        « redefinition of 'x' » sur la ligne générée. Un bloc imbriqué, lui,
+        ouvre bien une portée et reste permis."""
+        seen: dict[str, int] = {}
+        for s in stmts:
+            if not isinstance(s, StmtLocalAssign):
+                continue
+            first = seen.get(s.name)
+            if first is not None:
+                self.errors.append(CheckError(
+                    "error",
+                    f"'{s.name}' is already declared in this block (line {first}): the generated "
+                    "C has one scope per block and cannot declare the name twice. Drop this "
+                    f"`local` to assign the existing variable ({s.name} = ...), or give it another "
+                    "name. A nested block opens a scope of its own, and may declare it again.",
+                    line=getattr(s, "line", 0) or 0))
+            else:
+                seen[s.name] = getattr(s, "line", 0) or 0
 
     def _check_stmt(self, s, seq_top: bool = False):
         enclosing = self._stmt_line

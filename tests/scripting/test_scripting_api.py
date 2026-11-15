@@ -363,11 +363,11 @@ def test_l_etat_se_nomme_aussi_par_un_local_et_se_compare():
 
 
 def test_un_etat_d_image_ecrit_sur_une_image_inconnue_du_build_est_refuse():
-    """Un paramètre, un local réaffecté : on ne sait pas dans quel sprite chercher l'état,
-    et deviner la constante écrirait l'état d'une autre image."""
+    """Le même nom déclaré sur deux images (ici dans deux blocs) : on ne sait pas dans quel
+    sprite chercher l'état, et deviner la constante écrirait l'état d'une autre image."""
     errs = _ui_errors('function on_update(self)\n'
                       ' local c = interface:get("coeur_1")\n'
-                      ' local c = interface:get("curseur")\n'
+                      ' if scene.frame > 0 then local c = interface:get("curseur") end\n'
                       ' c.state = "on"\nend\n')
     assert len(errs) == 1 and "does not know which image" in errs[0]
 

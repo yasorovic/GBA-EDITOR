@@ -260,3 +260,156 @@ def test_une_condition_qui_peut_changer_passe(cond):
         f"local n = 0\nfunction on_update()\n n = n + 1\nend\n"
         f"function on_sequence_a()\n wait_until({cond})\nend\n")
     assert errs == []
+
+
+# ── Ce qui traverse une attente garde son type ───────────────────
+#
+# Le champ d'état d'un local hissé était déclaré `int` en dur : un Vec2, un
+# handle d'effet sonore ou un acteur y entraient de force, et gcc refusait la
+# ligne générée. Un acteur fait exception : un `Actor*` ne survit pas à l'image
+# (l'emplacement peut changer de main pendant l'attente), il est rangé en
+# RÉFÉRENCE, comme une variable de tête.
+
+_TYPES_HISSES = """
+function on_sequence_a()
+    local hb = self:collision_shape("hitbox")
+    local p = vec2(3, 4)
+    local n = 1
+    wait(2)
+    hb:deactivate()
+    self.position = p
+    self.frame = n
+end
+"""
+
+
+def test_un_local_hisse_garde_le_type_c_de_sa_valeur():
+    errs, code, _n = _gen(_TYPES_HISSES)
+    assert errs == []
+    assert "static int Hero_seq_a_hb = 0;" in code       # une boîte EST un entier
+    assert "static Vec2 Hero_seq_a_p = {0};" in code
+    assert "static int Hero_seq_a_n = 0;" in code
+
+
+def test_un_acteur_qui_traverse_une_attente_est_range_en_reference():
+    errs, code, _n = _gen("""
+function on_sequence_a()
+    local boss = actor:get("Boss")
+    wait(2)
+    boss:destroy()
+end
+""")
+    assert errs == []
+    assert "static int Hero_seq_a_boss = 0;" in code
+    assert "Hero_seq_a_boss = actor_ref_make(" in code
+    assert "actor_ref_get(Hero_seq_a_boss)" in code
+
+
+def test_un_local_hisse_est_substitue_devant_une_propriete():
+    """Le nom hissé était remplacé devant un APPEL (`hb:deactivate()`) mais pas
+    devant une PROPRIÉTÉ : le C citait `hb`, déclaré nulle part."""
+    errs, code, _n = _gen("""
+function on_sequence_a()
+    local hb = self:collision_shape("hitbox")
+    wait(2)
+    hb.offset = vec2(8, 0)
+    hb.offset.x = 12
+    hb.size = vec2(hb.offset.x, 4)
+end
+""")
+    assert errs == []
+    import re
+    # Le corps du `switch` seul : le commentaire d'en-tête nomme, lui, la
+    # variable Lua (« Survive the wait: hb »), ce qui est son rôle.
+    debut = code.index("switch (Hero_seq_a_step)")
+    corps = code[debut:code.index("\n}\n", debut)]
+    assert re.search(r"(?<![A-Za-z0-9_])hb(?![A-Za-z0-9_])", corps) is None, corps
+    assert corps.count("Hero_seq_a_hb") >= 5
+
+
+def test_deux_locals_de_meme_nom_dans_un_bloc_sont_refuses():
+    """Lua masque le premier, le C ne peut pas le redéclarer : `redefinition of
+    'body'` sortait du make, sans ligne Lua utile."""
+    errs, _code, _n = _gen("""
+function on_update()
+    local body = self:physics_body()
+    local body = self:physics_body()
+    body:apply_velocity()
+end
+""")
+    assert any("already declared in this block" in e for e in errs), errs
+
+
+def test_deux_locals_de_meme_nom_dans_deux_blocs_restent_valides():
+    """Un bloc imbriqué ouvre une portée : le C le permet, nous aussi."""
+    errs, _code, _n = _gen("""
+function on_update()
+    local body = self:physics_body()
+    if body.grounded then
+        local body = self:physics_body()
+        body:apply_velocity()
+    end
+end
+""")
+    assert errs == []
+
+
+def test_c_une_sequence_emise_garde_ses_valeurs_a_travers_l_attente(tmp_path):
+    """Sonde native : le C réellement émis pour la séquence est compilé et
+    exécuté. Il ne compilait pas (type du champ, nom non substitué) ; on vérifie
+    ici qu'il compile ET que chaque valeur traverse l'attente."""
+    import subprocess
+    import pytest as _pytest
+    from native_toolchain import compilateur_hote, environnement
+    from scripting.parser import parse
+    from scripting.codegen import generate, CodegenContext
+
+    cc = compilateur_hote()
+    if cc is None:
+        _pytest.skip("aucun compilateur C hôte")
+    src = """
+function on_start()
+    sequence:start("a")
+end
+
+function on_sequence_a()
+    local hb = self:collision_shape("hitbox")
+    local p = vec2(24, -4)
+    wait(2)
+    hb.offset = p
+    hb:deactivate()
+end
+"""
+    code, _w, _n = generate(parse(src), CodegenContext(
+        actor_name="Hero", actor_sym="Hero", anim_names=["idle"], sfx_names=[],
+        music_names=[], global_names=set(), const_names=set(), all_actor_syms=["Hero"]))
+    debut = code.index("/* Sequence state")
+    fin = code.index("}", code.index("void Hero_on_update(Actor* self) {")) + 1
+    sonde = ("#include <assert.h>\n#include <stddef.h>\n"
+             "typedef struct { int x, y; } Vec2;\ntypedef struct Actor Actor;\n"
+             "#define BOXTAG_HITBOX 3\n"
+             "static int last_box, last_active, set_calls;\n"
+             "static Vec2 last_offset;\n"
+             "static int actor_get_box(Actor* a, int tag) { (void)a; return tag == BOXTAG_HITBOX ? 7 : 0; }\n"
+             "static void collision_shape_set_offset(int h, Vec2 v) { last_box = h; last_offset = v; set_calls++; }\n"
+             "static void collision_shape_set_active(int h, int on) { last_box = h; last_active = on; }\n"
+             + code[debut:fin] +
+             "\nint main(void) {\n"
+             "  Hero_on_start(NULL);\n"
+             "  assert(Hero_seq_a_step == 1);\n"
+             "  Hero_on_update(NULL);           /* tranche 1 : acquisition */\n"
+             "  assert(Hero_seq_a_hb == 7 && set_calls == 0);\n"
+             "  Hero_on_update(NULL); Hero_on_update(NULL);   /* wait(2) */\n"
+             "  Hero_on_update(NULL);           /* tranche d'après l'attente */\n"
+             "  assert(set_calls == 1);\n"
+             "  assert(last_offset.x == 24 && last_offset.y == -4);\n"
+             "  assert(last_box == 7 && last_active == 0);\n"
+             "  assert(Hero_seq_a_step == 0);\n"
+             "  return 0;\n}\n")
+    (tmp_path / "probe.c").write_text(sonde, encoding="utf-8")
+    binaire = tmp_path / "probe"
+    build = subprocess.run([cc, "-std=gnu11", "-O0", "-o", str(binaire), str(tmp_path / "probe.c")],
+                           capture_output=True, text=True, env=environnement(cc))
+    assert build.returncode == 0, build.stderr + sonde
+    run = subprocess.run([str(binaire)], capture_output=True, text=True, env=environnement(cc))
+    assert run.returncode == 0, run.stderr + sonde

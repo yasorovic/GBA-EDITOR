@@ -118,6 +118,12 @@ _EXPORT_SETTABLE = frozenset({
 # annonce pour un prefab poolé (cf. CodeGen._emit_pool_state).
 _STATE_BYTES = {"vec2": 8, "vec3": 12, "rect": 16}
 
+# Les mêmes poids, lus par le TYPE C du champ : l'état d'une séquence est décrit
+# par son type C (cf. `_lifted_types`), pas par le nom de type Lua.
+_STATE_BYTES_BY_CTYPE = {C_TYPES[k]: v for k, v in _STATE_BYTES.items()}
+# Un composite s'initialise par `{0}`, un scalaire par `0`.
+_C_COMPOSITES = frozenset(_STATE_BYTES_BY_CTYPE)
+
 
 def export_setter_c_type(export_type: str) -> str:
     """Type C de l'argument d'un setter de spawn pour cet export : un scalaire
@@ -165,6 +171,25 @@ class _SequencePlan:
     steps:   list               # list[_Step], numérotées 1..N à l'émission
     lifted:  list               # noms des locals qui traversent une attente
     timer:   bool               # au moins un wait(n) → un compteur partagé
+    # Les locals hissés qui tiennent un ACTEUR : rangés en RÉFÉRENCE (un entier,
+    # cf. `actor_ref_make`), comme une variable de tête, parce qu'un pointeur ne
+    # survit pas à l'image (l'emplacement peut changer de main pendant l'attente).
+    lifted_actors: set = field(default_factory=set)
+
+
+def _local_assigns(stmts):
+    """Les `local x = …` d'un corps, dans l'ordre de la source, blocs imbriqués
+    compris. Sert à typer les locals d'une séquence AVANT de l'émettre."""
+    for s in stmts or ():
+        if isinstance(s, StmtLocalAssign):
+            yield s
+        elif isinstance(s, StmtIf):
+            yield from _local_assigns(s.then)
+            for _cond, body in s.elseifs:
+                yield from _local_assigns(body)
+            yield from _local_assigns(s.else_)
+        elif isinstance(s, (StmtWhile, StmtForNum)):
+            yield from _local_assigns(s.body)
 
 
 def referenced_names(nodes) -> set[str]:
@@ -772,19 +797,87 @@ class CodeGen:
                 if f not in lifted:
                     lifted.append(f)
 
+            types, actors = self._lifted_types(fn, lifted)
             plan = _SequencePlan(
                 name=name, steps=steps, lifted=lifted,
-                timer=any(st.kind == WAIT_FN for st in steps))
+                timer=any(st.kind == WAIT_FN for st in steps),
+                lifted_actors=actors)
             self._seq_plans.append(plan)
             self._plan_of[fn.name] = plan
 
             # L'état demandé par cette séquence : l'étape, le compteur s'il y a
-            # une durée à décompter, et les locals qui traversent.
+            # une durée à décompter, et les locals qui traversent. Un local
+            # hissé garde le type C de sa valeur : `int` en dur rangeait un
+            # `Vec2` ou un `mm_sfxhand` dans un entier, et gcc refusait la
+            # ligne générée.
             self._state_extra.append(("int", f"seq_{name}_step", "0"))
             if plan.timer:
                 self._state_extra.append(("int", f"seq_{name}_timer", "0"))
             for loc in lifted:
-                self._state_extra.append(("int", f"seq_{name}_{loc}", "0"))
+                c_type = types.get(loc, "int")
+                self._state_extra.append((c_type, f"seq_{name}_{loc}",
+                                          "{0}" if c_type in _C_COMPOSITES else "0"))
+
+    def _lifted_types(self, fn, lifted: list) -> tuple[dict, set]:
+        """Le type C de chaque local hissé dans l'état d'une séquence, et ceux
+        qui tiennent un acteur.
+
+        Le type se lit sur la valeur du `local`, par les mêmes fonctions que sa
+        déclaration dans une tranche (`_local_value_ctype`) : une seule décision,
+        au même endroit, pour le champ et pour l'affectation qui l'écrit. Un
+        acteur fait exception : un `Actor*` ne survit pas à l'image, il est rangé
+        en RÉFÉRENCE (un entier), comme une variable de tête.
+
+        Le plan tourne AVANT l'émission : les types des locals de la séquence ne
+        sont pas encore connus. On les note au passage, puis on rend les
+        dictionnaires à leur état : ce qu'une séquence déclare n'a pas à teinter
+        le handler émis avant elle."""
+        saved_vec, saved_ref = dict(self._vec_types), dict(self._ref_types)
+        types: dict[str, str] = {}
+        actors: set[str] = set()
+        try:
+            for s in _local_assigns(fn.body):
+                c_type = self._local_value_ctype(s.value)
+                self._note_ref(s.name, s.value)
+                vt = (infer_vec_type(s.value, self._vec_types, self._ref_types, self._kinds)
+                      if s.value is not None else None)
+                if vt:
+                    self._vec_types[s.name] = vt
+                if s.name not in lifted:
+                    continue
+                if c_type == "Actor*":
+                    actors.add(s.name)
+                    c_type = "int"
+                types[s.name] = c_type
+        finally:
+            self._vec_types.clear(); self._vec_types.update(saved_vec)
+            self._ref_types.clear(); self._ref_types.update(saved_ref)
+        return types, actors
+
+    def _local_value_ctype(self, value) -> str:
+        """Le type C que prend `local x = value`. Même ordre de décision pour la
+        déclaration dans une tranche et pour le champ d'état d'une séquence."""
+        vt = ((infer_vec_type(value, self._vec_types, self._ref_types, self._kinds)
+               or self._export_vec_type(value)) if value is not None else None)
+        if vt:
+            return C_TYPES[vt]
+        if self._holds_actor(value):
+            return "Actor*"
+        rt = infer_ref_type(value, self._kinds, self._ref_types) if value is not None else None
+        return REF_TYPE_TABLE[rt].c_type if rt else "int"
+
+    def _holds_actor(self, value) -> bool:
+        """`local b = …` tient-il un acteur ? `actor:get` et `actor:spawn` en
+        rendent un ; une variable de tête qui en garde la référence le résout en
+        acteur ; `self.Canon` nomme un enfant, qui en est un aussi."""
+        if value is None:
+            return False
+        if isinstance(value, ExprCall) and self._call_key(value.func) in ("actor.get", "actor.spawn"):
+            return True
+        if isinstance(value, ExprName) and value.name in (self._held_refs | self._export_actors):
+            return True
+        return (isinstance(value, ExprIndex) and isinstance(value.obj, ExprName)
+                and value.obj.name == "self" and value.field in (self.ctx.child_refs or {}))
 
     def _state_ref(self, field: str) -> str:
         """Où vit ce morceau d'état : dans le bloc de l'emplacement de l'instance pour un prefab,
@@ -860,6 +953,11 @@ class CodeGen:
         # pour toute la durée de l'émission de cette séquence : y compris leur
         # `local x = …`, qui devient une simple affectation.
         self._local_state = {loc: f"seq_{plan.name}_{loc}" for loc in plan.lifted}
+        # Un local hissé qui tient un acteur se lit et s'écrit comme une
+        # variable de tête : `actor_ref_make` à l'écriture, `actor_ref_get` à la
+        # lecture, le temps de cette séquence.
+        held = set(self._held_refs)
+        self._held_refs |= plan.lifted_actors
         self._w(f"/* Sequence \"{plan.name}\" : one slice per wait, in source order.")
         if plan.lifted:
             self._w(f"   Survive the wait: {', '.join(plan.lifted)}. */")
@@ -923,6 +1021,7 @@ class CodeGen:
         self._w("}")
         self._w("")
         self._local_state = {}
+        self._held_refs = held
 
     def _emit_sequence_pump(self):
         """Les séquences avancent à la FIN de `on_update`, dans l'ordre de
@@ -1350,7 +1449,7 @@ class CodeGen:
         for c_type, field_name, init in self._state_extra:
             fields.append(f"{c_type} {field_name};")
             inits.append(f".{field_name} = {init}")
-            per_instance += 4
+            per_instance += _STATE_BYTES_BY_CTYPE.get(c_type, 4)
 
         if not fields:
             return
@@ -1603,7 +1702,7 @@ class CodeGen:
             prop = resolve_prop(s.target, self._ref_types, self._kinds)
             if prop is not None:
                 receiver, p = prop
-                receiver = self._prop_receiver_c(s.target, receiver, p)
+                receiver = self._prop_receiver_c(s.target, p)
                 if p.c_setter is None:
                     # lecture seule : le checker a déjà refusé ; on trace plutôt
                     # que d'émettre du C qui ne compile pas.
@@ -1625,7 +1724,7 @@ class CodeGen:
                 if (owner is not None and owner[1].ptype in VEC_CONSTRUCTORS
                         and owner[1].c_setter is not None):
                     receiver, p = owner
-                    receiver = self._prop_receiver_c(s.target.obj, receiver, p)
+                    receiver = self._prop_receiver_c(s.target.obj, p)
                     c_args = [receiver] if p.self_first else []
                     guard = self._prop_guard(s.target.obj.obj, receiver, p, "setting")
                     self._w(f"{'if (' + guard + ') ' if guard else ''}"
@@ -1673,12 +1772,17 @@ class CodeGen:
             # valeur ne survivrait pas à l'attente qui suit.
             lifted = self._local_state.get(s.name)
             if lifted is not None:
-                val = self._expr(s.value) if s.value is not None else "0"
                 # Le type de la référence se note même quand la variable est
                 # HISSÉE dans l'état d'une séquence : c'est le même nom, et
                 # `pas:set_volume(…)` doit rester un réglage d'effet après
                 # l'attente qui l'a fait monter là.
                 self._note_ref(s.name, s.value)
+                if s.name in self._held_refs:
+                    # Un acteur hissé est rangé en RÉFÉRENCE, comme une variable
+                    # de tête : l'emplacement peut changer de main pendant l'attente.
+                    self._emit_held_ref_write(s.name, s.value)
+                    return
+                val = self._expr(s.value) if s.value is not None else "0"
                 self._w(f"{self._state_ref(lifted)} = {val};")
                 return
             dims = array_dims(s.value)
@@ -1696,31 +1800,11 @@ class CodeGen:
                 self._w(f"{C_TYPES[vt]} {s.name} = {self._expr(s.value)};")
                 return
             val = self._expr(s.value) if s.value is not None else "0"
-            # Détecte local var = actor:get("...") → Actor* au lieu de int
-            is_actor_ref = (
-                s.value is not None
-                and isinstance(s.value, ExprCall)
-                and self._call_key(s.value.func) == "actor.get"
-            ) or (
-                # `local b = actor:spawn("X", pos)` tient l'instance née : un
-                # `Actor*`, donc `b:set_velocity(...)` chaîne
-                # et `if not b then` teste vraiment le pool plein (NULL).
-                s.value is not None
-                and isinstance(s.value, ExprCall)
-                and self._call_key(s.value.func) == "actor.spawn"
-            ) or (
-                # `local b = last` : la variable de tête qui tient une référence se résout en
-                # acteur à la lecture, comme un export `actor_ref`.
-                isinstance(s.value, ExprName) and s.value.name in (self._held_refs | self._export_actors)
-            ) or (
-                # `local bras = self.bras` tient un acteur, exactement comme
-                # `actor:get(...)` : donc un `Actor*` et non un `int`, sans quoi
-                # `bras:destroy()` ne compilerait pas.
-                isinstance(s.value, ExprIndex)
-                and isinstance(s.value.obj, ExprName)
-                and s.value.obj.name == "self"
-                and s.value.field in (self.ctx.child_refs or {})
-            )
+            # `local b = actor:get("X")`, `actor:spawn(...)`, une variable de
+            # tête qui tient une référence, ou un enfant (`self.bras`) : un
+            # `Actor*` et non un `int`, sans quoi `b:destroy()` ne compilerait
+            # pas. Même décision que pour le champ d'état d'une séquence.
+            is_actor_ref = self._holds_actor(s.value)
             # Une RÉFÉRENCE rendue par un appel (`sfx.play`) porte le type C du
             # handle, et le nom est retenu : c'est lui qui dira à `_invoke` que
             # `pas:set_volume(80)` est un réglage d'effet et non d'acteur.
@@ -1822,16 +1906,7 @@ class CodeGen:
             # String littérale en dehors d'un appel API → chaîne C (rare en v1)
             return _c_quoted(e.value)
         if isinstance(e, ExprName):
-            # Une variable d'une séquence qui traverse une attente vit dans
-            # l'état de cette séquence : et masque un éventuel homonyme de tête,
-            # comme un `local` masque en Lua.
-            field = self._local_state.get(e.name)
-            if field is not None:
-                return self._state_ref(field)
-            # Prefab poolé : une variable de tête écrite par le script vit dans
-            # le slot de CETTE instance, pas au scope fichier.
-            field = self._pool_state.get(e.name)
-            raw = self._state_ref(field) if field is not None else e.name
+            raw = self._name_storage(e.name)
             # Une variable de tête qui tient un acteur range une RÉFÉRENCE : on la résout en
             # `Actor*` (ou nil si l'emplacement a changé de main depuis).
             if e.name in self._held_refs:
@@ -1853,7 +1928,7 @@ class CodeGen:
             prop = resolve_prop(e, self._ref_types, self._kinds)
             if prop is not None:
                 receiver, p = prop
-                recv_c = self._prop_receiver_c(e, receiver, p)
+                recv_c = self._prop_receiver_c(e, p)
                 read = self._prop_read(recv_c, p)
                 guard = self._prop_guard(e.obj, recv_c, p, "reading")
                 return f"({guard} ? {read} : {self._prop_zero(p)})" if guard else read
@@ -1999,12 +2074,13 @@ class CodeGen:
                     self._prop_constant(p, value.value, access))
         return p.c_setter, self._expr(value)
 
-    def _prop_receiver_c(self, access, receiver: str, p=None) -> str:
-        """Le récepteur C d'un accès de propriété. Un NOM s'émet tel quel ; un
-        récepteur CHAÎNÉ (`actor:get("Foe").velocity`) s'émet par son expression :
-        `resolve_prop` n'en rend qu'un libellé, bon pour un message du checker."""
-        c = (receiver if isinstance(access.obj, ExprName)
-             and access.obj.name not in (self._held_refs | self._export_actors) else self._expr(access.obj))
+    def _prop_receiver_c(self, access, p=None) -> str:
+        """Le récepteur C d'un accès de propriété, demandé à `_expr` : lui seul
+        sait où vit un nom (état de séquence, slot de pool) et comment il se lit
+        (une référence d'acteur se résout par `actor_ref_get`). Ce que
+        `resolve_prop` rend à côté n'est qu'un LIBELLÉ, bon pour un message du
+        checker : l'émettre tel quel citait un nom Lua absent du C."""
+        c = self._expr(access.obj)
         # Une propriété HÉRITÉE (`menu.visible`, de `ui_element`) attend le récepteur de
         # son parent : la même conversion que pour une méthode héritée.
         if p is not None and "." in p.lua_name:
@@ -2115,11 +2191,25 @@ class CodeGen:
             cval = self._expr(value)
         self._w(f'if (actor_exists_warn({recv}, "writing {key}")) {sym}_set_{key}({recv}, {cval});')
 
+    def _name_storage(self, name: str) -> str:
+        """Où vit ce nom dans le C émis, avant toute conversion de lecture.
+
+        Une variable d'une séquence qui traverse une attente vit dans l'état de
+        cette séquence, et masque un éventuel homonyme de tête, comme un `local`
+        masque en Lua. Dans un prefab poolé, une variable de tête écrite par le
+        script vit dans le slot de CETTE instance, pas au scope fichier. Une
+        seule réponse, pour la lecture comme pour l'écriture : deux endroits qui
+        la calculaient séparément ont divergé (le récepteur d'une propriété
+        citait le nom Lua, absent du C émis)."""
+        field = self._local_state.get(name)
+        if field is None:
+            field = self._pool_state.get(name)
+        return self._state_ref(field) if field is not None else name
+
     def _emit_held_ref_write(self, name: str, value) -> None:
         """`last = actor:spawn(...)` sur une variable de tête : on range la RÉFÉRENCE de l'acteur
         (sa génération y est retenue), `nil` la vide."""
-        field = self._pool_state.get(name)
-        raw = self._state_ref(field) if field is not None else name
+        raw = self._name_storage(name)
         if isinstance(value, ExprNil):
             self._w(f"{raw} = 0;")
         else:
@@ -2162,7 +2252,7 @@ class CodeGen:
                 continue
             receiver, p = prop
             receiver, p = prop
-            receiver = self._prop_receiver_c(prop_side, receiver, p)
+            receiver = self._prop_receiver_c(prop_side, p)
             other = e.right if prop_side is e.left else e.left
             if not isinstance(other, ExprString):
                 continue
