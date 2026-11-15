@@ -1,6 +1,7 @@
 """Actor / Prefab / Scene — entités placées dans une scène + la scène elle-même."""
 
-from dataclasses import dataclass, field
+import copy
+from dataclasses import asdict, dataclass, field, fields
 from typing import Optional
 
 from core.models.resource import Resource
@@ -357,6 +358,10 @@ class Actor(SceneMember, ComponentOwnerMixin):
     prefab_name: Optional[str] = None
     active: bool = True
     components: list = field(default_factory=list)
+    # Différence persistée avec le prefab. Les composants résolus restent dans
+    # `components` en mémoire pour que canvas, inspecteur et build lisent tous
+    # le même Actor, sans chemin parallèle.
+    prefab_overrides: dict = field(default_factory=dict, repr=False)
     # Transform / placement dans la scène
     x: int = 112
     y: int = 72
@@ -410,10 +415,12 @@ class Actor(SceneMember, ComponentOwnerMixin):
     notes: str = ""   # note libre utilisateur (éditeur uniquement, jamais compilée)
 
     def to_dict(self) -> dict:
+        resolved_prefab = bool(self.prefab_name and getattr(self, "_prefab_override_format", False))
         return {
             **self.member_header(),     # name, id, et source = l'id du prefab d'origine (cf. scene_member.py)
             "active":      self.active,
-            "components":  components_to_list(self.components),
+            **({"overrides": copy.deepcopy(self.prefab_overrides)} if resolved_prefab
+               else {"components": components_to_list(self.components)}),
             "x":           self.x,
             "y":           self.y,
             "flip_h":      self.flip_h,
@@ -435,12 +442,15 @@ class Actor(SceneMember, ComponentOwnerMixin):
 
     @classmethod
     def from_dict(cls, d: dict) -> "Actor":
+        raw_overrides = d.get("overrides")
         actor = cls(
             name        = d.get("name", "Actor"),
             # Un acteur d'avant l'en-tête commun nomme son prefab ; `Project.resolve_scene_sources` en tire l'id.
             prefab_name = d.get("prefab_name"),
             active      = d.get("active", True),
-            components  = _components_with_affine_migrated(d),
+            components  = ([] if isinstance(raw_overrides, dict)
+                           else _components_with_affine_migrated(d)),
+            prefab_overrides = copy.deepcopy(raw_overrides) if isinstance(raw_overrides, dict) else {},
             x           = d.get("x", 112),
             y           = d.get("y", 72),
             flip_h      = d.get("flip_h", False),
@@ -456,6 +466,7 @@ class Actor(SceneMember, ComponentOwnerMixin):
             is_player   = bool(d.get("is_player", False)),
             notes       = d.get("notes", ""),
         )
+        actor._prefab_override_format = isinstance(raw_overrides, dict)
         actor.read_member_header(d)
         return actor
 
@@ -516,6 +527,56 @@ def actor_prefab_linked(actor: "Actor", prefab: "Prefab") -> bool:
         if isinstance(ac, ScriptComponent) and ac.script != pc.script:
             return False
     return True
+
+
+_PREFAB_ACTOR_FIELDS = ("pal_bank", "is_player", "notes")
+
+
+def actor_prefab_override_diff(actor: "Actor", prefab: "Prefab") -> Optional[dict]:
+    """Surcharges par champ, ou None si la structure ne suit plus le prefab."""
+    if not actor_prefab_linked(actor, prefab):
+        return None
+    overrides: dict = {}
+    component_overrides: dict = {}
+    for instance, source in zip(actor.components, prefab.actor.components):
+        changed = {}
+        source_values = asdict(source)
+        for f in fields(instance):
+            if f.name == "id":
+                continue
+            value = copy.deepcopy(getattr(instance, f.name))
+            if value != source_values.get(f.name):
+                changed[f.name] = value
+        if changed:
+            component_overrides[instance.id] = changed
+    if component_overrides:
+        overrides["components"] = component_overrides
+    for name in _PREFAB_ACTOR_FIELDS:
+        value = copy.deepcopy(getattr(actor, name))
+        if value != getattr(prefab.actor, name):
+            overrides[name] = value
+    return overrides
+
+
+def resolve_actor_prefab(actor: "Actor", prefab: "Prefab") -> None:
+    """Matérialise le prefab et les seules surcharges de l'instance en mémoire."""
+    overrides = copy.deepcopy(actor.prefab_overrides)
+    actor.components = copy.deepcopy(prefab.actor.components)
+    for name in _PREFAB_ACTOR_FIELDS:
+        setattr(actor, name, copy.deepcopy(getattr(prefab.actor, name)))
+    by_id = {component.id: component for component in actor.components}
+    for component_id, values in (overrides.get("components") or {}).items():
+        component = by_id.get(component_id)
+        if component is None:
+            continue
+        valid = {f.name for f in fields(component)} - {"id"}
+        for name, value in values.items():
+            if name in valid:
+                setattr(component, name, copy.deepcopy(value))
+    for name in _PREFAB_ACTOR_FIELDS:
+        if name in overrides:
+            setattr(actor, name, copy.deepcopy(overrides[name]))
+    actor._prefab_override_format = True
 
 
 # ──────────────────────────────────────────────────────────────────

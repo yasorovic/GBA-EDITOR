@@ -345,6 +345,9 @@ class CodegenContext:
     # `textBox`, `ui_element`) : le même dictionnaire que `BuildContext.ref_kinds` :
     # le type jugé par le checker et la constante émise par le codegen parlent du même élément.
     ref_kinds: Optional[dict] = None
+    # nom simple écrit dans le script -> symbole projet qualifié (`layout.nom`).
+    # Le checker reste local à la scène, tandis que les tables C sont globales.
+    ui_ref_symbols: dict = field(default_factory=dict)
     # {nom d'image: [noms d'état de SON sprite]} : un état n'a de sens que dans
     # un sprite, et c'est l'image que le script nomme (cf. api.image_state_constant).
     image_states: dict = field(default_factory=dict)
@@ -1971,6 +1974,7 @@ class CodeGen:
             # (`IMGST_{image}_{état}`) : le checker a déjà refusé une image inconnue.
             image = element_of(access.obj, self._ref_elements)
             if image:
+                image = self.ctx.ui_ref_symbols.get(image, image)
                 return image_state_constant(image, name)
         make = _DOMAIN_CONSTANT.get(p.domain)
         return make(self, name) if make else f'"{name}"'
@@ -2795,7 +2799,8 @@ class CodeGen:
         if not args or not isinstance(args[0], ExprString):
             return "/* interface:get() : argument invalide */"
         name = args[0].value
-        return ref_constant((self._kinds or {}).get(name, REF_UI_ELEMENT), name)
+        symbol = self.ctx.ui_ref_symbols.get(name, name)
+        return ref_constant((self._kinds or {}).get(name, REF_UI_ELEMENT), symbol)
 
     def _sequence_step_arg(self, args: list, call: str) -> Optional[str]:
         """L'accès à l'étape de la séquence nommée, ou None si le nom n'est pas

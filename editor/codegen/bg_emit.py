@@ -46,7 +46,8 @@ def emit_bg_c(sym: str, tileset: list, tilemap: list, pal_offset: int = 0,
     SE stockent un pal_bank LOCAL (0..N-1, relatif à la palette de l'asset) ;
     on le décale ici vers sa banque physique réelle. `bpp` : 4 (tuiles 8 u32) ou
     8 (tuiles 16 u32, pal_bank ignoré par le hardware → pal_offset sans effet)."""
-    tiles = tileset_words(tileset, bpp)
+    blank_tile = len(tileset)
+    tiles = tileset_words([*tileset, "0" * (128 if bpp == 8 else 64)], bpp)
     se = [(w + (pal_offset << 12)) & 0xFFFF for w in tilemap] if pal_offset else list(tilemap)
     tiles_len = len(tiles) * 4
     attr = '__attribute__((aligned(4)))'
@@ -59,6 +60,7 @@ def emit_bg_c(sym: str, tileset: list, tilemap: list, pal_offset: int = 0,
     h = (
         f"#ifndef GRIT_{sym.upper()}_H\n#define GRIT_{sym.upper()}_H\n\n"
         f"#define {sym}TilesLen {tiles_len}\n"
+        f"#define {sym}BlankTile {blank_tile}\n"
         f"extern const unsigned int {sym}Tiles[{len(tiles)}];\n\n"
         f"extern const unsigned short {sym}Map[{len(se)}];\n\n"
         f"#endif // GRIT_{sym.upper()}_H\n"

@@ -63,12 +63,19 @@ def _deux_layouts(tmp_path, nom_b: str) -> Project:
     return p
 
 
-def test_deux_layouts_avec_un_element_homonyme_est_une_erreur(tmp_path):
-    """Deux scènes, deux layouts, chacun avec « titre » : REGION_TITRE serait défini
-    deux fois, avec deux valeurs. Le cas d'une démo réelle."""
+def test_deux_layouts_independants_acceptent_un_element_homonyme(tmp_path):
+    """Les symboles C sont qualifiés par layout, donc ces noms sont locaux."""
     from core.validator import _check_ui_element_names_unique
 
-    errors = _errs(_deux_layouts(tmp_path, "titre"), _check_ui_element_names_unique)
+    assert _errs(_deux_layouts(tmp_path, "titre"), _check_ui_element_names_unique) == []
+
+
+def test_deux_layouts_homonymes_dans_la_meme_scene_sont_ambigus(tmp_path):
+    from core.validator import _check_ui_element_names_unique
+
+    p = _deux_layouts(tmp_path, "titre")
+    p.scenes.append(Scene(name="S", ui_layouts=["main", "victoire"]))
+    errors = _errs(p, _check_ui_element_names_unique)
 
     assert len(errors) == 1
     assert "titre" in errors[0] and "'main'" in errors[0] and "'victoire'" in errors[0]

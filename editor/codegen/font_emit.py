@@ -1038,6 +1038,7 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
     L: list[str] = ["/* ── Text slots (UILayout) ─────────────────── */"]
     rows: list[str] = []
     for _lay, r in regions:
+        qname = f"{_lay.name}.{r.name}"
         # Cible et ancrage EFFECTIFS (hérités du root) : une zone imbriquée sous
         # un panel n'a plus d'ancrage propre.
         target_obj = (_lay.resolved_target(r) == TARGET_OBJ)
@@ -1059,7 +1060,7 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
             h = max(8, ((h + 7) // 8) * 8)
         font_idx = font_names.index(r.font_name) if r.font_name in font_names else 255
         pl = (obj_place or {}).get(r.name) if target_obj else None
-        ai = (actor_index or {}).get(r.name, -1)
+        ai = (actor_index or {}).get(qname, -1)
         # Priorité : -1 (hérité, le défaut) émis en 255, la sentinelle que
         # `ui_obj_prio` résout à la volée sur l'acteur ancré (sinon 0) ; 0-3 =
         # surcharge de l'auteur. Même mappage que les images (cf. `_gen_ui_images`).
@@ -1068,7 +1069,7 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
                  f"{sum(c // 8 for c in pl['cols'])}, {pl['rows']}, {pl['anim']}, "
                  f"{prio}, {FONT_PAL_BANK}"
                  if pl else "-1, 0, 0, 0, 0, 0, 0, 0, 0")
-        elem = (elem_index or {}).get(r.name, -1)
+        elem = (elem_index or {}).get(qname, -1)
         # En commentaire : d'où vient le contenu. La table seule ne le dit pas,
         # et c'est la première question en relisant le C.
         origin = "authored" if getattr(r, "text_key", "") else "written by script"

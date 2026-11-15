@@ -51,6 +51,16 @@ def reference_index(p, sound_assets=None) -> dict[str, dict[str, int]]:
     def index_of(names) -> dict[str, int]:
         return {n: i for i, n in enumerate(names)}
 
+    def ui_index(names) -> dict[str, int]:
+        """Index qualifié, plus alias simple seulement s'il est non ambigu."""
+        out = index_of(names)
+        simple: dict[str, list[int]] = {}
+        for name, rank in out.items():
+            simple.setdefault(name.rsplit(".", 1)[-1], []).append(rank)
+        out.update({name: ranks[0] for name, ranks in simple.items()
+                    if len(ranks) == 1})
+        return out
+
     audio = {kind: index_of(item.name for item, _path in sound_assets.get(kind, []))
              for kind in ("sfx", "music")}
     return {
@@ -63,8 +73,8 @@ def reference_index(p, sound_assets=None) -> dict[str, dict[str, int]]:
         "scene":   index_of([s.name for s in getattr(p, "scenes", [])]),
         "font":    index_of([f.name for f in project_fonts(p)]),
         "palette": index_of([b.name for b in getattr(p, "palettes", [])]),
-        "region":  index_of(p.region_names() if hasattr(p, "region_names") else []),
-        "image":   index_of(p.image_names() if hasattr(p, "image_names") else []),
+        "region":  ui_index(p.region_names() if hasattr(p, "region_names") else []),
+        "image":   ui_index(p.image_names() if hasattr(p, "image_names") else []),
         # Références du catalogue d'assets, pas des composants/layers de scène.
         "sprite":  index_of(p.data_column_choices("sprite")),
         "background": index_of(p.data_column_choices("background")),

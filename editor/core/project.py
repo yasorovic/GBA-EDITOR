@@ -77,7 +77,8 @@ from core.resources.palette_store import PaletteStore
 from core.resources.deleted_files import DeletedFilesBin
 from core.project_starters import copy_starter, get_starter
 from core import crash_log
-from core.scene_sources import resolve_scene_sources, stamp_scene_sources
+from core.scene_sources import (prepare_scene_prefabs, resolve_scene_prefabs,
+                                resolve_scene_sources, stamp_scene_sources)
 from core.project_paths import (
     ProjectPathsMixin, PROJECT_EXT, PROJECT_FORMAT_VERSION,
     ProjectFileError, ProjectManifestError,
@@ -217,7 +218,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # encore chargé, et l'appelant ne doit pas avoir à le vérifier.
         self.load_warnings: list[str] = []
         self.scenes:      ResourceStore[Scene]       = ResourceStore(self.user_library_dir, Scene)
-        self.scenes.before_save = lambda scene: stamp_scene_sources(self, scene)
+        self.scenes.before_save = self._prepare_scene_save
         self.sfx:         ResourceStore[Sfx]         = ResourceStore(self.user_library_dir, Sfx)
         self.music:       ResourceStore[Music]       = ResourceStore(self.user_library_dir, Music)
         # Les jingles sont des modules comme les musiques ; c'est leur DOSSIER qui
@@ -687,21 +688,26 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         return [(lay, e) for lay in self.ui_layouts for e in lay.elements]
 
     def region_names(self) -> list[str]:
-        """Noms de slot de texte du projet entier — l'espace de nommage des
-        constantes `REGION_*`, donc ce contre quoi vérifier l'unicité."""
-        return [r.name for _, r in self.all_regions()]
+        """Noms qualifiés `layout.élément`, dans l'ordre de `g_ui_regions`."""
+        return [self.ui_qualified_name(lay, r) for lay, r in self.all_regions()]
 
     def image_names(self) -> list[str]:
-        """Noms d'image du projet entier — l'espace des constantes `IMAGE_*`."""
-        return [im.name for _, im in self.all_images()]
+        """Noms qualifiés `layout.élément`, dans l'ordre de `g_ui_images`."""
+        return [self.ui_qualified_name(lay, im) for lay, im in self.all_images()]
 
     def ui_element_names(self) -> list[str]:
-        """TOUS les noms d'élément d'UI du projet. L'unicité se cherche ici et
-        pas par type : les deux espaces de constantes (`REGION_*`, `IMAGE_*`)
-        sont distincts côté C, mais l'auteur, lui, ne devrait jamais avoir à
-        savoir que deux éléments homonymes de types différents sont légaux —
-        il les verrait côte à côte dans l'arbre sans pouvoir les distinguer."""
-        return [e.name for _lay, e in self.all_elements()]
+        """Noms qualifiés `layout.élément`, dans l'ordre de `g_ui_elements`."""
+        return [self.ui_qualified_name(lay, e) for lay, e in self.all_elements()]
+
+    @staticmethod
+    def ui_qualified_name(layout, element) -> str:
+        """Nom de build dérivé, jamais stocké dans l'asset."""
+        return f"{layout.name}.{element.name}"
+
+    def scene_ui_name_map(self, scene) -> dict[str, str]:
+        """Nom simple authoré vers nom qualifié, pour les layouts de la scène."""
+        return {element.name: self.ui_qualified_name(layout, element)
+                for layout, element in self.scene_ui_elements(scene)}
 
     def audio_modules(self) -> list:
         """Tous les modules que la ROM peut embarquer : musiques PUIS jingles.
@@ -896,9 +902,15 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         actor = copy.deepcopy(prefab.actor)
         actor.name = name
         actor.prefab_name = prefab.name
+        actor.prefab_overrides = {}
+        actor._prefab_override_format = True
         actor.active = True
         actor.x, actor.y = x, y
         return actor
+
+    def _prepare_scene_save(self, scene) -> None:
+        prepare_scene_prefabs(self, scene)
+        stamp_scene_sources(self, scene)
 
     # ── Build ─────────────────────────────────────────────────────
 
@@ -1314,6 +1326,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.load_scenes()
         for scene in self.scenes:
             resolve_scene_sources(self, scene)
+            resolve_scene_prefabs(self, scene)
         self.load_active_scene_resources()
         self.load_warnings += self._unreadable_warnings()
 

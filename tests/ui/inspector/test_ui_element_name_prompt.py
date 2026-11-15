@@ -25,19 +25,29 @@ def test_un_nom_libre_est_rendu_tel_quel_sans_question(qapp, tmp_path, monkeypat
     assert resolve_ui_element_name(None, project, shop, mine, "slot3") == "slot3"
 
 
-def test_un_nom_pris_propose_le_suffixe_et_l_auteur_accepte(qapp, tmp_path, monkeypatch):
+def test_un_nom_pris_dans_un_autre_layout_reste_local(qapp, tmp_path, monkeypatch):
     project, shop, mine = _project(tmp_path)
+    monkeypatch.setattr(MessageBox, "question",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("asked")))
+
+    assert resolve_ui_element_name(None, project, shop, mine, "slot2") == "slot2"
+
+
+def test_un_nom_pris_dans_le_meme_layout_propose_un_suffixe(qapp, tmp_path, monkeypatch):
+    project, shop, mine = _project(tmp_path)
+    shop.elements.append(UIText(name="slot3"))
     shown = []
     monkeypatch.setattr(MessageBox, "question",
                         lambda parent, title, text, *a, **k: shown.append(text) or MessageBox.StandardButton.Yes)
 
-    assert resolve_ui_element_name(None, project, shop, mine, "slot2") == "slot2_2"
-    assert "hud" in shown[0] and "slot2_2" in shown[0]
+    assert resolve_ui_element_name(None, project, shop, mine, "slot3") == "slot3_2"
+    assert "shop" in shown[0] and "slot3_2" in shown[0]
 
 
-def test_un_nom_pris_que_l_auteur_refuse_ne_change_rien(qapp, tmp_path, monkeypatch):
+def test_un_nom_pris_localement_que_l_auteur_refuse_ne_change_rien(qapp, tmp_path, monkeypatch):
     project, shop, mine = _project(tmp_path)
+    shop.elements.append(UIText(name="slot3"))
     monkeypatch.setattr(MessageBox, "question", lambda *a, **k: MessageBox.StandardButton.No)
 
-    assert resolve_ui_element_name(None, project, shop, mine, "slot2") is None
+    assert resolve_ui_element_name(None, project, shop, mine, "slot3") is None
     assert mine.name == "slot9"

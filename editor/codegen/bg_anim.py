@@ -328,7 +328,7 @@ def layer_tile_count(p, host_ba) -> int:
     """Tuiles réellement chargées dans le charblock du calque : les siennes plus
     celles des fusions. C'est CE nombre que le budget doit voir — compter le seul
     hôte laisserait l'animé déborder sur le voisin sans erreur à l'exécution."""
-    return len(merged_tileset(p, host_ba))
+    return len(merged_tileset(p, host_ba)) + 1   # padding de carte garanti transparent
 
 
 def host_palettes(p, host_ba) -> list:

@@ -535,20 +535,29 @@ def transpile_all(
     image_names  = (p.image_names()  if hasattr(p, "image_names")  else [])
     # TOUS les éléments d'UI, tous types confondus — l'index de la table de
     # visibilité plate (UIELEM_*), pour interface:get().
-    element_names = (p.ui_element_names() if hasattr(p, "ui_element_names") else [])
+    element_symbols = (p.ui_element_names() if hasattr(p, "ui_element_names") else [])
+    element_names = [el.name for _lay, el in p.scene_ui_elements(scene)]
+    ui_ref_symbols = p.scene_ui_name_map(scene)
+    ui_list_names = [p.ui_qualified_name(lay, item)
+                     for lay, item in _project_lists(p)]
     # Le TYPE de chaque élément (liste, image, zone de texte, conteneur), lu dans la
     # mise en page : c'est ce qui type `interface:get("X")` dans le script.
     # Ce que rend une chose NOMMÉE : un élément d'interface par son nom, une cellule de
     # colonne `region`/`image` par son chemin `data.Table.colonne`.
-    ref_kinds = {**ui_ref_kinds(p), **data_column_kinds(p)}
+    ref_kinds = {**ui_ref_kinds(p, scene), **data_column_kinds(p)}
     # Les fonds que CETTE scène a : `layer:get(n)` est borné dessus (`api.LAYERS_BY_MODE`).
     layer_numbers = LAYERS_BY_MODE.get(int(getattr(scene, "render_mode", 0) or 0), LAYER_NUMBERS)
     # Les états que chaque image peut prendre, lus dans SON sprite : c'est le
     # seul endroit du build qui tienne les deux bouts (l'élément et l'asset).
     image_states = {}
+    check_image_states = {}
+    _scene_ui_layout_names = {lay.name for lay in p.scene_ui_layouts(scene)}
     for _lay, _im in (p.all_images() if hasattr(p, "all_images") else []):
         _spr = p.get_buildable_sprite(getattr(_im, "sprite_name", "") or "")
-        image_states[_im.name] = [st.name for st in (getattr(_spr, "states", []) or [])]
+        _states = [st.name for st in (getattr(_spr, "states", []) or [])]
+        image_states[p.ui_qualified_name(_lay, _im)] = _states
+        if _lay.name in _scene_ui_layout_names:
+            check_image_states[_im.name] = _states
     all_syms    = [c_sym(a.name) for a, _ in scene_actors]
     _actor_names = [a.name for a, _ in scene_actors]
     _area_names = [a.name for a in scene.areas]   # `area:get("…")` et `area.name` : les Areas de CETTE scène
@@ -724,7 +733,7 @@ def transpile_all(
             lang_codes   = lang_codes,
             palette_names = palette_names,
             element_names = element_names,
-            image_states = image_states,
+            image_states = check_image_states,
             ref_kinds    = ref_kinds,
             layer_numbers = layer_numbers,
             save_slots   = _save_slots,
@@ -787,7 +796,7 @@ def transpile_all(
         lang_codes   = lang_codes,
         palette_names = palette_names,
         element_names = element_names,
-        image_states = image_states,
+        image_states = check_image_states,
         ref_kinds    = ref_kinds,
         layer_numbers = layer_numbers,
         save_slots   = _save_slots,
@@ -872,11 +881,12 @@ def transpile_all(
             lang_codes   = lang_codes,
             palette_names = palette_names,
             region_names  = region_names,
-            ui_list_names = [pn.name for _l, pn in _project_lists(p)],
+            ui_list_names = ui_list_names,
             image_names   = image_names,
-            element_names = element_names,
+            element_names = element_symbols,
             image_states  = image_states,
             ref_kinds     = ref_kinds,
+            ui_ref_symbols = ui_ref_symbols,
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
@@ -964,7 +974,7 @@ def transpile_all(
             const_names  = list(const_names),
             sfx_component_name = pf_sfx_comp_name,
             element_names = element_names,
-            image_states = image_states,
+            image_states = check_image_states,
             ref_kinds    = ref_kinds,
             layer_numbers = layer_numbers,
             save_slots   = _save_slots,
@@ -1023,11 +1033,12 @@ def transpile_all(
             lang_codes   = lang_codes,
             palette_names = palette_names,
             region_names  = region_names,
-            ui_list_names = [pn.name for _l, pn in _project_lists(p)],
+            ui_list_names = ui_list_names,
             image_names   = image_names,
-            element_names = element_names,
+            element_names = element_symbols,
             image_states  = image_states,
             ref_kinds     = ref_kinds,
+            ui_ref_symbols = ui_ref_symbols,
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
@@ -1095,11 +1106,12 @@ def transpile_all(
         lang_codes   = lang_codes,
         palette_names = palette_names,
         region_names  = region_names,
-        ui_list_names = [pn.name for _l, pn in _project_lists(p)],
+        ui_list_names = ui_list_names,
         image_names   = image_names,
-        element_names = element_names,
+        element_names = element_symbols,
         image_states  = image_states,
         ref_kinds     = ref_kinds,
+        ui_ref_symbols = ui_ref_symbols,
         save_slots    = _save_slots,
         has_persistent = _has_persist,
         data_tables   = _data_tables,
@@ -1187,7 +1199,7 @@ def transpile_all(
             lang_codes   = lang_codes,
             palette_names = palette_names,
             element_names = element_names,
-            image_states = image_states,
+            image_states = check_image_states,
             ref_kinds    = ref_kinds,
             layer_numbers = layer_numbers,
             save_slots   = _save_slots,
@@ -1237,11 +1249,12 @@ def transpile_all(
             lang_codes   = lang_codes,
             palette_names = palette_names,
             region_names  = region_names,
-            ui_list_names = [pn.name for _l, pn in _project_lists(p)],
+            ui_list_names = ui_list_names,
             image_names   = image_names,
-            element_names = element_names,
+            element_names = element_symbols,
             image_states  = image_states,
             ref_kinds     = ref_kinds,
+            ui_ref_symbols = ui_ref_symbols,
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,

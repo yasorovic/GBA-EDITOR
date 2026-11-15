@@ -53,7 +53,8 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
         if not target_obj:
             x -= x % 8
             y -= y % 8
-        elem = (elem_index or {}).get(im.name, -1)
+        qname = p.ui_qualified_name(lay, im)
+        elem = (elem_index or {}).get(qname, -1)
         if sprite is None or not sprite.asset:
             rows.append(f"    {{ {x}, {y}, {im.w}, {im.h}, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, "
                         f"0, 0, 0, 1, 1, 0, {elem} }},  /* {im.name} — no sprite */")
@@ -78,7 +79,7 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
         rows.append(
             f"    {{ {x}, {y}, {g['frame_w']}, {g['frame_h']}, "
             f"{1 if target_obj else 0}, "
-            f"{ANCHORS.index(eff_anchor)}, {(actor_index or {}).get(im.name, -1)}, "
+            f"{ANCHORS.index(eff_anchor)}, {(actor_index or {}).get(qname, -1)}, "
             f"{ss}_anim_dirs, {ss}_state_start, {ss}_state_speed, {ss}_state_loop, "
             f"{n_states}, {st0}, {1 if im.playing else 0}, "
             f"{base}, {sprite.tiles_per_frame}, {oam_rel}, {prio}, "
@@ -87,7 +88,7 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
             f"  /* {im.name} — {sprite.name}"
             + (f", pavage {g['cols']}×{g['rows']}"
                if g['cols'] * g['rows'] > 1 else "") + " */")
-        if emit and eff_anchor == "actor" and (actor_index or {}).get(im.name, -1) < 0:
+        if emit and eff_anchor == "actor" and (actor_index or {}).get(qname, -1) < 0:
             # Même angle mort que pour une zone de texte : sans acteur résolu,
             # l'image se pose à l'origine de l'écran, ce qui ressemble à un bug
             # de placement plutôt qu'à une référence introuvable.
@@ -109,7 +110,7 @@ def ui_element_index(p: Project) -> dict:
     table de visibilité plate (`UIELEM_*`, `g_ui_elements`). Même ordre que
     celui utilisé par `codegen.py` pour les `#define` de script, donc la
     même constante des deux côtés du link."""
-    return {e.name: i for i, (_lay, e) in enumerate(
+    return {p.ui_qualified_name(lay, e): i for i, (lay, e) in enumerate(
         p.all_elements() if hasattr(p, "all_elements") else [])}
 
 
@@ -154,11 +155,11 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
     # Index d'IMAGE, celui de `g_ui_images` et donc de `IMAGE_*` : c'est par là
     # que la liste désigne son curseur. Le même ordre que `emit_ui_images_c`,
     # sans quoi elle en déplacerait un autre.
-    images = {im.name: i for i, (_l, im) in
+    images = {p.ui_qualified_name(lay, im): i for i, (lay, im) in
               enumerate(p.all_images() if hasattr(p, "all_images") else [])}
     # Index d'ÉLÉMENT (celui de `g_ui_elements`, donc de `UIELEM_*`) : c'est ce que la
     # liste rend quand on la traite comme un simple élément — `menu:hide()`.
-    elements = {el.name: i for i, (_l, el) in enumerate(
+    elements = {p.ui_qualified_name(lay, el): i for i, (lay, el) in enumerate(
         p.all_elements() if hasattr(p, "all_elements") else [])}
     rows_flat: list[int] = []
     row_counts: list[int] = []
@@ -172,7 +173,7 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
     for lay, lst in lists:
         rows = list_rows_of(lay, lst)
         row0 = len(rows_flat)
-        rows_flat += [regions.get(r.name, -1) for r in rows]
+        rows_flat += [regions.get(p.ui_qualified_name(lay, r), -1) for r in rows]
         row_counts.append(len(rows))
         actives.append(1 if getattr(lst, "active", True) else 0)
         delay = int(getattr(lst, "repeat_delay", 0) or 0) or d_delay
@@ -183,7 +184,7 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
         # se lit alors au surlignement.
         cur_name = str(getattr(lst, "cursor_image", "") or "")
         cur_el = lay.get(cur_name) if cur_name else None
-        cursor = images.get(cur_name, -1) \
+        cursor = images.get(p.ui_qualified_name(lay, cur_el), -1) \
             if getattr(cur_el, "kind", "") == KIND_IMAGE else -1
         if emit and cur_name and cursor < 0:
             emit("diagnostic", build_warning(
@@ -200,7 +201,7 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
             f"{max(1, min(255, int(getattr(lst, 'cursor_speed', 2) or 2)))}, "
             f"{int(getattr(lst, 'selected_text_color', 0) or 0)}, "
             f"{int(getattr(lst, 'selected_highlight_color', 0) or 0)}, "
-            f"{elements.get(lst.name, -1)}"
+            f"{elements.get(p.ui_qualified_name(lay, lst), -1)}"
             + "}" + f"   /* {lst.name} — {len(rows)} row(s) */")
         if emit and not rows:
             emit("diagnostic", build_warning(
@@ -239,8 +240,8 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
     # redessiner une rangée quand la sélection la quitte ou l'atteint.
     L.append("short g_ui_list_row_text[] = {"
              + (", ".join(["-1"] * len(rows_flat)) if rows_flat else "-1") + "};")
-    for i, (_lay, container) in enumerate(lists):
-        L.append(f"#define UILIST_{c_sym(container.name).upper()} {i}")
+    for i, (lay, container) in enumerate(lists):
+        L.append(f"#define UILIST_{c_sym(p.ui_qualified_name(lay, container)).upper()} {i}")
     if emit and n:
         L.insert(1, "")
         emit("log_line", f"[ui] {n} liste(s) de navigation")
@@ -261,7 +262,8 @@ def emit_ui_elements_c(p: Project) -> list[str]:
     rows: list[str] = []
     for lay, e in elements:
         parent = getattr(e, "parent", "") or ""
-        parent_idx = index.get(parent, -1) if lay.get(parent) is not None else -1
+        parent_el = lay.get(parent)
+        parent_idx = index.get(p.ui_qualified_name(lay, parent_el), -1) if parent_el is not None else -1
         rows.append(f"    {{ {parent_idx}, {1 if getattr(e, 'visible', True) else 0} }},"
                     f"  /* {e.name} */")
     L = ["/* ── Interface element visibility (UILayout) ───────── */"]
@@ -293,7 +295,8 @@ def region_actor_index(p: Project) -> dict:
             # L'ancrage vient du NŒUD (un enfant en hérite), plus de l'élément
             # lui-même — cohérent avec l'éditeur.
             eff_anchor, eff_actor = lay.effective_anchor(r)
-            if eff_anchor == "actor" and r.name not in out:
-                out[r.name] = names.get(eff_actor, -1)
+            qname = p.ui_qualified_name(lay, r)
+            if eff_anchor == "actor" and qname not in out:
+                out[qname] = names.get(eff_actor, -1)
         offset += len(actors)
     return out

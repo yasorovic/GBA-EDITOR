@@ -37,6 +37,12 @@ static void copy16(vu16*d, const void*s, u32 b) {
     for (u32 i = 0; i < b/2; i++) d[i] = p[i];
 }
 
+static void bg_tile_clear(vu16 *tiles, int tile, int bpp8) {
+    int halfwords = bpp8 ? 32 : 16;
+    tiles += tile * halfwords;
+    for (int i = 0; i < halfwords; i++) tiles[i] = 0;
+}
+
 /* ── Chargement map BG avec tuilage source ───────────────────────── */
 /* gcols/grows = taille GBA (32 ou 64), tw/th = taille de la source  */
 /* Décalage de screenblock d'une case (c,r) dans une carte large de `gcols`.
@@ -56,11 +62,11 @@ static int bg_block_ofs(int gcols, int c, int r) {
 }
 
 static void __attribute__((unused)) load_map(vu16*dst, const void*src,
-                     int tw, int th, int gcols, int grows) {
+                     int tw, int th, int gcols, int grows, u16 empty_se) {
     const u16*m = (const u16*)src;
     for (int y = 0; y < grows; y++) {
         for (int x = 0; x < gcols; x++) {
-            u16 t = (x < tw && y < th) ? m[y*tw + x] : 0;
+            u16 t = (x < tw && y < th) ? m[y*tw + x] : empty_se;
             dst[bg_block_ofs(gcols, x, y) + (y & 31)*32 + (x & 31)] = t;
         }
     }
@@ -79,28 +85,30 @@ static void bg_se_write(vu16 *dst, int gcols, int c, int r, u16 se) {
 }
 
 static void bg_load_col(vu16 *dst, const unsigned short *map,
-                        int tiles_w, int tiles_h, int win_w, int win_h, int wc) {
+                        int tiles_w, int tiles_h, int win_w, int win_h, int wc, u16 empty_se) {
     for (int r = bg_base_row; r < bg_base_row + win_h; r++) {
-        u16 se = (wc < tiles_w && r < tiles_h) ? map[r*tiles_w + wc] : 0;
+        u16 se = (wc >= 0 && r >= 0 && wc < tiles_w && r < tiles_h)
+                 ? map[r*tiles_w + wc] : empty_se;
         bg_se_write(dst, win_w, wc & 63, r & 63, se);
     }
 }
 
 static void bg_load_row(vu16 *dst, const unsigned short *map,
-                        int tiles_w, int tiles_h, int win_w, int wr) {
+                        int tiles_w, int tiles_h, int win_w, int wr, u16 empty_se) {
     for (int c = bg_base_col; c < bg_base_col + win_w; c++) {
-        u16 se = (c < tiles_w && wr < tiles_h) ? map[wr*tiles_w + c] : 0;
+        u16 se = (c >= 0 && wr >= 0 && c < tiles_w && wr < tiles_h)
+                 ? map[wr*tiles_w + c] : empty_se;
         bg_se_write(dst, win_w, c & 63, wr & 63, se);
     }
 }
 
 static void __attribute__((unused)) bg_stream_init(
         vu16 *dst, const unsigned short *map,
-        int tiles_w, int tiles_h, int win_w, int win_h) {
+        int tiles_w, int tiles_h, int win_w, int win_h, u16 empty_se) {
     bg_base_col = 0; bg_base_row = 0;
     for (int r = 0; r < win_h; r++)
         for (int c = 0; c < win_w; c++) {
-            u16 se = (c < tiles_w && r < tiles_h) ? map[r*tiles_w + c] : 0;
+            u16 se = (c < tiles_w && r < tiles_h) ? map[r*tiles_w + c] : empty_se;
             bg_se_write(dst, win_w, c, r, se);
         }
 }
@@ -109,16 +117,17 @@ static void __attribute__((unused)) bg_stream_init(
    bg_base_col déjà mis à jour et corrige la case-coin. */
 static void __attribute__((unused)) bg_stream_update(
         vu16 *dst, const unsigned short *map, int tiles_w, int tiles_h,
-        int win_w, int win_h, int stream_h, int stream_v, int cam_x, int cam_y) {
+        int win_w, int win_h, int stream_h, int stream_v, int cam_x, int cam_y,
+        u16 empty_se) {
     if (stream_h) {
         int cc = cam_x >> 3;
-        while (bg_base_col < cc) { bg_load_col(dst, map, tiles_w, tiles_h, win_w, win_h, bg_base_col + 64); bg_base_col++; }
-        while (bg_base_col > cc) { bg_base_col--; bg_load_col(dst, map, tiles_w, tiles_h, win_w, win_h, bg_base_col); }
+        while (bg_base_col < cc) { bg_load_col(dst, map, tiles_w, tiles_h, win_w, win_h, bg_base_col + 64, empty_se); bg_base_col++; }
+        while (bg_base_col > cc) { bg_base_col--; bg_load_col(dst, map, tiles_w, tiles_h, win_w, win_h, bg_base_col, empty_se); }
     }
     if (stream_v) {
         int cr = cam_y >> 3;
-        while (bg_base_row < cr) { bg_load_row(dst, map, tiles_w, tiles_h, win_w, bg_base_row + 64); bg_base_row++; }
-        while (bg_base_row > cr) { bg_base_row--; bg_load_row(dst, map, tiles_w, tiles_h, win_w, bg_base_row); }
+        while (bg_base_row < cr) { bg_load_row(dst, map, tiles_w, tiles_h, win_w, bg_base_row + 64, empty_se); bg_base_row++; }
+        while (bg_base_row > cr) { bg_base_row--; bg_load_row(dst, map, tiles_w, tiles_h, win_w, bg_base_row, empty_se); }
     }
 }
 
@@ -4948,13 +4957,28 @@ static void bg_maps_clear(void) {
 }
 
 
+static OBJATTR g_oam_sorted[128];
+
 static void oam_update(void) {
-    CpuFastSet(shadow_oam, (void*)OAM, COPY32|(128*sizeof(OBJATTR)/4));
+    int out = 0;
+    for (int priority = 0; priority < 4; priority++) {
+        for (int i = 0; i < 128; i++) {
+            if (((shadow_oam[i].attr2 >> 10) & 3) != priority) continue;
+            g_oam_sorted[out].attr0 = shadow_oam[i].attr0;
+            g_oam_sorted[out].attr1 = shadow_oam[i].attr1;
+            g_oam_sorted[out].attr2 = shadow_oam[i].attr2;
+            out++;
+        }
+    }
+    /* attr3 porte les matrices affines : leur emplacement matériel ne se trie pas. */
+    for (int i = 0; i < 128; i++) g_oam_sorted[i].dummy = shadow_oam[i].dummy;
+    CpuFastSet(g_oam_sorted, (void*)OAM, COPY32|(128*sizeof(OBJATTR)/4));
 }
 
-/* Les sprites d'acteurs prennent leur emplacement OAM À LA FRAME, dans l'ordre où le tick les écrit :
-   seuls ceux qui sont à l'écran en occupent un. `g_oam_hw` est le 1er emplacement non écrit à la
-   frame précédente ; `oam_hide_from(n)` éteint ce que la frame courante n'a pas repris. */
+/* Les sprites prennent leur emplacement logique À LA FRAME, dans l'ordre où le tick les écrit.
+   La copie matérielle les regroupe ensuite par priorité, sans déplacer attr3 qui porte les matrices.
+   `g_oam_hw` est le 1er emplacement non écrit à la frame précédente ; `oam_hide_from(n)` éteint ce
+   que la frame courante n'a pas repris. */
 static int g_oam_hw = 0;
 /* Sprites visibles qui n'ont pas trouvé de place cette frame (OAM pleine) : compté par le tick, lu
    par le build debug qui l'écrit dans le log. */

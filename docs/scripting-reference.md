@@ -225,6 +225,11 @@ Une liste se pilote par ses propriétés : `menu.index`, `menu.first`, `menu.cou
 
 `interface:get("Nom")` rend une référence du **type réel** de l'élément — liste, image, zone de texte, ou conteneur. Le cycle de vie (`:show()`, `:hide()`, `.visible`) est commun ; le reste appartient au type : `heart.state = "vide"` et `cursor.offset = vec2(0, 16)` pour une image, `box:draw("clé")` et `box.reading` pour une zone de texte.
 
+Le nom est local à la scène. Deux scènes peuvent donc chacune contenir un élément
+nommé `score` : le build le résout parmi les interfaces posées dans la scène du
+script. Deux interfaces d'une même scène ne peuvent pas partager ce nom, car la
+référence deviendrait ambiguë.
+
 ## Données
 
 Sauvegarde et tableaux. `save.write`/`save.read` — voir le panneau **API**, section **Données**. Pour une table de données du projet (`data.Objets`), voir `#data.Objets` ci-dessus (« Le langage ») et l'écran **Data**.

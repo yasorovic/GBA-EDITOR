@@ -62,6 +62,31 @@ def test_la_constante_emise_suit_la_nature():
     ]
 
 
+def test_un_nom_local_emet_le_symbole_qualifie_du_layout():
+    from scripting.parser import parse
+    from scripting.codegen import generate, CodegenContext
+
+    script = parse('function on_update()\ninterface:get("Heart"):play()\n'
+                   'interface:get("Heart").state = "full"\nend\n')
+    ctx = CodegenContext(
+        actor_name="Sc", actor_sym="Sc", anim_names=[], sfx_names=[],
+        music_names=[], global_names=set(), const_names=set(), all_actor_syms=[],
+        owner_kind="scene", image_names=["main.Heart", "victory.Heart"],
+        element_names=["main.Heart", "victory.Heart"],
+        image_states={"main.Heart": ["full"], "victory.Heart": ["full"]},
+        ref_kinds={"Heart": "image"},
+        ui_ref_symbols={"Heart": "victory.Heart"},
+    )
+
+    code, warnings, _ = generate(script, ctx)
+
+    assert warnings == []
+    assert "ui_image_play(IMAGE_VICTORY_HEART, 1);" in code
+    assert "ui_image_set_state(IMAGE_VICTORY_HEART, IMGST_VICTORY_HEART_FULL);" in code
+    assert "#define IMAGE_MAIN_HEART 0" in code
+    assert "#define IMAGE_VICTORY_HEART 1" in code
+
+
 def test_un_local_de_tete_qui_tient_une_zone_se_traduit_comme_dans_un_handler():
     """`local box = interface:get("Box")` en tête de fichier : `box:clear()` est une méthode de
     zone, pas d'acteur (le codegen retombait sur `actor_clear`)."""

@@ -178,7 +178,8 @@ def gen_scene_tick(
             if bi.get("stream"):
                 L.append(f"    bg_stream_update(MAP_RAM({bi['sbb']}), {bi['sym']}Map, "
                          f"{bi['tw']}, {bi['th']}, {bi['win_w']}, {bi['win_h']}, "
-                         f"{int(bi['stream_h'])}, {int(bi['stream_v'])}, cam_x, cam_y);")
+                         f"{int(bi['stream_h'])}, {int(bi['stream_v'])}, cam_x, cam_y, "
+                         f"{bi['sym']}BlankTile);")
             # Scroll = caméra × vitesse de parallax + décalage propre au layer
             # (layer_set_scroll / layer_scroll_by depuis Lua).
             L.append(f"    BGOFS({bi['bg']})=(u16)(((cam_x*layer_get_speed({bi['bg']}))>>8)+layer_get_scroll_x({bi['bg']}));")

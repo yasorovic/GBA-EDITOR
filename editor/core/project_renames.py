@@ -296,11 +296,8 @@ class ProjectRenameMixin:
     def rename_ui_element(self, layout, element, new_name: str) -> str:
         """Renomme un élément d'une mise en page UI (texte, conteneur, image).
 
-        **Unicité sur TOUT le projet, quel que soit le type** (cf.
-        `ui_element_names`) : un texte se résout en `REGION_*` et une image en
-        `IMAGE_*`, deux constantes C projet-globales, et le conteneur partage
-        l'espace des refs `parent`. Chercher au plus large évite d'avoir à
-        expliquer pourquoi deux éléments homonymes coexistent parfois.
+        Le nom d'auteur est local au layout. Les symboles C, eux, sont qualifiés
+        par le nom du layout, donc un autre écran peut réutiliser `score`.
 
         Les enfants pointant le parent par NOM, on les rebranche
         (`retarget_parent`) AVANT de figer le nouveau nom. Le nom se cite dans les
@@ -312,7 +309,7 @@ class ProjectRenameMixin:
         new_name = new_name.strip()
         if not new_name or new_name == element.name:
             return element.name
-        taken = set(self.ui_element_names()) - {element.name}
+        taken = set(layout.element_names()) - {element.name}
         if new_name in taken:
             new_name = unique_name(new_name, taken)
         kind = getattr(element, "kind", KIND_TEXT)
@@ -333,7 +330,19 @@ class ProjectRenameMixin:
                     if getattr(el, "cursor_image", "") == old_name:
                         el.cursor_image = new_name
             element.name = new_name
-            refs = self.rename_lua_refs(domain, old_name, new_name) if domain else {}
+            # Un script partagé entre une scène qui utilise ce layout et une
+            # autre qui ne l'utilise pas ne peut pas être réécrit sans changer
+            # le sens de la seconde. On ne corrige donc automatiquement que les
+            # scripts exclusifs aux scènes concernées.
+            affected = [s for s in self.scenes
+                        if any(lay.name == layout.name for lay in self.scene_ui_layouts(s))]
+            affected_ids = {id(s) for s in affected}
+            affected_scripts = {path for scene in affected for path in self.scene_scripts(scene)[0]}
+            other_scripts = {path for scene in self.scenes if id(scene) not in affected_ids
+                             for path in self.scene_scripts(scene)[0]}
+            from scripting.refactor import rename_in_files
+            refs = rename_in_files(sorted(affected_scripts - other_scripts), domain,
+                                   old_name, new_name) if domain else {}
             self.ui_layouts.save_all()
         self._notify_renamed(label, old_name, new_name, refs)
         return new_name

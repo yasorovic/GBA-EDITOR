@@ -103,7 +103,7 @@ def _image_data_lines(scene, sym: str) -> list[str]:
         L.append("};")
     for _f in (getattr(scene, "_ui_img_fills", []) or []):
         _se = _f["se"]
-        L.append(f"static const unsigned short {sym}_uimap_{c_sym(_f['name'])}[] = {{"
+        L.append(f"static const unsigned short {sym}_uimap_{c_sym(_f['qname'])}[] = {{"
                  f"   /* {_f['w']}x{_f['h']} cases */")
         for i in range(0, len(_se), 12):
             L.append("    " + " ".join(f"0x{v:04X}," for v in _se[i:i + 12]))
@@ -226,17 +226,22 @@ def _background_lines(p, scene, sym: str, bgi: list[dict], scene_actors: list, s
     if bgi:
         for bi in bgi:
             L.append(f"    copy16(TILE_RAM({bi['bg']}), {bi['sym']}Tiles, {bi['sym']}TilesLen);")
+            empty = (f"{bi['sym']}BlankTile" if bi.get("compressed")
+                     else f"({bi['sym']}TilesLen/32)")
+            L.append(f"    bg_tile_clear(TILE_RAM({bi['bg']}), {empty}, {1 if bi.get('bpp8') else 0});")
         for bi in bgi:
+            empty = (f"{bi['sym']}BlankTile" if bi.get("compressed")
+                     else f"({bi['sym']}TilesLen/32)")
             if bi.get("stream"):
                 # Streaming : charger la fenêtre résidente initiale depuis la map
                 # complète en ROM ; les bords se rechargent au scroll (tick).
                 L.append(f"    bg_stream_init(MAP_RAM({bi['sbb']}), {bi['sym']}Map, "
-                         f"{bi['tw']}, {bi['th']}, {bi['win_w']}, {bi['win_h']});")
+                         f"{bi['tw']}, {bi['th']}, {bi['win_w']}, {bi['win_h']}, {empty});")
             else:
                 ms = bi["map_size"]
                 gcols = 64 if (ms & 1) else 32
                 grows = 64 if (ms & 2) else 32
-                L.append(f"    load_map(MAP_RAM({bi['sbb']}), {bi['sym']}Map, {bi['tw']}, {bi['th']}, {gcols}, {grows});")
+                L.append(f"    load_map(MAP_RAM({bi['sbb']}), {bi['sym']}Map, {bi['tw']}, {bi['th']}, {gcols}, {grows}, {empty});")
         for bi in bgi:
             # Priorité GBA = bg_slot directement (bg_slot 0 = priorité 0 =
             # premier plan). Même convention que l'éditeur (scene_editor.py

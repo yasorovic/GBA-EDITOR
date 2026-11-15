@@ -245,11 +245,11 @@ def scene_ui_lines(p, scene, sym: str, sprite_offsets: dict, obj_text_oam: int, 
     _elem_of = _ui_element_index(p)
     for f in fills:
         L.append(
-            f"    ui_fill_rect_tracked({_elem_of.get(f['name'], -1)}, {f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, "
+            f"    ui_fill_rect_tracked({_elem_of.get(f['qname'], -1)}, {f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, "
             f"{text_base + fill_indices.index(f['index'])}, {f['bank']});   /* colour background '{f['name']}' → BG{f.get('slot', text_bg)} */")
     for f in img_fills:
         L.append(
-            f"    ui_fill_map_tracked({_elem_of.get(f['name'], -1)}, {f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, {sym}_uimap_{c_sym(f['name'])}, "
+            f"    ui_fill_map_tracked({_elem_of.get(f['qname'], -1)}, {f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, {sym}_uimap_{c_sym(f['qname'])}, "
             f"{asset_base[f['asset']]});   /* image background '{f['name']}' → BG{f.get('slot', text_bg)} */")
     # ── Le FOND des zones de texte ────────────────────────────────
     # Un texte prend le fond de son conteneur : sans ça, écrire remplace la
@@ -262,7 +262,7 @@ def scene_ui_lines(p, scene, sym: str, sprite_offsets: dict, obj_text_oam: int, 
     for rb in region_backdrops:
         f = img_fills[rb["fill"]]
         L.append(
-            f"    text_set_region_backdrop({rb['region']}, {sym}_uimap_{c_sym(f['name'])}, {f['w']}, {rb['dx']}, {rb['dy']}, "
+            f"    text_set_region_backdrop({rb['region']}, {sym}_uimap_{c_sym(f['qname'])}, {f['w']}, {rb['dx']}, {rb['dy']}, "
             f"{asset_base[f['asset']]}, {f['bank']});   /* '{rb['name']}' recomposes the background '{f['name']}' */")
     # COULEUR ensuite. `scene_region_colors` DÉRIVE de `fills`, la liste que le
     # build émet réellement : un conteneur écarté (palette non active, ancrage,

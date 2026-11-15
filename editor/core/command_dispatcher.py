@@ -609,41 +609,27 @@ class CommandDispatcher(EventEmitter):
 
     # ── Sprite ────────────────────────────────────────────────────
 
-    # ── Prefab avec propagation ───────────────────────────────────
+    # ── Prefab à surcharges d'instance ────────────────────────────
 
     def save_prefab(self, prefab: Prefab):
-        """
-        Sauvegarde le prefab ET propage ses components à toutes les instances
-        liées (actor.prefab_name == prefab.name) dans toutes les scènes.
-        La position/transform de chaque instance reste inchangée.
-        """
+        """Sauvegarde le prefab seul, puis résout ses instances en mémoire."""
         if not self._project:
             return
         with self._watcher.suspended():
             self._project.save_prefab(prefab)
 
-        # Propagation cross-scène
-        scenes_updated: list[Scene] = []
+        from core.models.scene import resolve_actor_prefab
+        changed = False
         for scene in self._project.scenes:
-            changed = False
             for actor in scene.actors:
-                if actor.prefab_name == prefab.name:
-                    actor.components = copy.deepcopy(prefab.components)
+                if (actor.prefab_name == prefab.name
+                        and getattr(actor, "_prefab_override_format", False)):
+                    resolve_actor_prefab(actor, prefab)
                     changed = True
-            if changed:
-                with self._watcher.suspended():
-                    self._project.save_scene(scene)
-                scenes_updated.append(scene)
-
-        if scenes_updated:
+        if changed:
             self._emit("scene_sprites_changed")
             self._emit("actors_list_changed")
-
-        n = len(scenes_updated)
-        msg = f"Prefab '{prefab.name}' saved"
-        if n:
-            msg += f" — {n} scene{'s' if n > 1 else ''} updated"
-        self._emit("status_message",msg)
+        self._emit("status_message", f"Prefab '{prefab.name}' saved")
 
     def relink_actor_to_prefab(self, actor: Actor) -> bool:
         """« Relink to prefab » : recharge `actor` depuis son prefab —
@@ -657,10 +643,10 @@ class CommandDispatcher(EventEmitter):
         prefab = self._project.get_prefab(actor.prefab_name)
         if not prefab:
             return False
-        actor.components = copy.deepcopy(prefab.actor.components)
-        actor.pal_bank = prefab.actor.pal_bank
-        actor.is_player = prefab.actor.is_player
-        actor.notes = prefab.actor.notes
+        from core.models.scene import resolve_actor_prefab
+        actor.prefab_overrides = {}
+        actor._prefab_override_format = True
+        resolve_actor_prefab(actor, prefab)
         self._save_scene()
         self._emit("scene_sprites_changed")
         self._emit("actors_list_changed")
@@ -688,6 +674,8 @@ class CommandDispatcher(EventEmitter):
         prefab.actor.pal_bank = actor.pal_bank
         prefab.actor.is_player = actor.is_player
         prefab.actor.notes = actor.notes
+        actor.prefab_overrides = {}
+        actor._prefab_override_format = True
         self.save_prefab(prefab)
         # cf. relink_actor_to_prefab — même badge, même besoin de tenir à
         # jour la Scene library et l'arbre de scène.

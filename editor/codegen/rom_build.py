@@ -840,7 +840,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                     f"{sym}.h not found/unreadable — build cancelled", "grit"))
                 ok = False
                 continue
-            tiles_used = int(m.group(1)) // 32
+            tiles_used = int(m.group(1)) // 32 + 1
             if tiles_used > tile_budget:
                 self._emit("diagnostic", build_error(
                     f"'{asset.name}' BG{layer.bg_slot}: {tiles_used} tiles generated, {tile_budget} tiles available "
@@ -881,7 +881,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 budget = budgets.get(key)
                 if budget is None or used <= budget:
                     continue
-                own = len(ba.effective_tileset())
+                own = len(ba.effective_tileset()) + 1
                 extra = used - own
                 self._emit("diagnostic", build_error(
                     f"'{ba.name}' BG{layer.bg_slot}: {used} tiles to load ({own} for the background"
@@ -920,7 +920,8 @@ class BuildWorker(EventEmitter, threading.Thread):
                 # encore tourné) : on prend le pire, l'allocateur reste correct
                 # — il donnera juste un budget prudent. Pour un fond compressé,
                 # les animés posés dessus comptent (ils partagent le charblock).
-                slots[layer.bg_slot] = (bg_anim_tile_count(p, ba)
+                unit = 2 if ba and getattr(ba, "bpp", 4) == 8 else 1
+                slots[layer.bg_slot] = (bg_anim_tile_count(p, ba) * unit
                                         if (ba and ba.tileset) else 512)
                 maps[layer.bg_slot] = bg_map_sbb_count(ms)
                 names[layer.bg_slot] = layer.background_name
@@ -931,7 +932,9 @@ class BuildWorker(EventEmitter, threading.Thread):
                                ui_slots=p.scene_ui_bg_slots(scene))
             for slot, name in names.items():
                 key = (name, slot)
-                b = lay.budget[slot]
+                ba = p.get_background(name)
+                unit = 2 if ba and getattr(ba, "bpp", 4) == 8 else 1
+                b = lay.budget[slot] // unit
                 out[key] = min(out[key], b) if key in out else b
         return out
 

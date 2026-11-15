@@ -15,13 +15,14 @@ def _layer_tiles_used(p, bi: dict) -> int:
         # Les animés posés partagent le charblock de leur hôte : leurs tuiles
         # comptent dans ce que le calque charge (cf. codegen/bg_anim).
         from codegen.bg_anim import layer_tile_count
-        return layer_tile_count(p, ba)
+        units = layer_tile_count(p, ba)
+        return units * (2 if getattr(ba, "bpp", 4) == 8 else 1)
     header = p.grit_out_dir / f"{bi['sym']}.h"
     if header.exists():
         import re
         m = re.search(rf"{bi['sym']}TilesLen\s+(\d+)", header.read_text())
         if m:
-            return int(m.group(1)) // 32
+            return int(m.group(1)) // 32 + 1
     # Inconnu (grit pas encore passé) : on suppose le pire pour ne pas
     # sur-promettre de la place à un voisin.
     return 512

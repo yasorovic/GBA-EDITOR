@@ -651,7 +651,8 @@ def scene_color_fills(p: Project, scene) -> tuple[list[dict], list[int]]:
         idx = int(getattr(el, "fill_index", 0) or 0) & 0xF
         if idx not in indices:
             indices.append(idx)
-        fills.append({"name": el.name, "tx": tx, "ty": ty, "w": tw, "h": th,
+        fills.append({"name": el.name, "qname": p.ui_qualified_name(lay, el),
+                      "tx": tx, "ty": ty, "w": tw, "h": th,
                       "index": idx, "bank": active.index(pal),
                       "slot": int(lay.bg_slot)})   # slot BG du nœud (routage v0.12)
     return fills, indices
@@ -755,7 +756,8 @@ def scene_image_fills(p: Project, scene) -> tuple[list[dict], list[dict]]:
             by_name[ba.name] = len(assets)
             assets.append({"name": ba.name, "sym": f"ui_bg_{c_sym(ba.name)}",
                            "words": words, "tiles": len(words) // 8})
-        fills.append({"name": el.name, "tx": tx, "ty": ty, "w": w, "h": h,
+        fills.append({"name": el.name, "qname": p.ui_qualified_name(lay, el),
+                      "tx": tx, "ty": ty, "w": w, "h": h,
                       "asset": by_name[ba.name], "se": se, "bank": banks[0],
                       "slot": int(lay.bg_slot)})   # slot BG du nœud (routage v0.12)
     return fills, assets

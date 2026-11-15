@@ -38,6 +38,36 @@ def resolve_scene_sources(project, scene) -> None:
                     member.source = named.id
 
 
+def resolve_scene_prefabs(project, scene) -> None:
+    """Résout les nouvelles surcharges et migre les anciennes copies complètes en mémoire."""
+    from core.models.scene import actor_prefab_linked, actor_prefab_override_diff, resolve_actor_prefab
+    for actor in scene.actors:
+        prefab = project.get_prefab(actor.prefab_name) if actor.prefab_name else None
+        if prefab is None:
+            continue
+        if getattr(actor, "_prefab_override_format", False):
+            resolve_actor_prefab(actor, prefab)
+        elif actor_prefab_linked(actor, prefab):
+            actor.prefab_overrides = actor_prefab_override_diff(actor, prefab) or {}
+            actor._prefab_override_format = True
+
+
+def prepare_scene_prefabs(project, scene) -> None:
+    """Recalcule les surcharges juste avant l'écriture d'une scène."""
+    from core.models.scene import actor_prefab_override_diff
+    for actor in scene.actors:
+        prefab = project.get_prefab(actor.prefab_name) if actor.prefab_name else None
+        if prefab is None:
+            continue
+        overrides = actor_prefab_override_diff(actor, prefab)
+        if overrides is None:
+            actor.prefab_overrides = {}
+            actor._prefab_override_format = False
+        else:
+            actor.prefab_overrides = overrides
+            actor._prefab_override_format = True
+
+
 def stamp_scene_sources(project, scene) -> None:
     for members, name_attr, store, complete in _members(project, scene):
         for member in members:

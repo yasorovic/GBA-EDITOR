@@ -846,26 +846,27 @@ def _check_text_zone_in_container(ctx: ValidationContext):
 
 
 def _check_ui_element_names_unique(ctx: ValidationContext):
-    """Un nom d'élément d'interface est UNIQUE dans tout le projet.
+    """Un nom simple est unique dans son layout et dans chaque scène.
 
-    `REGION_*`, `IMAGE_*` et `UIELEM_*` sont indexés par NOM, pour l'ensemble des
-    mises en page (cf. `Project.ui_element_names`) : deux éléments homonymes, même
-    dans deux layouts posés sur deux scènes différentes, émettent la même macro avec
-    deux valeurs. Le compilateur n'en dit qu'un avertissement, et la dernière
-    définition gagne — `interface:get("nom")` vise alors l'élément de l'AUTRE
-    interface. Le contrôle ci-dessus ne voit que le cas « un layout posé deux fois
-    dans une scène » ; celui-ci voit les homonymes entre layouts différents."""
-    owners: dict[str, list[str]] = {}
-    for layout, element in ctx.project.all_elements():
-        if element.name:
+    Les symboles C sont qualifiés par layout. Deux scènes indépendantes peuvent
+    donc chacune avoir `score`. Dans une même scène, en revanche,
+    `interface:get("score")` doit garder une seule cible."""
+    for layout in ctx.project.ui_layouts:
+        seen: set[str] = set()
+        for element in layout.elements:
+            if element.name in seen:
+                ctx.error(None, f"Interface element \"{element.name}\" duplicated in layout "
+                          f"'{layout.name}': names are local, but must remain unique inside a layout.")
+            seen.add(element.name)
+    for scene in ctx.project.scenes:
+        owners: dict[str, list[str]] = {}
+        for layout, element in ctx.project.scene_ui_elements(scene):
             owners.setdefault(element.name, []).append(layout.name)
-    for name, layouts in sorted(owners.items()):
-        if len(layouts) > 1:
-            where = ", ".join(f"'{lay}'" for lay in sorted(set(layouts)))
-            ctx.error(None,
-                f"Interface element \"{name}\" duplicated ({where}): its REGION_/IMAGE_/UIELEM_"
-                " constants collide and a script would target the wrong element. "
-                "Rename one of them: the name is unique across the whole project.")
+        for name, layouts in sorted(owners.items()):
+            if len(set(layouts)) > 1:
+                where = ", ".join(f"'{lay}'" for lay in sorted(set(layouts)))
+                ctx.error(scene, f"Interface element \"{name}\" is ambiguous in scene "
+                          f"'{scene.name}' ({where}): interface:get() needs one local target.")
 
 
 def _text_variants(p, text, globals_names: set) -> list:

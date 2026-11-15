@@ -31,7 +31,7 @@ def _names(items) -> list[str]:
     return [n for n in (getattr(it, "name", None) for it in (items or [])) if n]
 
 
-def ui_ref_kinds(project) -> dict[str, str]:
+def ui_ref_kinds(project, scene=None) -> dict[str, str]:
     """{nom d'élément d'interface → type de référence} : ce que `interface:get(nom)` rend.
 
     La NATURE d'un élément (`UILayout` : liste, image, zone de texte, conteneur) se lit
@@ -48,8 +48,13 @@ def ui_ref_kinds(project) -> dict[str, str]:
     # Les listes historiques restent lisibles, mais leur API dédiée est retirée :
     # elles ne donnent plus accès qu'au cycle de vie commun d'un conteneur.
     by_kind[KIND_LIST] = by_kind["container"]
-    return {el.name: by_kind.get(getattr(el, "kind", ""), base)
-            for _lay, el in (all_elements() if all_elements else [])}
+    if scene is not None and hasattr(project, "scene_ui_elements"):
+        return {el.name: by_kind.get(getattr(el, "kind", ""), base)
+                for _lay, el in project.scene_ui_elements(scene)}
+    return {(project.ui_qualified_name(lay, el)
+             if hasattr(project, "ui_qualified_name") else el.name):
+            by_kind.get(getattr(el, "kind", ""), base)
+            for lay, el in (all_elements() if all_elements else [])}
 
 
 def data_column_kinds(project) -> dict[str, str]:
@@ -129,8 +134,11 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
     if settings is not None and hasattr(settings, "all_languages"):
         out[DOMAIN_LANG] = [l.code for l in settings.all_languages()]
 
-    # Interfaces : toutes mises en page confondues.
-    if hasattr(project, "ui_element_names"):
+    # Interfaces : noms simples de la scène active. Hors contexte de scène,
+    # seuls les symboles qualifiés sont non ambigus.
+    if scene is not None and hasattr(project, "scene_ui_elements"):
+        out[DOMAIN_UI_ELEMENT] = [el.name for _lay, el in project.scene_ui_elements(scene)]
+    elif hasattr(project, "ui_element_names"):
         out[DOMAIN_UI_ELEMENT] = list(project.ui_element_names())
 
     # Boîtes sonores : l'import du modèle est celui que le checker fait déjà.
