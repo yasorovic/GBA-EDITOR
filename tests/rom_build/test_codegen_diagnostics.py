@@ -190,7 +190,10 @@ def test_un_fond_compresse_qui_depasse_son_budget_bloque_le_build(project, monke
     monkeypatch.setattr(bg_anim, "layer_tile_count", lambda *_args: 40)
     monkeypatch.setattr(worker, "_scene_tile_budgets", lambda _p: {("sky", 0): 10})
     assert worker._check_encoded_tile_budget(project) is False
-    assert journal.says("error", "36 for the animated backgrounds placed on it")
+    # 4 tuiles au fond, plus la tuile vide commune que le calque charge toujours
+    # (`bg_anim.layer_tile_count` la compte aussi) : 5 à lui, 35 aux animés.
+    assert journal.says("error", "40 tiles to load (5 for the background "
+                                 "+ 35 for the animated backgrounds placed on it)")
 
 
 # ── lua_compiler : un avertissement du générateur nomme son script ────────
