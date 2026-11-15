@@ -40,6 +40,28 @@ def test_lua_editor_goto_line(qapp):
     assert ed.textCursor().blockNumber() == 4
 
 
+def test_le_saut_pose_le_curseur_au_debut_du_code(qapp):
+    """Le curseur se pose sur le premier caractère non blanc, pas en fin de
+    ligne : c'est là que commence ce que le message désigne."""
+    from ui.script_editor.lua_editor import LuaEditor
+    ed = LuaEditor()
+    ed.setPlainText("function f()\n        local x = 1\nend\n")
+    ed.goto_line(2)
+    cur = ed.textCursor()
+    assert cur.blockNumber() == 1 and cur.positionInBlock() == 8
+
+
+def test_le_saut_sur_une_ligne_vide_reste_au_debut(qapp):
+    """Une ligne entièrement blanche n'a pas de « début du code » : le curseur
+    se pose au début de la ligne plutôt qu'au-delà de sa fin."""
+    from ui.script_editor.lua_editor import LuaEditor
+    ed = LuaEditor()
+    ed.setPlainText("function f()\n    \nend\n")
+    ed.goto_line(2)
+    cur = ed.textCursor()
+    assert cur.blockNumber() == 1 and cur.positionInBlock() == 0
+
+
 # ── Ouverture à une ligne (Script Editor) ─────────────────────────
 def test_open_script_at_line(qapp, tmp_path):
     from ui.script_editor.script_editor import ScriptEditorScreen

@@ -1,7 +1,8 @@
 """ui/script_editor/lua_editor.py : coloration syntaxique Lua + widget d'édition."""
-from PyQt6.QtWidgets import QPlainTextEdit
-from PyQt6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat, QTextCursor
-from PyQt6.QtCore import Qt, QRegularExpression
+from PyQt6.QtWidgets import QPlainTextEdit, QWidget
+from PyQt6.QtGui import (QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat,
+                         QTextCursor)
+from PyQt6.QtCore import Qt, QRect, QRegularExpression, QSize
 
 from scripting import completion
 from ui.common.theme import C, T
@@ -51,6 +52,23 @@ class LuaHighlighter(QSyntaxHighlighter):
                 self.setFormat(m.capturedStart(), m.capturedLength(), fmt)
 
 
+# ─── Marge des numéros de ligne ───────────────────────────────────────
+
+class LineNumberArea(QWidget):
+    """La marge gauche de l'éditeur. Elle ne sait rien : l'éditeur la mesure et
+    la peint, car lui seul connaît la géométrie de ses blocs."""
+
+    def __init__(self, editor: "LuaEditor"):
+        super().__init__(editor)
+        self._editor = editor
+
+    def sizeHint(self) -> QSize:
+        return QSize(self._editor.line_number_width(), 0)
+
+    def paintEvent(self, event):
+        self._editor.paint_line_numbers(event)
+
+
 # ─── Éditeur de code ──────────────────────────────────────────────────
 
 class LuaEditor(QPlainTextEdit):
@@ -71,6 +89,14 @@ class LuaEditor(QPlainTextEdit):
         self._hl = LuaHighlighter(self.document())
         self._completer = ScriptCompleter(self)
 
+        # La marge suit le nombre de lignes (sa largeur), le défilement (son
+        # contenu) et le curseur (la ligne mise en avant).
+        self._line_numbers = LineNumberArea(self)
+        self.blockCountChanged.connect(self._reserve_line_number_width)
+        self.updateRequest.connect(self._repaint_line_numbers)
+        self.cursorPositionChanged.connect(self._line_numbers.update)
+        self._reserve_line_number_width()
+
     def set_completion_context(self, context: str):
         """Le type de script (actor/scene/behavior/camera) — ce qui filtre les
         handlers proposés. Posé par l'écran à l'ouverture d'un fichier."""
@@ -80,6 +106,57 @@ class LuaEditor(QPlainTextEdit):
         """{domaine → noms du projet} pour la complétion des arguments chaîne.
         Posé par l'écran quand le projet est chargé."""
         self._completer.set_project_names(names)
+
+    # ── Marge des numéros de ligne ─────────────────────────────────
+    _GUTTER_PAD = 8      # le blanc de part et d'autre des chiffres
+
+    def line_number_width(self) -> int:
+        """La largeur de la marge : celle du plus grand numéro affichable."""
+        chiffres = len(str(max(1, self.blockCount())))
+        return 2 * self._GUTTER_PAD + self.fontMetrics().horizontalAdvance("9") * chiffres
+
+    def _reserve_line_number_width(self, _count: int = 0):
+        """Le texte commence après la marge : c'est la marge du viewport qui la
+        lui réserve, sans quoi les chiffres se peindraient par-dessus le code."""
+        self.setViewportMargins(self.line_number_width(), 0, 0, 0)
+
+    def _repaint_line_numbers(self, rect, dy):
+        if dy:
+            self._line_numbers.scroll(0, dy)
+        else:
+            self._line_numbers.update(0, rect.y(), self._line_numbers.width(), rect.height())
+        if rect.contains(self.viewport().rect()):
+            self._reserve_line_number_width()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Posée sur la HAUTEUR DU VIEWPORT, pas sur celle du widget : la feuille
+        # de style donne au cadre un rembourrage, et un numéro décalé de ces
+        # quelques pixels ne désignerait plus sa ligne.
+        viewport = self.viewport().geometry()
+        self._line_numbers.setGeometry(QRect(self.contentsRect().left(), viewport.top(),
+                                             self.line_number_width(), viewport.height()))
+
+    def paint_line_numbers(self, event):
+        """Les numéros des blocs visibles, alignés à droite. La ligne du curseur
+        est la seule en clair : l'auteur retrouve où il est sans compter."""
+        painter = QPainter(self._line_numbers)
+        painter.fillRect(event.rect(), QColor(C.BG_PANEL))
+        painter.setFont(self.font())
+        courante = self.textCursor().blockNumber()
+        block = self.firstVisibleBlock()
+        haut = self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
+        while block.isValid() and haut <= event.rect().bottom():
+            hauteur = self.blockBoundingRect(block).height()
+            if block.isVisible() and haut + hauteur >= event.rect().top():
+                painter.setPen(QColor(C.TEXT_NORM if block.blockNumber() == courante
+                                      else C.TEXT_MUTED))
+                painter.drawText(0, int(haut),
+                                 self._line_numbers.width() - self._GUTTER_PAD, int(hauteur),
+                                 int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                                 str(block.blockNumber() + 1))
+            block = block.next()
+            haut += hauteur
 
     _TAB_WIDTH = 4   # largeur d'un niveau d'indentation écrit en espaces
 
@@ -205,17 +282,25 @@ class LuaEditor(QPlainTextEdit):
                 return
 
     def goto_line(self, line: int):
-        """Place le curseur sur la ligne `line` (1-indexée) et la centre.
+        """Place le curseur au DÉBUT DU CODE de la ligne `line` (1-indexée) et
+        la centre.
 
         Sert au saut depuis le journal de build (`fichier.lua:ligne` cliqué).
-        Une ligne hors plage retombe sur la dernière — un message peut citer une
-        ligne au-delà de la fin sur un fichier tronqué."""
+        Le curseur se pose sur le premier caractère non blanc, pas en fin de
+        ligne : c'est là que commence ce que le message désigne, et l'auteur
+        n'a rien à retraverser. Une ligne hors plage retombe sur la dernière —
+        un message peut citer une ligne au-delà de la fin sur un fichier
+        tronqué."""
         doc = self.document()
         block = doc.findBlockByNumber(max(0, line - 1))
         if not block.isValid():
             block = doc.lastBlock()
+        texte = block.text()
+        # Une ligne entièrement blanche n'a pas de début de code : le curseur
+        # s'y pose au début plutôt qu'au bout de son indentation.
+        debut = len(texte) - len(texte.lstrip(" \t")) if texte.strip() else 0
         cur = QTextCursor(block)
-        cur.movePosition(QTextCursor.MoveOperation.EndOfLine)
+        cur.setPosition(block.position() + debut)
         self.setTextCursor(cur)
         self.centerCursor()
         self.setFocus()
