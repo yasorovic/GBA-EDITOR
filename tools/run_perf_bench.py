@@ -33,7 +33,10 @@ IMAGES_IGNOREES = 10            # pose des acteurs et mise en route, au début d
 ECHANTILLONS_MIN = 20
 
 _PHASE = re.compile(r"^PHASE (\S+) (\d+)$")
-_IMAGE = re.compile(r"^frame us=(\d+) oam=\d+$")        # une ligne coupée par la fin du tampon est écartée
+# Les compteurs qui suivent `us=` sont ceux que `debug_budget_report` écrit (gba_debug.h) : `oam`, puis la physique et le
+# son, plus `contact_overflow` s'il a débordé. Leur liste s'allonge au fil des chantiers, donc on les accepte tels quels
+# et on ne lit que `us=`. L'ancre de fin reste : une ligne coupée par la fin du tampon est écartée.
+_IMAGE = re.compile(r"^frame us=(\d+) (?:\w+=\d+ )*\w+=\d+$")
 
 
 def analyser(lignes: list[str]) -> dict:

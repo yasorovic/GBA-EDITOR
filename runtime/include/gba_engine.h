@@ -2998,13 +2998,15 @@ static int text_find(const unsigned short* s, int i, int len, int* consumed) {
 #define TEXT_EV_MAX  24        /* événements d'un texte, après décalage */
 #define TEXT_NUM_MAX 12        /* -2147483648 = 11 caractères */
 
-static unsigned short g_mat_cp[TEXT_MAT_MAX];
-static TextEvent      g_mat_ev[TEXT_EV_MAX];
+/* Réserves de recomposition, utilisées seulement par un texte à valeurs :
+   l'EWRAM garde l'IWRAM pour les données parcourues à chaque image. */
+static unsigned short g_mat_cp[TEXT_MAT_MAX] EWRAM_BSS;
+static TextEvent      g_mat_ev[TEXT_EV_MAX] EWRAM_BSS;
 /* Index source → index matérialisé. Une CARTE plutôt qu'un rattrapage des
    portées au fil de l'eau : `[wave]` peut couvrir une valeur, commencer avant
    et finir après, s'imbriquer — recaler ses bornes à la main demanderait de
    rejouer tous ces cas, alors que la carte les traite tous pareil. */
-static short          g_mat_map[TEXT_MAT_MAX + 1];
+static short          g_mat_map[TEXT_MAT_MAX + 1] EWRAM_BSS;
 static int text_num_cp(int value, unsigned short *buf);
 
 /* Les `$locale` d'un littéral `text.draw` arrivent ici au site d'appel. Le
@@ -4694,7 +4696,8 @@ static void ui_image_origin(const UIImageInfo *I, const UIImageState *S,
    dialogue) est dans la MÊME tilemap, et masquer ou déplacer l'image doit le rendre, pas le trouer.
    Une image plus grande que `UI_IMAGE_UNDER_MAX` cases n'est pas retenue : elle s'efface en tuile 0. */
 #define UI_IMAGE_UNDER_MAX 64
-static unsigned short g_ui_img_under[UI_IMAGE_MAX][UI_IMAGE_UNDER_MAX];
+/* 2 Kio lus seulement quand une image BG est reposée, déplacée ou masquée. */
+static unsigned short g_ui_img_under[UI_IMAGE_MAX][UI_IMAGE_UNDER_MAX] EWRAM_BSS;
 
 static void ui_image_snapshot_bg(int i, const UIImageInfo *I, int sx, int sy) {
     if (g_text_layer < 0 || i < 0 || i >= UI_IMAGE_MAX) return;

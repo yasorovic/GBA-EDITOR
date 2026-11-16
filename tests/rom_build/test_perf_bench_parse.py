@@ -9,7 +9,9 @@ import run_perf_bench as bench  # noqa: E402
 
 
 def _phase(nom, n, durees):
-    return [f"PHASE {nom} {n}"] + [f"frame us={d} oam=3" for d in durees]
+    """La ligne d'image telle que `debug_budget_report` l'écrit aujourd'hui (gba_debug.h) : tous les compteurs."""
+    ligne = "frame us={} oam=3 character=0 block=0 contact=0 area=0 fx=0 snd=0"
+    return [f"PHASE {nom} {n}"] + [ligne.format(d) for d in durees]
 
 
 def test_surcout_et_cout_par_instance():
@@ -26,9 +28,19 @@ def test_surcout_et_cout_par_instance():
 
 
 def test_une_ligne_coupee_est_ecartee():
-    lignes = _phase("vide", 0, [400] * 40) + _phase("count", 100, [500] * 35) + ["frame us=1"]
+    lignes = (_phase("vide", 0, [400] * 40) + _phase("count", 100, [500] * 35)
+              + ["frame us=1", "frame us=500 oam=3 charac"])
     count = next(p for p in bench.analyser(lignes)["phases"] if p["name"] == "count")
-    assert count["samples"] == 25                 # 35 moins les 10 ignorées ; la ligne "frame us=1" sans oam= ne compte pas
+    assert count["samples"] == 25                 # 35 moins les 10 ignorées ; les deux lignes coupées ne comptent pas
+
+
+def test_les_compteurs_ajoutes_ne_cassent_pas_la_lecture():
+    """La liste des compteurs s'allonge au fil des chantiers : seul `us=` est lu, le reste est accepté tel quel."""
+    base = _phase("vide", 0, [400] * 40)
+    debordement = ["frame us=500 oam=3 character=1 block=0 contact=9 area=0 fx=0 snd=0 contact_overflow=1"] * 35
+    count = next(p for p in bench.analyser(base + ["PHASE count 100"] + debordement)["phases"]
+                 if p["name"] == "count")
+    assert count["samples"] == 25 and count["median_us"] == 500
 
 
 def test_phase_trop_courte_est_omise():
