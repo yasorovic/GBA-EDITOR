@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
-from core.models.components import SpriteComponent
+from core.models.components import ScriptComponent, SpriteComponent
 from oam_fixtures import tout_afficher, SPRITE
 from codegen.oam_alloc import OBJECT_CAPACITY, scene_oam_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
@@ -458,6 +458,61 @@ def test_les_copies_posees_qui_ne_different_que_par_l_emplacement_partagent_un_t
     assert lay.type_table_size == 4                                           # le type 0, puis trois types de posés
 
 
+def test_les_singletons_identiques_partagent_un_type_et_un_code(tmp_path):
+    """Sans prefab aussi, même contenu généré = un seul modèle ; le premier acteur porte le code commun."""
+    actors = [Actor(name=name, components=[ScriptComponent(script="assets/coin.lua")])
+              for name in ("CoinA", "CoinB")]
+    scene = Scene(name="S", actors=actors)
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    lay = scene_oam_layout(p, scene)
+    assert lay.placed_type_ids == [1, 1] and lay.type_table_size == 2
+
+    from codegen.runtime_codegen.gen_pool import dispatch_sym, scene_pi
+    symbol = dispatch_sym(scene, [(a, None) for a in actors], scene_pi(p, scene))
+    assert symbol("S", "CoinA") == "S_CoinA"
+    assert symbol("S", "CoinB") == "S_CoinA"
+
+
+def test_un_parent_et_un_script_c_restant_des_singletons_distincts(tmp_path):
+    parent = Actor(name="A", components=[ScriptComponent(script="assets/a.lua")])
+    child = Actor(name="Child", parent="A")
+    other = Actor(name="B", components=[ScriptComponent(script="assets/a.lua")])
+    native_a = Actor(name="NativeA", components=[ScriptComponent(script="assets/a.c")])
+    native_b = Actor(name="NativeB", components=[ScriptComponent(script="assets/a.c")])
+    scene = Scene(name="S", actors=[parent, child, other, native_a, native_b])
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    ids = scene_oam_layout(p, scene).placed_type_ids
+    assert ids[0] != ids[2] and ids[3] != ids[4]
+
+
+def test_le_code_lua_fusionne_garde_un_etat_par_acteur(tmp_path):
+    actors = [Actor(name=name, components=[ScriptComponent(script="assets/coin.lua")])
+              for name in ("CoinA", "CoinB")]
+    scene = Scene(name="S", actors=actors)
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "coin.lua").write_text(
+        "local ticks = 0\nfunction on_update()\n    ticks = ticks + 1\nend\n", encoding="utf-8")
+    p.src_dir.mkdir(parents=True)
+
+    from codegen.runtime_codegen.lua_compiler import transpile_all
+    assert transpile_all(p, scene, [(a, None) for a in actors], [], lambda *_args: None)
+    code = (p.src_dir / "actor_S_CoinA.c").read_text(encoding="utf-8")
+    assert "self->slot_index" in code and "void S_CoinA_init_script_state(Actor* self)" in code
+    assert not (p.src_dir / "actor_S_CoinB.c").exists()
+
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.runtime_codegen.gen_scene_init import _start_lines
+    start = "\n".join(_start_lines(
+        p, scene, "S", [(a, None) for a in actors], 0, {0, 1}, scene_pi(p, scene), False, None,
+        {"S_CoinA": {"on_update"}},
+    ))
+    assert start.count("S_CoinA_init_script_state") == 2
+
+
 def test_un_autre_tag_de_boite_separe_deux_types(tmp_path):
     """Le tag est lu au modèle (les tables de paires appliquent la matrice des tags par couple de types) : deux copies
     de même masse dont les boîtes ont des tags différents ne partagent pas leur type."""
@@ -486,6 +541,6 @@ def test_les_tables_par_type_couvrent_les_poses(tmp_path):
     p.prefabs.items[0].children = [Actor(name="Aile")]
     lay = scene_oam_layout(p, scene)
     code = "\n".join(_shared_pool_lines(scene_pi(p, scene), lay.type_table_size))
-    # Un prefab à parties n'a pas de membres posés : chaque copie est un modèle à elle seule (types 3 à 6).
-    assert lay.placed_type_ids == [3, 4, 5, 6]
-    assert lay.type_table_size == 7 and "static const u8 _pt[7]={0,0,1,0,0,0,0};" in code
+    # Le prefab à parties n'a pas de membres posés, mais ses deux copies de même contenu partagent leur type.
+    assert lay.placed_type_ids == [3, 3, 4, 5]
+    assert lay.type_table_size == 6 and "static const u8 _pt[6]={0,0,1,0,0,0};" in code

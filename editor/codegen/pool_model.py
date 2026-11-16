@@ -86,20 +86,38 @@ def _variant_key(prefab_name: str, actor) -> tuple:
             bool(getattr(actor, "is_player", False)), _box_roles(actor))
 
 
+def singleton_type_groups(posed: list, members: dict, type_ids: list[int]) -> list[list[int]]:
+    """Groupes de singletons qui portent le même modèle, dans l'ordre de la scène."""
+    member_indices = {i for indices in members.values() for i in indices}
+    by_type: dict[int, list[int]] = {}
+    for i, kind in enumerate(type_ids):
+        if i not in member_indices:
+            by_type.setdefault(kind, []).append(i)
+    return [indices for indices in by_type.values() if len(indices) > 1]
+
+
 def placed_types(posed: list, members: dict, first: int, spawned: dict | None = None) -> list[int]:
     """Le type d'emplacement (`Actor.type_id`) de chaque acteur POSÉ.
 
     Un membre dont les valeurs lues au modèle sont celles de son prefab, quand la scène fait aussi naître ce prefab
     (`spawned` : nom -> (prefab, `root_type_id`)), prend le `root_type_id` du prefab : posé ou né, le même type, la même ligne de
     descripteur. Les autres types commencent à `first` (après ceux du pool partagé) : un membre qui diffère de son
-    prefab partage le sien avec les membres de mêmes valeurs (une variante), un acteur qui n'est membre de rien est un
-    modèle à lui seul."""
+    prefab partage le sien avec les membres de mêmes valeurs (une variante). Les acteurs sans modèle de prefab qui ont
+    le même contenu généré partagent eux aussi un type."""
     member_of = {i: name for name, idx in members.items() for i in idx}
+    parents = {getattr(a, "parent", None) for a in posed} - {None, ""}
     ids: dict = {_variant_key(name, prefab.actor): root_type_id for name, (prefab, root_type_id) in (spawned or {}).items()}
     fresh = 0
     out = []
     for i, a in enumerate(posed):
-        key = _variant_key(member_of[i], a) if i in member_of else ("singleton", i)
+        if i in member_of:
+            key = _variant_key(member_of[i], a)
+        else:
+            script = a.get_component("script")
+            native = bool(script and script.active and script.script and not script.script.lower().endswith(".lua"))
+            # Un parent compile ses accès `self.Enfant` contre sa propre hiérarchie ; un script C natif peut garder
+            # un état fichier. Ces deux cas restent donc des modèles uniques.
+            key = ("singleton", i) if a.name in parents or native else ("singleton", _variant_key("", a))
         if key not in ids:
             ids[key] = first + fresh
             fresh += 1

@@ -32,6 +32,7 @@ from codegen.runtime_codegen.physics.areas import scripted_areas
 from codegen.runtime_codegen.gen_camera import camera_sym
 import codegen.build_output as build_output
 from codegen.oam_alloc import scene_has_model, scene_oam_layout
+from codegen.pool_model import singleton_type_groups
 from codegen.runtime_codegen.input_layout import compute_input_layout
 
 
@@ -306,7 +307,7 @@ def state_cost_line(p, slots: int) -> str | None:
     name = sym[len(prefix):] if sym.startswith(prefix) else sym
     stride = read_state_stride(p)
     return (f"[ewram] script state: {stride} bytes x {slots} slots = {stride * slots / 1024:.1f} KiB, "
-            f"set by prefab {name} (scene {scene}); the other prefabs need at most {others} bytes")
+            f"set by model {name} (scene {scene}); the other models need at most {others} bytes")
 
 
 def member_export_inits(p, scene, actor) -> list:
@@ -664,15 +665,24 @@ def transpile_all(
 
     parsed_scripts = []
 
-    # Les acteurs posés qui sont des INSTANCES d'un modèle (cf. `pool_model.model_members`) n'ont pas de
-    # code à eux : le modèle est compilé une fois (plus bas, avec les prefabs), le membre n'apporte
-    # que ses valeurs. Nom de l'acteur -> symbole du modèle.
+    # Les acteurs posés qui partagent un modèle n'ont qu'un code : celui du prefab, ou celui du premier singleton
+    # identique. Nom de l'acteur -> symbole de ce code.
     _lay = scene_oam_layout(p, scene)
     _posed = [a for a in scene.actors if getattr(a, "active", True)]
     _actor_models = {_posed[i].name: pl.sym for pl in _lay.pools for i in pl.members}
+    _prefab_members = set(_actor_models)
+    _members = {pl.prefab.name: list(pl.members) for pl in _lay.pools}
+    _singleton_groups = singleton_type_groups(_posed, _members, _lay.placed_type_ids)
+    _singleton_reps: set[str] = set()
+    for group in _singleton_groups:
+        representative = scene_actor_sym(scene.name, _posed[group[0]].name)
+        _singleton_reps.add(_posed[group[0]].name)
+        _actor_models.update({_posed[i].name: representative for i in group})
 
     for actor, sprite in scene_actors:
-        if actor.name in _actor_models:
+        if actor.name in _prefab_members or (
+                actor.name in _actor_models
+                and _actor_models[actor.name] != scene_actor_sym(scene.name, actor.name)):
             continue
         script_path = _actor_script(actor)
         if not script_path:
@@ -854,6 +864,8 @@ def transpile_all(
             return False
         area_scripts.append((area_rank, area, area_ast, sp))
 
+    state_sizes: dict = {}
+
     # Génération C — actors de scène
     for actor, sprite, script, sp in parsed_scripts:
         s    = scene_actor_sym(scene.name, actor.name)
@@ -872,6 +884,7 @@ def transpile_all(
             child_sprites = _child_sprites(p, _scene_children(actor, scene_actors)),
             actor_name    = actor.name,
             actor_sym     = s,
+            is_pooled     = actor.name in _singleton_reps,
             scene_sym     = c_sym(scene.name),
             input_masks   = input_layout.masks,
             input_sequences = input_layout.sequences,
@@ -923,12 +936,15 @@ def transpile_all(
             actor_exports = _actor_exports,
             actor_models = _actor_models,
         )
-        c_code, gen_warnings, _ = lua_generate(script, ctx)
+        c_code, gen_warnings, actor_state_bytes = lua_generate(script, ctx)
         for w in gen_warnings:
             emit("diagnostic", build_warning(w, "codegen", sp.name))
         out = p.src_dir / f"actor_{s}.c"
         build_output.write(out, c_code)
         emit("log_line", f"[lua->c] {sp.name} -> {out.name}")
+        if actor_state_bytes:
+            state_sizes[s] = actor_state_bytes
+            emit("log_line", f"[ewram] actor model {actor.name}: script state {actor_state_bytes} bytes per instance")
 
     # Génération C — prefabs poolés, RECOMPILÉS PAR SCÈNE.
     # Chaque scène ne compile QUE les prefabs qu'elle déclare, contre SA
@@ -936,7 +952,6 @@ def transpile_all(
     # `actor_<Scène>_<Prefab>.c`, `POOL_<Scène>_<Prefab>_*` et `spawn_<Scène>_
     # <Prefab>` concordent. Le total EWRAM ci-dessous est celui de CETTE scène.
     scene_sym = c_sym(scene.name)
-    state_sizes: dict = {}
     for pf in prefabs:
         # Un prefab qu'aucune scène ne fait naître n'émet rien, mais son script est quand même
         # VÉRIFIÉ — une fois, par la première scène : sinon ses fautes sémantiques (un nom qui
