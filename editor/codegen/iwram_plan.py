@@ -119,6 +119,11 @@ def make_plan(modes: dict[tuple[str, str], int], sizes: dict[tuple[str, str], in
         victim = min(candidates, key=lambda key: VALUE.get(key[1], TABLE_VALUE) / max(1, sizes.get(key, 0)))
         modes[victim] = ROM
         dropped.append(victim)
+        # Le dernier tick physique sorti libère aussi ses helpers communs au
+        # prochain lien. Recompter avant de retirer autre chose sur leur dos.
+        if victim[1] == "physics" and not any(
+                phase == "physics" and mode != ROM for (_, phase), mode in modes.items()):
+            break
     return Plan(modes, placed(), budget, dropped)
 
 
@@ -158,13 +163,17 @@ def overflow_used(link_output: str) -> int:
     return used
 
 
-def dropped_cflags(dropped: list[tuple[str, str]]) -> str:
-    return " ".join(f"-D{macro_name(scene, phase)}={ROM}" for scene, phase in dropped)
+def dropped_cflags(dropped: list[tuple[str, str]], modes: dict[tuple[str, str], int] | None = None) -> str:
+    flags = [f"-D{macro_name(scene, phase)}={ROM}" for scene, phase in dropped]
+    physics = [mode for (_, phase), mode in (modes or {}).items() if phase == "physics"]
+    if physics and not any(mode != ROM for mode in physics):
+        flags.append("-DBS_PHYSICS_HELPERS_IWRAM=0")
+    return " ".join(flags)
 
 
 def cflags(plan: Plan) -> str:
     """Les `-D` pour les phases et tables renvoyées en ROM."""
-    return dropped_cflags(plan.dropped)
+    return dropped_cflags(plan.dropped, plan.modes)
 
 
 # ── Mémoire du plan entre deux builds ────────────────────────────────────────────────────────────────────────────────

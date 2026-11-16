@@ -1150,7 +1150,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         elif modes:
             modes = {key: (iwram_plan.ROM if key in dropped_all else mode) for key, mode in modes.items()}
             self._emit("log_line", f"[iwram] plan reused from the last build ({len(dropped_all)} phase(s) or table(s) in ROM)")
-        extra = iwram_plan.dropped_cflags(dropped_all)
+        extra = iwram_plan.dropped_cflags(dropped_all, modes)
         settled = False
         proc = None
         for attempt in range(self._IWRAM_FIT_REVISIONS + 1):
@@ -1177,7 +1177,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 break
             modes = plan.modes
             dropped_all = dropped_all + plan.dropped
-            extra = iwram_plan.dropped_cflags(dropped_all)
+            extra = iwram_plan.dropped_cflags(dropped_all, modes)
             self._emit("log_line", "[iwram] the code and tables placed in IWRAM do not fit with the "
                                    f"{iwram_plan.IWRAM_STACK_RESERVE // 1024} KiB kept for the stack: "
                                    + ", ".join(f"{scene}.{phase}" for scene, phase in plan.dropped)

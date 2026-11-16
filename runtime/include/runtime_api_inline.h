@@ -1080,11 +1080,20 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
    Bit (i*MAX_BOXES+j) = boxes i de `a` et j de `b`, canoniques. Pieds contre
    tête ET corps contre corps sont donc deux contacts distincts, suivis chacun
    d'une frame à l'autre — le premier ne masque plus le second. */
-/* Le test des boîtes et la boucle des paires tournent à chaque image pour chaque paire : leurs quelques centaines d'octets
-   valent l'IWRAM (ARM, sans temps d'attente). Hors GBA (sondes natives), la fonction reste ordinaire. */
+/* Le test des boîtes et la boucle des paires tournent à chaque image. Ils restent en IWRAM tant qu'une phase physique
+   y réside ; si le plan les a toutes renvoyées en ROM, leurs helpers la suivent. L'affine garde son attribut propre. */
 #ifdef __arm__
-#define BS_ATTR_IWRAM __attribute__((noinline, section(".iwram"), target("arm"), long_call))
+#define BS_ATTR_RENDER_IWRAM __attribute__((noinline, section(".iwram"), target("arm"), long_call))
+#ifndef BS_PHYSICS_HELPERS_IWRAM
+#define BS_PHYSICS_HELPERS_IWRAM 1
+#endif
+#if BS_PHYSICS_HELPERS_IWRAM
+#define BS_ATTR_IWRAM BS_ATTR_RENDER_IWRAM
 #else
+#define BS_ATTR_IWRAM __attribute__((noinline))
+#endif
+#else
+#define BS_ATTR_RENDER_IWRAM __attribute__((noinline))
 #define BS_ATTR_IWRAM __attribute__((noinline))
 #endif
 /* L'écriture OAM d'un sprite affine : matrice du sprite (rotation, échelle), mémoïsée dans `ac` (cf. `AffCache`), position
@@ -1096,7 +1105,7 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
    Elle écrit `shadow_oam` et `g_oam_dropped`, qui n'existent qu'avec `gba_engine.h` (dans main.c) : les fichiers des
    scripts, qui incluent aussi ce header, ne la voient pas. */
 #ifdef GBA_ENGINE_H
-BS_ATTR_IWRAM
+BS_ATTR_RENDER_IWRAM
 static int __attribute__((unused)) oam_write_affine(const Actor* a, OamEntry* o, AffCache* ac, int oamn, int* affn,
         int cx, int cy, int w, int h, int base_tile, int tiles_per_frame, int shape, int size) {
     int rot=o->rotation, sx_q=o->scale_x, sy_q=o->scale_y;

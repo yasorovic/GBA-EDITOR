@@ -66,7 +66,21 @@ def test_toutes_les_scenes_comptent_car_le_code_place_y_reste():
 def test_les_defines_n_imposent_que_les_phases_renvoyees_en_rom():
     plan = ip.make_plan({("A", "render"): 2, ("A", "physics"): 2},
                         {("A", "render"): 4 * K, ("A", "physics"): 30 * K}, static_bytes=6 * K)
-    assert ip.cflags(plan) == "-DBS_IWRAM_A_physics=0"
+    assert ip.cflags(plan) == "-DBS_IWRAM_A_physics=0 -DBS_PHYSICS_HELPERS_IWRAM=0"
+
+
+def test_les_helpers_physiques_restent_tant_qu_une_scene_physique_est_en_iwram():
+    modes = {("A", "physics"): ip.ROM, ("B", "physics"): ip.ARM}
+    assert ip.dropped_cflags([("A", "physics")], modes) == "-DBS_IWRAM_A_physics=0"
+
+
+def test_le_dernier_tick_physique_declenche_un_nouveau_lien_avant_d_autres_retraits():
+    modes = {("A", "physics"): ip.ARM, ("A", "render"): ip.ARM}
+    sizes = {("A", "physics"): 8 * K, ("A", "render"): 8 * K}
+    plan = ip.make_plan(modes, sizes, static_bytes=20 * K)
+
+    assert plan.dropped == [("A", "physics")]
+    assert plan.modes[("A", "render")] == ip.ARM
 
 
 def test_la_place_sans_lien_se_compte_dans_les_objets_moins_le_code_deja_place():
