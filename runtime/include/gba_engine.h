@@ -2569,10 +2569,12 @@ static int text_fx_at(int i) {
    s'arrête et les suivants retombent dans la bande, en statique. */
 static int   g_cap_max = 0;
 static int   g_cap_n   = 0;
-static short g_cap_x[TEXT_ANIM_MAX], g_cap_y[TEXT_ANIM_MAX], g_cap_gi[TEXT_ANIM_MAX];
-static short g_cap_fx[TEXT_ANIM_MAX];   /* TEXT_EV_WAVE | TEXT_EV_SHAKE */
-static short g_cap_i [TEXT_ANIM_MAX];   /* rang du caractère — déphasage */
-static short g_cap_ink[TEXT_ANIM_MAX];  /* encre au moment de la capture */
+static short g_cap_x[TEXT_ANIM_MAX] EWRAM_BSS;
+static short g_cap_y[TEXT_ANIM_MAX] EWRAM_BSS;
+static short g_cap_gi[TEXT_ANIM_MAX] EWRAM_BSS;
+static short g_cap_fx[TEXT_ANIM_MAX] EWRAM_BSS;   /* TEXT_EV_WAVE | TEXT_EV_SHAKE */
+static short g_cap_i[TEXT_ANIM_MAX] EWRAM_BSS;    /* rang du caractère — déphasage */
+static short g_cap_ink[TEXT_ANIM_MAX] EWRAM_BSS;  /* encre au moment de la capture */
 
 /* ── Effets par caractère ─────────────────────────────────────────
    Compteur PROPRE au texte, et non `_g_frame` : l'animation d'un texte ne
@@ -2653,7 +2655,7 @@ typedef struct {
     short w, h;        /* taille du bloc, en tuiles */
 } RegionSurf;
 
-static RegionSurf g_region_surf[TEXT_REGION_SURF_MAX];
+static RegionSurf g_region_surf[TEXT_REGION_SURF_MAX] EWRAM_BSS;
 static int g_region_surf_n = 0;
 /* Bloc de la zone EN COURS de rendu — posé par `text_render_region_cp`, remis
    à 0 après, exactement comme `g_ui_fill`. 0 = écriture libre. */
@@ -2769,7 +2771,7 @@ typedef struct {
                                      palette du conteneur). -1 = suivre la police. */
 } RegionFill;
 
-static RegionFill g_region_fill[TEXT_REGION_FILL_MAX];
+static RegionFill g_region_fill[TEXT_REGION_FILL_MAX] EWRAM_BSS;
 static int g_region_fill_n = 0;
 /* Fond de la zone EN COURS de composition — posé par `text_render_region_cp`
    (et par `text_clear_region_at`, son pendant à l'effacement) depuis une
@@ -3617,7 +3619,7 @@ typedef struct TextRead {
     unsigned char last_visible;
 } TextRead;
 
-static TextRead g_reads[TEXT_READ_MAX];
+static TextRead g_reads[TEXT_READ_MAX] EWRAM_BSS;
 static int      g_reads_init = 0;
 
 /* Routage de rendu par scène — le SLOT BG de chaque zone dans la scène courante.
@@ -3627,8 +3629,8 @@ static int      g_reads_init = 0;
    cible par nœud attendra l'édition par nœud (tranche éditeur). Les régions sont
    un sous-ensemble des éléments, d'où le même plafond. */
 #define UI_REGION_MAX UI_ELEMENT_MAX
-static short         g_region_layer[UI_REGION_MAX];   /* slot BG du nœud */
-static unsigned char g_region_active[UI_REGION_MAX];  /* 0 = zone hors de la scène courante */
+static short         g_region_layer[UI_REGION_MAX] EWRAM_BSS;   /* slot BG du nœud */
+static unsigned char g_region_active[UI_REGION_MAX] EWRAM_BSS;  /* 0 = zone hors de la scène courante */
 
 void scene_route_region(int r, int layer) {
     if (r < 0 || r >= UI_REGION_MAX || r >= g_ui_region_count) return;
@@ -4562,15 +4564,15 @@ typedef struct UIImageState {
     unsigned char bank;     /* banque de palette, posée par scene_init */
 } UIImageState;
 
-static UIImageState g_ui_img[UI_IMAGE_MAX];
+static UIImageState g_ui_img[UI_IMAGE_MAX] EWRAM_BSS;
 
 static void ui_images_invalidate(void) {
     for (int i = 0; i < UI_IMAGE_MAX; i++) g_ui_img[i].last = 255;   /* « aucune frame posée » : la prochaine mise à jour redessine */
 }
 
 /* Routage de rendu par scène — pendant image des zones (cf. scene_route_region). */
-static short         g_image_layer[UI_IMAGE_MAX];
-static unsigned char g_image_active[UI_IMAGE_MAX];
+static short         g_image_layer[UI_IMAGE_MAX] EWRAM_BSS;
+static unsigned char g_image_active[UI_IMAGE_MAX] EWRAM_BSS;
 
 void scene_route_image(int i, int layer) {
     if (i < 0 || i >= UI_IMAGE_MAX || i >= g_ui_image_count) return;
