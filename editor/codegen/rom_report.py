@@ -199,8 +199,9 @@ def read_sections(size_tool: Path, elf: Path) -> dict[str, int]:
 _EWRAM = (0x02000000, 256 * 1024)
 _IWRAM = (0x03000000, 32 * 1024)
 
-# Ce que l'EWRAM doit garder de libre après le lien : le tas (les tampons de maxmod, `92 × canaux + 1056` octets,
-# soit 4 Ko au pire) et un reste pour ce que le jeu pourrait encore prendre. Le contrôle est fait après le lien, sur la
+# Ce que l'EWRAM doit garder de libre après le lien : les opérations transitoires, dont une migration de sauvegarde,
+# et ce que le jeu pourrait encore prendre. Les tampons de maxmod sont désormais statiques et déjà comptés. Le
+# contrôle est fait après le lien, sur la
 # mémoire réellement occupée : la capacité du pool (`oam_alloc.OBJECT_CAPACITY`) ne se calcule pas de la RAM libre.
 EWRAM_MARGIN = 16 * 1024
 

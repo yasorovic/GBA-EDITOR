@@ -915,7 +915,7 @@ class MmutilAudio:
                     self._emit("log_line", "[bin2s] -> src/soundbank.s")
                     # bin2s ne génère pas de header : déclarer nous-mêmes le
                     # symbole "soundbank_bin" (dérivé de "soundbank.bin" par
-                    # bin2s) que main.c référence via mmInitDefault().
+                    # bin2s) que l'initialisation de maxmod référence dans main.c.
                     h_dst = p.src_dir / "soundbank.bin.h"
                     build_output.write(
                         h_dst,

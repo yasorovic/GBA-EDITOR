@@ -239,10 +239,10 @@ class ProjectSettings:
     # dégraderait un projet existant sans que personne ne l'ait demandé.
     sfx_sample_rate: int = 0
     # Canaux logiciels de maxmod, partagés par la musique et les effets.
-    # `mmInitDefault(bank, n)` alloue exactement 92 × n + 1056 octets sur le
-    # tas (40 o de voie de module + 28 o de voie active + 24 o de voie de
-    # mixage par canal, plus le tampon de mixage 16 kHz) — mesuré au
-    # désassemblage. Défaut 8 : la valeur qui était en dur,
+    # Maxmod réserve exactement 92 × n + 1056 octets en EWRAM statique
+    # (40 o de voie de module + 28 o de voie active + 24 o de voie de mixage
+    # par canal, plus le tampon d'onde 16 kHz). Défaut 8 : la valeur qui était
+    # en dur,
     # pour qu'un projet existant ne change pas de son parce qu'un réglage est
     # apparu. Le pool de RÉFÉRENCES d'effets, lui, vaut 16 quoi qu'on mette ici.
     sound_channels: int = 8

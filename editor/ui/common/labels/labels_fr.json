@@ -1866,7 +1866,7 @@
     "projset.cartridge_note": { "text": "Un dépassement est signalé comme une erreur. La ROM est tout de même produite, mais elle ne tient pas sur cette cartouche." },
     "projset.sound_channels": { "text": "Canaux sonores" },
     "projset.channels_tip": { "text": "Définit le nombre de canaux de mixage logiciels, partagés par la musique et les effets sonores. Un module en demande un par voix, et chaque effet en cours de lecture en prend un de plus. Les références d’effets sonores suivent une limite distincte de {handle_slots} : un effet supplémentaire est joué, mais sans référence." },
-    "projset.channels_note": { "text": "Chaque canal coûte {channel_bytes} octets de tas, plus un tampon de mixage fixe de {buffer_bytes} octets. Huit canaux, la valeur par défaut, coûtent {default_bytes} octets." },
+    "projset.channels_note": { "text": "Chaque canal réserve {channel_bytes} octets d’EWRAM, plus un tampon d’onde fixe de {buffer_bytes} octets. Huit canaux, la valeur par défaut, réservent {default_bytes} octets." },
     "projset.debug_build": { "text": "Compilation de débogage" },
     "projset.debug_tip": { "text": "Active debug.* dans les scripts : debug:log(...) écrit dans la console de log de mGBA, et le moteur mesure le temps d’image, l’usage de l’OAM, les canaux sonores et la charge DMA une fois par image." },
     "projset.debug_note": { "text": "Décochée (Release), chaque appel à debug.* et la mesure qu’il coûte sont retirés à la compilation, pas seulement rendus silencieux." },

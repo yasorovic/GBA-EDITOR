@@ -2055,7 +2055,7 @@ def _check_reserved_input_names(ctx: ValidationContext):
 def _check_module_channels(ctx: ValidationContext):
     """Un module qui demande plus de voies que le projet n'a de canaux.
 
-    `mmInitDefault(bank, n)` fixe le nombre de canaux logiciels — un réglage de
+    L'initialisation de maxmod fixe le nombre de canaux logiciels — un réglage de
     projet depuis la v0.8.8 — et musique et effets s'y partagent. Un module de
     16 voies dans un projet à 8 canaux ne joue pas « un peu moins fort » : les
     notes en trop n'ont nulle part où sonner, et il manque des instruments sans

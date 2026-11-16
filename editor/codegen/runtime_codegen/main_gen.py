@@ -27,7 +27,7 @@ from codegen.runtime_codegen.gen_affine import compute_affine_info
 from codegen.runtime_codegen.gen_camera import camera_table_lines
 from codegen.runtime_codegen.gen_declarations import extern_lines, include_lines
 from codegen.runtime_codegen.gen_globals import globals_lines
-from codegen.runtime_codegen.gen_main_loop import main_lines
+from codegen.runtime_codegen.gen_main_loop import main_lines, sound_memory_lines
 from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
 from codegen.runtime_codegen.gen_save import save_lines
 from codegen.runtime_codegen.gen_scene_data import scene_data_lines
@@ -278,6 +278,7 @@ def generate_main(
         L += music_runtime_stub_lines()
 
     # ── main() ────────────────────────────────────────────────────
+    L += sound_memory_lines(p, has_soundbank)
     L += main_lines(p, sprite_offsets, start_idx, start_scene, n_scenes, has_sound, soundbank_h, has_transitions)
 
     out = p.src_dir / "main.c"

@@ -3066,7 +3066,7 @@
     "projset.rom_prefetch_tip": { "text": "Lets the cartridge read ahead while the CPU works on something else, which hides part of the ROM wait states." },
     "projset.rom_timing_wide": { "text": "Above 16 MiB the ROM spills onto the WS1 window; the build copies this setting there." },
     "projset.cartridge_note": { "text": "Going over the capacity is reported as an error. The ROM is still built, but it does not fit on that cartridge." },
-    "projset.channels_note": { "text": "Each channel costs {channel_bytes} bytes of heap, plus a fixed {buffer_bytes}-byte mixing buffer. Eight channels, the default, cost {default_bytes} bytes." },
+    "projset.channels_note": { "text": "Each channel reserves {channel_bytes} bytes of EWRAM, plus a fixed {buffer_bytes}-byte wave buffer. Eight channels, the default, reserve {default_bytes} bytes." },
     "projset.debug_note": { "text": "When unchecked (Release), every debug.* call and the measurement it costs are removed at compile time, not just silenced." },
     "projset.default_font_note": { "text": "A character missing from both fonts is still reported. With no default font, a missing glyph is simply skipped and draws nothing." },
     "projset.frames_title": { "text": "Transition duration" },

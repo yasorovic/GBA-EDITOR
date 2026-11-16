@@ -69,9 +69,9 @@ PANNING_MAX = 100       # l'API Lua écrit −100..+100, centrée sur 0
 
 # ── Les canaux logiciels, et ce qu'ils coûtent ────────────────────────
 #
-# Mesuré au désassemblage de `mmInitDefault` : elle alloue
-# `92 × n + 1056` octets, soit 40 o de voie de module, 28 o de voie active et
-# 24 o de voie de mixage par canal, plus le tampon de mixage du mode 16 kHz.
+# Maxmod réserve `92 × n + 1056` octets en EWRAM statique : 40 o de voie de
+# module, 28 o de voie active et 24 o de voie de mixage par canal, plus le
+# tampon d'onde du mode 16 kHz. Son second tampon de 1 056 o reste en IWRAM.
 # Les trois tailles sont aussi dans `maxmod.h` (MM_SIZEOF_MODCH/ACTCH/MIXCH) —
 # on les nomme ici pour que le chiffre affiché à l'auteur vienne d'un endroit,
 # pas d'une constante recopiée dans un tooltip.
@@ -81,11 +81,11 @@ SOUND_CHANNELS_MAX = 32     # le masque de canaux de maxmod est un mot 32 bits
 SOUND_HANDLE_SLOTS = 16     # la table de RÉFÉRENCES, indépendante du nombre de canaux
 
 _CHANNEL_BYTES = 40 + 28 + 24    # MM_SIZEOF_MODCH + _ACTCH + _MIXCH
-_MIX_BUFFER_BYTES = 1056         # MM_MIXLEN_16KHZ — le mode que mmInitDefault choisit
+_MIX_BUFFER_BYTES = 1056         # MM_MIXLEN_16KHZ, tampon d'onde en EWRAM
 
 
 def sound_channels_bytes(channels: int) -> int:
-    """Ce que `mmInitDefault` alloue sur le tas pour ce nombre de canaux."""
+    """EWRAM statique réservée par maxmod pour ce nombre de canaux."""
     return _CHANNEL_BYTES * int(channels) + _MIX_BUFFER_BYTES
 
 

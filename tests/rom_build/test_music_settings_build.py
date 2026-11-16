@@ -130,6 +130,9 @@ def test_des_musiques_reglees_produisent_une_rom(tmp_path):
     # La table : une ligne pour le morceau réglé, et une pour le WAV — qui est un module comme lui : sa
     # section « Zone » (500-2500 ms) est la plage d'ordres [1, 2) du module que le build a écrit.
     main_c = (project.src_dir / "main.c").read_text(encoding="utf-8")
+    assert "g_mm_module_channels[MM_SIZEOF_MODCH * 8 / 4] EWRAM_BSS" in main_c
+    assert "g_mm_mixing_memory[MM_MIXLEN_16KHZ / 4];" in main_c
+    assert "mmInit(&mm_system);" in main_c and "mmInitDefault" not in main_c
     assert "[MOD_THEME] = { 2, 6, 1229, 1126, 30, 60 }" in main_c
     assert "[MOD_AMBIENT] = { 1, 2, 0, 0, 0, 0 }" in main_c
     assert "void music_play(int id, int loop, int volume){" in main_c

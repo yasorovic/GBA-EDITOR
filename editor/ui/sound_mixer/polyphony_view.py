@@ -2,7 +2,7 @@
 
 Une courbe en escalier sous la forme d'onde, sur le MÊME axe de temps (les deux widgets prennent toute la largeur
 de la colonne et partent du même PCM). Une ligne en pointillé marque le nombre de canaux logiciels du projet
-(`mmInitDefault(bank, n)`) : ce qui dépasse est peint en rouge, car ces voix-là n'ont nulle part où sonner.
+(réglage « Canaux sonores ») : ce qui dépasse est peint en rouge, car ces voix-là n'ont nulle part où sonner.
 
 C'est le nombre de canaux QUI SONNENT dans l'émulation — un canal dont le volume est tombé à zéro compte pour
 rien. La console, elle, garde une voie tant que son échantillon n'est pas fini : la courbe est un plancher, pas

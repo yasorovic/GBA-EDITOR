@@ -724,7 +724,7 @@ def music_start_lines(p) -> list[str]:
     """L'état musical de départ, joué au démarrage du jeu.
 
     Séparé de `emit` parce qu'il ne s'agit pas d'une table mais d'un appel, et
-    qu'il doit tomber dans `main()` après `mmInitDefault`.
+    qu'il doit tomber dans `main()` après l'initialisation de maxmod.
     """
     box = collect(p)["music_box"]
     states = list(getattr(box, "states", []) or []) if box else []

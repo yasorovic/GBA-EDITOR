@@ -4,6 +4,37 @@ from __future__ import annotations
 from codegen.c_names import sym as c_sym
 
 
+def _sound_channels(p) -> int:
+    return int(getattr(p.settings, "sound_channels", 8))
+
+
+def sound_memory_lines(p, enabled: bool) -> list[str]:
+    """Les tampons maxmod, statiques : seul le tampon mélangé reste en IWRAM."""
+    if not enabled:
+        return []
+    channels = _sound_channels(p)
+    return [
+        f"static u32 g_mm_module_channels[MM_SIZEOF_MODCH * {channels} / 4] EWRAM_BSS;",
+        f"static u32 g_mm_active_channels[MM_SIZEOF_ACTCH * {channels} / 4] EWRAM_BSS;",
+        f"static u32 g_mm_mixing_channels[MM_SIZEOF_MIXCH * {channels} / 4] EWRAM_BSS;",
+        "static u32 g_mm_wave_memory[MM_MIXLEN_16KHZ / 4] EWRAM_BSS;",
+        "static u32 g_mm_mixing_memory[MM_MIXLEN_16KHZ / 4];",
+        "",
+    ]
+
+
+def sound_init_lines(p) -> list[str]:
+    channels = _sound_channels(p)
+    return [
+        "    mm_gba_system mm_system = {",
+        f"        MM_MIX_16KHZ, {channels}, {channels},",
+        "        g_mm_module_channels, g_mm_active_channels, g_mm_mixing_channels,",
+        "        g_mm_mixing_memory, g_mm_wave_memory, (mm_addr)soundbank_bin",
+        "    };",
+        "    mmInit(&mm_system);",
+    ]
+
+
 def main_lines(p, sprite_offsets: dict, start_idx: int, start_scene: str, n_scenes: int, has_sound: bool,
                soundbank_h, has_transitions: bool) -> list[str]:
     """`int main(void)` : init, copie des tuiles de sprites en VRAM, boucle (fondu, son, entrées, tick de la scène)."""
@@ -24,15 +55,9 @@ def main_lines(p, sprite_offsets: dict, start_idx: int, start_scene: str, n_scen
         # mmVBlank() DOIT être lié à l'IRQ vblank (doc maxmod.h) — sans ça le
         # mixeur n'avance jamais et le son ne sort qu'en grésillement/silence.
         L.append("    irqSet(IRQ_VBLANK, mmVBlank);")
-        # Les canaux logiciels, partagés par la musique et les effets — un
-        # réglage de projet depuis la v0.8.8 (défaut 8, la valeur qui était en
-        # dur). `mmInitDefault()` attend un NOMBRE de canaux, pas une taille :
-        # MM_SIZEOF_MODLIST n'existe pas dans maxmod.h. Ce qu'elle alloue est
-        # chiffré par `audio.sound_channels_bytes`.
-        from core.models.audio import sound_channels_bytes
-        _ch = int(getattr(p.settings, "sound_channels", 8))
-        L.append(f"    mmInitDefault((mm_addr)soundbank_bin, {_ch});   /* {_ch} channels —"
-                 f" {sound_channels_bytes(_ch)} B of heap */")
+        # Les canaux et les deux tampons sont statiques : le linker les compte,
+        # et maxmod ne tire plus malloc uniquement pour son initialisation.
+        L += sound_init_lines(p)
         from codegen.runtime_codegen.sound_emit import music_start_lines
         L += music_start_lines(p)
         # Plus de mmStart au boot. Il démarrait la PREMIÈRE musique du projet,

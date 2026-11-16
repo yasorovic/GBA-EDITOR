@@ -7,7 +7,7 @@ Le pic du rendu n'a pas le volume de la musique : le lecteur l'applique en jouan
 barres le multiplient (`set_gain`), pour montrer ce que chaque canal fait réellement entendre.
 
 Il y a une barre par canal de la SOURCE (un module à 4 voies en montre 4, un effet — une seule voix — en montre une) ;
-le plafond du projet (`mmInitDefault(bank, n)`) ne fait pas ajouter de barres, il fait peindre en rouge celles qui le
+le plafond du projet (« Canaux sonores ») ne fait pas ajouter de barres, il fait peindre en rouge celles qui le
 dépassent — ces voix-là n'ont nulle part où sonner. La place qui reste est dite par la courbe de polyphonie.
 """
 from __future__ import annotations

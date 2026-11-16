@@ -1260,8 +1260,8 @@ class BuildWorker(EventEmitter, threading.Thread):
                 "the ROM exceeds the declared cartridge capacity.", "weight"))
         if report.ewram_tight:
             self._emit("diagnostic", build_warning(
-                f"only {report.ewram_free // 1024} KiB of EWRAM stay free after the link: the heap (music "
-                "buffers) and anything the game adds may not fit.", "weight"))
+                f"only {report.ewram_free // 1024} KiB of EWRAM stay free after the link: transient work "
+                "and anything the game adds may not fit.", "weight"))
 
     # ── Étape 5 : mgba ────────────────────────────────────────────
 
