@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 
-from core.models.components import CollisionShapeComponent
+from core.models.components import CollisionShapeComponent, ScriptComponent
 from core.models.scene import Actor
 
 
@@ -22,7 +22,10 @@ def _lignes(tmp_path, acteurs, scripts, reagit):
 
 
 def _acteur(nom, tag="body"):
-    return Actor(name=nom, components=[CollisionShapeComponent(w=8, h=8, tag=tag)])
+    # Un script par acteur : deux acteurs au contenu identique partagent un modèle, donc un type. Ici chacun est son
+    # propre type, ce que la passe de contacts déroule type par type.
+    return Actor(name=nom, components=[CollisionShapeComponent(w=8, h=8, tag=tag),
+                                       ScriptComponent(script=f"assets/{nom}.lua")])
 
 
 def test_sans_script_qui_reponde_aucune_passe(tmp_path):

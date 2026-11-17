@@ -29,3 +29,16 @@ def test_l_initialisation_utilise_les_tampons_sans_mm_init_default():
 
 def test_un_projet_sans_son_ne_reserve_rien():
     assert sound_memory_lines(_project(), False) == []
+
+
+def test_le_taux_de_mixage_dimensionne_les_tampons_et_regle_le_mixeur():
+    """Deux macros pour un seul choix : `MM_MIX_<taux>` règle le mixeur, `MM_MIXLEN_<taux>` dimensionne ses tampons. Un
+    taux changé dans un seul des deux endroits compilerait, et le mixeur écrirait au-delà d'un tampon trop court."""
+    from codegen.runtime_codegen.gen_main_loop import MIXING_RATE, MM_MIX_MODE, MM_MIXLEN
+
+    assert (MM_MIX_MODE, MM_MIXLEN) == (f"MM_MIX_{MIXING_RATE}", f"MM_MIXLEN_{MIXING_RATE}")
+
+    memoire = "\n".join(sound_memory_lines(_project(), True))
+    init = "\n".join(sound_init_lines(_project()))
+    assert memoire.count(MM_MIXLEN) == 2 and MM_MIX_MODE not in memoire     # les deux tampons, et rien d'autre
+    assert MM_MIX_MODE in init and MM_MIXLEN not in init

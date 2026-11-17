@@ -1088,7 +1088,10 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
 #define BS_PHYSICS_HELPERS_IWRAM 1
 #endif
 #if BS_PHYSICS_HELPERS_IWRAM
-#define BS_ATTR_IWRAM BS_ATTR_RENDER_IWRAM
+/* Leur propre section, avalée par l'IWRAM comme `.iwram` (gba_cart.ld : `*(.iwram .iwram*)`) : `size -A main.o` la
+   mesure à part, et le plan (cf. `iwram_plan`) peut rendre ces octets au budget quand la dernière phase physique
+   repart en ROM. Sans la mesure, il retirerait d'autres phases pour payer une place déjà libérée. */
+#define BS_ATTR_IWRAM __attribute__((noinline, section(".iwram.bs_physics_helpers"), target("arm"), long_call))
 #else
 #define BS_ATTR_IWRAM __attribute__((noinline))
 #endif
@@ -1152,6 +1155,12 @@ static int __attribute__((unused)) oam_write_affine(const Actor* a, OamEntry* o,
     return oamn+1;
 }
 #endif
+/* Les helpers des contacts et des zones, comme `oam_write_affine` ci-dessus : ils ne servent QU'À main.c, qui déroule
+   les paires de collision et les zones. Les unités de script incluent aussi ce header ; les en garder dehors fait de
+   l'invariant une erreur de compilation plutôt qu'un oubli. Elles émettraient sinon leur propre copie de ce code en
+   IWRAM, dans une section que le plan ne mesure pas (il ne lit que `main.o`, cf. `iwram_plan`). L'API que voient les
+   scripts (`collision_shape:overlaps`, `area:overlaps`) a ses propres fonctions `inline`, plus bas. */
+#ifdef GBA_ENGINE_H
 _Static_assert(MAX_BOXES * MAX_BOXES <= 16, "actors_overlap_mask tient sur 16 bits");
 static inline int _box_canonical(const Actor*a, int i) {
     for (int k=0; k<i; k++)
@@ -1264,6 +1273,7 @@ static void __attribute__((unused)) area_effects_apply(const AreaEffect* fx, u8 
     }
     if (buoyancy) { *gx -= (*gx * buoyancy) >> 8; *gy -= (*gy * buoyancy) >> 8; }
 }
+#endif /* GBA_ENGINE_H : fin des helpers réservés à main.c */
 
 /* La référence `area` d'un script : le rang de l'Area dans `g_areas`, plus un (0 = pas d'Area), comme la référence d'une
    boîte. `g_areas` existe dans tout projet (une entrée au moins), l'extern est donc toujours satisfait. */

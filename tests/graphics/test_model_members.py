@@ -126,7 +126,7 @@ def test_les_appels_de_code_d_un_membre_vont_au_modele(tmp_path):
     p, scene, _coin = _projet(tmp_path, n=2)
     singleton = Actor(name="Door")
     scene.actors.append(singleton)
-    sym_of = dispatch_sym(scene, [(a, None) for a in scene.actors], scene_pi(p, scene))
+    sym_of = dispatch_sym(p, scene, [(a, None) for a in scene.actors], scene_pi(p, scene))
     assert sym_of("S", "C0") == "S_Coin" and sym_of("S", "C1") == "S_Coin"
     assert sym_of("S", "Door") == "S_Door"
 
@@ -169,3 +169,35 @@ def test_un_acteur_pose_du_meme_nom_que_son_prefab_garde_sa_constante(tmp_path):
     text = (p.src_dir / "actor_types.h").read_text(encoding="utf-8")
     assert text.count("#define ACTOR_S_COIN ") == 1 and "#define ACTOR_S_COIN 0" in text
     assert "#define MODEL_S_COIN_COUNT 2" in text            # le modèle existe toujours, sans constante en double
+
+
+def test_deux_enfants_de_parents_differents_partagent_un_type(tmp_path):
+    """Un ENFANT reste partageable, un parent non (cf. `pool_model.parent_names`).
+
+    Rien de la hiérarchie n'entre dans le code d'un enfant : le lien est posé par `scene_init`, emplacement par
+    emplacement, et lu au runtime dans `g_slot_link`. Deux enfants de parents différents, et même un acteur sans
+    parent de contenu identique, tiennent donc dans un seul modèle. Le jour où un accès serait résolu au build dans
+    l'enfant (comme `self.Enfant` l'est dans le parent), ce test tomberait : c'est son rôle."""
+    from codegen.runtime_codegen.gen_actor_hierarchy import placed_link_lines
+
+    p = Project(tmp_path)
+    scene = Scene(name="S")
+    enfant = ScriptComponent(script="assets/enfant.lua")
+    scene.actors = [Actor(name="P1", components=[ScriptComponent(script="assets/pere.lua")]),
+                    Actor(name="P2", components=[ScriptComponent(script="assets/pere.lua")]),
+                    Actor(name="E1", components=[copy.deepcopy(enfant)]),
+                    Actor(name="E2", components=[copy.deepcopy(enfant)]),
+                    Actor(name="Libre", components=[copy.deepcopy(enfant)])]
+    scene.actors[2].parent, scene.actors[3].parent = "P1", "P2"
+    p.scenes.items = [scene]
+    tout_afficher(p)
+
+    layout = scene_oam_layout(p, scene)
+    assert layout.placed_type_ids[0] != layout.placed_type_ids[1]          # deux parents, deux modèles
+    assert layout.placed_type_ids[2] == layout.placed_type_ids[3] == layout.placed_type_ids[4]
+    assert layout.singleton_groups == [[2, 3, 4]]
+
+    # Et ce que le modèle partagé ne porte pas, `scene_init` le pose par emplacement : chacun son parent.
+    liens = "\n".join(placed_link_lines([(a, None) for a in scene.actors], 0))
+    assert liens.count("actor_link_slot(") == 2
+    assert "actor_link_slot(2, 0, 1," in liens and "actor_link_slot(3, 1, 1," in liens

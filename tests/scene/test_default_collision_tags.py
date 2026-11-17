@@ -37,12 +37,14 @@ def test_collision_enter_is_dispatched_to_scene_actor_script(tmp_path):
     scene = project.scenes[0]
     scene.actors.clear()      # le Player du modèle décalerait les indices que ce test lit
     scripts = (project.user_library_dir / "scripts")
-    (scripts / "Hit.lua").write_text(
-        "function on_collision_enter(other, my_box, other_box)\nend\n", encoding="utf-8")
+    # Un script PAR acteur : deux acteurs au contenu identique partagent un modèle, donc une ligne de
+    # descripteur et un seul crochet (cf. `pool_model.placed_types`). Ici on veut les deux crochets.
     for name in ("A", "B"):
+        (scripts / f"Hit{name}.lua").write_text(
+            "function on_collision_enter(other, my_box, other_box)\nend\n", encoding="utf-8")
         actor = Actor(name=name)
         actor.components = [CollisionShapeComponent(w=8, h=8),
-                            ScriptComponent(script="assets/scripts/Hit.lua")]
+                            ScriptComponent(script=f"assets/scripts/Hit{name}.lua")]
         scene.actors.append(actor)
     project.save()
 

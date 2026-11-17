@@ -43,7 +43,7 @@ from typing import Optional
 from codegen.actor_appearance import has_oam_entry
 from codegen.c_names import sym as c_sym
 from codegen.layout_cache import layout_memo
-from codegen.pool_model import model_members, placed_types, prefab_group
+from codegen.pool_model import model_members, placed_types, prefab_group, singleton_type_groups
 from codegen.ui_obj_budget import scene_ui_obj_slots
 from core.models.scene import Scene
 
@@ -152,6 +152,10 @@ class OamLayout:
     # Par acteur posé : son type d'emplacement (`Actor.type_id`) : celui du modèle né pour une copie identique au prefab,
     # sinon un type après ceux du pool partagé (cf. `pool_model.placed_types`).
     placed_type_ids: list[int] = field(default_factory=list)
+    # Les acteurs posés SANS modèle de prefab qui partagent un type, donc un code : indices dans les posés, le premier
+    # du groupe portant le symbole. Dérivé de `placed_type_ids`, calculé ici pour que le code appelé (`dispatch_sym`),
+    # celui qui est compilé (`lua_compiler`) et l'état d'instance posé (`gen_scene_init`) lisent le même groupement.
+    singleton_groups: list[list[int]] = field(default_factory=list)
 
     @property
     def type_table_size(self) -> int:
@@ -291,8 +295,11 @@ def _compute_oam_layout(project, scene: Scene) -> OamLayout:
                             entries=size if shows else 0, models=shared_models)
         pools += shared_models
 
+    type_ids = placed_types(
+        posed, members, shared_type_count(shared) + 1,
+        {m.prefab.name: (m.prefab, m.root_type_id) for m in (shared.models if shared else [])})
+
     return OamLayout(scene=scene, scene_sym=scene_sym, placed=placed,
                      placed_entry=placed_entry, ui=ui, pools=pools, shared=shared, capacity=capacity,
-                     placed_type_ids=placed_types(
-                         posed, members, shared_type_count(shared) + 1,
-                         {m.prefab.name: (m.prefab, m.root_type_id) for m in (shared.models if shared else [])}))
+                     placed_type_ids=type_ids,
+                     singleton_groups=singleton_type_groups(members, type_ids))

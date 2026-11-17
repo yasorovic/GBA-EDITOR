@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.models.components import CollisionShapeComponent, TriggerComponent
+from core.models.components import CollisionShapeComponent, ScriptComponent, TriggerComponent
 from core.models.scene import Actor, Area, Scene
 from native_toolchain import compilateur_hote, environnement
 
@@ -149,7 +149,10 @@ def _settings():
 
 
 def _actor(name: str, tag: str = "body") -> Actor:
-    return Actor(name=name, components=[CollisionShapeComponent(id="body", tag=tag, w=8, h=8)])
+    # Un script par acteur : sans cela, deux acteurs au contenu identique partagent un modèle, donc un type, et la
+    # passe n'aurait plus qu'une ligne pour les deux.
+    return Actor(name=name, components=[CollisionShapeComponent(id="body", tag=tag, w=8, h=8),
+                                        ScriptComponent(script=f"assets/{name}.lua")])
 
 
 def _area(name: str, tag: str = "area", trigger: bool = True, x: int = 40, y: int = 56) -> Area:

@@ -18,6 +18,16 @@ def prefab_group(prefab) -> int:
     return 1 + len(getattr(prefab, "children", []) or [])
 
 
+def parent_names(posed: list) -> set[str]:
+    """Les acteurs posés dont un autre posé est l'enfant.
+
+    Un parent compile ses accès `self.Enfant` contre sa propre hiérarchie (`_child_refs_for_actor` : l'`ACTOR_*` de
+    l'enfant est une constante du build) : il ne peut donc partager son code avec personne. Un ENFANT, lui, n'a rien
+    du parent dans son code (le lien vit dans `g_slot_link`, posé par `scene_init` instance par instance) et reste
+    partageable. Rendu ici pour que la règle, lue par `model_members` et par `placed_types`, soit la même."""
+    return {getattr(a, "parent", None) for a in posed} - {None, ""}
+
+
 def _sfx_key(owner) -> tuple:
     comp = owner.get_component("sound_fx")
     return (bool(comp and comp.active), getattr(comp, "sfx_name", "") if comp else "")
@@ -36,7 +46,7 @@ def model_members(project, posed: list) -> dict:
 
     Les autres acteurs, dérivés du prefab ou non, restent des singletons : chacun son code."""
     by_name = {pf.name: pf for pf in project.prefabs}
-    parents = {getattr(a, "parent", None) for a in posed} - {None, ""}
+    parents = parent_names(posed)
     out: dict = {}
     for i, a in enumerate(posed):
         pf = by_name.get(getattr(a, "prefab_name", None) or "")
@@ -86,8 +96,12 @@ def _variant_key(prefab_name: str, actor) -> tuple:
             bool(getattr(actor, "is_player", False)), _box_roles(actor))
 
 
-def singleton_type_groups(posed: list, members: dict, type_ids: list[int]) -> list[list[int]]:
-    """Groupes de singletons qui portent le même modèle, dans l'ordre de la scène."""
+def singleton_type_groups(members: dict, type_ids: list[int]) -> list[list[int]]:
+    """Groupes de singletons qui portent le même modèle, dans l'ordre de la scène.
+
+    Dérivé des types d'emplacement, donc calculé UNE fois, dans `oam_alloc` (`OamLayout.singleton_groups`). Le
+    refaire ailleurs sur une autre vue des acteurs, celle d'une scène sans physique par exemple, donnerait un
+    autre groupement que celui des types."""
     member_indices = {i for indices in members.values() for i in indices}
     by_type: dict[int, list[int]] = {}
     for i, kind in enumerate(type_ids):
@@ -105,7 +119,7 @@ def placed_types(posed: list, members: dict, first: int, spawned: dict | None = 
     prefab partage le sien avec les membres de mêmes valeurs (une variante). Les acteurs sans modèle de prefab qui ont
     le même contenu généré partagent eux aussi un type."""
     member_of = {i: name for name, idx in members.items() for i in idx}
-    parents = {getattr(a, "parent", None) for a in posed} - {None, ""}
+    parents = parent_names(posed)
     ids: dict = {_variant_key(name, prefab.actor): root_type_id for name, (prefab, root_type_id) in (spawned or {}).items()}
     fresh = 0
     out = []
@@ -115,8 +129,8 @@ def placed_types(posed: list, members: dict, first: int, spawned: dict | None = 
         else:
             script = a.get_component("script")
             native = bool(script and script.active and script.script and not script.script.lower().endswith(".lua"))
-            # Un parent compile ses accès `self.Enfant` contre sa propre hiérarchie ; un script C natif peut garder
-            # un état fichier. Ces deux cas restent donc des modèles uniques.
+            # Un parent ne partage rien (cf. `parent_names`) ; un script C natif peut garder un état fichier. Ces
+            # deux cas restent donc des modèles uniques.
             key = ("singleton", i) if a.name in parents or native else ("singleton", _variant_key("", a))
         if key not in ids:
             ids[key] = first + fresh

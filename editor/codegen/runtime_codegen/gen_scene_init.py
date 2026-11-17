@@ -23,7 +23,6 @@ from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scen
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_spawn_lines
 from codegen.runtime_codegen.gen_ui_scene import scene_ui_lines
 from codegen.runtime_codegen.physics.body import support_normal
-from codegen.pool_model import singleton_type_groups
 from codegen.runtime_codegen.gen_vram_layout import layer_base_bank
 from codegen.runtime_codegen.sound_emit import scene_music_lines
 from core.models.field_value import FieldValue, var_names_from_project
@@ -65,9 +64,7 @@ def gen_scene_init(
     L += appearance_table_lines(sym, alay)
     L += _image_data_lines(scene, sym)
     L += _bg_anim_data_lines(sym, anims, tanims)
-    members = {pl["prefab"].name: pl["members"] for pl in pi}
-    singleton_groups = singleton_type_groups(
-        [a for a, _ in scene_actors], members, scene_oam_layout(p, scene).placed_type_ids)
+    singleton_groups = scene_oam_layout(p, scene).singleton_groups
     if singleton_groups:
         from codegen.runtime_codegen.lua_compiler import member_export_inits
         from scripting.codegen import export_setter_c_type
@@ -389,9 +386,7 @@ def _start_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, lua_
     """La musique de la scène, l'état des instances d'un modèle, puis les `on_start` (acteurs, scène)."""
     L: list[str] = []
     members = {j for pl in pi for j in pl["members"]}
-    layout = scene_oam_layout(p, scene)
-    member_map = {pl["prefab"].name: pl["members"] for pl in pi}
-    for group in singleton_type_groups([a for a, _ in scene_actors], member_map, layout.placed_type_ids):
+    for group in scene_oam_layout(p, scene).singleton_groups:
         members.update(actor_offset + j for j in group)
     # ── Musique de la scène ───────────────────────
     # Posée AVANT les on_start : le réglage déclaratif passe en premier et le
@@ -400,7 +395,7 @@ def _start_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, lua_
     if has_sound:
         L += scene_music_lines(p, scene, sound_assets)
 
-    symbol = dispatch_sym(scene, scene_actors, pi)
+    symbol = dispatch_sym(p, scene, scene_actors, pi)
     scripts = [(j, symbol(scene.name, scene_actors[j - actor_offset][0].name)) for j in sorted(lua_idx)]
     # L'état des instances POSÉES d'un modèle, AVANT tout on_start : l'un peut lire l'autre. Le modèle
     # remet l'état de départ de son script, puis chaque valeur d'export propre au membre y est posée.

@@ -62,7 +62,7 @@ def gen_scene_tick(
         input_layout = _cil(p)
     sym = c_sym(scene.name)
     _lay = scene_oam_layout(p, scene)
-    _dsym = dispatch_sym(scene, scene_actors, pi)
+    _dsym = dispatch_sym(p, scene, scene_actors, pi)
     # Les instances posées d'un modèle sont des acteurs de la scène, appelés par leur indice avec le code du
     # modèle (`_dsym`) ; celles qui naissent vivent dans le pool partagé, parcouru par modèle.
     phases: dict[str, list[str]] = {name: [] for name in TICK_PHASES}

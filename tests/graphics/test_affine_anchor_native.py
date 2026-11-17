@@ -42,7 +42,7 @@ def _sinus_du_moteur() -> str:
 def _ecriture_affine_du_moteur() -> str:
     """`oam_write_affine` telle que le moteur l'écrit (le C émis l'appelle), à compiler contre les structures de la sonde."""
     texte = RUNTIME.read_text(encoding="utf-8")
-    debut = texte.index("BS_ATTR_IWRAM\nstatic int __attribute__((unused)) oam_write_affine(")
+    debut = texte.index("BS_ATTR_RENDER_IWRAM\nstatic int __attribute__((unused)) oam_write_affine(")
     fin = texte.index("\n}\n", debut) + 3
     return texte[debut:fin]
 
@@ -56,7 +56,7 @@ typedef struct { u16 attr0, attr1, attr2, dummy; } S;
 typedef A Actor; typedef O OamEntry;
 A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0; AffCache g_aff_cache[1];
 int g_oam_dropped = 0;
-#define BS_ATTR_IWRAM
+#define BS_ATTR_RENDER_IWRAM
 """
 
 

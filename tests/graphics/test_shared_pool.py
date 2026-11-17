@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
-from core.models.components import ScriptComponent, SpriteComponent
+from core.models.components import (PHYSICS_BODY_KINEMATIC, PhysicsBodyComponent, ScriptComponent,
+                                    SpriteComponent)
 from oam_fixtures import tout_afficher, SPRITE
 from codegen.oam_alloc import OBJECT_CAPACITY, scene_oam_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
@@ -469,7 +470,7 @@ def test_les_singletons_identiques_partagent_un_type_et_un_code(tmp_path):
     assert lay.placed_type_ids == [1, 1] and lay.type_table_size == 2
 
     from codegen.runtime_codegen.gen_pool import dispatch_sym, scene_pi
-    symbol = dispatch_sym(scene, [(a, None) for a in actors], scene_pi(p, scene))
+    symbol = dispatch_sym(p, scene, [(a, None) for a in actors], scene_pi(p, scene))
     assert symbol("S", "CoinA") == "S_CoinA"
     assert symbol("S", "CoinB") == "S_CoinA"
 
@@ -485,6 +486,27 @@ def test_un_parent_et_un_script_c_restant_des_singletons_distincts(tmp_path):
     p.scenes.items = [scene]
     ids = scene_oam_layout(p, scene).placed_type_ids
     assert ids[0] != ids[2] and ids[3] != ids[4]
+
+
+def test_une_scene_sans_physique_ne_fusionne_pas_deux_corps_differents(tmp_path):
+    """Le groupement vient du layout, bâti sur les acteurs tels qu'ils sont. Une scène sans physique construit ses
+    acteurs sans PhysicsBody : calculé sur CETTE vue, le groupement fusionnait deux acteurs que les types, le code
+    compilé et l'état d'instance tenaient pour distincts, et le second appelait le code du premier."""
+    from codegen.runtime_codegen.gen_pool import dispatch_sym, scene_pi
+    from codegen.runtime_codegen.physics.body import without_scene_physics
+    libre = Actor(name="CoinA", components=[ScriptComponent(script="assets/coin.lua")])
+    corps = Actor(name="CoinB", components=[ScriptComponent(script="assets/coin.lua"),
+                                            PhysicsBodyComponent(mode=PHYSICS_BODY_KINEMATIC)])
+    scene = Scene(name="S", actors=[libre, corps], physics_enabled=False)
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    lay = scene_oam_layout(p, scene)
+    assert lay.placed_type_ids[0] != lay.placed_type_ids[1] and lay.singleton_groups == []
+
+    # La vue que le build passe au générateur quand la scène n'a pas de physique.
+    vue = [(without_scene_physics(a), None) for a in scene.actors]
+    symbol = dispatch_sym(p, scene, vue, scene_pi(p, scene))
+    assert symbol("S", "CoinA") == "S_CoinA" and symbol("S", "CoinB") == "S_CoinB"
 
 
 def test_le_code_lua_fusionne_garde_un_etat_par_acteur(tmp_path):
@@ -544,3 +566,34 @@ def test_les_tables_par_type_couvrent_les_poses(tmp_path):
     # Le prefab à parties n'a pas de membres posés, mais ses deux copies de même contenu partagent leur type.
     assert lay.placed_type_ids == [3, 3, 4, 5]
     assert lay.type_table_size == 6 and "static const u8 _pt[6]={0,0,1,0,0,0};" in code
+
+
+def test_un_script_qui_nomme_son_propre_acteur_reste_fusionnable(tmp_path):
+    """Le code d'un modèle partagé ne doit rien porter qui désigne UN de ses acteurs à sa place.
+
+    Un script qui se nomme (`self.name == "CoinA"`) le fait par une lecture d'instance (`actor_get_name(self)`), pas
+    par l'identité de l'acteur compilé : CoinB joue le même code et répond non. Un acteur nommé EXPLICITEMENT
+    (`actor:get("CoinB")`) reste, lui, une constante du build : c'est le littéral du script, le même pour les deux."""
+    actors = [Actor(name=name, components=[ScriptComponent(script="assets/coin.lua")])
+              for name in ("CoinA", "CoinB")]
+    scene = Scene(name="S", actors=actors)
+    p = Project(tmp_path)
+    p.scenes.items = [scene]
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "coin.lua").write_text(
+        'function on_update(self)\n'
+        '    if self.name == "CoinA" then self:destroy() end\n'
+        '    local autre = actor:get("CoinB")\n'
+        '    if autre then autre:hide() end\n'
+        'end\n', encoding="utf-8")
+    p.src_dir.mkdir(parents=True)
+
+    from codegen.runtime_codegen.lua_compiler import transpile_all
+    assert scene_oam_layout(p, scene).singleton_groups == [[0, 1]]
+    assert transpile_all(p, scene, [(a, None) for a in actors], [], lambda *_args: None)
+    assert not (p.src_dir / "actor_S_CoinB.c").exists()
+
+    code = (p.src_dir / "actor_S_CoinA.c").read_text(encoding="utf-8")
+    assert "actor_get_name(self) == ACTOR_S_COINA" in code
+    assert code.count("ACTOR_S_COINA") == 1          # nulle part ailleurs : `self` n'est jamais résolu en CoinA
+    assert "&g_actors[ACTOR_S_COINB]" in code

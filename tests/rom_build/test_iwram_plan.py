@@ -74,13 +74,39 @@ def test_les_helpers_physiques_restent_tant_qu_une_scene_physique_est_en_iwram()
     assert ip.dropped_cflags([("A", "physics")], modes) == "-DBS_IWRAM_A_physics=0"
 
 
-def test_le_dernier_tick_physique_declenche_un_nouveau_lien_avant_d_autres_retraits():
+def test_la_taille_des_helpers_physiques_se_lit_dans_leur_propre_section():
+    sections = ".iwram 4800 0\n.iwram.bs_physics_helpers 3072 0\n.text 9999 0\n"
+    assert ip.read_sizes("", sections)[ip.PHYSICS_HELPERS] == 3072
+
+
+def test_les_helpers_physiques_pesent_tant_qu_une_phase_physique_est_en_iwram():
+    """Ils sont dans `static_bytes` (mesuré sur le lien courant) : le budget ne les crédite pas d'avance."""
     modes = {("A", "physics"): ip.ARM, ("A", "render"): ip.ARM}
-    sizes = {("A", "physics"): 8 * K, ("A", "render"): 8 * K}
-    plan = ip.make_plan(modes, sizes, static_bytes=20 * K)
+    sizes = {("A", "physics"): 2 * K, ("A", "render"): 2 * K, ip.PHYSICS_HELPERS: 3 * K}
+    plan = ip.make_plan(modes, sizes, static_bytes=23 * K)
+
+    assert not plan.changed and plan.budget == 5 * K and plan.placed == 4 * K
+
+
+def test_la_sortie_du_dernier_tick_physique_rend_la_place_de_ses_helpers():
+    """Sans ce crédit, les 3 Ko des helpers resteraient comptés et l'affichage partirait avec la physique, pour payer
+    des octets que le prochain lien n'écrit plus."""
+    modes = {("A", "physics"): ip.ARM, ("A", "render"): ip.ARM}
+    sizes = {("A", "physics"): 8 * K, ("A", "render"): 8 * K, ip.PHYSICS_HELPERS: 3 * K}
+    plan = ip.make_plan(modes, sizes, static_bytes=23 * K)
 
     assert plan.dropped == [("A", "physics")]
     assert plan.modes[("A", "render")] == ip.ARM
+    assert plan.budget == 8 * K and plan.placed == 8 * K
+
+
+def test_une_phase_physique_qui_reste_ne_rend_rien():
+    """Deux scènes physiques : la première sortie, les helpers servent encore la seconde."""
+    modes = {("A", "physics"): ip.ARM, ("B", "physics"): ip.ARM}
+    sizes = {("A", "physics"): 8 * K, ("B", "physics"): 2 * K, ip.PHYSICS_HELPERS: 3 * K}
+    plan = ip.make_plan(modes, sizes, static_bytes=23 * K)
+
+    assert plan.dropped == [("A", "physics")] and plan.budget == 5 * K and plan.placed == 2 * K
 
 
 def test_la_place_sans_lien_se_compte_dans_les_objets_moins_le_code_deja_place():

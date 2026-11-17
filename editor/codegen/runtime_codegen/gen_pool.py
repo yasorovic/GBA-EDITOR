@@ -13,7 +13,6 @@ from core.models.scene import Scene
 from core.project import Project
 from codegen.runtime_codegen.gen_affine import pool_affine
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_spawn_lines
-from codegen.pool_model import placed_types, singleton_type_groups
 
 
 def scene_pi(p: Project, scene: Scene) -> list[dict]:
@@ -42,18 +41,15 @@ def scene_pi(p: Project, scene: Scene) -> list[dict]:
     ]
 
 
-def dispatch_sym(scene, scene_actors: list, pi: list[dict]):
+def dispatch_sym(p: Project, scene, scene_actors: list, pi: list[dict]):
     """Le symbole C dont le code d'un acteur posé s'appelle : le sien, ou celui de son MODÈLE s'il en est
     une instance (membre de prefab ou singleton identique). Seuls les APPELS de scripts (événements,
-    collisions, interaction) passent par ici ; `ACTOR_*` et les tables par acteur gardent le nom propre."""
+    collisions, interaction) passent par ici ; `ACTOR_*` et les tables par acteur gardent le nom propre.
+
+    Les groupes de singletons viennent du layout : les refaire sur `scene_actors`, qui est la vue sans physique
+    quand la scène n'en a pas, fusionnait deux acteurs que le reste du build tenait pour distincts."""
     models = {scene_actors[j][0].name: pl["sym"] for pl in pi for j in pl["members"]}
-    members = {pl["prefab"].name: pl["members"] for pl in pi}
-    shared = [pl for pl in pi if pl["shared"]]
-    type_ids = placed_types(
-        [a for a, _ in scene_actors], members, 1 + sum(pl["group"] for pl in shared),
-        {pl["prefab"].name: (pl["prefab"], pl["root_type_id"]) for pl in shared},
-    )
-    for group in singleton_type_groups([a for a, _ in scene_actors], members, type_ids):
+    for group in scene_oam_layout(p, scene).singleton_groups:
         representative = scene_actor_sym(scene.name, scene_actors[group[0]][0].name)
         models.update({scene_actors[j][0].name: representative for j in group})
 

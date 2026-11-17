@@ -49,6 +49,12 @@ VALUE = {"render": 8, "physics": 4, "hooks": 1, "late": 1}
 TABLE_VALUE = 2  # Priorité indicative : une petite table peut rester avant une grande phase.
 _TABLE_SECTION = re.compile(r"\.data\.bs_table\.(\w+)\.(_\w+)")
 
+# Les helpers physiques communs (`BS_ATTR_IWRAM`, runtime_api_inline.h) : du code chaud qu'aucune phase ne porte, donc
+# compté dans `static_bytes`. Ils ont leur propre section pour être mesurables, et ils suivent la dernière phase
+# physique restée en IWRAM (cf. `dropped_cflags`). Leur clé n'est pas un placement : rien ne la retire.
+PHYSICS_HELPERS = ("", "_physics_helpers")
+_HELPERS_SECTION = ".iwram.bs_physics_helpers"
+
 _MACRO = re.compile(r"^#define\s+BS_IWRAM_(\w+?)_(hooks|physics|late|render)\s+(\d)\s*(?:/\*.*)?$", re.M)
 _SYMBOL = re.compile(r"^\S+\s+([0-9a-fA-F]+)\s+[tT]\s+scene_tick_(\w+?)_(hooks|physics|late|render)$", re.M)
 
@@ -67,12 +73,16 @@ def read_modes(main_c: str) -> dict[tuple[str, str], int]:
 
 
 def read_sizes(nm_output: str, size_output: str = "") -> dict[tuple[str, str], int]:
-    """Tailles compilées des phases (`nm -S`) et des tables IWRAM (`size -A`)."""
+    """Tailles compilées des phases (`nm -S`), des tables IWRAM et des helpers physiques (`size -A`)."""
     sizes = {(m.group(2), m.group(3)): int(m.group(1), 16) for m in _SYMBOL.finditer(nm_output)}
     for line in size_output.splitlines():
         parts = line.split()
-        if len(parts) >= 2 and (table := _TABLE_SECTION.fullmatch(parts[0])):
+        if len(parts) < 2:
+            continue
+        if table := _TABLE_SECTION.fullmatch(parts[0]):
             sizes[table.groups()] = int(parts[1])
+        elif parts[0] == _HELPERS_SECTION:
+            sizes[PHYSICS_HELPERS] = int(parts[1])
     return sizes
 
 
@@ -103,28 +113,33 @@ def make_plan(modes: dict[tuple[str, str], int], sizes: dict[tuple[str, str], in
     """Dégrade `modes` jusqu'à ce que le code placé tienne dans ce que l'IWRAM laisse libre.
 
     `sizes` : les tailles AU MODE ACTUEL (celles de `main.o`). `static_bytes` : l'IWRAM prise par le reste (données
-    initialisées, .bss, bibliothèques), placements mobiles exclus. On retire la phase ou la table qui a la plus faible
-    priorité par octet jusqu'à ce que ça tienne."""
+    initialisées, .bss, bibliothèques, helpers physiques), placements mobiles exclus. On retire la phase ou la table qui
+    a la plus faible priorité par octet jusqu'à ce que ça tienne."""
     modes = dict(modes)
-    budget = max(0, IWRAM_TOTAL - IWRAM_STACK_RESERVE - static_bytes)
+    helpers = sizes.get(PHYSICS_HELPERS, 0)
     dropped: list[tuple[str, str]] = []
+
+    def physics_in_iwram() -> bool:
+        return any(phase == "physics" and mode != ROM for (_, phase), mode in modes.items())
 
     def placed() -> int:
         return sum(sizes.get(key, 0) for key, mode in modes.items() if mode != ROM)
 
-    while placed() > budget:
+    def budget() -> int:
+        # Sortie la dernière phase physique, le prochain lien n'aura plus les helpers communs
+        # (`-DBS_PHYSICS_HELPERS_IWRAM=0`) : leur place revient au budget. Sans ce crédit, le plan retirerait d'autres
+        # phases pour payer des octets déjà libérés, et dépenserait une révision à le découvrir.
+        freed = 0 if physics_in_iwram() else helpers
+        return max(0, IWRAM_TOTAL - IWRAM_STACK_RESERVE - static_bytes + freed)
+
+    while placed() > budget():
         candidates = [key for key, mode in modes.items() if mode != ROM]
         if not candidates:
             break
         victim = min(candidates, key=lambda key: VALUE.get(key[1], TABLE_VALUE) / max(1, sizes.get(key, 0)))
         modes[victim] = ROM
         dropped.append(victim)
-        # Le dernier tick physique sorti libère aussi ses helpers communs au
-        # prochain lien. Recompter avant de retirer autre chose sur leur dos.
-        if victim[1] == "physics" and not any(
-                phase == "physics" and mode != ROM for (_, phase), mode in modes.items()):
-            break
-    return Plan(modes, placed(), budget, dropped)
+    return Plan(modes, placed(), budget(), dropped)
 
 
 # Ce que les bibliothèques (libgba, maxmod) prennent en IWRAM et qu'on ne voit pas sans lien : une estimation, que le contrôle

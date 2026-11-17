@@ -8,6 +8,14 @@ def _sound_channels(p) -> int:
     return int(getattr(p.settings, "sound_channels", 8))
 
 
+# Le taux de mixage de maxmod. Un seul choix, mais DEUX macros à tenir d'accord : `MM_MIX_<taux>` dit au mixeur à quelle
+# fréquence il tourne, `MM_MIXLEN_<taux>` la taille des tampons qu'il lui faut. Les dissocier ne serait pas une erreur de
+# compilation : le mixeur écrirait au-delà d'un tampon trop court. D'où le taux écrit UNE fois, les deux noms dérivés.
+MIXING_RATE = "16KHZ"
+MM_MIX_MODE = f"MM_MIX_{MIXING_RATE}"
+MM_MIXLEN = f"MM_MIXLEN_{MIXING_RATE}"
+
+
 def sound_memory_lines(p, enabled: bool) -> list[str]:
     """Les tampons maxmod, statiques : seul le tampon mélangé reste en IWRAM."""
     if not enabled:
@@ -17,8 +25,8 @@ def sound_memory_lines(p, enabled: bool) -> list[str]:
         f"static u32 g_mm_module_channels[MM_SIZEOF_MODCH * {channels} / 4] EWRAM_BSS;",
         f"static u32 g_mm_active_channels[MM_SIZEOF_ACTCH * {channels} / 4] EWRAM_BSS;",
         f"static u32 g_mm_mixing_channels[MM_SIZEOF_MIXCH * {channels} / 4] EWRAM_BSS;",
-        "static u32 g_mm_wave_memory[MM_MIXLEN_16KHZ / 4] EWRAM_BSS;",
-        "static u32 g_mm_mixing_memory[MM_MIXLEN_16KHZ / 4];",
+        f"static u32 g_mm_wave_memory[{MM_MIXLEN} / 4] EWRAM_BSS;",
+        f"static u32 g_mm_mixing_memory[{MM_MIXLEN} / 4];",
         "",
     ]
 
@@ -27,7 +35,7 @@ def sound_init_lines(p) -> list[str]:
     channels = _sound_channels(p)
     return [
         "    mm_gba_system mm_system = {",
-        f"        MM_MIX_16KHZ, {channels}, {channels},",
+        f"        {MM_MIX_MODE}, {channels}, {channels},",
         "        g_mm_module_channels, g_mm_active_channels, g_mm_mixing_channels,",
         "        g_mm_mixing_memory, g_mm_wave_memory, (mm_addr)soundbank_bin",
         "    };",

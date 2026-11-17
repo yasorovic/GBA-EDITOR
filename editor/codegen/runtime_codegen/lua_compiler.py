@@ -32,7 +32,6 @@ from codegen.runtime_codegen.physics.areas import scripted_areas
 from codegen.runtime_codegen.gen_camera import camera_sym
 import codegen.build_output as build_output
 from codegen.oam_alloc import scene_has_model, scene_oam_layout
-from codegen.pool_model import singleton_type_groups
 from codegen.runtime_codegen.input_layout import compute_input_layout
 
 
@@ -671,10 +670,8 @@ def transpile_all(
     _posed = [a for a in scene.actors if getattr(a, "active", True)]
     _actor_models = {_posed[i].name: pl.sym for pl in _lay.pools for i in pl.members}
     _prefab_members = set(_actor_models)
-    _members = {pl.prefab.name: list(pl.members) for pl in _lay.pools}
-    _singleton_groups = singleton_type_groups(_posed, _members, _lay.placed_type_ids)
     _singleton_reps: set[str] = set()
-    for group in _singleton_groups:
+    for group in _lay.singleton_groups:
         representative = scene_actor_sym(scene.name, _posed[group[0]].name)
         _singleton_reps.add(_posed[group[0]].name)
         _actor_models.update({_posed[i].name: representative for i in group})
