@@ -469,6 +469,12 @@ class BuildWorker(EventEmitter, threading.Thread):
             if ok:
                 self._write_project_data_tables(p, sound_assets)
 
+            # Grilles de valeurs des scènes : même raison d'être avant la
+            # transpilation que les tables, `grids.h` étant inclus par les
+            # unités qui liront `data.grid.<Nom>`.
+            if ok:
+                self._write_scene_grids(p)
+
             # Transpilation Lua → C pour chaque scène : ses acteurs, ses Areas,
             # ses caméras. Les prefabs sont RECOMPILÉS par scène depuis le pool
             # par scène : chaque scène émet `actor_<Scène>_<Prefab>.c` contre SA
@@ -1055,6 +1061,11 @@ class BuildWorker(EventEmitter, threading.Thread):
         """Génère data_tables.h/.c depuis project.data_tables."""
         from codegen.runtime_codegen.data_tables import write_data_tables
         return write_data_tables(p.src_dir, p, self._emit, sound_assets)
+
+    def _write_scene_grids(self, p) -> list[str]:
+        """Génère grids.h/.c depuis les grilles de valeurs des scènes."""
+        from codegen.runtime_codegen.grids import write_grids
+        return write_grids(p.src_dir, p, self._emit)
 
     # ── Transpilation Lua → C ─────────────────────────────────────────
 

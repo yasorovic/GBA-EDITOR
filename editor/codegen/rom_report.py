@@ -37,7 +37,7 @@ DEFAULT_CARTRIDGE_MIB = 4
 # peut agir), le moteur ensuite, le reste en dernier.
 CATEGORY_ORDER = (
     "Audio", "Polices", "Fonds", "Sprites", "Palettes", "Textes",
-    "Interface", "Tables de données", "Collision", "Code", "Reste",
+    "Interface", "Tables de données", "Grilles", "Collision", "Code", "Reste",
 )
 
 # Chaque règle est (catégorie, motif). Les motifs suivent les générateurs de
@@ -52,6 +52,10 @@ _SYMBOL_RULES: tuple[tuple[str, re.Pattern], ...] = (
     ("Fonds",             re.compile(r"_bg\d+(Tiles|Map|Pal)$")),
     ("Palettes",          re.compile(r"^g_pal(ettes)?(_bg_|_obj_|$)")),
     ("Collision",         re.compile(r"^g_cmap_")),
+    # Les grilles de valeurs d'une scène (runtime_codegen/grids.py). La carte
+    # de collision garde son poste : elle est la grille du moteur, pas une
+    # donnée que l'auteur nomme.
+    ("Grilles",           re.compile(r"^g_grid_")),
     ("Textes",            re.compile(r"^g_text|^g_str")),
     ("Interface",         re.compile(r"^g_ui_")),
     ("Tables de données", re.compile(r"^g_data_|^data_table_")),
