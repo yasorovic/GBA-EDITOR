@@ -882,8 +882,9 @@ class SceneEditor(QWidget):
 
     def _on_clear_collision(self):
         """Vide toute la carte de collision de la scène, en UNE entrée d'historique (Ctrl+Z la rend)."""
-        from core.history import CollisionPaintCmd, get_history
+        from core.history import GridPaintCmd, get_history
         from core.models.collision_tiles import TILE_EMPTY
+        from ui.scene_manager.grid_paint_surface import GridPaintSurface
         overlay = self._gba_scene.collision_overlay
         delta = {(col, row): (tile, TILE_EMPTY)
                  for row, line in enumerate(overlay.get_map()) for col, tile in enumerate(line) if tile != TILE_EMPTY}
@@ -892,7 +893,10 @@ class SceneEditor(QWidget):
             return
         for (col, row), (_old, new) in delta.items():
             overlay.set_tile(col, row, new)
-        get_history().push_executed(CollisionPaintCmd(overlay, delta, persist_fn=self._on_collision_painted))
+        get_history().push_executed(GridPaintCmd(
+            GridPaintSurface("Collision", 8, changed=overlay.update,
+                             read=overlay.tile_at, write=overlay.set_tile), delta,
+            persist_fn=self._on_collision_painted, label="Peinture collision"))
         self._on_collision_painted()
 
     def _on_collision_painted(self):

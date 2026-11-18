@@ -336,12 +336,15 @@ class CollisionTool(BaseTool):
 
         self._last_cell = None
         if self._stroke_delta:
-            from core.history import CollisionPaintCmd, get_history
+            from core.history import GridPaintCmd, get_history
+            from ui.scene_manager.grid_paint_surface import GridPaintSurface
 
-            cmd = CollisionPaintCmd(
-                ov,
+            cmd = GridPaintCmd(
+                GridPaintSurface("Collision", 8, changed=ov.update,
+                                 read=ov.tile_at, write=ov.set_tile),
                 dict(self._stroke_delta),
                 persist_fn=lambda: self._view.collision_painted.emit(),
+                label="Peinture collision",
             )
             get_history().push_executed(cmd)
             self._stroke_delta = {}

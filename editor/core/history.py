@@ -727,28 +727,30 @@ class SetPaletteColorsCmd(Command):
         self._set(0)
 
 
-class CollisionPaintCmd(Command):
-    """
-    Stroke de peinture collision (pinceau ou slope). Un stroke = press → release.
-    delta : {(col, row): (old_tile, new_tile)}
-    Les tiles sont déjà appliquées au moment du push — on bypasse execute().
+class GridPaintCmd(Command):
+    """Stroke de peinture d'une surface de grille.
+
+    ``surface`` sait seulement lire et écrire une case : collision et grille
+    de données partagent donc l'annulation sans partager leurs valeurs.
+    Les cellules sont déjà écrites au moment du push, ``execute`` ne sert
+    qu'au refaire.
     """
 
-    def __init__(self, overlay, delta: dict, persist_fn=None):
-        self._overlay = overlay
-        self._delta   = delta
-        self.label    = "Peinture collision"
+    def __init__(self, surface, delta: dict, persist_fn=None, label: str = "Peinture de grille"):
+        self._surface = surface
+        self._delta = delta
+        self.label = label
         self._persist = persist_fn
 
     def execute(self):
         for (col, row), (_, new) in self._delta.items():
-            self._overlay.set_tile(col, row, new)
+            self._surface.set_value(col, row, new)
         if self._persist:
             self._persist()
 
     def undo(self):
         for (col, row), (old, _) in self._delta.items():
-            self._overlay.set_tile(col, row, old)
+            self._surface.set_value(col, row, old)
         if self._persist:
             self._persist()
 
