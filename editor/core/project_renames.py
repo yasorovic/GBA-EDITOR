@@ -651,7 +651,7 @@ class ProjectRenameMixin:
 
     # ── Tables de données ────────────────────────────────────────────
     # Une table et ses colonnes sont citées comme du CODE dans les scripts
-    # (`data.Objets[i].prix`), pas comme des chaînes d'arguments : elles ne
+    # (`data.table.Objets[i].prix`), pas comme des chaînes d'arguments : elles ne
     # passent donc pas par `rename_lua_refs` mais par le second type de site de
     # `scripting/refactor.py`. Le nom sur le disque, lui, se renomme comme
     # n'importe quelle ressource.

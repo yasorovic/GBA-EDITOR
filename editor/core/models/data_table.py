@@ -26,7 +26,7 @@ utile.
 }
 ```
 
-Un script la lit par indexation — `data.Objets[i].prix` — et le build l'émet en
+Un script la lit par indexation — `data.table.Objets[i].prix` — et le build l'émet en
 `const` dans la ROM. Elle ne peut donc pas être écrite : le checker le refuse en
 nommant la table et la colonne.
 
@@ -45,7 +45,7 @@ from core.models.resource import Resource
 from core.models import asset_extensions
 
 # Le nom d'une table et celui de ses colonnes sont des IDENTIFIANTS, pas des
-# libellés : un script les écrit comme du CODE (`data.Objets[i].prix`), sans
+# libellés : un script les écrit comme du CODE (`data.table.Objets[i].prix`), sans
 # guillemets. « Objets rares » ne s'écrirait donc pas.
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 

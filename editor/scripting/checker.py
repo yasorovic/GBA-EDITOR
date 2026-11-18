@@ -26,7 +26,8 @@ from .parser import (
     StmtBreak, StmtUnsupported, ExprUnsupported,
     ExprInvoke, ExprCall, ExprIndex, ExprIndexAt, ExprTable, ExprName, ExprString,
     ExprNumber, ExprUnop, ExprBool, ExprBinop, ExprNil,
-    ARRAY_CTOR, array_dims, DATA_NS, REQUIRE_FN, require_target, local_names,
+    ARRAY_CTOR, array_dims, DATA_NS, DATA_TABLE_NS, data_grid_ref, data_kind_alone,
+    data_legacy_ref, data_table_ref, REQUIRE_FN, require_target, local_names,
     assigned_names, sequence_name, wait_call, WAIT_FN, WAIT_UNTIL_FN, WAIT_FNS,
     SEQUENCE_PREFIX,
 )
@@ -184,6 +185,12 @@ class BuildContext:
     save_slots:   Optional[int] = None # emplacements de sauvegarde déclarés au projet
     # Tables de données : colonnes et nombre de lignes, pour valider leurs accès.
     data_tables:  dict = None
+    # Grilles de valeurs LISIBLES de la scène où ce script tourne : nom -> `GridAccess`
+    # (cf. codegen/runtime_codegen/grids.py). None hors build : les accès ne sont alors
+    # pas jugés, comme pour les tables.
+    scene_grids:  dict = None
+    # Le nom de cette scène, pour que les messages la nomment. Vide hors build.
+    scene_label:  str = ""
     # Indique si le projet contient au moins une variable persistante.
     has_persistent: Optional[bool] = None
     # Une transformation affine est nécessaire pour afficher rotation et échelle.
@@ -216,6 +223,11 @@ class Checker:
         self.ctx    = ctx
         self._stmt_line = 0
         self.errors: list[CheckError] = _LineStampedErrors(self)
+        # Noeuds `data.grid.<Nom>` déjà consommés par un accès COMPLET (`:at(...)`,
+        # `[x][y]`, une écriture refusée). La marche des expressions redescend dans
+        # le récepteur après l'avoir jugé : sans cette marque, une grille lue
+        # correctement serait signalée une seconde fois comme citée nue.
+        self._grids_lues: set[int] = set()
         # Dimensions des tableaux du script. `None` indique des déclarations incompatibles.
         self._arrays: dict[str, Optional[tuple[int, ...]]] = {}
         # Types des variables vectorielles. `None` indique des types incompatibles.
@@ -856,9 +868,15 @@ class Checker:
             cur = cur.obj
         indices.reverse()
         # Une table de données est dimensionnée par son nombre de lignes.
-        table = self._data_table_ref(cur)
+        table = data_table_ref(cur)
         if table is not None:
             self._check_data_rows(table, indices)
+            return
+        # Une grille a deux dimensions, la colonne puis la rangée.
+        grid = data_grid_ref(cur)
+        if grid is not None:
+            self._grids_lues.add(id(cur))
+            self._check_grid_cells(grid, indices)
             return
         if not isinstance(cur, ExprName):
             return
@@ -888,14 +906,6 @@ class Checker:
 
     # Tables de données
 
-    @staticmethod
-    def _data_table_ref(e) -> Optional[str]:
-        """`data.Objets` → "Objets", sinon None."""
-        if (isinstance(e, ExprIndex) and isinstance(e.obj, ExprName)
-                and e.obj.name == DATA_NS):
-            return e.field
-        return None
-
     def _check_data_table(self, name: str) -> bool:
         """La table existe-t-elle ? Une table inconnue est une ERREUR : le
         `g_data_*` émis n'existerait pas, et gcc échouerait sur la ligne générée
@@ -907,8 +917,106 @@ class Checker:
         near = ", ".join(sorted(self.ctx.data_tables)[:5]) or ("no table in the "
                                                                "project")
         self.errors.append(CheckError(
-            "error", f"data.{name}: data table not found ({near})."))
+            "error", f"data.table.{name}: data table not found ({near})."))
         return False
+
+    def _check_data_legacy(self, name: str) -> None:
+        """`data.Objets` sans sa nature : refusé, avec la forme à écrire.
+
+        Pas de tolérance en double : `data.table` et `data.grid` disent la NATURE de la
+        donnée, et un script qui lirait les deux orthographes rendrait la grammaire
+        ambiguë pour rien."""
+        self.errors.append(CheckError(
+            "error",
+            f"data.{name}: a data table is now read as data.{DATA_TABLE_NS}.{name}"
+            f" (and a painted grid of the scene as data.grid.<Name>)."))
+
+    def _grid(self, name: str):
+        """La grille de ce nom dans la scène du script, ou None (une erreur est posée).
+
+        Hors build (`scene_grids` absent), l'accès n'est pas jugé : même règle que pour
+        les tables de données."""
+        if self.ctx.scene_grids is None:
+            return None
+        found = self.ctx.scene_grids.get(name)
+        if found is None:
+            near = ", ".join(sorted(self.ctx.scene_grids)) or "no grid in this scene"
+            where = f" of scene {self.ctx.scene_label}" if self.ctx.scene_label else ""
+            self.errors.append(CheckError(
+                "error",
+                f"data.grid.{name}: no painted grid{where} by that name ({near})."))
+        return found
+
+    def _check_data_grid(self, name: str) -> None:
+        """`data.grid.<Nom>` cité SEUL : la grille existe, mais ce n'est pas une valeur.
+
+        Une grille se lit case par case : par pixel (`:at(x, y)`) ou par case
+        (`[x][y]`). Sans ce refus, le C émis serait `int v = g_grid_…;`, que gcc
+        refuserait bien plus loin, sur une ligne que l'auteur n'a pas écrite."""
+        if self._grid(name) is None:
+            return
+        self.errors.append(CheckError(
+            "error",
+            f"data.grid.{name} is a grid, not a value: read one cell, with"
+            f" data.grid.{name}:at(x, y) in pixels or data.grid.{name}[x][y] in cells."))
+
+    def _check_grid_method(self, name: str, method: str, args: list) -> None:
+        """`data.grid.<Nom>:at(x, y)` : la seule méthode, et ses deux arguments.
+
+        `at` prend des PIXELS monde, comme `collision.tile_at` : c'est la même question
+        posée à la même échelle, et la grille rend la case qui contient ce point."""
+        grid = self._grid(name)
+        if grid is None:
+            return
+        if method != "at":
+            self.errors.append(CheckError(
+                "error",
+                f"data.grid.{name}:{method}(): a painted grid is read-only, and its only"
+                f" method is :at(x, y), in world pixels. One cell is also read as"
+                f" data.grid.{name}[x][y]."))
+            return
+        if len(args) != 2:
+            self.errors.append(CheckError(
+                "error",
+                f"data.grid.{name}:at() takes two arguments, x and y in world pixels"
+                f" ({len(args)} given)."))
+
+    def _check_grid_cells(self, name: str, indices: list) -> None:
+        """`data.grid.<Nom>[x][y]` : deux dimensions, et des bornes quand elles sont
+        écrites en clair.
+
+        L'ordre est celui de la déclaration, la colonne puis la rangée, et les index
+        partent de 1 comme tout tableau du sous-ensemble."""
+        grid = self._grid(name)
+        if grid is None:
+            return
+        if len(indices) != 2:
+            self.errors.append(CheckError(
+                "error",
+                f"data.grid.{name} has two dimensions: write data.grid.{name}[x][y]"
+                f" (column then row), or :at(x, y) in pixels."))
+            return
+        for k, (index, size, axe) in enumerate(zip(indices, (grid.cols, grid.rows), "xy")):
+            value = self._literal_int(index)
+            if value is not None and not (1 <= value <= size):
+                self.errors.append(CheckError(
+                    "error",
+                    f"data.grid.{name}[{value}]: out of bounds on {axe} : this grid runs"
+                    f" from 1 to {size} (cells are numbered from 1)."))
+
+    def _check_grid_write(self, name: str) -> None:
+        """Une grille peinte est `const` en ROM : l'écriture ne compilerait pas."""
+        self.errors.append(CheckError(
+            "error",
+            f"data.grid.{name} cannot be written: a painted grid is constant, baked into"
+            " the ROM. For a value that changes during the game, use a global variable"
+            " or a working array."))
+
+    def _check_data_kind_alone(self, kind: str) -> None:
+        """`data.table` ou `data.grid` sans le nom qui suit : rien à lire."""
+        self.errors.append(CheckError(
+            "error",
+            f"data.{kind}: name the one you mean, as in data.{kind}.<Name>."))
 
     def _check_global_scalar(self, name: str) -> None:
         """`global.nom` cité SEUL : comme valeur lue, ou comme cible d'une
@@ -1114,8 +1222,8 @@ class Checker:
         if len(indices) > 1:
             self.errors.append(CheckError(
                 "error",
-                f"data.{table} is indexed by its ROW and nothing else: "
-                f"data.{table}[i].column."))
+                f"data.table.{table} is indexed by its ROW and nothing else: "
+                f"data.table.{table}[i].column."))
             return
         k = self._literal_int(indices[0]) if indices else None
         if k is None:
@@ -1124,7 +1232,7 @@ class Checker:
             borne = (f"from 1 to {rows}" if rows else "empty: no rows")
             self.errors.append(CheckError(
                 "error",
-                f"data.{table}[{k}]: out of bounds : this table goes {borne} (rows are "
+                f"data.table.{table}[{k}]: out of bounds : this table goes {borne} (rows are "
                 "numbered from 1)."))
 
     def _check_data_column(self, table: str, column: str):
@@ -1134,25 +1242,30 @@ class Checker:
         if column not in columns:
             self.errors.append(CheckError(
                 "error",
-                f"data.{table}[…].{column}: this table has no column '{column}' "
+                f"data.table.{table}[…].{column}: this table has no column '{column}' "
                 f"({', '.join(columns) or 'no columns'})."))
 
     def _check_data_write(self, target):
         """Une table authorée est `const` en ROM : l'écriture ne compilerait
         pas. Autant le dire sur la ligne Lua fautive que sur la ligne générée.
 
-        Une propriété d'un élément TENU par une cellule (`data.T[i].icone.offset = …`) s'écrit sur
+        Une propriété d'un élément TENU par une cellule (`data.table.T[i].icone.offset = …`) s'écrit sur
         l'élément, pas sur la table : la cellule n'est là que pour désigner l'image ou la zone."""
         if (isinstance(target, ExprIndex)
                 and infer_ref_type(target.obj, self._kinds, self._ref_types) is not None):
             return
         node = target
         while isinstance(node, (ExprIndex, ExprIndexAt)):
-            name = self._data_table_ref(node)
+            grid = data_grid_ref(node)
+            if grid is not None:
+                self._grids_lues.add(id(node))
+                self._check_grid_write(grid)
+                return
+            name = data_table_ref(node)
             if name is not None:
                 self.errors.append(CheckError(
                     "error",
-                    f"data.{name} cannot be written: a data table is constant, baked into"
+                    f"data.table.{name} cannot be written: a data table is constant, baked into"
                     " the ROM. For a value that changes during the game, use a global"
                     " variable or a working array."))
                 return
@@ -1874,7 +1987,7 @@ class Checker:
                 self._check_global_indexed(e.obj.field, e.index)
             # La base est déjà validée pour éviter les diagnostics dupliqués.
             if (not is_global_index and not isinstance(cur, ExprName)
-                    and self._data_table_ref(cur) is None):
+                    and data_table_ref(cur) is None):
                 self._check_expr(cur)
         elif isinstance(e, (ExprInvoke, ExprCall)):
             self._check_call_expr(e)
@@ -1916,10 +2029,24 @@ class Checker:
                 self._check_bare_name(e.name, ecrit=False)
         elif isinstance(e, ExprIndex):
             # Les accès aux tables et à leurs colonnes sont résolus ici.
-            table = self._data_table_ref(e)
+            # Un accès aux données est dit une fois, sur le nœud complet : on ne
+            # redescend pas dans `data.table` ou `data.grid`, qui n'ont rien à
+            # ajouter et dont la nature seule serait rapportée comme une faute.
+            table = data_table_ref(e)
             if table is not None:
                 self._check_data_table(table)
-            elif isinstance(e.obj, ExprName) and e.obj.name == "global":
+                return
+            if data_legacy_ref(e) is not None:
+                self._check_data_legacy(data_legacy_ref(e))
+                return
+            if data_grid_ref(e) is not None:
+                if id(e) not in self._grids_lues:
+                    self._check_data_grid(data_grid_ref(e))
+                return
+            if data_kind_alone(e) is not None:
+                self._check_data_kind_alone(data_kind_alone(e))
+                return
+            if isinstance(e.obj, ExprName) and e.obj.name == "global":
                 self._check_global_scalar(e.field)
             elif isinstance(e.obj, ExprName) and e.obj.name == "const":
                 self._check_const_scalar(e.field)
@@ -1929,7 +2056,7 @@ class Checker:
                   and e.field in self.ctx.child_names):
                 pass          # `self.bras` : un enfant de cet acteur (v0.23)
             elif isinstance(e.obj, ExprIndexAt):
-                owner = self._data_table_ref(e.obj.obj)
+                owner = data_table_ref(e.obj.obj)
                 if owner is not None:
                     self._check_data_column(owner, e.field)
             elif resolve_prop(e, self._ref_types, self._kinds) is None and self._child_of(e) is not None:
@@ -2057,7 +2184,7 @@ class Checker:
             base = base.obj
         if isinstance(base, ExprName) and base.name in self._arrays:
             return
-        if self._data_table_ref(base) is not None:
+        if data_table_ref(base) is not None:
             return          # `#data.Objets` : validée par ailleurs
         self.errors.append(CheckError(
             "error",
@@ -2129,6 +2256,9 @@ class Checker:
                     if api is not None:
                         self._check_args(_key, api, e.args, receiver=f"self.{e.obj.field}",
                                          library=(self.ctx.child_sprites or {}).get(e.obj.field))
+                elif data_grid_ref(e.obj) is not None:
+                    self._grids_lues.add(id(e.obj))
+                    self._check_grid_method(data_grid_ref(e.obj), e.method, e.args)
                 elif ref is None and not is_actor_call(e.obj):
                     self.errors.append(CheckError(
                         "error",

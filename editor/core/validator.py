@@ -1476,7 +1476,7 @@ def _check_data_tables(ctx: ValidationContext):
     """Ce qu'une table de données doit respecter pour être émise.
 
     Le nom d'une table et celui de ses colonnes s'écrivent comme du CODE dans
-    un script (`data.Objets[i].prix`) : ce sont des identifiants, pas des
+    un script (`data.table.Objets[i].prix`) : ce sont des identifiants, pas des
     libellés. Et une référence qui ne résout pas serait émise en 0 — c'est-à-dire
     la PREMIÈRE entrée de la table citée, une valeur plausible et fausse. La
     dégradation silencieuse est refusée ici comme partout ailleurs."""
@@ -1487,7 +1487,7 @@ def _check_data_tables(ctx: ValidationContext):
         if not IDENTIFIER.match(table.name):
             ctx.error(None,
                       f"Table \"{table.name}\": a script writes it without quotes "
-                      f"(data.{table.name}), so its name must be an identifier — letters, "
+                      f"(data.table.{table.name}), so its name must be an identifier — letters, "
                       "digits and _, not starting with a digit.")
         vus = set()
         for col in table.columns:

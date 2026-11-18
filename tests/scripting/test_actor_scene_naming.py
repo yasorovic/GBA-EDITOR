@@ -79,7 +79,7 @@ def test_get_actor_dans_un_script_partage_resout_au_runtime():
 
 def test_get_actor_par_index_dynamique():
     """actor:get(i) — adressage dynamique 1-based → rang 0-based parmi les
-    vivants (`actor_nth`), même repli 1→0 que data.Table[i]."""
+    vivants (`actor_nth`), même repli 1→0 que data.table.Table[i]."""
     code = _gen('    local u = actor:get(i)', scene_sym="Arena")
     assert "actor_nth((i) - 1)" in code
     assert "Actor* u" in code           # typé Actor*, pas int

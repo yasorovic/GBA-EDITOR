@@ -34,7 +34,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REF_TYPES, REF_ACTOR, PARAM_STR, D
                   DOMAIN_PREFAB, MODULE_CALLS, COLLISION_EVENTS, BOX_PARAMS, AREA_EVENTS, AREA_PARAM,
                   REF_AREA, REF_COLLISION_SHAPE)
 
-from .parser import DATA_NS, raw_tree
+from .parser import DATA_NS, DATA_TABLE_NS, raw_tree
 
 try:
     from luaparser import ast as _lua_ast, astnodes as _nodes
@@ -584,13 +584,22 @@ class DataRef:
 
 
 def _table_of(node) -> Optional[str]:
-    """`data.Objets` → "Objets", pour tout autre noeud → None."""
-    if (isinstance(node, _nodes.Index)
-            and node.notation == _nodes.IndexNotation.DOT
-            and isinstance(node.value, _nodes.Name)
-            and node.value.id == DATA_NS):
-        return getattr(node.idx, "id", None)
-    return None
+    """`data.table.Objets` → "Objets", pour tout autre noeud → None.
+
+    Deux niveaux à remonter depuis le nom de la table : `data`, puis la nature de la
+    donnée. L'arbre lu ici est celui de `luaparser`, pas celui du checker : le
+    reconnaisseur de `parser.py` ne s'y applique pas."""
+    if not (isinstance(node, _nodes.Index)
+            and node.notation == _nodes.IndexNotation.DOT):
+        return None
+    kind = node.value
+    if not (isinstance(kind, _nodes.Index)
+            and kind.notation == _nodes.IndexNotation.DOT
+            and isinstance(kind.value, _nodes.Name)
+            and kind.value.id == DATA_NS
+            and getattr(kind.idx, "id", None) == DATA_TABLE_NS):
+        return None
+    return getattr(node.idx, "id", None)
 
 
 def _tail_span(text: str, node, name: str) -> Optional[tuple[int, int]]:
@@ -698,7 +707,7 @@ def _rename_by_position(project, new: str, find) -> dict[Path, int]:
 # ── Globals et constantes : même second type de site ──────────────
 #
 # `global.nom` / `global.nom[i]` / `const.nom` (chantier global/const) : le même
-# repérage que `data.Objets`, un seul niveau de namespace en moins. `_ns_field`
+# repérage que `data.table.Objets`, deux niveaux de namespace en moins. `_ns_field`
 # est `_table_of` généralisé au namespace ("global" ou "const" au lieu de
 # `DATA_NS` figé) ; `iter_var_refs` couvre les TROIS formes d'un coup, parce
 # que `global.nom[i]` porte le même noeud `Index(global, nom)` QUE `global.nom`

@@ -172,7 +172,7 @@ def test_les_conversions_vers_l_element_de_base_existent_dans_le_moteur():
 
 # ── Une colonne de données `region` / `image` porte le handle d'un type ────────
 # Le build range dans une telle colonne l'INDEX de la zone ou de l'image : c'est exactement la
-# valeur du type. `data.Dialogue[i].boite:draw("…")` se juge donc comme `interface:get(…):draw`,
+# valeur du type. `data.table.Dialogue[i].boite:draw("…")` se juge donc comme `interface:get(…):draw`,
 # sans nom d'élément à citer — la porte d'usage qui manquait depuis la migration des fonctions
 # de module.
 
@@ -208,13 +208,13 @@ def _data_c(body: str) -> list[str]:
 
 
 def test_une_cellule_de_colonne_region_ou_image_est_une_reference_typee():
-    body = ('data.Dialogue[2].boite:draw("hello")\n'
-            'local z = data.Dialogue[1].boite\n'
+    body = ('data.table.Dialogue[2].boite:draw("hello")\n'
+            'local z = data.table.Dialogue[1].boite\n'
             'z:clear()\n'
-            'if data.Dialogue[1].boite.reading then z:skip() end\n'
-            'data.Dialogue[1].icone.offset = vec2(0, 4)\n'
-            'data.Dialogue[1].icone:pause()\n'
-            'local n = data.Dialogue[1].n')
+            'if data.table.Dialogue[1].boite.reading then z:skip() end\n'
+            'data.table.Dialogue[1].icone.offset = vec2(0, 4)\n'
+            'data.table.Dialogue[1].icone:pause()\n'
+            'local n = data.table.Dialogue[1].n')
     assert _data_errors(body) == []
     assert _data_c(body) == [
         "text_draw_in(g_data_Dialogue[1].boite, TEXT_HELLO);",
@@ -230,15 +230,15 @@ def test_une_cellule_de_colonne_region_ou_image_est_une_reference_typee():
 def test_la_cellule_garde_sa_nature_de_donnee_constante():
     """Le handle se lit ; la CELLULE ne s'écrit toujours pas (la table est en ROM). Seule une
     propriété de l'élément désigné s'écrit."""
-    (msg,) = _data_errors("data.Dialogue[1].boite = 2")
+    (msg,) = _data_errors("data.table.Dialogue[1].boite = 2")
     assert "constant" in msg
-    assert _data_errors("data.Dialogue[1].icone.offset = vec2(0, 1)") == []
+    assert _data_errors("data.table.Dialogue[1].icone.offset = vec2(0, 1)") == []
 
 
 def test_un_membre_d_un_autre_type_est_refuse_sur_une_cellule():
-    (msg,) = _data_errors("local i = data.Dialogue[1].boite.offset")
-    assert "textBox" in msg and "data.Dialogue[…].boite" in msg
-    (msg,) = _data_errors('data.Dialogue[1].boite:play()')
+    (msg,) = _data_errors("local i = data.table.Dialogue[1].boite.offset")
+    assert "textBox" in msg and "data.table.Dialogue[…].boite" in msg
+    (msg,) = _data_errors('data.table.Dialogue[1].boite:play()')
     assert "textBox" in msg
 
 
@@ -249,7 +249,7 @@ def test_l_etat_d_image_par_nom_exige_une_image_connue_au_build():
     from scripting.checker import check, BuildContext
     ctx = BuildContext(actor_name="Sc", data_tables=DATA, ref_kinds=_kinds_data(),
                        image_states={"Heart": ["full"]})
-    src = 'function on_update()\ndata.Dialogue[1].icone.state = "full"\nend\n'
+    src = 'function on_update()\ndata.table.Dialogue[1].icone.state = "full"\nend\n'
     (msg,) = [e.message for e in check(parse(src), ctx) if e.level == "error"]
     assert "does not know which image" in msg
 

@@ -26,7 +26,7 @@ Un script contient des variables, des événements proposés dans le panneau **E
 and or not                -- logique
 &  |  ~  <<  >>  ~a         -- bit à bit : et, ou, xor, décalages, non (entiers 32 bits)
 #t                         -- taille d'un tableau, connue au build
-#data.Objets               -- nombre de lignes d'une table de données, connu au build aussi
+#data.table.Objets         -- nombre de lignes d'une table de données, connu au build aussi
 ```
 
 Quelques règles sur les nombres, qui découlent du fait que le moteur n'a que des entiers :
@@ -232,7 +232,26 @@ référence deviendrait ambiguë.
 
 ## Données
 
-Sauvegarde et tableaux. `save.write`/`save.read` — voir le panneau **API**, section **Données**. Pour une table de données du projet (`data.Objets`), voir `#data.Objets` ci-dessus (« Le langage ») et l'écran **Data**.
+Sauvegarde et tableaux. `save.write`/`save.read` — voir le panneau **API**, section **Données**. Pour une table de données du projet (`data.table.Objets`), voir `#data.table.Objets` ci-dessus (« Le langage ») et l'écran **Data**.
+
+Le module `data` porte un niveau par **nature** de donnée, et la nature se lit donc dans le code :
+
+```lua
+local prix = data.table.Objets[i].prix     -- une table du PROJET : des colonnes nommées
+local sol  = data.grid.Terrain:at(x, y)    -- une grille de la SCÈNE : la case qui contient ce point
+local coin = data.grid.Terrain[1][1]       -- la même grille, par case : colonne, puis rangée
+```
+
+Une **table** a un contenu différent d'une colonne à l'autre et vit dans le projet : elle est la même partout. Une **grille** a un contenu identique dans toutes ses cases, retrouvées par leur position, et appartient à **sa scène** : `data.grid.Terrain` dans le script de la scène 2 désigne le terrain de la scène 2.
+
+Les deux sont `const` en ROM : elles se lisent, elles ne s'écrivent pas. Pour une valeur qui change en jeu, une variable globale ou un tableau de travail.
+
+Sur une grille :
+
+- `:at(x, y)` prend des **pixels monde**, comme `collision.tile_at`, et rend la case qui contient ce point. Hors de la grille vaut `0`, comme hors de la carte de collision.
+- `[x][y]` prend des **cases**, la colonne puis la rangée, numérotées à partir de 1 comme tout tableau. Un index écrit en clair est borné au build.
+- Le pas d'une grille est une puissance de deux (8, 16 ou 32 px) : passer d'un pixel à une case est un décalage de bits, la console n'ayant pas d'instruction de division.
+- Les valeurs nommées de sa légende sont des constantes du build.
 
 ## Script
 

@@ -732,11 +732,63 @@ def wait_call(stmt) -> Optional[tuple[str, Any]]:
     return f.name, (stmt.call.args[0] if stmt.call.args else None)
 
 
-# L'espace de noms des tables AUTHORÉES du projet : `data.Objets[i].prix`.
-# Un nom réservé plutôt qu'un nom global par table : sans lui, une table
-# nommée `score` masquerait un `local score` du script, et l'auteur n'aurait
-# aucun moyen de savoir lequel des deux il lit.
+# L'espace de noms des DONNÉES du projet et de la scène : `data.table.Objets[i].prix`,
+# `data.grid.Terrain:at(x, y)`. Un nom réservé plutôt qu'un nom global par table : sans
+# lui, une table nommée `score` masquerait un `local score` du script, et l'auteur
+# n'aurait aucun moyen de savoir lequel des deux il lit.
 DATA_NS = "data"
+
+# Un niveau par NATURE de donnée, au singulier (tranché le 2026-11-11). Une table a un
+# contenu différent d'une colonne à l'autre et vient du PROJET ; une grille a un contenu
+# identique dans toutes ses cases et appartient à la SCÈNE COURANTE. La nature se lit donc
+# dans le code, et une table et une grille peuvent porter le même nom.
+DATA_TABLE_NS = "table"
+DATA_GRID_NS = "grid"
+DATA_KINDS = (DATA_TABLE_NS, DATA_GRID_NS)
+
+
+def data_ref(e, kind: str):
+    """`data.<kind>.<Nom>` → "Nom", sinon None.
+
+    LE reconnaisseur de l'accès aux données : le checker, le codegen et l'inférence de
+    types le lisent tous ici. Il a longtemps existé en trois copies (`_data_table_ref`),
+    ce qui est exactement la manière dont trois exemplaires finissent par diverger."""
+    if (isinstance(e, ExprIndex) and isinstance(e.obj, ExprIndex)
+            and isinstance(e.obj.obj, ExprName) and e.obj.obj.name == DATA_NS
+            and e.obj.field == kind):
+        return e.field
+    return None
+
+
+def data_table_ref(e):
+    """`data.table.Objets` → "Objets", sinon None."""
+    return data_ref(e, DATA_TABLE_NS)
+
+
+def data_grid_ref(e):
+    """`data.grid.Terrain` → "Terrain", sinon None."""
+    return data_ref(e, DATA_GRID_NS)
+
+
+def data_kind_alone(e):
+    """`data.table` ou `data.grid` cité SEUL → la nature, sinon None.
+
+    Une nature n'est pas une donnée : sans le nom qui suit, il n'y a rien à lire."""
+    if (isinstance(e, ExprIndex) and isinstance(e.obj, ExprName)
+            and e.obj.name == DATA_NS and e.field in DATA_KINDS):
+        return e.field
+    return None
+
+
+def data_legacy_ref(e):
+    """`data.Objets` → "Objets" : l'ANCIENNE forme, sans sa nature.
+
+    Elle n'est pas tolérée en double (une grammaire unique) : elle est refusée avec un
+    message qui donne la nouvelle. Ce reconnaisseur n'existe que pour écrire ce message."""
+    if (isinstance(e, ExprIndex) and isinstance(e.obj, ExprName)
+            and e.obj.name == DATA_NS and e.field not in DATA_KINDS):
+        return e.field
+    return None
 
 
 def assigned_names(script: LuaScript) -> set[str]:

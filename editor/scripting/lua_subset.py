@@ -66,7 +66,7 @@ ACCEPTED: dict[str, str] = {
     "FalseExpr":    "false",
     "Nil":          "nil  (vaut 0 dans le C émis: cf. « La vérité » ci-dessous)",
     "Name":         "x",
-    "Index":        "self.position  /  data.Objets  /  t[i]",
+    "Index":        "self.position  /  data.table.Objets  /  t[i]",
     "Table":        "{1, 2, 4, 8} : un tableau, et rien d'autre",
 
     # ── La vérité : décision volontaire (2026-09-27), PAS le vrai Lua ──

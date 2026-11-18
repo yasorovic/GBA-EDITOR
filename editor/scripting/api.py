@@ -1144,7 +1144,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     #
     # Pas d'entrée de catalogue ici : `global.nom` / `const.nom` ne sont pas
     # des APPELS mais un accès POINTÉ, comme `self.position` (RUNTIME_PROPS)
-    # ou `data.Objets` : sauf que le membre est un nom de PROJET, pas un nom
+    # ou `data.table.Objets` : sauf que le membre est un nom de PROJET, pas un nom
     # de langage fixe, donc ni l'un ni l'autre catalogue ne convient. Le
     # checker (`_check_global_scalar`/`_check_const_scalar`/
     # `_check_global_indexed`) et le codegen (`_expr`, branche `ExprIndex`)

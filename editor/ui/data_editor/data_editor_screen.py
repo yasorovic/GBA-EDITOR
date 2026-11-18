@@ -10,7 +10,7 @@ Layout : 3 colonnes (même modèle que le Palette Editor)
   Centre  : la table active  (DataTablePanel)
   Droite  : la colonne et la cellule      (DataInspectorPanel)
 
-Un script lit une table par indexation — `data.Objets[i].prix` — et le build
+Un script lit une table par indexation — `data.table.Objets[i].prix` — et le build
 l'émet en `const` dans la ROM. C'est pour ça que le nom d'une table et celui de
 ses colonnes sont des IDENTIFIANTS et non des libellés : ils s'écrivent comme
 du code, sans guillemets.

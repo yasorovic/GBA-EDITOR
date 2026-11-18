@@ -41,7 +41,7 @@ CASES = [
     ("tableau-taille-calculee", "local t = array(foo)\nfunction on_update()\nend", {}, "error",
      "one or two sizes expected"),
     ("indice-hors-bornes", "t[9] = 1", {"top": "local t = array(3)"}, "error", "out of bounds"),
-    ("table-hors-bornes", "local x = data.T[9].a", {"data_tables": TABLES}, "error", "out of bounds"),
+    ("table-hors-bornes", "local x = data.table.T[9].a", {"data_tables": TABLES}, "error", "out of bounds"),
     ("modulo-d-un-vecteur", "local v = vec2(1, 2)\nlocal w = v % 2", {}, "error", "is not defined on a vec2/vec3"),
     ("vec2-plus-vec3", "local v = vec2(1, 2)\nlocal w = v + vec3(1, 2, 3)", {}, "error", "same type"),
     ("champ-inexistant-d-un-vecteur", "local v = vec2(1, 2)\nlocal w = v.z", {}, "error", "has no field 'z'"),

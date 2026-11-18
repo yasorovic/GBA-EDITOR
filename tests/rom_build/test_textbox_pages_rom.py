@@ -50,7 +50,7 @@ def test_textbox_pages_compile_into_one_region(tmp_path, monkeypatch):
         '        debug:log("TEXTBOX_INITIAL_READY")\n'
         '    end\n'
         '    if scene.frame == 30 then\n'
-        '        interface:get("Dialogue"):draw(data.Lines[2].line)\n'
+        '        interface:get("Dialogue"):draw(data.table.Lines[2].line)\n'
         '        debug:log("TEXTBOX_SECOND_PAGE_DRAWN")\n'
         '    end\nend\n', encoding="utf-8")
     scene.script = p.asset_rel(script)

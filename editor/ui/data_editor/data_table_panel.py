@@ -5,7 +5,7 @@ Deux objets d'édition dans un seul widget, et c'est le point délicat de cet
 distinguent par le geste — l'en-tête pour le schéma, les cellules pour les
 valeurs — et non par un mode à basculer.
 
-Le rang d'une ligne EST ce qu'un script indexe (`data.Objets[3]`) : l'en-tête
+Le rang d'une ligne EST ce qu'un script indexe (`data.table.Objets[3]`) : l'en-tête
 vertical le montre, numéroté À PARTIR DE 1 comme en Lua, et insérer au milieu
 décale ce qui suit. C'est le comportement voulu, pas un défaut à masquer par
 une identité de ligne que le script ne pourrait pas nommer.

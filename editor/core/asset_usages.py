@@ -4,7 +4,7 @@ core/asset_usages.py — ce qui cite encore un asset, pour prévenir avant de le
 Un avertissement, pas un refus : supprimer reste possible et annulable. La liste dit où l'asset est cité, sans prétendre
 être exhaustive — elle couvre ce que le projet référence par NOM : composants de sprite, calques de fond, prefabs posés,
 palettes (cf. `Project.palette_usages`), scène de départ, et les scripts, où un nom entre guillemets désigne un asset
-(`sfx.play("boom")`, `scene:switch("Level")`, `data.Items`).
+(`sfx.play("boom")`, `scene:switch("Level")`, `data.table.Items`).
 """
 from __future__ import annotations
 

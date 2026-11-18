@@ -549,7 +549,7 @@ JINGLES = AssetKind(
 
 def _rename_data_table(project, table, new_name: str) -> str:
     # Seul `rename_*` à rendre un booléen : le nom d'une table s'écrit comme du
-    # code dans les scripts (`data.Objets`), donc il doit être un identifiant.
+    # code dans les scripts (`data.table.Objets`), donc il doit être un identifiant.
     # Un refus laisse `table.name` inchangé, ce que l'arbre réaffichera.
     project.rename_data_table(table, new_name)
     return table.name

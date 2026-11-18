@@ -165,14 +165,14 @@ def test_zero_est_faux_pas_comme_le_vrai_lua():
 
 
 def test_data_objets_longueur_accepte_par_le_checker():
-    """`#data.Objets` — le nombre de lignes d'une table de données — était listé
+    """`#data.table.Objets` — le nombre de lignes d'une table de données — était listé
     comme absent ; en réalité déjà validé
-    (`checker._check_length`, commentaire « #data.Objets — validée par ailleurs »).
+    (`checker._check_length`, commentaire « #data.table.Objets — validée par ailleurs »).
     Ce test fige que le checker ne le refuse PAS."""
     from scripting.parser import parse
     from scripting.checker import check, BuildContext
 
-    src = _in_handler("    local n = #data.Objets")
+    src = _in_handler("    local n = #data.table.Objets")
     errs = check(parse(src), BuildContext(
         actor_name="Ball", data_tables={"Objets": (["prix"], 4)}))
     assert [e.message for e in errs if e.level == "error"] == []
@@ -184,7 +184,7 @@ def test_data_objets_longueur_est_une_constante_de_build():
     from scripting.parser import parse
     from scripting.codegen import generate, CodegenContext
 
-    src = _in_handler("    local n = #data.Objets")
+    src = _in_handler("    local n = #data.table.Objets")
     code, _, _ = generate(parse(src), CodegenContext(
         actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
         music_names=[], global_names=set(), const_names=set(),

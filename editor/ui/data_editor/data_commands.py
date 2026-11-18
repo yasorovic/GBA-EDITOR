@@ -64,7 +64,7 @@ class InsertRowCmd(Command):
     """Insertion d'une ligne à un RANG précis.
 
     `AddListItemCmd` ajoute en fin de liste ; ici le rang compte, parce qu'il
-    EST ce qu'un script indexe (`data.Objets[3]`). Insérer au milieu décale
+    EST ce qu'un script indexe (`data.table.Objets[3]`). Insérer au milieu décale
     tout ce qui suit — c'est le comportement voulu, la grille numérote les
     lignes pour que ça se voie."""
 

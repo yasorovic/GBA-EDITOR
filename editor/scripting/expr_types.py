@@ -36,7 +36,7 @@ from __future__ import annotations
 from typing import NamedTuple, Optional
 
 from .parser import (ExprName, ExprIndex, ExprIndexAt, ExprCall, ExprInvoke, ExprBinop,
-                     ExprString, DATA_NS, StmtAssign, StmtLocalAssign, StmtIf, StmtWhile,
+                     ExprString, DATA_NS, data_table_ref, StmtAssign, StmtLocalAssign, StmtIf, StmtWhile,
                      StmtForNum)
 
 from .api import RUNTIME_API, RUNTIME_PROPS, REF_TYPES, REF_ACTOR, ApiProp, ref_member
@@ -272,7 +272,7 @@ def chain_label(obj) -> str:
     les arguments n'aident pas à comprendre la faute."""
     cell = _data_cell(obj)
     if cell:
-        return f"data.{cell[0]}[…].{cell[1]}"
+        return f"data.table.{cell[0]}[…].{cell[1]}"
     if isinstance(obj, ExprInvoke):
         return f"{obj.method}(…)"
     if isinstance(obj, ExprIndex):
@@ -389,21 +389,20 @@ def infer_vec_type(expr, local_types: dict[str, Optional[str]],
 
 def data_column_key(table: str, column: str) -> str:
     """La clé, dans `ref_kinds`, du TYPE de référence que stocke une colonne de données :
-    `data_column_key("Dialogue", "boite")` → `"data.Dialogue.boite"`. `ref_kinds` dit ce que rend
+    `data_column_key("Dialogue", "boite")` → `"data.Dialogue.boite"`. C'est une CLÉ interne,
+    pas l'orthographe d'un script (qui écrit `data.table.Dialogue[i].boite`) : la changer
+    ferait traverser le renommage à `project.DATA_COLUMN_SOURCES` et à l'écran Data pour rien. `ref_kinds` dit ce que rend
     une chose NOMMÉE du projet : un élément d'interface par son nom, une cellule de table par
     son chemin : sans un second paramètre à faire traverser tout le pipeline."""
     return f"{DATA_NS}.{table}.{column}"
 
 
 def _data_cell(expr) -> Optional[tuple[str, str]]:
-    """`data.Dialogue[i].boite` → `("Dialogue", "boite")`, sinon None."""
+    """`data.table.Dialogue[i].boite` → `("Dialogue", "boite")`, sinon None."""
     if not (isinstance(expr, ExprIndex) and isinstance(expr.obj, ExprIndexAt)):
         return None
-    row = expr.obj.obj
-    if (isinstance(row, ExprIndex) and isinstance(row.obj, ExprName)
-            and row.obj.name == DATA_NS):
-        return row.field, expr.field
-    return None
+    table = data_table_ref(expr.obj.obj)
+    return (table, expr.field) if table is not None else None
 
 
 def _is_actor_receiver(obj, ref_kinds, ref_types) -> bool:

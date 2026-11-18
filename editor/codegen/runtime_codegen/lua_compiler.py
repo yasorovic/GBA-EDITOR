@@ -33,6 +33,7 @@ from codegen.runtime_codegen.gen_camera import camera_sym
 import codegen.build_output as build_output
 from codegen.oam_alloc import scene_has_model, scene_oam_layout
 from codegen.runtime_codegen.input_layout import compute_input_layout
+from codegen.runtime_codegen.grids import scene_grid_access
 
 
 def _actor_script(actor: Actor) -> Optional[str]:
@@ -631,10 +632,14 @@ def transpile_all(
     _export_resolver = _make_export_resolver(p, scene.name, text_keys)
     # Tables de données : {nom: (colonnes, nombre de lignes)}. Le checker en
     # tire ses refus (table ou colonne inconnue, index hors bornes, écriture sur
-    # une const) et le codegen la taille pour `#data.X`. Une seule lecture du
+    # une const) et le codegen la taille pour `#data.table.X`. Une seule lecture du
     # registre pour tous les scripts de la scène.
     _data_tables = {t.name: ([c.name for c in t.columns], len(t.rows))
                     for t in getattr(p, "data_tables", [])}
+    # Les grilles de valeurs LISIBLES de cette scène : une grille appartient à sa
+    # scène, donc `data.grid.Terrain` ne désigne pas la même chose d'une scène à
+    # l'autre. La fiche d'accès porte la géométrie et les noms C (cf. grids.py).
+    _scene_grids = scene_grid_access(scene)
 
     # Les globales de type string : `global.x = "texte"` s'y résout en index de texte.
     _string_globals = frozenset(g.name for g in p.globals if g.type == "string")
@@ -768,6 +773,8 @@ def transpile_all(
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
+            scene_grids  = _scene_grids,
+            scene_label  = scene.name,
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
@@ -831,6 +838,8 @@ def transpile_all(
         save_slots   = _save_slots,
         has_persistent = _has_persist,
         data_tables  = _data_tables,
+        scene_grids  = _scene_grids,
+        scene_label  = scene.name,
         spawn_exports = _spawn_meta,
         actor_sprites = _actor_libs,
         prefab_sprites = _prefab_libs,
@@ -922,6 +931,7 @@ def transpile_all(
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
+            scene_grids   = _scene_grids,
             export_inits  = _export_inits(actor, script, _export_resolver),
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
@@ -1014,6 +1024,8 @@ def transpile_all(
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
+            scene_grids  = _scene_grids,
+            scene_label  = scene.name,
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
@@ -1076,6 +1088,7 @@ def transpile_all(
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
+            scene_grids   = _scene_grids,
             # Le repli ÉDITEUR d'un export poolé (D2) : `Prefab.exports_values`
             # réglé sur le template, sinon le `default` du script. Un `Prefab` EST
             # son acteur racine, donc `get_component("script")` rend ses valeurs.
@@ -1149,6 +1162,7 @@ def transpile_all(
         save_slots    = _save_slots,
         has_persistent = _has_persist,
         data_tables   = _data_tables,
+        scene_grids   = _scene_grids,
         spawn_exports = _spawn_meta,
         actor_sprites = _actor_libs,
         prefab_sprites = _prefab_libs,
@@ -1239,6 +1253,8 @@ def transpile_all(
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
+            scene_grids  = _scene_grids,
+            scene_label  = scene.name,
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
@@ -1292,6 +1308,7 @@ def transpile_all(
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
+            scene_grids   = _scene_grids,
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,

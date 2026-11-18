@@ -58,6 +58,23 @@ def area_script_sym(scene_name: str, area_name: str) -> str:
     return f"{sym(scene_name)}_{sym(area_name)}"
 
 
+def grid_sym(scene_name: str, grid_name: str) -> str:
+    """Symbole C des cases d'une grille de valeurs : ``g_grid_<Scène>_<Grille>``.
+
+    Qualifié par la scène, comme un acteur posé : une grille appartient à sa scène, et
+    deux scènes peuvent nommer la leur « Terrain »."""
+    return f"g_grid_{sym(scene_name)}_{sym(grid_name)}"
+
+
+def grid_macro(kind: str, scene_name: str, grid_name: str) -> str:
+    """Macro d'une grille : ``GRID_<KIND>_<SCÈNE>_<GRILLE>``.
+
+    `kind` vaut `W`, `H`, `STEP`, `SHIFT`, ou `VALUE_<NOM>` pour une valeur de la légende.
+    L'émetteur de `grids.h` et le codegen Lua qui lit la grille passent tous deux par ici :
+    un nom de macro inventé deux fois est un nom qui finira par différer."""
+    return f"GRID_{kind}_{c_ident(scene_name)}_{c_ident(grid_name)}"
+
+
 def module_constant(music_name: str) -> str:
     """La constante `MOD_*` d'un module (musique, jingle) dans `soundbank.h` : celle que `main.c` et les tables de boîtes
     citent. Elle vient du NOM DE L'ASSET — le build réécrit le header de mmutil pour qu'il en soit ainsi

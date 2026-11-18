@@ -1394,6 +1394,19 @@ static inline int scene_frame(void) { return _g_frame; }
 /* Carte de collision — le type de tile à une position monde (0 = vide) */
 extern int collision_map_tile(int px, int py);
 
+/* Grille de valeurs d'une scène — la case qui contient un point du monde.
+   Le build passe le tableau, sa géométrie et son décalage, tous connus à la
+   compilation (`grids.h`) : la grille est résolue par son nom au build, elle n'a
+   donc ni pointeur actif ni recherche à l'exécution. `shift` remplace une
+   division, que la GBA n'a pas. Hors de la grille vaut 0, comme hors de la carte
+   de collision : une case vide et une case absente se lisent pareil. */
+static inline int grid_value_at(const unsigned char *cells, int w, int h,
+                                int shift, int px, int py) {
+    const int tx = px >> shift, ty = py >> shift;
+    if (tx < 0 || ty < 0 || tx >= w || ty >= h) return 0;
+    return (int)cells[ty * w + tx];
+}
+
 /* Aléatoire — LCG 32-bit, zéro overhead, pas de division flottante */
 /* La graine est définie dans main.c : `static` ici, chaque unité de script
    aurait sa propre suite, identique aux autres. */

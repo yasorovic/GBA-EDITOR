@@ -57,12 +57,12 @@ def test_un_indice_sur_autre_chose_qu_un_tableau_avertit_et_trop_d_indices_est_u
 
 def test_une_table_de_donnees_absente_ou_mal_indexee_est_une_erreur():
     tables = {"Items": (["price"], 3)}
-    assert says(diagnostics(_in_handler("local v = data.Nope[1].price"), data_tables=tables),
-                "error", "data.Nope: data table not found (Items)")
-    assert says(diagnostics(_in_handler("local v = data.Items[1][2]"), data_tables=tables),
-                "error", "data.Items is indexed by its ROW and nothing else")
-    assert says(diagnostics(_in_handler("local v = data.Items[1].nope"), data_tables=tables),
-                "error", "data.Items[…].nope: this table has no column 'nope' (price)")
+    assert says(diagnostics(_in_handler("local v = data.table.Nope[1].price"), data_tables=tables),
+                "error", "data.table.Nope: data table not found (Items)")
+    assert says(diagnostics(_in_handler("local v = data.table.Items[1][2]"), data_tables=tables),
+                "error", "data.table.Items is indexed by its ROW and nothing else")
+    assert says(diagnostics(_in_handler("local v = data.table.Items[1].nope"), data_tables=tables),
+                "error", "data.table.Items[…].nope: this table has no column 'nope' (price)")
 
 
 def test_une_globale_indexee_inconnue_est_une_erreur():

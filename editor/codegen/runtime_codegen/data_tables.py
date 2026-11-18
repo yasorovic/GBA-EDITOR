@@ -2,7 +2,7 @@
 
 Émet `data_tables.h` (un typedef et une déclaration par table) et
 `data_tables.c` (les valeurs, en `const`). Un script les lit par indexation —
-`data.Objets[i].prix` devient `g_data_Objets[(i) - 1].prix` — et n'a donc rien
+`data.table.Objets[i].prix` devient `g_data_Objets[(i) - 1].prix` — et n'a donc rien
 à charger : la ROM est adressable directement.
 
 **Un tableau de structs, pas une structure de tableaux.** Le C se relit avec

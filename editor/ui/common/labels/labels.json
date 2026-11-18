@@ -1863,7 +1863,7 @@
       "text": "Type"
     },
     "datatable.empty": {
-      "text": "No table selected.\n\nA data table is read from a script as data.Name[i].column. Its rows are numbered from 1, like every array in Lua."
+      "text": "No table selected.\n\nA data table is read from a script as data.table.Name[i].column. Its rows are numbered from 1, like every array in Lua."
     },
     "datatable.text_not_found": {
       "text": "{name}  (not found in the text table)"

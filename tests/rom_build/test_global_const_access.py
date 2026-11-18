@@ -2,7 +2,7 @@
 
 `global.get("score")` / `global.set("score", v)` / `const.get("max")` ont
 quitté `RUNTIME_API` : ce ne sont pas des appels, ce sont des accès d'état,
-comme `self.position` (RUNTIME_PROPS) ou `data.Objets`. Le membre étant un nom
+comme `self.position` (RUNTIME_PROPS) ou `data.table.Objets`. Le membre étant un nom
 de PROJET et non un membre de langage fixe, ni l'un ni l'autre catalogue ne
 convenait — le checker et le codegen les résolvent directement contre
 `project.globals` / `.constants`.

@@ -28,7 +28,7 @@ from .parser import (
     StmtForNum, StmtReturn, StmtBreak, StmtUnsupported,
     ExprNumber, ExprBool, ExprNil, ExprString, ExprName, ExprUnsupported,
     ExprIndex, ExprIndexAt, ExprTable, ExprInvoke, ExprCall, ExprBinop, ExprUnop,
-    array_dims, require_target, DATA_NS,
+    array_dims, require_target, DATA_NS, data_grid_ref, data_table_ref,
     assigned_names, sequence_name, wait_call, WAIT_FN, WAIT_UNTIL_FN,
     local_names,
 )
@@ -380,6 +380,9 @@ class CodegenContext:
     # de lignes sert à `#data.X`, qui est une constante de compilation comme
     # `#t` sur un tableau : la taille est connue, elle n'est rangée nulle part.
     data_tables: dict = field(default_factory=dict)
+    # Grilles de valeurs lisibles de la scène : nom -> `GridAccess` (qui porte la
+    # géométrie ET les noms C, cf. codegen/runtime_codegen/grids.py).
+    scene_grids: dict = field(default_factory=dict)
     # Sauvegarde : deux faits du projet, portés jusqu'ici pour que le checker des
     # BEHAVIORS (relancé depuis ce contexte-ci) voie ce que voit celui des
     # acteurs. Sans eux, `save:write(7)` passerait dans un behavior et pas dans
@@ -1160,6 +1163,9 @@ class CodeGen:
         # Toujours inclus, même sans table : l'en-tête est toujours généré, et
         # un include conditionnel serait un second chemin pour un cas vide.
         self._w('#include "data_tables.h"')
+        # Même règle pour les grilles de valeurs des scènes : `grids.h` est
+        # toujours généré, donc toujours inclus.
+        self._w('#include "grids.h"')
         if self.ctx.owner_kind == "area":
             # `self` : l'Area à laquelle ce script est attaché, une référence `area` comme celle d'`area:get`.
             self._w(f"static const int self __attribute__((unused)) = {self.ctx.area_ref};")
@@ -1575,19 +1581,11 @@ class CodeGen:
             return "{" + ", ".join(self._expr(v) for v in value.items) + "}"
         return "{0}" if len(dims) == 1 else "{{0}}"
 
-    @staticmethod
-    def _data_table_ref(e) -> Optional[str]:
-        """`data.Objets` → "Objets", sinon None."""
-        if (isinstance(e, ExprIndex) and isinstance(e.obj, ExprName)
-                and e.obj.name == DATA_NS):
-            return e.field
-        return None
-
     def _array_length(self, operand) -> Optional[int]:
         """La valeur de `#x`, connue au build. `#t` est le nombre d'éléments,
         `#t[i]` la longueur d'une ligne d'un tableau à deux dimensions, et
-        `#data.X` le nombre de lignes de la table."""
-        name = self._data_table_ref(operand)
+        `#data.table.X` le nombre de lignes de la table."""
+        name = data_table_ref(operand)
         if name is not None:
             entry = self.ctx.data_tables.get(name)
             return entry[1] if entry else None
@@ -1950,11 +1948,13 @@ class CodeGen:
                 zero = f"({c_type}){{0}}" if meta.get("type") in EXPORT_COMPOSITES else "0"
                 return (f'(actor_exists_warn({recv}, "reading {key}") ? '
                         f'{sym}_get_{key}({recv}) : {zero})')
+            # Une grille citée seule n'a pas d'émission : le checker l'a refusée
+            # (`_check_data_grid`), et il n'y a pas de valeur à produire.
             # `data.Objets` → le tableau const émis par data_tables.c. Ce qui
             # suit (l'indexation puis la colonne) se compose tout seul : le
             # `.champ` ci-dessous et `ExprIndexAt` s'appliquent au résultat,
             # exactement comme en Lua.
-            table = self._data_table_ref(e)
+            table = data_table_ref(e)
             if table is not None:
                 return f"g_data_{table}"
             # `global.nom` → la variable C émise par globals.c : NU (scalaire,
@@ -1983,6 +1983,9 @@ class CodeGen:
             # module.field : retourne le nom composé pour la résolution ultérieure
             return f"{self._expr(e.obj)}.{e.field}"
         if isinstance(e, ExprIndexAt):
+            cell = self._grid_cell(e)
+            if cell is not None:
+                return cell
             return f"{self._expr(e.obj)}[{self._index(e.index)}]"
         if isinstance(e, ExprTable):
             # Un constructeur n'a de sens que comme initialiseur de déclaration
@@ -2276,12 +2279,51 @@ class CodeGen:
             return self._call(e)
         return "/* unhandled call */"
 
+    def _grid_of(self, expr):
+        """La fiche d'accès de la grille que cette expression désigne, ou None."""
+        name = data_grid_ref(expr)
+        return (self.ctx.scene_grids or {}).get(name) if name is not None else None
+
+    def _grid_cell(self, e: ExprIndexAt) -> Optional[str]:
+        """`data.grid.T[x][y]` → l'indexation du tableau mis à plat.
+
+        La grille est émise en une dimension (rangées concaténées), donc la chaîne
+        `[x][y]` ne se compose pas toute seule comme celle d'une table : l'ordre est
+        la colonne puis la rangée, et les index partent de 1 comme tout tableau du
+        sous-ensemble."""
+        if not isinstance(e.obj, ExprIndexAt):
+            return None
+        grid = self._grid_of(e.obj.obj)
+        if grid is None:
+            return None
+        self._uses_grids = True
+        # `_index` fait déjà la traduction de la base 1 vers la base 0, une fois.
+        x, y = self._index(e.obj.index), self._index(e.index)
+        return f"{grid.sym}[({y}) * {grid.width} + ({x})]"
+
+    def _grid_at(self, e: ExprInvoke) -> Optional[str]:
+        """`data.grid.T:at(x, y)` → `grid_value_at(...)`, en pixels monde.
+
+        Toute la géométrie est connue à la compilation : la grille est résolue par son
+        nom au build, et la fonction inline ne fait qu'un décalage et un test de bornes
+        (cf. `runtime_api_inline.h`)."""
+        grid = self._grid_of(e.obj)
+        if grid is None or e.method != "at" or len(e.args) != 2:
+            return None
+        self._uses_grids = True
+        px, py = (self._expr(a) for a in e.args)
+        return (f"grid_value_at({grid.sym}, {grid.width}, {grid.height}, "
+                f"{grid.shift}, {px}, {py})")
+
     def _invoke(self, e: ExprInvoke) -> str:
         """var:method(args) : var peut être self, une variable Actor*/référence,
         OU une expression qui rend directement un actor (`actor:get("X")`,
         `actor:spawn(...)`, `self.<enfant>`) ou une référence (`sfx:play(...)`).
         Ce dernier cas évite d'imposer un local intermédiaire pour chaîner :
         `actor:get("Foe"):move_to(p, 2)` marche sans `local u = actor:get(...)`."""
+        cell = self._grid_at(e)
+        if cell is not None:
+            return cell
         if isinstance(e.obj, ExprName):
             name = e.obj.name          # "self", "other", "paddle", ...
             ref  = self._ref_types.get(name)

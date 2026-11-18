@@ -26,41 +26,82 @@ valeur comme une autre. Seule une grille qui n'a jamais reçu de cases est saut�
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
-from codegen.c_names import c_ident, sym as c_sym
+from codegen.c_names import c_ident, grid_macro, grid_sym
 from core.app_info import APP_NAME
 import codegen.build_output as build_output
 
 
 def array_name(scene, grid) -> str:
     """Le tableau des cases : son nom dit la scène d'où il vient."""
-    return f"g_grid_{c_sym(scene.name)}_{c_sym(grid.name)}"
-
-
-def _macro_base(scene, grid) -> str:
-    return f"{c_ident(scene.name)}_{c_ident(grid.name)}"
+    return grid_sym(scene.name, grid.name)
 
 
 def width_macro(scene, grid) -> str:
-    return f"GRID_W_{_macro_base(scene, grid)}"
+    return grid_macro("W", scene.name, grid.name)
 
 
 def height_macro(scene, grid) -> str:
-    return f"GRID_H_{_macro_base(scene, grid)}"
+    return grid_macro("H", scene.name, grid.name)
 
 
 def step_macro(scene, grid) -> str:
-    return f"GRID_STEP_{_macro_base(scene, grid)}"
+    return grid_macro("STEP", scene.name, grid.name)
+
+
+def shift_macro(scene, grid) -> str:
+    """Le décalage de bits qui passe d'un pixel à une case.
+
+    Émis à côté du pas pour que la lecture par pixel n'ait ni division ni calcul :
+    la GBA n'a pas d'instruction de division."""
+    return grid_macro("SHIFT", scene.name, grid.name)
 
 
 def value_macro(scene, grid, value_name: str) -> str:
-    """La constante d'une valeur nommée de la légende.
+    """La constante d'une valeur nommée de la légende, qualifiée par la scène.
 
-    Qualifiée par la scène, comme tout symbole émis : l'espace de noms C est
-    plat. L'orthographe que le script écrira est l'affaire de la tranche qui
-    ouvre la porte Lua, pas de celle-ci."""
-    return f"GRID_VALUE_{_macro_base(scene, grid)}_{c_ident(value_name)}"
+    L'origine d'abord, ce qu'elle est ensuite : `GRID_VALUE_<SCÈNE>_<GRILLE>_<VALEUR>`."""
+    return f"{grid_macro('VALUE', scene.name, grid.name)}_{c_ident(value_name)}"
+
+
+@dataclass(frozen=True)
+class GridAccess:
+    """Ce qu'un script a besoin de savoir d'une grille, pour la lire.
+
+    Construit par `lua_compiler` (qui tient la scène) et lu par le vérificateur et le
+    traducteur Lua vers C. Les noms C sont portés ici plutôt que rederivés là-bas : un
+    nom de scène qui commence par un chiffre gagne un `_` dans son symbole et pas dans
+    sa macro (`c_names.sym` contre `c_ident`), donc les deux ne se déduisent pas l'un de
+    l'autre."""
+    name: str          # le nom d'auteur, celui que le script écrit
+    cols: int
+    rows: int
+    step: int          # pixels par case
+    sym: str           # g_grid_<Scène>_<Grille>
+    width: str         # GRID_W_<SCÈNE>_<GRILLE>
+    height: str        # GRID_H_...
+    shift: str         # GRID_SHIFT_...
+
+
+def grid_access(scene, grid) -> GridAccess:
+    """La fiche d'accès d'une grille, telle que les scripts la liront."""
+    return GridAccess(
+        name=grid.name, cols=grid.cols, rows=grid.rows, step=grid.step,
+        sym=array_name(scene, grid), width=width_macro(scene, grid),
+        height=height_macro(scene, grid), shift=shift_macro(scene, grid),
+    )
+
+
+def scene_grid_access(scene) -> dict:
+    """{nom d'auteur → `GridAccess`} des grilles lisibles de cette scène.
+
+    Une grille jamais dimensionnée n'y est pas : rien n'est émis pour elle, donc rien
+    n'est lisible, et le vérificateur dira qu'elle est absente."""
+    return {grid.name: grid_access(scene, grid)
+            for grid in getattr(scene, "grids", [])
+            if grid.cells and grid.cols}
 
 
 def emitted_grids(p) -> list[tuple]:
@@ -102,6 +143,7 @@ def generate_grids_h(pairs: list[tuple]) -> str:
             f"#define {width_macro(scene, grid)} {cols}",
             f"#define {height_macro(scene, grid)} {rows}",
             f"#define {step_macro(scene, grid)} {grid.step}",
+            f"#define {shift_macro(scene, grid)} {grid.step.bit_length() - 1}",
         ]
         lines += [f"#define {value_macro(scene, grid, v.name)} {v.value}"
                   for v in grid.values if v.name]
