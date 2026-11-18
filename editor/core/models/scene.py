@@ -22,6 +22,10 @@ from core.models.ui_region import InterfaceNode
 # module (feuille, il n'importe rien) : ils sont réclamés par l'outil de
 # peinture, par le canvas qui les dessine et par le codegen qui les émet en C.
 from core.models.collision_tiles import TILE_EMPTY, COLLISION_TILE_SIZE
+# Les grilles de valeurs d'une scène vivent aussi dans leur propre module
+# feuille, lu par ce modèle, par le canvas qui les peindra et par le codegen
+# qui les émettra en C.
+from core.models.grid import Grid
 from core.models import asset_extensions
 
 # ── Slots BG valides par mode vidéo ───────────────────────────────
@@ -780,6 +784,10 @@ class Scene(Resource):
     collision_layer: int = 0  # index BG (0-3) portant la carte de collisions
     # Grille de collision en tiles 8×8 — list[row][col] de TILE_* constants
     collision_map: list = field(default_factory=list)
+    # Grilles de valeurs de la scène, nommées et citées par un script
+    # (`data.grid.<Nom>`). La carte de collision ci-dessus en est l'ancêtre et
+    # reste à part : elle a ses pentes, ses faces à sens unique et ses tags.
+    grids: list = field(default_factory=list)   # list[Grid]
     # Physique de scène : option avancée. Désactivée, la carte Physics disparaît, PhysicsBody et PhysicMaterial
     # sont ignorés (acteurs et prefabs), et la CollisionShape se simplifie (ni sens unique, ni matériau).
     # Une scène écrite avant l'option garde sa physique : la clé absente se lit comme activée.
@@ -835,6 +843,10 @@ class Scene(Resource):
             for n in self.ui_layouts
         ]
 
+        # Même invariant pour les grilles : un dict (constructeur direct, code
+        # hérité) devient une `Grid`.
+        self.grids = [g if isinstance(g, Grid) else Grid.from_dict(g) for g in self.grids]
+
     # ── Mélange : lectures dérivées ───────────────────────────────
     def blend_layers(self, role: str) -> list:
         """Layers tenant `role` dans le mélange, dans l'ordre de la scène."""
@@ -863,6 +875,18 @@ class Scene(Resource):
             row.extend([TILE_EMPTY] * (cols - len(row)))
         while len(self.collision_map) < rows:
             self.collision_map.append([TILE_EMPTY] * cols)
+
+    def grid(self, name: str):
+        """La grille de ce nom, ou None. C'est ce que `data.grid.<Nom>` désigne."""
+        return next((g for g in self.grids if g.name == name), None)
+
+    def ensure_grid_sizes(self, width_px: int = 240, height_px: int = 160):
+        """Chaque grille reçoit ses cases, ou les voit grandir avec la scène.
+
+        Jamais de rognage, comme pour la carte de collision. Cette méthode ne
+        CRÉE aucune grille : c'est l'auteur qui les déclare."""
+        for g in self.grids:
+            g.ensure_size(width_px, height_px)
 
     def members(self) -> list:
         """Tout ce qui est posé dans la scène et porte un en-tête `name`/`id`/`source`."""
@@ -925,6 +949,9 @@ class Scene(Resource):
                if self.font_pal_banks else {}),
             "collision_layer": self.collision_layer,
             "collision_map": self.collision_map,
+            # Absentes du fichier tant que la scène n'en a aucune : une scène
+            # sans grille ne gagne pas la clé (même règle que blend/music).
+            **({"grids": [g.to_dict() for g in self.grids]} if self.grids else {}),
             "physics_enabled": self.physics_enabled,
             **({"physics_gravity_override": True,
                 "physics_gravity_x": self.physics_gravity_x,
@@ -1017,6 +1044,7 @@ class Scene(Resource):
             font_pal_banks=_font_pal_banks_from_dict(d),
             collision_layer=d.get("collision_layer", 0),
             collision_map=d.get("collision_map", []),
+            grids=[Grid.from_dict(g) for g in d.get("grids", []) if isinstance(g, dict)],
             physics_enabled=bool(d.get("physics_enabled", True)),
             # Avant l'héritage projet, la présence d'une valeur de gravité
             # signifiait nécessairement une règle propre à cette scène.
@@ -1052,6 +1080,7 @@ class Scene(Resource):
         scene.ensure_member_names()
         assign_member_ids(scene.members())
         scene.ensure_collision_map()
+        scene.ensure_grid_sizes()
         return scene
 
     def effective_physics_gravity(self, project_settings) -> tuple[float, float]:

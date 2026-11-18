@@ -55,8 +55,11 @@ import json
 # ligne — c'est la partie du sidecar de fond qui se relisait le mieux, et
 # c'est elle qui a servi de modèle à cette règle.
 ROW_KEYS: frozenset[str] = frozenset({
-    # Grilles de scène — une ligne par rangée de tuiles.
-    "collision_map",
+    # Grilles de scène — une ligne par rangée de tuiles. `cells` est la carte
+    # d'une grille de valeurs nommée (cf. models/grid.py) : même forme, même
+    # raison, et une grille au pas de 8 pèse autant de rangées que la carte de
+    # collision.
+    "collision_map", "cells",
     # Fond tuilé — la tilemap est rangée en 2D depuis la v0.24, justement pour
     # avoir des rangées à donner à cette règle (cf. models/background.py).
     "tilemap",
