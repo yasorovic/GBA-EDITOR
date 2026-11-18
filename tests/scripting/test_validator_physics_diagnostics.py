@@ -48,6 +48,17 @@ def test_une_face_a_sens_unique_sur_un_capteur_avertit(project):
     assert _found(project, validator._check_collision, actor, block) == []
 
 
+def test_les_ids_de_forme_vides_ou_dupliques_sont_refuses(project):
+    actor = Actor(name="Hero", components=[
+        CollisionShapeComponent(id="", w=8, h=8),
+        CollisionShapeComponent(id="hurt", w=8, h=8),
+        CollisionShapeComponent(id="hurt", w=8, h=8),
+    ])
+    found = _found(project, validator._check_components, actor, actor.components)
+    assert _says(found, "error", "id cannot be empty")
+    assert _says(found, "error", "id 'hurt' is used more than once")
+
+
 def test_un_corps_qui_cite_une_boite_absente_ou_en_double_est_une_erreur(project):
     actor = Actor(name="Hero")
     body = PhysicsBodyComponent(collider_id="hit")

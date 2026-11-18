@@ -88,7 +88,7 @@ Le même principe, nommer ce qu'on veut atteindre, vaut pour tous les éléments
 | un acteur de la scène, par son nom | `actor:get("Porte")` | l'acteur, ou `nil` s'il est absent ou détruit |
 | le n-ième acteur de la scène | `actor:get(i)` (de 1 à `actor:count()`) | le i-ème acteur vivant, posé ou né, ou `nil` |
 | la n-ième instance vivante d'un prefab | `actor:get("Bullet", i)` (de 1 à `actor:count("Bullet")`) | l'instance, ou `nil` |
-| une boîte de collision de l'acteur | `self:collision_shape("body")` | la boîte, ou `nil` |
+| une boîte de collision de l'acteur, par son Id | `self:collision_shape("Corps")` | la boîte |
 | un élément d'interface | `interface:get("Score")` | l'élément, du type réel (texte, image, liste...) |
 | une valeur partagée | `global.score` | la globale |
 | qui je touche | `other.name` (dans `on_collision_enter`) | le nom de l'autre acteur |

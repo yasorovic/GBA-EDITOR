@@ -189,6 +189,8 @@ DOMAIN_AXIS   = "axis"
 DOMAIN_INPUT_SEQUENCE = "input_sequence"
 # Identifiant d'acteur : acteurs de scène et prefabs poolés.
 DOMAIN_ACTOR_NAME = "actor_name"
+# Identifiant d'une forme de collision, local à l'acteur qui la porte.
+DOMAIN_BOX_ID = "box_id"
 # Étiquette libre d'une boîte de collision.
 DOMAIN_BOX_TAG = "box_tag"
 # Nom d'une Area de la scène : `area:get("Door")` et `area.name == "Door"` (AREA_<SCÈNE>_<NOM>, la référence elle-même).
@@ -655,17 +657,25 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # Ce que l'inspecteur du CollisionShapeComponent règle (actif, solide, décalage,
     # taille) est vivant au runtime : la résolution contre la carte et le test de
     # chevauchement lisent ces mêmes champs à chaque frame. La boîte est un objet
-    # à part entière : on la demande à l'acteur par son tag, on la tient dans une
+    # à part entière : on la demande à l'acteur par son id, on la tient dans une
     # variable, et ses champs sont des PROPRIÉTÉS (cf. RUNTIME_PROPS, clés
     # `collision_shape.*`), ses actions des MÉTHODES (`collision_shape:*`). Le tag est
-    # la clé : le lire n'a de sens que pour comparer.
+    # Le tag reste le groupe que la matrice de collision compare.
     "actor:collision_shape": ApiFunc(
-        lua_name="actor:collision_shape", c_func="actor_get_box",
-        params=[Param("tag", PARAM_STR, DOMAIN_BOX_TAG, doc="Tag of the box, as set in its CollisionShapeComponent")],
+        lua_name="actor:collision_shape", c_func="actor_get_box_at",
+        params=[Param("id", PARAM_STR, DOMAIN_BOX_ID, doc="Id of the CollisionShapeComponent")],
         ret=REF_COLLISION_SHAPE, self_first=True,
-        doc="The collision shape of this actor carrying this tag. Returns nil if the "
-            "actor has none: `if hb then` tests it. Ex: local hb = "
-            "self:collision_shape(\"hitbox\")",
+        doc="The collision shape of this actor designated by its component id. The id "
+            "is resolved at build time, so the actor must be known (self or an actor "
+            "reached by a literal name). Ex: local hb = self:collision_shape(\"Hitbox\")",
+    ),
+    "actor:collision_shape_by_tag": ApiFunc(
+        lua_name="actor:collision_shape_by_tag", c_func="actor_get_box",
+        params=[Param("tag", PARAM_STR, DOMAIN_BOX_TAG, doc="Collision group carried by the shape")],
+        ret=REF_COLLISION_SHAPE, self_first=True,
+        doc="The first collision shape of this actor carrying this collision tag. This "
+            "runtime lookup is available for a dynamic actor such as `other`. Returns nil "
+            "when no shape carries the tag. Ex: other:collision_shape_by_tag(\"hurtbox\")",
     ),
     # ── Les Areas : un module `area` pour l'acquisition, une référence `area` pour ses états et ses actions. Une Area
     # n'a ni sprite, ni vélocité, ni `destroy` : elle est posée dans la scène et n'en bouge que par sa position. Dans son propre
@@ -2030,8 +2040,8 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="actor.box_count", c_getter="actor_get_box_count", ptype=PARAM_INT,
         self_first=True, read_only=True,
         doc="Number of collision shapes of this actor, active or not (fixed at build, "
-            "read-only). The boxes themselves are requested by their tag: "
-            "self:collision_shape(\"hitbox\").",
+            "read-only). The boxes themselves are requested by their component id: "
+            "self:collision_shape(\"Hitbox\").",
     ),
 
     # ── La boîte de collision (référence `collision_shape`) ──────────
@@ -2688,12 +2698,11 @@ def module_members(module: str) -> list[str]:
 
 @dataclass(frozen=True)
 class SpriteLibrary:
-    """Ce que les sprites d'un porteur offrent à un script qui le PILOTE de l'extérieur
-    (`self.Canon:play_anim("tir")`) : les noms d'état, les ids d'apparence, et pour un
-    porteur à plusieurs apparences la table `anim_maps` (cf. `CodegenContext`)."""
+    """Ce qu'un porteur connu offre à un script qui le pilote de l'extérieur."""
     anim_names: tuple = ()
     anim_maps: tuple = ()
     sprite_ids: tuple = ()
+    box_ids: tuple = ()
 
 
 def anim_constant(actor_sym: str, anim_name: str) -> str:

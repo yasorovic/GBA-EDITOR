@@ -78,12 +78,9 @@ class CollisionShapeComponent:
         on_tile_collide(normal_x, normal_y)           — choc contre la carte
 
     `other` est une référence d'actor (pas un index) ; `my_box`/`other_box`
-    valent une constante `BOXTAG_<TAG>` dérivée du champ `tag` ci-dessous —
-    c'est ainsi qu'un script distingue quelle box a touché, y compris entre
-    boxes solides et boxes trigger : il n'existe pas de handler trigger séparé.
-
-    tag : label libre pour que le script distingue plusieurs colliders
-          sur un même actor (ex: "body", "sword_hitbox", "ground_check").
+    valent une constante `BOXTAG_<TAG>` dérivée du champ `tag` ci-dessous. Le tag
+    classe les formes pour la matrice et les événements ; l'id désigne une forme
+    précise dans `collision_shape(id)`. Il n'existe pas de handler trigger séparé.
     """
     id: str = "collision"
     active: bool = True

@@ -149,7 +149,9 @@ int main(void) {
     b->collision.box_count = 1;
     b->collision.boxes[0] = (CollisionShape){ 0,  0, 16, 16, 1, 1, TAG_BODY };
 
-    /* Le tag choisit la bonne boîte : la référence est un rang, 0 = absente. */
+    /* L'id est déjà résolu en rang au build ; le tag garde sa recherche dynamique. */
+    printf("ranks %d %d %d %d\n", actor_get_box_at(a, 0), actor_get_box_at(a, 1),
+           actor_get_box_at(a, 2), actor_get_box_at(0, 0));
     int body = actor_get_box(a, TAG_BODY);
     int hit  = actor_get_box(a, TAG_HIT);
     int none = actor_get_box(a, TAG_NONE);

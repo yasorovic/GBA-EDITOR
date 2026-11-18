@@ -548,7 +548,15 @@ def _check_area_handlers(ctx: ValidationContext, scene):
 
 
 def _check_components(ctx: ValidationContext, owner, components):
-    from core.models.components import component_type_name
+    from core.models.components import CollisionShapeComponent, component_type_name
+
+    box_ids = [comp.id for comp in components if isinstance(comp, CollisionShapeComponent)]
+    for box_id in dict.fromkeys(box_ids):
+        if not box_id:
+            ctx.error(owner, "CollisionShape id cannot be empty: a script uses it to designate this shape.")
+        elif box_ids.count(box_id) > 1:
+            ctx.error(owner, f"CollisionShape id '{box_id}' is used more than once on this actor. "
+                      "Each collision shape needs a unique id.")
 
     for comp in components:
         try:

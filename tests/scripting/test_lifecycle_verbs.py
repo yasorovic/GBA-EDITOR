@@ -114,8 +114,8 @@ def test_les_verbes_d_une_boite_et_d_un_element_se_traduisent_sans_variable():
             'interface:get("Menu"):hide()\ninterface:get("Menu"):show()')
     assert _errors(body) == []
     assert _c_body(body) == [
-        "collision_shape_set_active(actor_get_box(self, BOXTAG_HB), 0);",
-        "int hb = actor_get_box(self, BOXTAG_HB);",
+        "collision_shape_set_active(actor_get_box_at(self, 0), 0);",
+        "int hb = actor_get_box_at(self, 0);",
         "collision_shape_set_active(hb, 1);",
         "ui_element_show(UIELEM_MENU, 0);", "ui_element_show(UIELEM_MENU, 1);",
     ]

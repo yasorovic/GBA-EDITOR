@@ -220,13 +220,17 @@ class ScriptEditorScreen(QWidget):
     def _completion_names(self):
         """Les noms du projet, plus les animations du sprite du script OUVERT : elles
         dépendent de l'acteur auquel il est attaché, pas du seul projet."""
-        from scripting.project_names import names_by_domain, anim_names_of_script
+        from scripting.api import DOMAIN_BOX_ID
+        from scripting.project_names import names_by_domain, anim_names_of_script, collision_shape_ids_of_script
         if not self._project:
             return None
         names = names_by_domain(self._project)
         anims = anim_names_of_script(self._project, self._path) if self._path else []
         if anims:
             names[DOMAIN_ANIM] = anims
+        box_ids = collision_shape_ids_of_script(self._project, self._path) if self._path else []
+        if box_ids:
+            names[DOMAIN_BOX_ID] = box_ids
         return names
 
     def refresh(self):

@@ -45,7 +45,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_ACTOR_PROPS, 
                   DOMAIN_LANG,
                   DOMAIN_PALETTE,
                   DOMAIN_IMAGE_STATE, DOMAIN_UI_ELEMENT,
-                  DOMAIN_ACTOR_NAME, DOMAIN_BOX_TAG, box_tag_constant, DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL,
+                  DOMAIN_ACTOR_NAME, DOMAIN_BOX_ID, DOMAIN_BOX_TAG, box_tag_constant, DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL,
                   DOMAIN_SEQUENCE,
                   DOMAIN_OBJ_MODE, DOMAIN_DIRECTION, DOMAIN_WIN_REGION,
                   DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE, HARDWARE_ENUMS,
@@ -122,6 +122,8 @@ class BuildContext:
     anim_names:   list[str]  = None    # noms d'anim définis dans le SpriteAsset lié
     # Identifiants des composants sprite, dans l'ordre des apparences. `None` relâche le contrôle.
     sprite_ids:   list[str]  = None
+    # Identifiants des CollisionShapeComponent, dans leur ordre runtime.
+    box_ids: list[str] = None
     # Événements d'animation autorisés comme fonctions de premier niveau.
     frame_event_names: list[str] = None
     sfx_names:    list[str]  = None    # noms de Sfx dans le projet
@@ -131,7 +133,7 @@ class BuildContext:
     # Codes des langues déclarées. Une liste vide interdit `lang.set` et `lang.get`.
     lang_codes:   list[str]  = None
     camera_names: list[str]  = None    # noms des caméras de la scène compilée (pour camera.switch)
-    box_tag_names: list[str] = None    # tags de boîtes de collision du projet (self:collision_shape…)
+    box_tag_names: list[str] = None    # groupes de collision du projet (collision_shape_by_tag, hb.tag)
     # Le propriétaire porte-t-il un PhysicsBody ? `None` relâche le contrôle de `self:physics_body()`.
     has_physics_body: bool = None
     window_names: list[str]  = None    # noms de WindowSlot du projet (pour window.*)
@@ -2627,6 +2629,13 @@ class Checker:
                 continue
 
             if param.domain in _RECEIVER_DOMAINS and receiver != "self":
+                if param.domain == DOMAIN_BOX_ID:
+                    self.errors.append(CheckError(
+                        "error",
+                        f"{receiver}:{key.split(':')[1]}(): a collision shape id is local to its actor, "
+                        "and the build cannot know which actor this dynamic reference will hold. Reach "
+                        "the actor by a literal name, or use collision_shape_by_tag(tag)."))
+                    continue
                 # Ces noms sont résolus dans le sprite de l'acteur courant.
                 self.errors.append(CheckError(
                     "error",
@@ -2673,13 +2682,15 @@ class Checker:
                 "error", "literal text: at most 4 interpolated values in a literal."))
 
     def _check_library_name(self, shown: str, domain: str, name: str, library, child: str):
-        """Un état ou un id d'apparence cité sur un ENFANT : il doit exister dans SES
-        sprites, sinon la constante n'existerait pas et gcc s'en plaindrait à la place."""
+        """Un nom local cité sur un acteur connu doit exister sur cet acteur."""
         if domain == DOMAIN_ANIM:
             known, what = library.anim_names, "state"
             found = c_ident(name) in {c_ident(n) for n in known}
-        else:
+        elif domain == DOMAIN_SPRITE_ID:
             known, what = library.sprite_ids, "sprite id"
+            found = name in known
+        else:
+            known, what = library.box_ids, "collision shape id"
             found = name in known
         if not found:
             self.errors.append(CheckError(
@@ -2707,6 +2718,24 @@ class Checker:
                 "error",
                 f"{call_key}('{name}'): no sprite component with this id on the actor. Available"
                 f" ids: {', '.join(self.ctx.sprite_ids) or 'none'}.",
+            ))
+
+    def _check_box_id(self, call_key: str, name: str):
+        if self.ctx.box_ids is not None and name not in self.ctx.box_ids:
+            if self.ctx.box_tag_names is not None and name in self.ctx.box_tag_names:
+                message = (
+                    f"{call_key}('{name}'): '{name}' is a collision tag, not a CollisionShape id. "
+                    "Use the component id with collision_shape(id), or use "
+                    "collision_shape_by_tag(tag) for a runtime tag lookup."
+                )
+            else:
+                message = (
+                    f"{call_key}('{name}'): no CollisionShape with this id on the actor. Available"
+                    f" ids: {', '.join(self.ctx.box_ids) or 'none'}."
+                )
+            self.errors.append(CheckError(
+                "error",
+                message,
             ))
 
     def _check_sfx(self, call_key: str, name: str):
@@ -3327,6 +3356,7 @@ class Checker:
 _DOMAIN_CHECKS: dict = {
     DOMAIN_ANIM:    lambda c, key, val, p, a: c._check_anim(key, val),
     DOMAIN_SPRITE_ID: lambda c, key, val, p, a: c._check_sprite_id(key, val),
+    DOMAIN_BOX_ID: lambda c, key, val, p, a: c._check_box_id(key, val),
     DOMAIN_SFX:     lambda c, key, val, p, a: c._check_sfx(key, val),
     DOMAIN_MUSIC:   lambda c, key, val, p, a: c._check_music(key, val),
     DOMAIN_JINGLE:  lambda c, key, val, p, a: c._check_jingle(key, val),
@@ -3419,7 +3449,7 @@ def _domain_example(domain: Optional[str]) -> Optional[str]:
 # l'écrit. `BuildContext` décrit l'acteur qui EXÉCUTE : ses animations, son
 # SoundFX. Un `other:play_anim("walk")` cite donc une ressource que ce script
 # ne peut ni vérifier ni résoudre : cf. `_check_args`.
-_RECEIVER_DOMAINS: frozenset = frozenset({DOMAIN_ANIM, DOMAIN_SPRITE_ID})
+_RECEIVER_DOMAINS: frozenset = frozenset({DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_BOX_ID})
 
 _ACTOR_STORED = (
     "`{name}` cannot hold an actor: an array element is stored as an integer and has no actor "

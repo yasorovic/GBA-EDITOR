@@ -61,12 +61,13 @@ l'acteur tombe (la gravité est traitée dans [Gravité et saut](gravite-saut.md
 
 ## Lire et régler la boîte depuis un script
 
-Chaque boîte porte un **Tag** (`body`, `hitbox`...). Un script demande la boîte à l'acteur par ce
-tag, la garde dans une variable, puis lit ou change ses champs pendant le jeu :
+Chaque boîte possède un **Id**, qui la désigne dans cet acteur, et un **Tag**, qui la classe dans la
+matrice de collision. Un script demande normalement la boîte par son Id, puis lit ou change ses
+champs pendant le jeu :
 
 ```lua
-local corps = self:collision_shape("body")       -- nil si l'acteur n'a pas de boîte de ce tag
-local frappe = self:collision_shape("hitbox")
+local corps = self:collision_shape("Corps")
+local frappe = self:collision_shape("Frappe")
 
 frappe.offset = vec2(8, -4)                    -- décalage par rapport au pivot du sprite
 frappe.size = vec2(20, 8)                      -- une zone d'attaque qui s'allonge
@@ -87,7 +88,9 @@ Deux actions complètent la boîte :
 
 ```lua
 if frappe:overlaps(ennemi) then ... end        -- touche-t-elle N'IMPORTE QUELLE boîte active de cet acteur ?
-if frappe:overlaps(ennemi:collision_shape("body")) then ... end   -- ... ou celle-là seulement ?
+if frappe:overlaps(ennemi:collision_shape("Corps")) then ... end  -- acteur connu par son nom
+
+local hurtbox = other:collision_shape_by_tag("hurtbox")           -- acteur dynamique d'un événement
 
 local sol = corps:get_collision_tile(corps.bounds.x, corps.bounds.y + corps.bounds.h)
 ```
@@ -97,8 +100,10 @@ ne dépend pas de la boîte) et rend l'index de type de la tuile (0 = vide, 1 = 
 22 à 25 = faces à sens unique ; le tableau complet est dans
 [Types de tuile de collision](types-de-tuile-collision.md)). Une face à sens unique se lit comme une
 tuile non nulle, au même titre qu'un bloc plein : comparez l'index pour les distinguer. Une boîte inactive ne touche
-personne. Un tag que le projet ne connaît pas est refusé au Build. Une boîte que l'acteur n'a pas
-donne `nil` : testez-la avec `if boite then`. `self.box_count` donne le nombre de boîtes de l'acteur.
+personne. Un Id vide, dupliqué ou absent est refusé au Build. L'Id est résolu en rang sans recherche
+au runtime ; l'acteur doit donc être `self` ou être atteint par un nom écrit en toutes lettres.
+`collision_shape_by_tag(tag)` garde la recherche runtime nécessaire pour `other` et rend la première
+boîte de ce groupe, ou `nil`. `self.box_count` donne le nombre de boîtes de l'acteur.
 
 ## Si l'acteur traverse encore le décor
 

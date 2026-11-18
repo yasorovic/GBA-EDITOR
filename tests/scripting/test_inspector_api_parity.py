@@ -5,8 +5,8 @@ d'inspecteur a une porte Lua — écrite quand le runtime sait la changer, en
 LECTURE SEULE quand la valeur est fixée au build.
 
 Ce que ce fichier tient, et qu'un test de catalogue ne verrait pas :
-- les portes se compilent vers le bon C (le tag de boîte devient `BOXTAG_*`) ;
-- un tag inconnu est refusé À LA COMPILATION — au runtime il se lirait vide et
+- l'id se compile en rang et la recherche explicite par tag en `BOXTAG_*` ;
+- un id ou un tag inconnu est refusé À LA COMPILATION — au runtime il se lirait vide et
   s'écrirait sans effet, sans un mot ;
 - les portes en lecture seule le sont vraiment ;
 - le C se comporte (bornes, boîte absente, bonne boîte) — sonde native.
@@ -28,17 +28,20 @@ MOTEUR_DIR = REPO_DIR / "runtime" / "include"
 TAGS = ["body", "hitbox"]
 
 
-def _lua(src: str, tags=TAGS):
+def _lua(src: str, tags=TAGS, ids=("body", "hitbox")):
+    from scripting.api import SpriteLibrary
     from scripting.parser import parse
     from scripting.checker import check, BuildContext
     from scripting.codegen import generate, CodegenContext
 
     script = parse(src)
     errors = check(script, BuildContext(actor_name="Ball", anim_names=["idle"],
-                                        box_tag_names=tags))
+                                        box_ids=list(ids), box_tag_names=tags,
+                                        actor_sprites={"Ball": SpriteLibrary(box_ids=tuple(ids))}))
     code, _, _ = generate(script, CodegenContext(
         actor_name="Ball", actor_sym="Ball", anim_names=["idle"], sfx_names=[],
-        music_names=[], global_names=set(), const_names=set(), all_actor_syms=["Ball"]))
+        music_names=[], global_names=set(), const_names=set(), all_actor_syms=["Ball"],
+        box_ids=list(ids), actor_sprites={"Ball": SpriteLibrary(box_ids=tuple(ids))}))
     return [e.message for e in errors if e.level == "error"], code
 
 
@@ -58,7 +61,7 @@ def test_une_boite_se_tient_dans_une_variable_et_ses_champs_sont_des_proprietes(
         "  if not hb then self:hide() end\n"
         "end\n")
     assert errs == []
-    assert "int hb = actor_get_box(self, BOXTAG_HITBOX);" in code
+    assert "int hb = actor_get_box_at(self, 1);" in code
     assert "collision_shape_set_offset(hb, (Vec2){8, (-4)})" in code
     assert "collision_shape_set_size(hb, (Vec2){12, 8})" in code
     assert "collision_shape_set_solid(hb, 0)" in code
@@ -85,7 +88,18 @@ def test_une_boite_d_un_autre_acteur_se_demande_aussi():
                       " local hb = o:collision_shape(\"body\")\n"
                       " hb.solid = false\nend\n")
     assert errs == []
-    assert "actor_get_box(o, BOXTAG_BODY)" in code
+    assert "actor_get_box_at(o, 0)" in code
+
+
+def test_un_acteur_dynamique_se_recherche_par_tag():
+    src = ("function on_collide(other, my_box, other_box)\n"
+           " local hb = other:collision_shape_by_tag(\"hitbox\")\nend\n")
+    errs, code = _lua(src)
+    assert errs == []
+    assert "actor_get_box(other, BOXTAG_HITBOX)" in code
+
+    errs, _ = _lua(src.replace("collision_shape_by_tag", "collision_shape"))
+    assert errs and "dynamic" in errs[0] and "collision_shape_by_tag" in errs[0]
 
 
 def test_overlaps_prend_un_acteur_ou_une_autre_boite():
@@ -101,7 +115,7 @@ def test_overlaps_prend_un_acteur_ou_une_autre_boite():
     assert errs == []
     assert "collision_shape_overlaps_actor(hb, o)" in code
     assert "collision_shape_overlaps_box(hb, hurt)" in code
-    assert "collision_shape_overlaps_box(hb, actor_get_box(o, BOXTAG_BODY))" in code
+    assert "collision_shape_overlaps_box(hb, actor_get_box_at(o, 0))" in code
 
 
 def test_get_collision_tile_est_une_methode_de_la_boite():
@@ -140,10 +154,17 @@ def test_un_champ_inconnu_sur_une_boite_est_refuse():
     assert errs and "width" in errs[0]
 
 
-def test_un_tag_de_boite_inconnu_est_refuse_a_la_compilation():
+def test_un_id_de_boite_inconnu_est_refuse_a_la_compilation():
     errs, _ = _lua("function on_update(self)\n"
                    "  local hb = self:collision_shape(\"hitboks\")\nend\n")
     assert errs and "hitboks" in errs[0] and "hitbox" in errs[0]
+
+
+def test_un_ancien_tag_utilise_comme_id_propose_la_migration():
+    errs, _ = _lua("function on_update(self)\n"
+                   "  local hb = self:collision_shape(\"hitbox\")\nend\n",
+                   tags=["body", "hitbox"], ids=("Body", "Attack"))
+    assert errs and "collision tag" in errs[0] and "collision_shape_by_tag" in errs[0]
 
 
 # ── Réglages fixés au build : lecture seule ──────────────────────────
@@ -173,7 +194,9 @@ def test_un_autre_acteur_se_lit_aussi():
 def test_toutes_les_portes_de_la_tranche_ont_leur_c():
     from scripting.api import RUNTIME_API, RUNTIME_PROPS
     facade = (MOTEUR_DIR / "runtime_api_inline.h").read_text(encoding="utf-8", errors="ignore")
-    fns = [RUNTIME_API[k].c_func for k in ("actor:collision_shape", "collision_shape:overlaps")]
+    fns = [RUNTIME_API[k].c_func for k in (
+        "actor:collision_shape", "actor:collision_shape_by_tag", "collision_shape:overlaps",
+    )]
     fns += ["collision_shape_overlaps_box", RUNTIME_API["collision_shape:get_collision_tile"].c_func]
     fns += [RUNTIME_PROPS[k].c_getter for k in ("actor.box_count", "actor.screen_space", "actor.affine")]
     for k, prop in RUNTIME_PROPS.items():
@@ -204,23 +227,30 @@ def test_renommer_un_tag_de_boite_suit_dans_les_scripts():
     from scripting.api import DOMAIN_BOX_TAG
     from scripting.refactor import rename_in_text
     src = ("function on_update(self)\n"
-           "  local hb = self:collision_shape(\"hitbox\")\n"
+           "  local hb = self:collision_shape_by_tag(\"hitbox\")\n"
            "  local s = \"hitbox\"\nend\n")
     out, n = rename_in_text(src, DOMAIN_BOX_TAG, "hitbox", "strike")
     assert n == 1
-    assert "collision_shape(\"strike\")" in out and "local s = \"hitbox\"" in out
+    assert "collision_shape_by_tag(\"strike\")" in out and "local s = \"hitbox\"" in out
 
 
 def test_renommer_un_tag_de_boite_suit_aussi_la_comparaison_de_hb_tag():
-    """`hb.tag == "hitbox"` cite le tag comme `self:collision_shape("hitbox")` :
-    le renommage doit le suivre, sinon la comparaison ne compile plus."""
+    """L'id d'acquisition ne change pas quand le groupe est renommé."""
     from scripting.api import DOMAIN_BOX_TAG
     from scripting.refactor import rename_in_text
     src = ("function on_update(self)\n"
-           "  local hb = self:collision_shape(\"hitbox\")\n"
+           "  local hb = self:collision_shape(\"Hitbox\")\n"
            "  if hb.tag == \"hitbox\" then self:show() end\nend\n")
     out, n = rename_in_text(src, DOMAIN_BOX_TAG, "hitbox", "strike")
-    assert n == 2 and out.count("strike") == 2
+    assert n == 1 and 'collision_shape("Hitbox")' in out
+
+
+def test_renommer_un_id_de_boite_suit_l_acquisition():
+    from scripting.api import DOMAIN_BOX_ID
+    from scripting.refactor import rename_in_text
+    src = 'local hb = self:collision_shape("Hitbox")\nlocal s = "Hitbox"\n'
+    out, n = rename_in_text(src, DOMAIN_BOX_ID, "Hitbox", "Attack")
+    assert n == 1 and 'collision_shape("Attack")' in out and 'local s = "Hitbox"' in out
 
 
 # ── Le C se comporte ─────────────────────────────────────────────────
@@ -262,6 +292,7 @@ def test_c_la_destruction_remet_les_tables_par_emplacement_a_zero(sortie_sonde):
 
 def test_c_la_bonne_boite_repond(sortie_sonde):
     """La référence est un rang (acteur × MAX_BOXES + boîte + 1), 0 = absente."""
+    assert sortie_sonde["ranks"] == [1, 2, 0, 0]
     assert sortie_sonde["refs"] == [1, 2, 0, 5]
     assert sortie_sonde["tags"] == [0, 1]
     assert sortie_sonde["offset_body"] == [0, 0]

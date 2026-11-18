@@ -1626,15 +1626,20 @@ static inline int actor_get_affine(const Actor* s)       { return actor_oam_entr
 static inline int actor_get_box_count(const Actor* s)    { return s->collision.box_count; }
 
 /* ── Boîtes de collision — la référence `collision_shape` ─────────────────────
-   Une boîte est nommée par son tag (BOXTAG_*, le champ « Tag » du
-   CollisionShapeComponent), et un script la tient dans une variable :
-   `local hb = self:collision_shape("hitbox")`. La référence est un ENTIER — le
+   Une boîte connue est désignée au build par l'id de son CollisionShapeComponent ;
+   une recherche dynamique reste possible par tag avec `collision_shape_by_tag`.
+   La référence est un ENTIER — le
    rang de l'acteur dans g_actors, puis celui de la boîte, plus un — parce que
    0 doit dire « pas de boîte » (`if not hb`), comme la référence d'un effet
    sonore. Une boîte absente se lit vide et s'écrit sans effet (même politique
-   qu'un index hors plage). Deux boîtes de même tag sur un acteur : la première
-   répond. Le tag est la CLÉ, donc en lecture seule. */
+   qu'un index hors plage). Deux boîtes de même tag sur un acteur : la recherche
+   par tag rend la première. Le tag reste en lecture seule. */
+static inline int actor_get_box_at(const Actor* s, int rank) {
+    if (!s || rank < 0 || rank >= s->collision.box_count) return 0;
+    return (int)(s - g_actors) * MAX_BOXES + rank + 1;
+}
 static inline int actor_get_box(const Actor* s, int tag) {
+    if (!s) return 0;
     for (int i = 0; i < s->collision.box_count; i++)
         if (s->collision.boxes[i].tag == tag)
             return (int)(s - g_actors) * MAX_BOXES + i + 1;

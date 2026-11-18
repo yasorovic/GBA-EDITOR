@@ -832,7 +832,7 @@ class RenameCollisionTagCmd(Command):
     def _apply(self, old: str, new: str):
         from core.models.settings import pair_key
         from scripting.api import DOMAIN_BOX_TAG
-        # Les scripts citent le tag en chaîne (`self:collision_shape("hitbox")`, `hb.tag == "hitbox"`) : ils
+        # Les scripts citent le tag en chaîne (`self:collision_shape_by_tag("hitbox")`, `hb.tag == "hitbox"`) : ils
         # suivent le renommage, dans un sens comme dans l'autre (annulation).
         self._project.rename_lua_refs(DOMAIN_BOX_TAG, old, new)
         for c in self._components:

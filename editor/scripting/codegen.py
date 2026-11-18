@@ -54,7 +54,7 @@ from .api import (
     DOMAIN_ACTOR_NAME, DOMAIN_SCENE, DOMAIN_LANG,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
     DOMAIN_MUSIC_SECTION, music_section_constant,
-    DOMAIN_CAMERA, camera_constant, DOMAIN_BOX_TAG, box_tag_constant, DOMAIN_AREA_NAME, area_name_constant,
+    DOMAIN_CAMERA, camera_constant, DOMAIN_BOX_ID, DOMAIN_BOX_TAG, box_tag_constant, DOMAIN_AREA_NAME, area_name_constant,
     window_region_constant,
     DOMAIN_TEXT, DOMAIN_FONT, DOMAIN_IMAGE_STATE,
     DOMAIN_PALETTE, DOMAIN_UI_ELEMENT, ui_list_constant,
@@ -305,6 +305,8 @@ class CodegenContext:
     # `id` des composants sprite de ce propriétaire (ses apparences), dans l'ordre :
     # SPRITE_<ACTEUR>_<ID> = le rang que `OamEntry.appearance` désigne.
     sprite_ids: list[str] = field(default_factory=list)
+    # Ids des CollisionShapeComponent, dans l'ordre de `Actor.collision.boxes`.
+    box_ids: list[str] = field(default_factory=list)
     # Porteur à PLUSIEURS apparences : `anim_names` est l'UNION des noms d'état de
     # leurs sprites, et `anim_maps[a][k]` le rang de l'état `anim_names[k]` dans le
     # sprite de l'apparence `a` (255 = cet état n'existe pas dans ce sprite). Vide
@@ -1093,6 +1095,7 @@ class CodeGen:
                 owner_kind   = "behavior",
                 anim_names   = self.ctx.anim_names,
                 sprite_ids   = self.ctx.sprite_ids,
+                box_ids      = self.ctx.box_ids,
                 sfx_names    = self.ctx.sfx_names,
                 music_names  = self.ctx.music_names,
                 jingle_names = self.ctx.jingle_names,
@@ -2562,7 +2565,7 @@ class CodeGen:
         if not isinstance(arg, ExprString) or param.domain is None:
             return self._expr(arg)
         name = arg.value
-        if library is not None and param.domain in (DOMAIN_ANIM, DOMAIN_SPRITE_ID):
+        if library is not None and param.domain in (DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_BOX_ID):
             return _library_constant(param.domain, library, name, receiver)
         make_constant = _DOMAIN_CONSTANT.get(param.domain)
         if make_constant is None:
@@ -3215,6 +3218,7 @@ _DOMAIN_CONSTANT: dict = {
     # l'argument optionnel/le bit de tampon, mais lisent le MÊME dict.
     DOMAIN_KEY:     lambda g, name: g.ctx.input_masks.get(name, key_constant(name)),
     DOMAIN_ACTOR_NAME:     lambda g, name: actor_name_constant(name, g.ctx.scene_sym),
+    DOMAIN_BOX_ID: lambda g, name: str(g.ctx.box_ids.index(name) if name in g.ctx.box_ids else 0),
     DOMAIN_BOX_TAG: lambda g, name: box_tag_constant(name),
     DOMAIN_AREA_NAME: lambda g, name: area_name_constant(name, g.ctx.scene_sym),
     DOMAIN_SCENE:   lambda g, name: scene_constant(name),
@@ -3242,11 +3246,14 @@ _DOMAIN_CONSTANT: dict = {
 }
 
 def _library_constant(domain: str, library, name: str, receiver: str) -> str:
-    """Le rang de `name` dans les sprites d'un ENFANT, écrit en nombre : il n'a pas de
-    `#define` dans le `.c` du parent, qui ne connaît que ses propres sprites. Un enfant à
-    plusieurs apparences range ses états selon le sprite AFFICHÉ, lu à l'exécution."""
+    """Le rang d'un nom local au récepteur connu, écrit directement en nombre.
+
+    Les états et apparences viennent de ses sprites ; les formes de collision de
+    ses composants. Aucun de leurs symboles locaux n'existe dans le C de l'appelant."""
     if domain == DOMAIN_SPRITE_ID:
         return str(library.sprite_ids.index(name))
+    if domain == DOMAIN_BOX_ID:
+        return str(library.box_ids.index(name))
     k = [c_ident(n) for n in library.anim_names].index(c_ident(name))
     if not library.anim_maps:
         return str(k)

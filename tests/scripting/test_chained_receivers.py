@@ -57,7 +57,7 @@ def _c_body(body: str) -> list[str]:
 
 # (forme chaînée, forme via un local, le récepteur C que le local tient)
 _FOE = "runtime_get_actor(ACTORNAME_FOE)"
-_BOX = "actor_get_box(self, BOXTAG_HB)"
+_BOX = "actor_get_box_at(self, 0)"
 
 PARITY = [
     pytest.param('actor:get("Foe"):move_to(vec2(1, 2), 2)',

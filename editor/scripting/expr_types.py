@@ -100,7 +100,7 @@ def resolve_prop(expr, ref_types: Optional[dict[str, str]] = None,
     `other.velocity` est le même champ, avec un autre récepteur. Les propriétés
     de caméra/scène, elles, n'existent que sur `camera`/`scene`.
 
-    Un récepteur qui tient une RÉFÉRENCE (`hb = self:collision_shape("hitbox")`,
+    Un récepteur qui tient une RÉFÉRENCE (`hb = self:collision_shape("Hitbox")`,
     d'où `hb.solid`) a les propriétés de son TYPE, clés `collision_shape.solid` :
     `ref_types` (nom → type, tenu par le checker et le codegen) le dit. Et il n'a
     QUE celles-là : jamais le repli sur les champs d'actor, sans quoi `hb.tag`
@@ -450,7 +450,7 @@ def infer_ref_type(expr, ref_kinds: Optional[dict[str, str]] = None,
         if receiver:
             found = ref_member(receiver, expr.method, ":")
             return found[1].ret if (found and found[1].ret in REF_TYPES) else None
-        # `self:collision_shape("hitbox")` : un constructeur de référence qui
+        # `self:collision_shape("Hitbox")` : un constructeur de référence qui
         # s'écrit comme une méthode d'actor, faute de module à qui le rattacher.
         api = RUNTIME_API.get(f"{REF_ACTOR}:{expr.method}")
         return api.ret if (api and api.ret in REF_TYPES) else None

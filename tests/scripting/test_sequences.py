@@ -387,10 +387,9 @@ end
     fin = code.index("}", code.index("void Hero_on_update(Actor* self) {")) + 1
     sonde = ("#include <assert.h>\n#include <stddef.h>\n"
              "typedef struct { int x, y; } Vec2;\ntypedef struct Actor Actor;\n"
-             "#define BOXTAG_HITBOX 3\n"
              "static int last_box, last_active, set_calls;\n"
              "static Vec2 last_offset;\n"
-             "static int actor_get_box(Actor* a, int tag) { (void)a; return tag == BOXTAG_HITBOX ? 7 : 0; }\n"
+             "static int actor_get_box_at(Actor* a, int rank) { (void)a; return rank == 0 ? 7 : 0; }\n"
              "static void collision_shape_set_offset(int h, Vec2 v) { last_box = h; last_offset = v; set_calls++; }\n"
              "static void collision_shape_set_active(int h, int on) { last_box = h; last_active = on; }\n"
              + code[debut:fin] +

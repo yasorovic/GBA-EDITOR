@@ -10,7 +10,7 @@ from dataclasses import replace, is_dataclass, fields
 from pathlib import Path
 from typing import Optional
 
-from core.models.components import ScriptComponent
+from core.models.components import CollisionShapeComponent, ScriptComponent
 from core.models.sprite import SpriteAsset
 from core.models.components import affine_sprite_component
 from codegen.actor_appearance import owner_appearances
@@ -374,6 +374,11 @@ def _sprite_ids(p, owner) -> list[str]:
     return [c.id for c, _sprite in owner_appearances(p, owner)]
 
 
+def _box_ids(owner) -> list[str]:
+    """Ids des formes, dans le même ordre que leur émission dans `collision.boxes`."""
+    return [c.id for c in owner.components if isinstance(c, CollisionShapeComponent)]
+
+
 def _anim_union(p, owner, sprite) -> tuple[list[str], list[list[int]]]:
     """(noms d'état, correspondances) d'un propriétaire de script.
 
@@ -464,7 +469,7 @@ def _child_sprites(p, children) -> dict:
         apps = owner_appearances(p, c)
         names, maps = _anim_union(p, c, apps[0][1] if apps else None)
         out[c.name] = SpriteLibrary(tuple(names), tuple(tuple(m) for m in maps),
-                                    tuple(_sprite_ids(p, c)))
+                                    tuple(_sprite_ids(p, c)), tuple(_box_ids(c)))
     return out
 
 
@@ -723,6 +728,7 @@ def transpile_all(
             axis_names   = input_layout.axis_names,
             anim_names   = anim_names,
             sprite_ids   = _sprite_ids(p, actor),
+            box_ids      = _box_ids(actor),
             frame_event_names = frame_event_names,
             affine_transform = _rt_transform,
             sfx_names    = sfx_names,
@@ -899,6 +905,7 @@ def transpile_all(
             anim_names    = anims,
             anim_maps     = anim_maps,
             sprite_ids    = _sprite_ids(p, actor),
+            box_ids       = _box_ids(actor),
             sfx_names     = sfx_names,
             music_names   = music_names,
             jingle_names = jingle_names,
@@ -986,6 +993,7 @@ def transpile_all(
             axis_names   = input_layout.axis_names,
             anim_names   = pf_anim,
             sprite_ids   = _sprite_ids(p, pf),
+            box_ids      = _box_ids(pf),
             affine_transform = _pf_rt_transform,
             sfx_names    = sfx_names,
             music_names  = music_names,
@@ -1055,6 +1063,7 @@ def transpile_all(
             anim_names    = pf_anim,
             anim_maps     = pf_anim_maps,
             sprite_ids    = _sprite_ids(p, pf),
+            box_ids       = _box_ids(pf),
             sfx_names     = sfx_names,
             music_names   = music_names,
             jingle_names = jingle_names,

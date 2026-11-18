@@ -239,6 +239,14 @@ def test_argument_projet_propose_les_noms():
     assert _refs('actor:get("') == {"Hero", "Boss"}   # DOMAIN_ACTOR — scène active
 
 
+def test_collision_shape_propose_les_ids_du_script():
+    from scripting.api import DOMAIN_BOX_ID
+    names = {DOMAIN_BOX_ID: ["Corps", "Frappe"]}
+    got = {c.insert for c in C.candidates_at('self:collision_shape("', context="actor",
+                                             project_names=names)}
+    assert got == {"Corps", "Frappe"}
+
+
 def test_argument_enum_reste_prioritaire_sur_le_projet():
     # Un domaine d'énumération matérielle garde ses valeurs fixes, même avec un
     # projet fourni : les deux sources ne se marchent pas dessus.

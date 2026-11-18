@@ -20,7 +20,7 @@ from scripting.api import (
     DOMAIN_UI_ELEMENT, DOMAIN_GLOBAL, REF_TYPE_TABLE,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
     DOMAIN_MUSIC_SECTION,
-    DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS, DOMAIN_BOX_TAG, DOMAIN_ANIM,
+    DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS, DOMAIN_BOX_ID, DOMAIN_BOX_TAG, DOMAIN_ANIM,
     DOMAIN_ACTOR_NAME, DOMAIN_AREA_NAME,
 )
 from core.models.settings import BUTTON_NAMES
@@ -81,6 +81,16 @@ def anim_names_of_script(project, path) -> list[str]:
     for owner in actors_and_prefabs_of_script(project, path):
         for _comp, sprite in owner_appearances(project, owner):
             names += [st.name for st in sprite.states if st.name not in names]
+    return names
+
+
+def collision_shape_ids_of_script(project, path) -> list[str]:
+    """Ids de formes proposés pour les acteurs et prefabs qui portent ce script."""
+    from core.models.components import CollisionShapeComponent
+    names: list[str] = []
+    for owner in actors_and_prefabs_of_script(project, path):
+        names += [c.id for c in owner.components
+                  if isinstance(c, CollisionShapeComponent) and c.id not in names]
     return names
 
 
