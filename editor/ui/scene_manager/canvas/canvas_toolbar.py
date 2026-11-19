@@ -27,16 +27,10 @@ class FloatingToolbar(QFrame):
         select    — Sélection / déplacement d'actors   (S)
         add       — Ajouter un actor ou une Area au clic (A, dropdown)
         erase     — Supprimer un actor au clic         (E)
-        collision — Édition de collisions (dropdown)   (C)
-        palette   — Éditeur de palette couleurs        (P)
-
-    Le bouton collision ouvre un dropdown avec 3 modes :
-        collision_8    — Pinceau  8×8 px
-        collision_16   — Pinceau 16×16 px
-        collision_slope— Slope (triangle)
+        inpaint   — Peinture de la surface choisie (B, C pour Collision)
     """
 
-    tool_changed = pyqtSignal(str)  # ex. "select", "collision_8", "collision_slope"…
+    tool_changed = pyqtSignal(str)  # ex. "select", "paint_brush", "paint_fill"…
 
     # Outils principaux — (id, icon_key, titre, description) — le raccourci est `canvas.<icon_key>`
     _MAIN_TOOLS = [
@@ -52,68 +46,18 @@ class FloatingToolbar(QFrame):
         ("add_area", "area", 'cvtool.add_area', 'cvtool.add_area_tip'),
     ]
 
-    # Sous-outils collision — (id, icon_key, label, tooltip)
-    _COLLISION_MODES = [
-        (
-            "collision_8",
-            "tool_collision_8",
-            'cvtool.8_8_px_brush',
-            'cvtool.collision_brush_8_8_px',
-        ),
-        (
-            "collision_16",
-            "tool_collision_16",
-            'cvtool.16_16_px_brush',
-            'cvtool.collision_brush_16_16_px',
-        ),
-        (
-            "collision_slope",
-            "tool_collision_slope",
-            'cvtool.floor_slope',
-            'cvtool.floor_slope_triangle_bresenham',
-        ),
-        (
-            "collision_slope_inv",
-            "tool_collision_slope_inv",
-            'cvtool.ceiling_slope',
-            'cvtool.ceiling_slope_tip',
-        ),
-        (
-            "collision_oneway_up",
-            "tool_collision_oneway_up",
-            'cvtool.oneway_up',
-            'cvtool.oneway_up_tip',
-        ),
-        (
-            "collision_oneway_down",
-            "tool_collision_oneway_down",
-            'cvtool.oneway_down',
-            'cvtool.oneway_down_tip',
-        ),
-        (
-            "collision_oneway_left",
-            "tool_collision_oneway_left",
-            'cvtool.oneway_left',
-            'cvtool.oneway_left_tip',
-        ),
-        (
-            "collision_oneway_right",
-            "tool_collision_oneway_right",
-            'cvtool.oneway_right',
-            'cvtool.oneway_right_tip',
-        ),
-    ]
-
     # Sous-outils inpainting de scène — (id, icon_key, label, tooltip)
-    _INPAINT_MODES = [
-        ("inpaint_brush", "tool_inpaint_brush", 'cvtool.brush',
-         'cvtool.inpaint_brush_tip'),
-        ("inpaint_rect", "tool_inpaint_rect", 'cvtool.rectangle',
-         'cvtool.inpaint_rect_tip'),
+    _PAINT_MODES = [
+        ("paint_brush", "tool_tile_brush", 'cvtool.brush',
+         'cvtool.paint_brush_tip'),
+        ("paint_rect", "tool_inpaint_rect", 'cvtool.rectangle',
+         'cvtool.paint_rect_tip'),
+        ("paint_fill", "tool_fill", 'bginp.fill', 'cvtool.paint_fill_tip'),
     ]
-    _INPAINT_ICON_KEYS = {
-        "inpaint_brush": "tool_inpaint_brush",
-        "inpaint_rect": "tool_inpaint_rect",
+    _PAINT_ICON_KEYS = {
+        "paint_brush": "tool_tile_brush",
+        "paint_rect": "tool_inpaint_rect",
+        "paint_fill": "tool_fill",
     }
 
     # Sous-outils UI — (id, icon_key, label, tooltip). Un seul bouton, le type
@@ -145,8 +89,7 @@ class FloatingToolbar(QFrame):
         self._drag_offset = QPoint()
         self._current_tool = "select"
         self._current_add = "add"
-        self._current_collision = "collision_8"
-        self._current_inpaint = "inpaint_brush"
+        self._current_paint = "paint_brush"
         self._current_ui = "ui_text"
 
         self.setFixedWidth(46)
@@ -204,41 +147,23 @@ class FloatingToolbar(QFrame):
             layout.addWidget(btn, 0, Qt.AlignmentFlag.AlignHCenter)
             self._btns[tool_id] = btn
 
-        # ── Bouton collision avec dropdown ────────────────────────
-        self._btn_collision = QToolButton()
-        # Icône « mur » partagée avec le toggle « Collisions scène » de la
-        # toolbar haute : une seule identité visuelle pour la collision. Le
-        # sous-mode actif (8/16/slope) se choisit dans le menu déroulant.
-        self._btn_collision.setIcon(_ico("view_collision", COLOR_DEFAULT, COLOR_ACTIVE))
-        self._btn_collision.setIconSize(QSize(24, 24))
-        self._btn_collision.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self._btn_collision.setToolTip(tooltip(
-            title=label('cvtool.collision_editing'), shortcut=get_keybindings().resolve("canvas.tool_collision"),
-            body=label('cvtool.collision_editing_tip'),
-        ))
-        self._btn_collision.setCheckable(True)
-        self._btn_collision.setFixedSize(36, 36)
-        self._btn_collision.clicked.connect(self._on_collision_click)
-        layout.addWidget(self._btn_collision, 0, Qt.AlignmentFlag.AlignHCenter)
-        self._btns["collision"] = self._btn_collision
-
-        # ── Bouton peinture palette BG avec dropdown ──────────────
-        self._btn_inpaint = QToolButton()
-        self._btn_inpaint.setIcon(
-            _ico(self._INPAINT_ICON_KEYS[self._current_inpaint],
+        # ── Bouton de peinture de surface avec dropdown ───────────
+        self._btn_paint = QToolButton()
+        self._btn_paint.setIcon(
+            _ico(self._PAINT_ICON_KEYS[self._current_paint],
                  COLOR_DEFAULT, COLOR_ACTIVE)
         )
-        self._btn_inpaint.setIconSize(QSize(24, 24))
-        self._btn_inpaint.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self._btn_inpaint.setToolTip(tooltip(
-            title=label('cvtool.scene_inpainting'), shortcut=get_keybindings().resolve("canvas.tool_inpaint"),
-            body=label('cvtool.scene_inpainting_tip'),
+        self._btn_paint.setIconSize(QSize(24, 24))
+        self._btn_paint.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self._btn_paint.setToolTip(tooltip(
+            title=label('cvtool.surface_painting'), shortcut=get_keybindings().resolve("canvas.tool_inpaint"),
+            body=label('cvtool.surface_painting_tip'),
         ))
-        self._btn_inpaint.setCheckable(True)
-        self._btn_inpaint.setFixedSize(36, 36)
-        self._btn_inpaint.clicked.connect(self._on_inpaint_click)
-        layout.addWidget(self._btn_inpaint, 0, Qt.AlignmentFlag.AlignHCenter)
-        self._btns["inpaint_btn"] = self._btn_inpaint
+        self._btn_paint.setCheckable(True)
+        self._btn_paint.setFixedSize(36, 36)
+        self._btn_paint.clicked.connect(self._on_paint_click)
+        layout.addWidget(self._btn_paint, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._btns["paint_btn"] = self._btn_paint
 
         # ── Séparateur + outil palette ────────────────────────────
         sep2 = QFrame()
@@ -303,60 +228,13 @@ class FloatingToolbar(QFrame):
         self._current_add = mode
         self._set_tool(mode)
 
-    # ── Collision dropdown ────────────────────────────────────────
-
-    def _on_collision_click(self):
-        self._show_collision_menu()
-
-    def _show_collision_menu(self):
-        from PyQt6.QtGui import QAction
-        from PyQt6.QtWidgets import QMenu
-
-        menu = QMenu(self)
-        menu.setFont(QFont(T.UI, T.MD))
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background: {C.BG_RAISED};
-                color: {C.TEXT_NORM};
-                border: 1px solid {C.SPLITTER};
-                border-radius: 4px;
-                padding: 4px;
-            }}
-            QMenu::item {{ padding: 5px 14px 5px 8px; border-radius: 3px; icon-size: 20px; }}
-            QMenu::item:selected {{ background: {C.BG_SEL}; color: {C.ACCENT}; }}
-            QMenu::item:checked  {{ color: {C.ACCENT}; }}
-        """)
-
-        from ui.common.icons import COLOR_DEFAULT
-        from ui.common.icons import get as _ico
-
-        for mode_id, icon_key, lbl_key, tip in self._COLLISION_MODES:
-            act = QAction(label(lbl_key), self)
-            act.setIcon(_ico(icon_key, COLOR_DEFAULT))
-            act.setToolTip(tooltip(title=label(lbl_key), body=label(tip)))
-            act.setCheckable(True)
-            act.setChecked(self._current_collision == mode_id)
-            act.triggered.connect(lambda _, m=mode_id: self._select_collision_mode(m))
-            menu.addAction(act)
-
-        # Positionner le menu à droite du bouton
-        btn_pos = self._btn_collision.mapToGlobal(
-            QPoint(self._btn_collision.width() + 4, 0)
-        )
-        self._exec_menu(menu, btn_pos, self._btn_collision)
-
-    def _select_collision_mode(self, mode: str):
-        # Le bouton garde l'icône « mur » (identité collision partagée) ; le
-        # sous-mode choisi est indiqué par la coche du menu déroulant.
-        self._current_collision = mode
-        self._set_tool(mode)
-
+    # ── Peinture de surface dropdown ──────────────────────────────
     # ── Peinture palette BG dropdown ──────────────────────────────
 
-    def _on_inpaint_click(self):
-        self._show_inpaint_menu()
+    def _on_paint_click(self):
+        self._show_paint_menu()
 
-    def _show_inpaint_menu(self):
+    def _show_paint_menu(self):
         from PyQt6.QtGui import QAction
         from PyQt6.QtWidgets import QMenu
 
@@ -372,29 +250,33 @@ class FloatingToolbar(QFrame):
         from ui.common.icons import COLOR_DEFAULT
         from ui.common.icons import get as _ico
 
-        for mode_id, icon_key, lbl_key, tip in self._INPAINT_MODES:
+        for mode_id, icon_key, lbl_key, tip in self._PAINT_MODES:
             act = QAction(label(lbl_key), self)
             act.setIcon(_ico(icon_key, COLOR_DEFAULT))
             act.setToolTip(tooltip(title=label(lbl_key), body=label(tip)))
             act.setCheckable(True)
-            act.setChecked(self._current_inpaint == mode_id)
-            act.triggered.connect(lambda _, m=mode_id: self._select_inpaint_mode(m))
+            act.setChecked(self._current_paint == mode_id)
+            act.triggered.connect(lambda _, m=mode_id: self._select_paint_mode(m))
             menu.addAction(act)
 
-        btn_pos = self._btn_inpaint.mapToGlobal(
-            QPoint(self._btn_inpaint.width() + 4, 0)
+        btn_pos = self._btn_paint.mapToGlobal(
+            QPoint(self._btn_paint.width() + 4, 0)
         )
-        self._exec_menu(menu, btn_pos, self._btn_inpaint)
+        self._exec_menu(menu, btn_pos, self._btn_paint)
 
-    def _select_inpaint_mode(self, mode: str):
-        self._current_inpaint = mode
+    def _select_paint_mode(self, mode: str):
+        self._current_paint = mode
         from ui.common.icons import COLOR_ACTIVE, COLOR_DEFAULT
         from ui.common.icons import get as _ico
 
-        self._btn_inpaint.setIcon(
-            _ico(self._INPAINT_ICON_KEYS[mode], COLOR_DEFAULT, COLOR_ACTIVE)
+        self._btn_paint.setIcon(
+            _ico(self._PAINT_ICON_KEYS[mode], COLOR_DEFAULT, COLOR_ACTIVE)
         )
         self._set_tool(mode)
+
+    def activate_paint_gesture(self, mode: str):
+        if mode in self._PAINT_ICON_KEYS:
+            self._select_paint_mode(mode)
 
     # ── Widgets d'interface dropdown ──────────────────────────────
 
@@ -462,8 +344,7 @@ class FloatingToolbar(QFrame):
             btn.setChecked(
                 tid == tool
                 or (tid == "add" and tool == "add_area")
-                or (tid == "collision" and tool.startswith("collision"))
-                or (tid == "inpaint_btn" and tool.startswith("inpaint"))
+                or (tid == "paint_btn" and tool.startswith("paint_"))
                 or (tid == "ui_btn" and tool.startswith("ui_"))
             )
 
@@ -481,15 +362,15 @@ class FloatingToolbar(QFrame):
         return self._current_tool
 
     def activate_shortcut(self, group: str):
-        """Active un outil depuis un raccourci clavier. Pour 'collision' /
-        'inpaint', reprend le dernier sous-mode utilisé (comme un clic ré-active
+        """Active un outil depuis un raccourci clavier. Pour la peinture,
+        reprend le dernier geste utilisé (comme un clic ré-active
         le mode courant). Passe par _set_tool → boutons + signal synchronisés."""
         if group == "add":
             self._set_tool(self._current_add)
         elif group == "collision":
-            self._set_tool(self._current_collision)
-        elif group == "inpaint":
-            self._set_tool(self._current_inpaint)
+            self._set_tool(self._current_paint)
+        elif group == "paint":
+            self._set_tool(self._current_paint)
         elif group == "ui":
             self._set_tool(self._current_ui)
         else:

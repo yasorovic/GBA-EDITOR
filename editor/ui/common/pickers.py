@@ -72,7 +72,6 @@ def attached_script_slot(
     open_file: Callable[[str], None],
     template: str,
     add_label: str,
-    new_title: str,
     hint: str = "",
     parent=None,
 ) -> PickerSlot:
@@ -86,7 +85,6 @@ def attached_script_slot(
     La valeur du slot est le chemin relatif du script. L'appelant range la valeur (`on_assigned(chemin)`,
     `on_cleared()`) et repose le slot depuis son modèle (`set_value`). `project` est lu au moment du geste."""
     from pathlib import Path
-    from PyQt6.QtWidgets import QInputDialog
 
     def entries():
         proj = project()
@@ -104,19 +102,21 @@ def attached_script_slot(
             return PickerEntry(label('pick.name_missing', name=name), rel, missing=True)
         return PickerEntry(name, rel)
 
-    def _create():
+    def _create(name: str):
         proj = project()
         if proj is None:
             return
-        name, ok = QInputDialog.getText(parent, new_title, label("common.name_without_lua"))
-        if not ok or not name.strip():
+        name = name.strip()
+        if name.lower().endswith(".lua"):
+            name = name[:-4].rstrip()
+        if not name:
             return
         from core import asset_creation
         from core.command_dispatcher import get_dispatcher
         from core.history import RefreshAfterCmd, get_history
         from ui.common.import_folder import import_folder
         folder = import_folder(proj)
-        gesture = asset_creation.create_blank(proj, "script", folder, name=name.strip(), template=template)
+        gesture = asset_creation.create_blank(proj, "script", folder, name=name, template=template)
         get_history().push(RefreshAfterCmd(gesture.command, get_dispatcher().notify_disk_changed))
         path = folder / f"{gesture.names[0]}.lua"
         slot.pick(proj.asset_rel(path))
@@ -141,7 +141,8 @@ def attached_script_slot(
 
     slot = PickerSlot(add_label, icons.COLOR_SCRIPT, entries, describe, on_assigned,
                       on_cleared=on_cleared, on_open=_open,
-                      new_label=label('wdg.new_script'), on_new=_create, hint=hint, parent=parent)
+                      new_label=label('pick.create_script_named', name='{name}'),
+                      on_new=_create, create_named=True, hint=hint, parent=parent)
     slot.accept_drops(_dropped)
     return slot
 

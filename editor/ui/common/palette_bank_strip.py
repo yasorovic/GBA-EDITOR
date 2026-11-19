@@ -22,7 +22,9 @@ from ui.common.palette_swatch import swatch_icon
 class PaletteBankStrip(QFrame):
     """Bandeau flottant : pastilles de palettes. Clic = sélection active.
 
-    `load(entries, active)` accepte `entries: list[(id, label, colors)]`.
+    `load(entries, active, icons)` accepte `entries: list[(id, label, colors)]`.
+    `icons` permet à une valeur métier de garder son pictogramme au lieu
+    d'être réduite à un nuancier.
     La sélection précédente est retrouvée par CONTENU de palette (pas par
     `id`) au rechargement suivant : un `id` peut désigner une palette
     différente après insertion/suppression dans la liste du consommateur
@@ -76,11 +78,17 @@ class PaletteBankStrip(QFrame):
         self._layout.activate()
         self.adjustSize()
 
-    def load(self, entries: list, active=None):
+    def load(self, entries: list, active=None, icons: dict | None = None,
+             match_colors: bool = True, value_entries: bool = False):
         """`entries` : list[(id, label, colors)]. `active` : repli si aucune
         palette précédemment active n'est retrouvée par contenu (ni au premier
-        chargement) — sinon la 1re entrée."""
-        prev_colors = self._colors.get(self._active) if self._active is not None else None
+        chargement) — sinon la 1re entrée. `match_colors=False` convient aux
+        valeurs métier dont l'identité est l'id, même si leurs couleurs se
+        répètent. `value_entries=True` remplace le vocabulaire de palette par
+        celui d'une valeur peinte dans les infobulles."""
+        icons = icons or {}
+        prev_colors = (self._colors.get(self._active)
+                       if match_colors and self._active is not None else None)
         for b in self._btns.values():
             b.setParent(None)
             b.deleteLater()
@@ -100,11 +108,13 @@ class PaletteBankStrip(QFrame):
         for id_, entry_label, colors in entries:
             btn = QToolButton()
             btn.setCheckable(True)
-            btn.setIcon(swatch_icon(list(colors), self._ICON))
+            btn.setIcon(icons.get(id_) or swatch_icon(list(colors), self._ICON))
             btn.setIconSize(QSize(self._ICON, self._ICON))
             btn.setFixedSize(30, 30)
-            btn.setToolTip(tooltip(
-                title=label("palstrip.select_title", name=entry_label)))
+            title = (label("palstrip.select_value_title", name=entry_label)
+                     if value_entries
+                     else label("palstrip.select_title", name=entry_label))
+            btn.setToolTip(tooltip(title=title))
             btn.setChecked(id_ == self._active)
             btn.clicked.connect(lambda _c=False, i=id_: self._select(i))
             self._layout.addWidget(btn)

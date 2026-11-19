@@ -120,6 +120,32 @@ class Grid:
         while len(self.cells) < rows:
             self.cells.append([GRID_VALUE_EMPTY] * cols)
 
+    def cells_at_step(self, width_px: int, height_px: int, step: int) -> list[list[int]]:
+        """Rééchantillonne la grille dans le même espace monde.
+
+        Chaque nouvelle case lit l'ancienne case qui contient son centre. Le
+        passage vers une maille plus fine duplique donc les régions peintes ;
+        vers une maille plus grosse, il choisit un échantillon prévisible. La
+        commande d'interface garde les deux états pour rendre ce choix
+        intégralement annulable.
+        """
+        step = step if step in GRID_STEPS else GRID_STEP_DEFAULT
+        width_px = max(width_px, self.cols * self.step)
+        height_px = max(height_px, self.rows * self.step)
+        cells = make_cells(width_px, height_px, step)
+        if not self.cells:
+            return cells
+        for row in range(len(cells)):
+            old_row = min(self.rows - 1, (row * step + step // 2) // self.step)
+            source = self.cells[old_row]
+            if not source:
+                continue
+            for col in range(len(cells[row])):
+                old_col = min(len(source) - 1,
+                              (col * step + step // 2) // self.step)
+                cells[row][col] = source[old_col]
+        return cells
+
     def to_dict(self) -> dict:
         return {
             "name": self.name,

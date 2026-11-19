@@ -47,7 +47,6 @@ class ScriptEditor(BaseComponentEditor):
             open_file   = self._open_file,
             template    = "actor",
             add_label   = label("comped.script_add"),
-            new_title   = label("comped.new_script_title"),
             hint        = label("comped.script_hint"),
             parent      = self.insp,
         )

@@ -307,16 +307,27 @@ class ScriptEditorScreen(QWidget):
                 name=self._path.name if self._path else "?"))
 
     def _reload_from_disk(self):
+        """Relit le fichier quand un AUTRE outil l'a changé.
+
+        La surveillance ne distingue pas l'écriture d'un tiers de la nôtre :
+        chaque Ctrl+S déclenchait donc une relecture, et relire remplace le
+        document, ce qui ramenait la vue sur le curseur. Comparer au disque
+        suffit à écarter notre propre écriture, et un vrai rechargement
+        conserve le défilement : rien ne se recadre tout seul."""
         if not self._path or not self._path.exists():
             return
         source = self._path.read_text(encoding="utf-8")
+        if source == self._editor.toPlainText():
+            return
         pos = self._editor.textCursor().position()
+        defilement = self._editor.verticalScrollBar().value()
         self._editor.blockSignals(True)
         self._editor.setPlainText(source)
         self._editor.blockSignals(False)
         cur = self._editor.textCursor()
         cur.setPosition(min(pos, len(source)))
         self._editor.setTextCursor(cur)
+        self._editor.verticalScrollBar().setValue(defilement)
         self._title_lbl.setText(f"↻ {self._path.name}")
         self._dirty = False
         self._save_btn.setEnabled(False)

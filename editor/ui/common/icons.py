@@ -61,12 +61,11 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "tool_add":              ("mdi.plus-circle-outline",     "⊕"),
     "tool_erase":            ("mdi.eraser-variant",          "⌫"),
     "tool_collision_8":      ("mdi.border-outside",          "▪"),
-    "tool_collision_16":     ("mdi.border-all",              "■"),
     "tool_collision_slope":      ("mdi.trending-up",             "◥"),
     "tool_collision_slope_inv":  ("mdi.trending-down",           "◣"),
-    "tool_collision_oneway_up": ("mdi.arrow-collapse-up", "↑"),
-    "tool_collision_oneway_down": ("mdi.arrow-collapse-down", "↓"),
-    "tool_collision_oneway_left": ("mdi.arrow-collapse-left", "←"),
+    "tool_collision_oneway_up":    ("mdi.arrow-collapse-up",    "↑"),
+    "tool_collision_oneway_down":  ("mdi.arrow-collapse-down",  "↓"),
+    "tool_collision_oneway_left":  ("mdi.arrow-collapse-left",  "←"),
     "tool_collision_oneway_right": ("mdi.arrow-collapse-right", "→"),
     "tool_palette":          ("mdi.palette-outline",         "◐"),
     # Zone de texte : un rectangle qui contient du texte — l'outil délimite une
@@ -371,12 +370,7 @@ def toolbar_icon(name: str, color: str = COLOR_DEFAULT,
 
 
 def _inpaint_brush_icon(color: str, color_active: str | None = None) -> QIcon:
-    """Image + pinceau superposés : l'inpainting recolore une image existante.
-
-    `qtawesome` ne garantit pas la composition de deux glyphes entre ses
-    versions ; la petite composition locale garde donc exactement cette forme
-    dans toutes les installations de l'éditeur.
-    """
+    """Image + pinceau superposés pour l'éditeur d'arrière-plan."""
     if _qta is None:
         return QIcon()
     size = 64

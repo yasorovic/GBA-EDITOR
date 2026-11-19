@@ -79,6 +79,34 @@ def test_scene_library_reste_accessible_sans_scene_active(qapp):
     assert panel._context_tabs.currentIndex() == 2
 
 
+def test_content_montre_la_collision_et_les_grilles_de_la_scene(qapp, tmp_path):
+    from PyQt6.QtWidgets import QTreeWidgetItemIterator
+    from core.models.grid import Grid
+    from ui.scene_manager.scene_tree_panel import (
+        SceneTreePanel, T_COLLISION, T_GRID, _ROLE_TYPE,
+    )
+
+    project = Project.create(tmp_path / "Game", "Game")
+    project.active_scene.grids.append(Grid(name="Terrain", step=16))
+    panel = SceneTreePanel()
+    panel.load_project(project)
+
+    iterator = QTreeWidgetItemIterator(panel._tree)
+    by_type = {T_COLLISION: [], T_GRID: []}
+    while iterator.value():
+        item = iterator.value()
+        if item.data(0, _ROLE_TYPE) in by_type:
+            by_type[item.data(0, _ROLE_TYPE)].append(item)
+        iterator += 1
+
+    grids = by_type[T_GRID]
+    assert [item.text(0) for item in grids] == ["Terrain"]
+    assert "data.grid.Terrain" in grids[0].toolTip(0)
+    collision = by_type[T_COLLISION]
+    assert len(collision) == 1
+    assert "collision.tile_at" in collision[0].toolTip(0)
+
+
 def test_onglets_etroits_tronquent_les_noms_sans_boutons_de_defilement(qapp):
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QToolButton

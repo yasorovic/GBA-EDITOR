@@ -1,11 +1,18 @@
-"""Le pinceau de collision : trait continu, pinceau 16 aligné sur sa grille, un coup de pinceau = une entrée d'historique."""
+"""La surface Collision passe par les gestes communs ; la pente garde son geste propre."""
 from __future__ import annotations
 
 from PyQt6.QtCore import QPointF, Qt
 
 from core.history import get_history
-from core.models.collision_tiles import TILE_EMPTY, TILE_SOLID
-from ui.scene_manager.canvas_tools import CollisionTool
+from core.models.collision_tiles import (
+    TILE_EMPTY,
+    TILE_ONEWAY_LEFT,
+    TILE_ONEWAY_UP,
+    TILE_SLOPE_L,
+    TILE_SOLID,
+)
+from ui.scene_manager.canvas_tools import CollisionSlopeTool, GridPaintTool
+from ui.scene_manager.grid_paint_surface import GridPaintSurface
 
 
 class _Overlay:
@@ -24,8 +31,11 @@ class _Overlay:
     def set_preview(self, _tiles):
         pass
 
-    def set_hover(self, _hover):
+    def update(self):
         pass
+
+    def get_map(self):
+        return [[self.tile_at(col, row) for col in range(16)] for row in range(4)]
 
 
 class _Signal:
@@ -50,26 +60,22 @@ class _Event:
         return self._held
 
 
+def _surface(view):
+    overlay = view.collision_overlay
+    return GridPaintSurface("Collision", 8, changed=overlay.update,
+                            read=overlay.tile_at, write=overlay.set_tile)
+
+
 def _solid(view):
     return {cell for cell, tile in view.collision_overlay.tiles.items() if tile == TILE_SOLID}
 
 
-def test_le_pinceau_16_se_pose_sur_la_grille_de_16(qapp):
-    view = _View()
-    tool = CollisionTool(view, "collision_16")
-
-    tool.on_press(QPointF(8 * 3 + 1, 8 * 5 + 1), _Event())
-    tool.on_release(QPointF(8 * 3 + 1, 8 * 5 + 1), _Event())
-
-    assert _solid(view) == {(2, 4), (3, 4), (2, 5), (3, 5)}
-
-
 def test_un_glisser_rapide_ne_laisse_pas_de_trou(qapp):
     view = _View()
-    tool = CollisionTool(view, "collision_8")
+    tool = GridPaintTool(view, _surface(view), "brush", TILE_SOLID, None)
 
     tool.on_press(QPointF(1, 1), _Event())
-    tool.on_move(QPointF(8 * 10 + 1, 1), _Event())        # un seul événement qui saute dix tuiles
+    tool.on_move(QPointF(8 * 10 + 1, 1), _Event())
     tool.on_release(QPointF(8 * 10 + 1, 1), _Event())
 
     assert _solid(view) == {(col, 0) for col in range(11)}
@@ -77,20 +83,20 @@ def test_un_glisser_rapide_ne_laisse_pas_de_trou(qapp):
 
 def test_un_coup_de_pinceau_est_une_entree_d_historique_qui_s_annule_seule(qapp):
     view = _View()
-    tool = CollisionTool(view, "collision_8")
+    tool = GridPaintTool(view, _surface(view), "brush", TILE_SOLID, None)
     history = get_history()
     history.clear()
 
     for strokes in range(16):
         tool.on_press(QPointF(8 * strokes + 1, 1), _Event())
         tool.on_release(QPointF(8 * strokes + 1, 1), _Event())
-    assert len(_solid(view)) == 16
 
+    assert len(_solid(view)) == 16
     undone = 0
     while history.undo():
         undone += 1
-
-    assert undone == 16 and _solid(view) == set()
+    assert undone == 16
+    assert _solid(view) == set()
     history.clear()
 
 
@@ -100,7 +106,6 @@ def test_effacer_toute_la_collision_est_une_entree_d_historique_qui_la_rend(qapp
 
     view = _View()
     overlay = view.collision_overlay
-    overlay.get_map = lambda: [[overlay.tile_at(col, row) for col in range(6)] for row in range(4)]
     for cell in ((0, 0), (3, 1), (5, 3)):
         overlay.set_tile(*cell, TILE_SOLID)
     saved = []
@@ -117,18 +122,34 @@ def test_effacer_toute_la_collision_est_une_entree_d_historique_qui_la_rend(qapp
     history.clear()
 
 
-def test_un_pinceau_a_sens_unique_pose_sa_tuile_et_le_clic_droit_l_efface(qapp):
-    from core.models.collision_tiles import TILE_ONEWAY_LEFT, TILE_ONEWAY_UP
-
-    for mode, tuile in (("collision_oneway_up", TILE_ONEWAY_UP), ("collision_oneway_left", TILE_ONEWAY_LEFT)):
+def test_une_face_a_sens_unique_est_une_valeur_du_pinceau_commun(qapp):
+    for tile in (TILE_ONEWAY_UP, TILE_ONEWAY_LEFT):
         view = _View()
-        tool = CollisionTool(view, mode)
+        tool = GridPaintTool(view, _surface(view), "brush", tile, None)
         tool.on_press(QPointF(12, 4), _Event())
         tool.on_move(QPointF(28, 4), _Event())
         tool.on_release(QPointF(28, 4), _Event())
-        assert {c: t for c, t in view.collision_overlay.tiles.items()} == {(1, 0): tuile, (2, 0): tuile, (3, 0): tuile}
+
+        assert {cell: value for cell, value in view.collision_overlay.tiles.items()} == {
+            (1, 0): tile, (2, 0): tile, (3, 0): tile,
+        }
 
         erase = Qt.MouseButton.RightButton
         tool.on_press(QPointF(12, 4), _Event(erase, erase))
         tool.on_release(QPointF(12, 4), _Event(erase, erase))
         assert view.collision_overlay.tile_at(1, 0) == TILE_EMPTY
+
+
+def test_le_trait_de_pente_reste_un_geste_propre_a_la_collision(qapp):
+    view = _View()
+    tool = CollisionSlopeTool(view, "collision_slope")
+
+    tool.on_press(QPointF(1, 2 * 8 + 1), _Event())
+    tool.on_move(QPointF(2 * 8 + 1, 1), _Event())
+    tool.on_release(QPointF(2 * 8 + 1, 1), _Event())
+
+    assert view.collision_overlay.tiles == {
+        (0, 2): TILE_SLOPE_L,
+        (1, 1): TILE_SLOPE_L,
+        (2, 0): TILE_SLOPE_L,
+    }

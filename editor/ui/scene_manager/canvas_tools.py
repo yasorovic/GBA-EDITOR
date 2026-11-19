@@ -18,19 +18,8 @@ from core.models.unique_name import unique_name
 from abc import ABC
 from typing import TYPE_CHECKING, Optional
 
-from core.models.collision_tiles import (
-    TILE_EMPTY, TILE_ONEWAY_DOWN, TILE_ONEWAY_LEFT, TILE_ONEWAY_RIGHT,
-    TILE_ONEWAY_UP, TILE_SOLID,
-)
-
-# Un mode de pinceau à sens unique = une tuile : le nom du mode dit la normale.
-_ONEWAY_BRUSHES = {
-    "collision_oneway_up": TILE_ONEWAY_UP,
-    "collision_oneway_down": TILE_ONEWAY_DOWN,
-    "collision_oneway_left": TILE_ONEWAY_LEFT,
-    "collision_oneway_right": TILE_ONEWAY_RIGHT,
-}
-from core.collision_slopes import SLOPE_MODES, slope_tiles_for
+from core.models.collision_tiles import TILE_EMPTY
+from core.collision_slopes import slope_tiles_for
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QBrush, QColor, QPen
 from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsView
@@ -232,156 +221,123 @@ class EraseTool(BaseTool):
 #  Collision — pinceau 8px, 16px, slope sol, slope plafond (inversé)
 # ──────────────────────────────────────────────────────────────────
 
-class CollisionTool(BaseTool):
-    """
-    mode : "collision_8" | "collision_16" | "collision_slope" | "collision_slope_inv"
-           | "collision_oneway_up" | "..._down" | "..._left" | "..._right"
+class CollisionSlopeTool(BaseTool):
+    """Trait de pente de la surface Collision.
 
-    Clic gauche = peindre / appliquer.
-    Clic droit = effacer (TILE_EMPTY).
+    Le mode choisit le côté plein (sol ou plafond). Les autres gestes passent
+    par GridPaintTool, comme pour une grille ou un fond.
     """
 
     def __init__(self, view: GBAView, mode: str):
         super().__init__(view)
         self._mode = mode
-        self._paint_mode: bool = True  # True=peindre, False=effacer
-        self._slope_start: Optional[tuple[int, int]] = None
-        self._dirty = False
-        self._stroke_delta: dict[tuple[int, int], tuple[int, int]] = {}
-        self._last_cell: Optional[tuple[int, int]] = None   # dernière cellule du trait en cours, pour relier deux événements
-
-    # ── Cycle de vie ─────────────────────────────────────────────
+        self._paint = True
+        self._start: Optional[tuple[int, int]] = None
 
     def activate(self):
         self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
         self._view.setCursor(Qt.CursorShape.CrossCursor)
-        ov = self._view.collision_overlay
-        if ov:
-            ov.setVisible(True)
+        if self._view.collision_overlay:
+            self._view.collision_overlay.setVisible(True)
 
     def deactivate(self):
         self._view.unsetCursor()
-        ov = self._view.collision_overlay
-        if ov:
-            ov.set_preview(None)
-            ov.set_hover(None)
-            sc = self._view.scene()
-            keep_visible = (getattr(sc, "_collision_view", False) or getattr(sc, "_collision_index_view", False)
-                            or getattr(sc, "_collision_normals_view", False))
-            if not keep_visible:
-                ov.setVisible(False)
-
-    # ── Événements ───────────────────────────────────────────────
+        overlay = self._view.collision_overlay
+        if not overlay:
+            return
+        overlay.set_preview(None)
+        scene = self._view.scene()
+        if not (getattr(scene, "_collision_view", False)
+                or getattr(scene, "_collision_index_view", False)
+                or getattr(scene, "_collision_normals_view", False)):
+            overlay.setVisible(False)
 
     def on_press(self, pos: QPointF, e) -> bool:
-        self._stroke_delta = {}
-        self._last_cell = None
-        self._paint_mode = e.button() == Qt.MouseButton.LeftButton
-        ov = self._view.collision_overlay
-        if not ov:
+        overlay = self._view.collision_overlay
+        if not overlay:
             return True
-        self._update_hover(pos)
-        if self._mode in SLOPE_MODES:
-            col, row = ov.scene_to_tile(pos.x(), pos.y())
-            self._slope_start = (col, row)
-            if self._paint_mode:
-                ov.set_preview(self._slope_tiles_for(col, row, col, row))
-        elif self._mode == "collision_8":
-            self._paint_brush(pos, 1)
-            self._dirty = True
-        elif self._mode == "collision_16":
-            self._paint_brush(pos, 2)
-            self._dirty = True
-        elif self._mode in _ONEWAY_BRUSHES:
-            self._paint_brush(pos, 1)
-            self._dirty = True
+        self._paint = e.button() == Qt.MouseButton.LeftButton
+        self._start = overlay.scene_to_tile(pos.x(), pos.y())
+        if self._paint:
+            col, row = self._start
+            overlay.set_preview(slope_tiles_for(self._mode, col, row, col, row))
         return True
 
     def on_move(self, pos: QPointF, e) -> bool:
-        ov = self._view.collision_overlay
-        if not ov:
-            return True
-        self._update_hover(pos)
-        # Brush : seulement si le bouton correspondant est enfoncé
-        buttons = e.buttons()
-        active = (self._paint_mode and buttons & Qt.MouseButton.LeftButton) or (
-            not self._paint_mode and buttons & Qt.MouseButton.RightButton
-        )
-        if self._mode == "collision_8" and active:
-            self._paint_brush(pos, 1)
-        elif self._mode == "collision_16" and active:
-            self._paint_brush(pos, 2)
-        elif self._mode in _ONEWAY_BRUSHES and active:
-            self._paint_brush(pos, 1)
-        elif self._mode in SLOPE_MODES and self._slope_start and self._paint_mode:
-            sc, sr = self._slope_start
-            ec, er = ov.scene_to_tile(pos.x(), pos.y())
-            ov.set_preview(self._slope_tiles_for(sc, sr, ec, er))
+        overlay = self._view.collision_overlay
+        if overlay and self._start and self._paint:
+            col, row = overlay.scene_to_tile(pos.x(), pos.y())
+            overlay.set_preview(slope_tiles_for(self._mode, *self._start, col, row))
         return True
 
     def on_release(self, pos: QPointF, e) -> bool:
-        ov = self._view.collision_overlay
-        if ov and self._mode in SLOPE_MODES and self._slope_start:
-            sc, sr = self._slope_start
-            ec, er = ov.scene_to_tile(pos.x(), pos.y())
-            tiles = self._slope_tiles_for(sc, sr, ec, er)
-            for col, row, t in tiles:
-                old = ov.tile_at(col, row)
-                new = t if self._paint_mode else TILE_EMPTY
-                self._stroke_delta[(col, row)] = (old, new)
-                ov.set_tile(col, row, new)
-            ov.set_preview(None)
-            self._slope_start = None
-            self._dirty = True
-
-        self._last_cell = None
-        if self._stroke_delta:
+        overlay = self._view.collision_overlay
+        if not overlay or self._start is None:
+            return True
+        col, row = overlay.scene_to_tile(pos.x(), pos.y())
+        delta = {}
+        for cell_col, cell_row, tile in slope_tiles_for(self._mode, *self._start, col, row):
+            old = overlay.tile_at(cell_col, cell_row)
+            new = tile if self._paint else TILE_EMPTY
+            if old != new:
+                delta[(cell_col, cell_row)] = (old, new)
+                overlay.set_tile(cell_col, cell_row, new)
+        overlay.set_preview(None)
+        self._start = None
+        if delta:
             from core.history import GridPaintCmd, get_history
             from ui.scene_manager.grid_paint_surface import GridPaintSurface
 
-            cmd = GridPaintCmd(
-                GridPaintSurface("Collision", 8, changed=ov.update,
-                                 read=ov.tile_at, write=ov.set_tile),
-                dict(self._stroke_delta),
-                persist_fn=lambda: self._view.collision_painted.emit(),
+            get_history().push_executed(GridPaintCmd(
+                GridPaintSurface("Collision", 8, changed=overlay.update,
+                                 read=overlay.tile_at, write=overlay.set_tile),
+                delta, persist_fn=lambda: self._view.collision_painted.emit(),
                 label="Peinture collision",
-            )
-            get_history().push_executed(cmd)
-            self._stroke_delta = {}
-
-        if self._dirty:
+            ))
             self._view.collision_painted.emit()
-            self._dirty = False
         return True
+_BG_TILE = 8
 
-    def on_leave(self):
-        ov = self._view.collision_overlay
-        if ov:
-            ov.set_hover(None)
 
-    # ── Logique interne ───────────────────────────────────────────
+class GridPaintTool(BaseTool):
+    """Pinceau, rectangle ou remplissage d'une surface de valeurs."""
 
-    def _update_hover(self, scene_pos: QPointF):
-        """Surligne la tuile (ou le bloc 2×2) que le pinceau va couvrir. Une pente
-        en cours de tracé a déjà son aperçu : la surbrillance s'efface alors."""
-        ov = self._view.collision_overlay
-        if not ov:
-            return
-        if self._mode in SLOPE_MODES and self._slope_start:
-            ov.set_hover(None)
-            return
-        size = 2 if self._mode == "collision_16" else 1
-        col, row = self._brush_origin(*ov.scene_to_tile(scene_pos.x(), scene_pos.y()), size)
-        ov.set_hover((col, row, size, size))
+    def __init__(self, view: GBAView, surface, mode: str, value: int, persist):
+        super().__init__(view)
+        self._surface, self._mode, self._value, self._persist = surface, mode, value, persist
+        self._erase = False
+        self._anchor = None
+        self._delta = {}
+        self._last_cell = None
+        self._preview = None
 
-    @staticmethod
-    def _brush_origin(col: int, row: int, brush_tiles: int) -> tuple[int, int]:
-        """Le pinceau de 16 px se pose sur la grille de 16 px (blocs de 2x2 tuiles), pas sur la tuile de 8 px sous le curseur."""
-        return col - col % brush_tiles, row - row % brush_tiles
+    def activate(self):
+        self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
+        self._view.setCursor(Qt.CursorShape.CrossCursor)
+        if self._mode == 'rect':
+            self._preview = QGraphicsRectItem(0, 0, 0, 0)
+            self._preview.setBrush(QBrush(QColor(120, 180, 255, 60)))
+            self._preview.setPen(QPen(QColor(120, 180, 255, 220), 0))
+            self._preview.setZValue(300)
+            self._preview.setVisible(False)
+            self._view.scene().addItem(self._preview)
+
+    def deactivate(self):
+        self._view.unsetCursor()
+        if self._preview and self._preview.scene():
+            self._preview.scene().removeItem(self._preview)
+        self._preview = None
+
+    def _paint(self, col, row, *, notify: bool = False) -> bool:
+        old = self._surface.value_at(col, row)
+        new = self._surface.empty_value if self._erase else self._value
+        if old != new and self._surface.set_value(col, row, new, notify=notify):
+            self._delta[(col, row)] = (self._delta.get((col, row), (old, new))[0], new)
+            return True
+        return False
 
     @staticmethod
     def _cells_between(start: tuple[int, int], end: tuple[int, int]):
-        """Les cellules d'un segment (Bresenham), extrémités comprises : deux événements souris éloignés ne laissent pas de trou."""
         (c0, r0), (c1, r1) = start, end
         dc, dr = abs(c1 - c0), -abs(r1 - r0)
         step_c, step_r = (1 if c0 < c1 else -1), (1 if r0 < r1 else -1)
@@ -398,148 +354,83 @@ class CollisionTool(BaseTool):
                 error += dc
                 r0 += step_r
 
-    def _paint_brush(self, scene_pos: QPointF, brush_tiles: int):
-        ov = self._view.collision_overlay
-        if not ov:
-            return
-        cell = self._brush_origin(*ov.scene_to_tile(scene_pos.x(), scene_pos.y()), brush_tiles)
-        # Le pas du trait vaut la taille du pinceau : un pinceau de 2 tuiles avance par blocs de 2.
-        start = self._last_cell if self._last_cell is not None else cell
-        self._last_cell = cell
-        step = brush_tiles
-        for col, row in self._cells_between((start[0] // step, start[1] // step), (cell[0] // step, cell[1] // step)):
-            self._paint_cell(col * step, row * step, brush_tiles)
+    def _paint_to(self, col: int, row: int):
+        start = self._last_cell if self._last_cell is not None else (col, row)
+        changed = False
+        for cell in self._cells_between(start, (col, row)):
+            changed = self._paint(*cell) or changed
+        if changed:
+            self._surface.notify_changed()
+        self._last_cell = (col, row)
 
-    def _paint_cell(self, col: int, row: int, brush_tiles: int):
-        ov = self._view.collision_overlay
-        new_type = _ONEWAY_BRUSHES.get(self._mode, TILE_SOLID) if self._paint_mode else TILE_EMPTY
-        for dr in range(brush_tiles):
-            for dc in range(brush_tiles):
-                c, r = col + dc, row + dr
-                old = ov.tile_at(c, r)
-                ov.set_tile(c, r, new_type)
-                if (c, r) not in self._stroke_delta:
-                    self._stroke_delta[(c, r)] = (old, new_type)
-                else:
-                    self._stroke_delta[(c, r)] = (
-                        self._stroke_delta[(c, r)][0],
-                        new_type,
-                    )
-
-    # ── Slope : génération de tiles ──────────────────────────────
-    # Algo (Bresenham + règles de pentes GBA) déporté dans core.collision_slopes
-    # — pure géométrie, sans dépendance UI.
-
-    def _slope_tiles_for(
-        self,
-        sc: int,
-        sr: int,
-        ec: int,
-        er: int,
-    ) -> list[tuple[int, int, int]]:
-        return slope_tiles_for(self._mode, sc, sr, ec, er)
-
-
-_BG_TILE = 8
-
-
-class SceneInpaintingTool(BaseTool):
-    """Peinture par palette d'un layer BG (réassignation SE_PALBANK par tuile).
-
-    mode : "inpaint_brush" (pinceau 8×8) | "inpaint_rect" (sélection rectangulaire).
-    Clic gauche = peindre la banque active ; clic droit = effacer l'override.
-    L'état (layer actif, banque de peinture, raster) vit dans
-    `view.inpainting_controller`.
-    """
-
-    _PREVIEW_FILL = QColor(120, 180, 255, 60)
-    _PREVIEW_BORDER = QColor(120, 180, 255, 220)
-
-    def __init__(self, view: GBAView, mode: str):
-        super().__init__(view)
-        self._mode = mode
-        self._erase = False
-        self._anchor: Optional[tuple[int, int]] = None  # (col,row) pour le rect
-        self._preview: QGraphicsRectItem | None = None
-
-    # ── Cycle de vie ─────────────────────────────────────────────
-    def activate(self):
-        self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
-        self._view.setCursor(Qt.CursorShape.CrossCursor)
-        if self._mode == "inpaint_rect":
-            self._preview = QGraphicsRectItem(0, 0, 0, 0)
-            self._preview.setBrush(QBrush(self._PREVIEW_FILL))
-            self._preview.setPen(QPen(self._PREVIEW_BORDER, 0))
-            self._preview.setZValue(60)
-            self._preview.setVisible(False)
-            self._view.scene().addItem(self._preview)
-
-    def deactivate(self):
-        self._view.unsetCursor()
-        if self._preview and self._preview.scene():
-            self._preview.scene().removeItem(self._preview)
-        self._preview = None
-
-    # ── Helpers ──────────────────────────────────────────────────
-    def _ctrl(self):
-        return getattr(self._view, "inpainting_controller", None)
-
-    @staticmethod
-    def _tile(pos: QPointF) -> tuple[int, int]:
-        return int(pos.x() // _BG_TILE), int(pos.y() // _BG_TILE)
-
-    # ── Événements ───────────────────────────────────────────────
     def on_press(self, pos: QPointF, e) -> bool:
-        ctrl = self._ctrl()
-        if not ctrl or not ctrl.ready:
-            return True  # consommé (évite le rubber band) même si rien à peindre
-        self._erase = e.button() == Qt.MouseButton.RightButton
-        ctrl.begin_stroke()
-        col, row = self._tile(pos)
-        if self._mode == "inpaint_rect":
+        self._erase, self._delta, self._last_cell = e.button() == Qt.MouseButton.RightButton, {}, None
+        col, row = self._surface.scene_to_cell(pos.x(), pos.y())
+        if self._mode == 'rect':
             self._anchor = (col, row)
             self._update_preview(col, row)
+        elif self._mode == 'fill':
+            self._fill(col, row)
         else:
-            ctrl.inpaint_tile(col, row, erase=self._erase)
+            self._paint_to(col, row)
         return True
 
+    def _fill(self, col: int, row: int):
+        """Remplit uniquement la zone contiguë de la valeur sous le clic."""
+        source = self._surface.value_at(col, row)
+        target = self._surface.empty_value if self._erase else self._value
+        if source == target or not self._surface.contains(col, row):
+            return
+        pending, seen = [(col, row)], set()
+        changed = False
+        while pending:
+            c, r = pending.pop()
+            if (c, r) in seen or not self._surface.contains(c, r) or self._surface.value_at(c, r) != source:
+                continue
+            seen.add((c, r))
+            changed = self._paint(c, r) or changed
+            pending.extend(((c - 1, r), (c + 1, r), (c, r - 1), (c, r + 1)))
+        if changed:
+            self._surface.notify_changed()
+
     def on_move(self, pos: QPointF, e) -> bool:
-        ctrl = self._ctrl()
-        if not ctrl or not ctrl.ready:
-            return True
-        buttons = e.buttons()
-        pressing = buttons & (Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton)
-        col, row = self._tile(pos)
-        if self._mode == "inpaint_rect" and self._anchor is not None:
+        col, row = self._surface.scene_to_cell(pos.x(), pos.y())
+        if self._mode == 'rect' and self._anchor is not None:
             self._update_preview(col, row)
-        elif self._mode == "inpaint_brush" and pressing:
-            ctrl.inpaint_tile(col, row, erase=self._erase)
+            return True
+        held = Qt.MouseButton.RightButton if self._erase else Qt.MouseButton.LeftButton
+        if self._mode == 'brush' and e.buttons() & held:
+            self._paint_to(col, row)
         return True
 
     def on_release(self, pos: QPointF, e) -> bool:
-        ctrl = self._ctrl()
-        if not ctrl or not ctrl.ready:
-            return True
-        if self._mode == "inpaint_rect" and self._anchor is not None:
-            ac, ar = self._anchor
-            ec, er = self._tile(pos)
-            for r in range(min(ar, er), max(ar, er) + 1):
-                for c in range(min(ac, ec), max(ac, ec) + 1):
-                    ctrl.inpaint_tile(c, r, erase=self._erase)
+        if self._anchor is not None:
+            c0, r0 = self._anchor
+            c1, r1 = self._surface.scene_to_cell(pos.x(), pos.y())
+            changed = False
+            for row in range(min(r0, r1), max(r0, r1) + 1):
+                for col in range(min(c0, c1), max(c0, c1) + 1):
+                    changed = self._paint(col, row) or changed
+            if changed:
+                self._surface.notify_changed()
             self._anchor = None
             if self._preview:
                 self._preview.setVisible(False)
-        ctrl.end_stroke()
+        if self._delta:
+            from core.history import GridPaintCmd, get_history
+            get_history().push_executed(GridPaintCmd(self._surface, dict(self._delta), self._persist))
+            if self._persist:
+                self._persist()
+        self._last_cell = None
         return True
 
     def _update_preview(self, col: int, row: int):
         if not self._preview or self._anchor is None:
             return
-        ac, ar = self._anchor
-        x0, y0 = min(ac, col) * _BG_TILE, min(ar, row) * _BG_TILE
-        w = (abs(col - ac) + 1) * _BG_TILE
-        h = (abs(row - ar) + 1) * _BG_TILE
-        self._preview.setRect(x0, y0, w, h)
+        c0, r0 = self._anchor
+        size = self._surface.cell_size
+        self._preview.setRect(min(c0, col) * size, min(r0, row) * size,
+                              (abs(col - c0) + 1) * size, (abs(row - r0) + 1) * size)
         self._preview.setVisible(True)
 
     def on_leave(self):
@@ -557,7 +448,7 @@ class UIWidgetTool(BaseTool):
     outil paramétré par `kind`, choisi dans le dropdown de la toolbar (même
     modèle que collision et inpainting).
 
-    Le geste est celui de `SceneInpaintingTool` en mode rect — ancre au press,
+    Le geste est celui de `GridPaintTool` en mode rect — ancre au press,
     aperçu au move, création au release — parce que c'est déjà le geste
     « délimiter une surface » du canvas, et qu'en inventer un second pour la
     même intention rendrait l'outil étranger au reste.

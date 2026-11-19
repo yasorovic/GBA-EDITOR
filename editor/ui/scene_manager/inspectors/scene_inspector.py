@@ -367,7 +367,6 @@ class SceneInspector(QWidget):
             open_file   = self._scene_script_open_file,
             template    = "scene",
             add_label   = label("sceneinsp.script_add"),
-            new_title   = label("sceneinsp.new_scene_script"),
             hint        = label("sceneinsp.script_hint"),
             parent      = self,
         )
@@ -475,7 +474,6 @@ class SceneInspector(QWidget):
 
         # Rows dynamiques des BackgroundLayers (portés par la scène)
         self._bg_layer_rows: list[BgLayerRow] = []
-        self._inpaint_layer_slot: Optional[int] = None  # layer BG peint actif
         self._bg_layers_container = QVBoxLayout()
         self._bg_layers_container.setContentsMargins(0, 2, 0, 0)
         self._bg_layers_container.setSpacing(3)
@@ -977,11 +975,9 @@ class SceneInspector(QWidget):
                 row.bound_toggled.connect(self._on_bound_toggled)
                 row.layer_swap_requested.connect(self._on_layer_swap)
                 row.visibility_toggled.connect(self._on_layer_visibility)
-                row.inpaint_layer_selected.connect(self._on_inpaint_layer)
                 self._bg_layers_container.addWidget(row)
                 self._bg_layer_rows.append(row)
             row.set_visible_state(getattr(layer, "visible", True))
-            row.set_inpaint_layer(layer.bg_slot == self._inpaint_layer_slot)
 
         self._refresh_bound_rows()
 
@@ -1060,14 +1056,6 @@ class SceneInspector(QWidget):
         layer.visible = visible
         self._persist_scene()
         get_dispatcher()._emit("bg_layer_visibility", bg_slot, visible)
-
-    def _on_inpaint_layer(self, bg_slot: int):
-        """Sélectionne le layer peint par l'outil de peinture par palette.
-        Radio-like : une seule cible active, les autres lignes se décochent."""
-        self._inpaint_layer_slot = bg_slot
-        for row in self._bg_layer_rows:
-            row.set_inpaint_layer(row.slot_index == bg_slot)
-        get_dispatcher()._emit("inpaint_layer_changed", bg_slot)
 
     def _on_layer_swap(self, src_slot: int, dst_slot: int):
         """Glisser-déposer d'un BgLayerRow sur un autre : échange leurs

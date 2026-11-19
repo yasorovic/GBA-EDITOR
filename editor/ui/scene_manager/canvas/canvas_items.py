@@ -10,7 +10,8 @@ Ne dépend que du modèle, du thème, de `canvas_const` et de Qt — aucun ne re
 vers la scène/vue/façade (les items dialoguent avec leur scène via `self.scene()`
 + `hasattr`, sans l'importer). `_screen_scale`/`_draw_placeholder`/`_tile_path`/
 `_WIN_COLORS` et les constantes de couleur restent privés (usage interne) ;
-`hw_layer_z`/`make_placeholder_pixmap` et les classes traversent (façade + scène).
+`hw_layer_z`/`make_placeholder_pixmap`/`grid_value_text` et les classes traversent
+(façade + scène).
 """
 from __future__ import annotations
 
@@ -1400,6 +1401,70 @@ def _tile_path(x: int, y: int, tile_type: int) -> QPainterPath:
         p.lineTo(x + px, y + py)
     p.closeSubpath()
     return p
+
+
+def grid_value_text(value: int, *, compact: bool = False) -> str:
+    """Affichage de l'octet d'une grille, identique au bandeau et au canvas."""
+    if 0 <= value <= 9:
+        return str(value)
+    return f"{value:02X}" if compact else f"0x{value:02X}"
+
+
+class GridOverlay(QGraphicsItem):
+    """Valeurs d'une Grid : repère d'édition, jamais rendu par la ROM."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._grid = None
+        self.setZValue(295)
+        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self.setVisible(False)
+
+    def load(self, grid):
+        self.prepareGeometryChange()
+        self._grid = grid
+        self.update()
+
+    def boundingRect(self):
+        grid = self._grid
+        if not grid:
+            return QRectF()
+        return QRectF(0, 0, grid.cols * grid.step, grid.rows * grid.step)
+
+    def paint(self, painter, option, widget=None):
+        grid = self._grid
+        if not grid:
+            return
+        declared = {value.value for value in grid.values}
+        font = QFont(T.MONO)
+        font.setPixelSize(max(5, min(10, grid.step - 4)) * _TEXT_SCALE)
+        painter.save()
+        # Même voile que la collision : la donnée éditée se détache du décor,
+        # sans transformer sa valeur en couleur de gameplay.
+        painter.fillRect(self.boundingRect(), _C_COLLISION_VEIL)
+        cell_pen = QPen(QColor(255, 255, 255, 105), 0)
+        painter.setFont(font)
+        for row, cells in enumerate(grid.cells):
+            for col, value in enumerate(cells):
+                if value == 0 and value not in declared:
+                    continue
+                x, y = col * grid.step, row * grid.step
+                painter.setPen(cell_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(QRectF(x + 0.5, y + 0.5, grid.step - 1, grid.step - 1))
+                painter.save()
+                painter.translate(x, y)
+                painter.scale(1 / _TEXT_SCALE, 1 / _TEXT_SCALE)
+                cell = QRectF(0, 0, grid.step * _TEXT_SCALE, grid.step * _TEXT_SCALE)
+                shown = grid_value_text(value, compact=True)
+                painter.setPen(QColor(0, 0, 0, 210))
+                painter.drawText(cell.translated(4, 4), Qt.AlignmentFlag.AlignCenter, shown)
+                painter.setPen(QColor(255, 255, 255, 240))
+                painter.drawText(cell, Qt.AlignmentFlag.AlignCenter, shown)
+                painter.restore()
+        painter.setPen(QPen(QColor(255, 255, 255, 110), 0))
+        painter.drawRect(self.boundingRect())
+        painter.restore()
 
 
 class CollisionOverlay(QGraphicsItem):

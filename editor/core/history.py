@@ -17,6 +17,7 @@ Règles :
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Optional, TYPE_CHECKING
 
@@ -730,8 +731,8 @@ class SetPaletteColorsCmd(Command):
 class GridPaintCmd(Command):
     """Stroke de peinture d'une surface de grille.
 
-    ``surface`` sait seulement lire et écrire une case : collision et grille
-    de données partagent donc l'annulation sans partager leurs valeurs.
+    ``surface`` réapplique un delta : collision, grille de données et calque
+    de fond partagent donc l'annulation sans partager leurs valeurs.
     Les cellules sont déjà écrites au moment du push, ``execute`` ne sert
     qu'au refaire.
     """
@@ -743,16 +744,41 @@ class GridPaintCmd(Command):
         self._persist = persist_fn
 
     def execute(self):
-        for (col, row), (_, new) in self._delta.items():
-            self._surface.set_value(col, row, new)
+        self._surface.apply_delta(self._delta, True)
         if self._persist:
             self._persist()
 
     def undo(self):
-        for (col, row), (old, _) in self._delta.items():
-            self._surface.set_value(col, row, old)
+        self._surface.apply_delta(self._delta, False)
         if self._persist:
             self._persist()
+
+
+class GridStepCmd(Command):
+    """Change la maille et les cases d'une grille en une seule commande."""
+
+    def __init__(self, grid, new_step: int, new_cells: list[list[int]],
+                 persist_fn=None, refresh_fn=None, label: str = "Changer le pas de grille"):
+        self._grid = grid
+        self._old = (grid.step, deepcopy(grid.cells))
+        self._new = (new_step, deepcopy(new_cells))
+        self._persist = persist_fn
+        self._refresh = refresh_fn
+        self.label = label
+
+    def _apply(self, state):
+        self._grid.step, cells = state
+        self._grid.cells = deepcopy(cells)
+        if self._refresh:
+            self._refresh()
+        if self._persist:
+            self._persist()
+
+    def execute(self):
+        self._apply(self._new)
+
+    def undo(self):
+        self._apply(self._old)
 
 
 def _collision_tag_owners(project):
@@ -903,26 +929,6 @@ class RemoveCollisionTagCmd(Command):
             s.collision_tags = sorted(set(s.collision_tags) | {self._tag})
         if self._persist:
             self._persist()
-
-
-class SceneInpaintingCmd(Command):
-    """Stroke d'inpainting de scène (réassignation SE_PALBANK par tuile).
-    delta : {(col, row): (old_slot|None, new_slot|None)}.
-    Les tuiles sont déjà appliquées au moment du push — execute() n'est appelé
-    que lors d'un redo. Délègue au SceneInpaintingController pour rebâtir le pixmap."""
-
-    def __init__(self, controller, layer, bg_slot: int, delta: dict, persist_fn=None):
-        self._ctrl = controller
-        self._layer = layer
-        self._bg_slot = bg_slot
-        self._delta = delta
-        self.label = "Inpainting de scène"
-
-    def execute(self):
-        self._ctrl.apply_override_delta(self._layer, self._bg_slot, self._delta, True)
-
-    def undo(self):
-        self._ctrl.apply_override_delta(self._layer, self._bg_slot, self._delta, False)
 
 
 class BackgroundInpaintingCmd(Command):

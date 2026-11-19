@@ -1,6 +1,6 @@
 """Génération de tiles de collision (pentes) pour un drag (sc,sr)→(ec,er) sur
 la grille 8×8 de la scène. Pure géométrie (Bresenham + règles de pentes GBA),
-sans dépendance UI — consommé par CollisionTool (cf. ui/scene_manager/canvas_tools.py).
+sans dépendance UI — consommé par CollisionSlopeTool (cf. ui/scene_manager/canvas_tools.py).
 
 Angle du drag         Résultat
 ───────────────────── ────────────────────────────────
@@ -38,7 +38,7 @@ from core.models.collision_tiles import (
     TILE_SLOPE_R_STEEP_LO_INV,
 )
 
-# Modes de CollisionTool qui produisent des pentes (par opposition au brush plein).
+# Modes du trait de pente (sol ou plafond).
 SLOPE_MODES = ("collision_slope", "collision_slope_inv")
 
 

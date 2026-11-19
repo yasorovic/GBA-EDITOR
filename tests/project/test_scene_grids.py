@@ -76,6 +76,19 @@ def test_reduire_la_scene_ne_detruit_pas_ce_qui_est_peint():
     assert grid.cells[9][14] == 7
 
 
+def test_changer_le_pas_conserve_les_regions_dans_l_espace_monde():
+    grid = Grid(name="Terrain", step=16, cells=[[1, 2], [3, 4]])
+
+    cells = grid.cells_at_step(32, 32, 8)
+
+    assert cells == [
+        [1, 1, 2, 2],
+        [1, 1, 2, 2],
+        [3, 3, 4, 4],
+        [3, 3, 4, 4],
+    ]
+
+
 def test_ensure_grid_sizes_ne_cree_aucune_grille():
     """C'est l'auteur qui déclare une grille, pas le chargement d'une scène."""
     scene = Scene(name="Arena")

@@ -232,7 +232,6 @@ class CameraInspector(QWidget):
             open_file   = self._script_open_file,
             template    = "camera",
             add_label   = label('caminsp.add_a_camera_script'),
-            new_title   = label('caminsp.new_camera_script'),
             hint        = "on_start · on_update",
             parent      = self,
         )

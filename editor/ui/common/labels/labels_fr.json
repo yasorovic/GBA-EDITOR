@@ -190,6 +190,7 @@
     "disk.preview_too_large": { "text": "Background trop grand pour l’aperçu" },
     "pick.choose_a_tag": { "text": "Choisir un tag" },
     "pick.create_tag_named": { "text": "＋  Créer « {name} »" },
+    "pick.create_script_named": { "text": "＋  Créer le script « {name} »" },
     "wdg.create_named_hint": { "text": "Créer" },
     "common.none_paren": {
       "text": "(aucun)"
@@ -539,10 +540,10 @@
       "text": "Outil d’effacement"
     },
     "settings.shortcuts.action.canvas.tool_collision": {
-      "text": "Outil de collision"
+      "text": "Peindre la collision"
     },
     "settings.shortcuts.action.canvas.tool_inpaint": {
-      "text": "Outil de recoloration"
+      "text": "Outil de peinture"
     },
     "settings.shortcuts.action.canvas.tool_ui": {
       "text": "Outil d’interface"
@@ -830,6 +831,8 @@
     "scttree.filter_cameras": {
       "text": "Caméras"
     },
+    "scttree.filter_collision": { "text": "Carte de collision" },
+    "scttree.filter_grids": { "text": "Grilles de données" },
     "scttree.filter_unfiled": {
       "text": "Éléments non classés"
     },
@@ -1143,6 +1146,26 @@
       "text": "Éléments d’interface"
     },
     "scncanvas.interface_tip": { "text": "Affiche les textes, conteneurs, listes et images placés dans la scène." },
+    "scncanvas.paint_surface": { "text": "Surface de peinture" },
+    "scncanvas.choose_paint_surface": { "text": "Choisir une surface" },
+    "scncanvas.create_grid_named": { "text": "＋  Créer la grille « {name} »" },
+    "scncanvas.add_grid_history": { "text": "Ajouter la grille {name}" },
+    "scncanvas.grid_created": { "text": "Grille « {name} » créée." },
+    "scncanvas.grid_step": { "text": "Taille des cases de la grille" },
+    "scncanvas.grid_step_option": { "text": "{step} px" },
+    "scncanvas.grid_step_tip": { "text": "Rééchantillonne la grille de données active dans l’espace de la scène. Les outils de peinture utilisent immédiatement la nouvelle taille de case." },
+    "scncanvas.grid_step_history": { "text": "Passer la grille {name} à {step} px" },
+    "scncanvas.grid_step_changed": { "text": "La grille « {name} » utilise maintenant des cases de {step} px." },
+    "scncanvas.paint_collision": { "text": "Collision" },
+    "scncanvas.paint_background": { "text": "Fond BG{slot}" },
+    "scncanvas.collision_empty": { "text": "Vide" },
+    "scncanvas.collision_solid": { "text": "Plein" },
+    "scncanvas.collision_floor_slope": { "text": "Pente de sol" },
+    "scncanvas.collision_ceiling_slope": { "text": "Pente de plafond" },
+    "scncanvas.collision_oneway_up": { "text": "Face à sens unique : haut" },
+    "scncanvas.collision_oneway_down": { "text": "Face à sens unique : bas" },
+    "scncanvas.collision_oneway_left": { "text": "Face à sens unique : gauche" },
+    "scncanvas.collision_oneway_right": { "text": "Face à sens unique : droite" },
     "cvtool.select": {
       "text": "Sélectionner"
     },
@@ -1159,48 +1182,17 @@
       "text": "Éditer les collisions"
     },
     "cvtool.collision_editing_tip": { "text": "Peint les cellules de collision de la scène active avec le pinceau choisi." },
-    "cvtool.8_8_px_brush": {
-      "text": "Pinceau 8 × 8 px"
-    },
-    "cvtool.collision_brush_8_8_px": {
-      "text": "Peint les cellules de collision tuile par tuile, en 8 × 8 pixels."
-    },
-    "cvtool.16_16_px_brush": {
-      "text": "Pinceau 16 × 16 px"
-    },
-    "cvtool.collision_brush_16_16_px": {
-      "text": "Peint les cellules de collision par blocs de 16 × 16 pixels."
-    },
-    "cvtool.floor_slope": {
-      "text": "Pente de sol"
-    },
-    "cvtool.floor_slope_triangle_bresenham": {
-      "text": "Peint une pente de sol montante sous forme de triangle."
-    },
-    "cvtool.ceiling_slope": {
-      "text": "Pente de plafond"
-    },
-    "cvtool.ceiling_slope_tip": { "text": "Peint une pente de sol inversée sous forme de triangle." },
-    "cvtool.oneway_up": { "text": "Face à sens unique : haut" },
-    "cvtool.oneway_up_tip": { "text": "Peint une face plate qui porte par le dessus et se traverse par le dessous et par les côtés." },
-    "cvtool.oneway_down": { "text": "Face à sens unique : bas" },
-    "cvtool.oneway_down_tip": { "text": "Peint une face plate qui porte par le dessous et se traverse par le dessus et par les côtés." },
-    "cvtool.oneway_left": { "text": "Face à sens unique : gauche" },
-    "cvtool.oneway_left_tip": { "text": "Peint une face plate qui arrête par la gauche et se traverse par la droite, le dessus et le dessous." },
-    "cvtool.oneway_right": { "text": "Face à sens unique : droite" },
-    "cvtool.oneway_right_tip": { "text": "Peint une face plate qui arrête par la droite et se traverse par la gauche, le dessus et le dessous." },
-    "cvtool.scene_inpainting": {
-      "text": "Recolorer les palettes du fond"
-    },
-    "cvtool.scene_inpainting_tip": { "text": "Recolore la palette des tuiles de fond de la scène avec l’outil choisi." },
+    "cvtool.surface_painting": { "text": "Peindre une surface" },
+    "cvtool.surface_painting_tip": { "text": "Peint les valeurs de collision, d’une grille ou d’un fond sur la surface choisie." },
     "cvtool.brush": {
       "text": "Pinceau"
     },
-    "cvtool.inpaint_brush_tip": { "text": "Repeint la palette de chaque tuile de 8 × 8 pixels traversée. Les pixels de l’image ne changent pas." },
+    "cvtool.paint_brush_tip": { "text": "Peint la valeur choisie dans chaque case traversée." },
     "cvtool.rectangle": {
       "text": "Rectangle"
     },
-    "cvtool.inpaint_rect_tip": { "text": "Repeint la palette de chaque tuile dans une zone rectangulaire. Les pixels de l’image ne changent pas." },
+    "cvtool.paint_rect_tip": { "text": "Peint la valeur choisie dans toutes les cases d’un rectangle." },
+    "cvtool.paint_fill_tip": { "text": "Remplace une zone contiguë de valeurs identiques." },
     "cvtool.interface_widget": {
       "text": "Ajouter un élément d’interface"
     },
@@ -1742,6 +1734,9 @@
     "sceneinsp.mode_tip_4": { "text": "Fournit un bitmap BG2 avec palette 8 bpp, 256 couleurs, 240 × 160." },
     "sceneinsp.mode_tip_5": { "text": "Fournit un bitmap BG2 en couleur directe 16 bpp, 160 × 128." },
     "scttree.ref_tip": { "text": "Référençable dans les scripts sous le nom {handle}." },
+    "scttree.collision_map": { "text": "Carte de collision" },
+    "scttree.collision_ref": { "text": "Cases de 8 px. Référençable dans les scripts sous le nom {handle}." },
+    "scttree.grid_ref": { "text": "Cases de {step} px. Référençable dans les scripts sous le nom {handle}." },
     "scttree.actor_prefab_tip": { "text": "Instance du prefab {name}. Référençable dans les scripts sous le nom {handle}." },
     "scttree.elem_ref": { "text": "{type}. Référençable dans les scripts sous le nom {handle}." },
     "scttree.elem_authoring": { "text": "{type}. Élément d’édition seulement : non référençable dans les scripts." },
@@ -2464,6 +2459,7 @@
     "backdrop.title": { "text": "Fond d’épreuve" },
     "backdrop.note": { "text": "Aide de lecture uniquement. Ne modifie ni le texte ni la ROM." },
     "palstrip.select_title": { "text": "Sélectionner la palette : {name}" },
+    "palstrip.select_value_title": { "text": "Sélectionner la valeur : {name}" },
     "rombar.mode_title": { "text": "Affichage de la barre ROM" },
     "rombar.target_title": { "text": "Cartouche cible" },
     "pick.open_palette_title": { "text": "Choisir une couleur de palette" },
@@ -2614,15 +2610,9 @@
     "hints.scene.nudge": { "text": "Décale de 1 px (Maj : 8 px)" },
     "hints.scene.place_actor": { "text": "Place un acteur sur la grille" },
     "hints.scene.erase_actor": { "text": "Supprime l’acteur ou l’area sous le curseur" },
-    "hints.scene.paint_solid": { "text": "Peint des tuiles de collision pleines" },
     "hints.scene.erase_tiles": { "text": "Efface des tuiles de collision" },
-    "hints.scene.paint_oneway": { "text": "Peint des faces de collision à sens unique" },
-    "hints.scene.draw_slope": { "text": "Trace une pente entre deux tuiles" },
-    "hints.scene.erase_slope": { "text": "Efface les tuiles le long du trait" },
-    "hints.scene.inpaint_paint": { "text": "Peint la banque active sur des tuiles" },
-    "hints.scene.inpaint_clear": { "text": "Retire la banque imposée aux tuiles" },
-    "hints.scene.inpaint_rect_paint": { "text": "Peint la banque active sur un rectangle" },
-    "hints.scene.inpaint_rect_clear": { "text": "Retire la banque imposée sur un rectangle" },
+    "hints.scene.paint_value": { "text": "Peint la valeur choisie" },
+    "hints.scene.paint_clear": { "text": "Restaure la valeur vide" },
     "hints.scene.ui_place_default": { "text": "Place un élément à sa taille par défaut" },
     "hints.scene.ui_draw_rect": { "text": "Trace le rectangle de l’élément" },
     "hints.scene.back_to_select": { "text": "Revient à Sélectionner" },

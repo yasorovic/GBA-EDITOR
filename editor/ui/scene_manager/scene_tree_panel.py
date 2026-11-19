@@ -1,6 +1,6 @@
 
-"""Panneau gauche (haut) — contenu de la scène ACTIVE : acteurs + mise en
-page UI. Sépare deux questions distinctes que l'ancien panneau unique
+"""Panneau gauche (haut) — contenu de la scène ACTIVE : acteurs, caméras,
+Areas, grilles et mise en page UI. Sépare deux questions distinctes que l'ancien panneau unique
 posait ensemble : « quelles scènes/prefabs/scripts existent dans le projet »
 (SceneLibraryPanel, cf. scene_library_panel.py) et « qu'est-ce qu'il y a DANS
 la scène que j'édite en ce moment » (ce module).
@@ -53,6 +53,8 @@ T_SCENE  = "scene"
 T_ACTOR  = "actor"
 T_CAMERA = "camera"          # une caméra POSSÉDÉE par la scène active
 T_AREA   = "area"            # une zone de jeu posée dans la scène active
+T_COLLISION = "collision_map"  # carte de collision intégrée à la scène
+T_GRID   = "grid"            # une grille de données possédée par la scène
 T_PREFAB = "prefab"
 T_SCRIPT = "script"
 T_FOLDER = "folder"
@@ -68,6 +70,10 @@ def _content_member(node_type: str, obj) -> str | None:
         return f"camera:{obj.name}"
     if node_type == T_AREA:
         return f"area:{obj.name}"
+    if node_type == T_COLLISION:
+        return "collision"
+    if node_type == T_GRID:
+        return f"grid:{obj.name}"
     if node_type == T_UI_LAYOUT:
         return f"ui:{obj.name}"
     return None
@@ -118,6 +124,10 @@ def _lua_handle(node_type: str, obj) -> str:
         return f'actor:get("{obj.name}")'
     if node_type == T_CAMERA:
         return f'camera:switch("{obj.name}")'
+    if node_type == T_COLLISION:
+        return "collision.tile_at(x, y)"
+    if node_type == T_GRID:
+        return f"data.grid.{obj.name}"
     if node_type == T_UI_ELEM:
         kind = getattr(obj, "kind", "")
         if kind in (KIND_TEXT, KIND_TEXTBOX):
@@ -332,6 +342,11 @@ class _ActiveSceneTree(_Tree):
         self.clear()
         if scene is not None:
             self._populate_content_folders(scene, project)
+            collision_item = QTreeWidgetItem()
+            collision_item.setData(0, _ROLE_TYPE, T_COLLISION)
+            collision_item.setData(0, _ROLE_OBJ, scene)
+            self._update_collision_item(collision_item)
+            self._add_content_root(T_COLLISION, scene, collision_item)
             # Les acteurs se posent en ARBRE depuis la v0.23 : un acteur dont
             # `parent` nomme un autre acteur de la scène s'accroche sous lui.
             # Même dérivation que la branche Interface juste en dessous, qui
@@ -376,6 +391,12 @@ class _ActiveSceneTree(_Tree):
                     host.addChild(area_item)
                 else:
                     self._add_content_root(T_AREA, area, area_item)
+            for grid in scene.grids:
+                grid_item = QTreeWidgetItem()
+                grid_item.setData(0, _ROLE_TYPE, T_GRID)
+                grid_item.setData(0, _ROLE_OBJ, grid)
+                self._update_grid_item(grid_item, grid)
+                self._add_content_root(T_GRID, grid, grid_item)
             self._populate_ui_branch(scene, project)
             self._install_visibility_controls()
         self.blockSignals(False)
@@ -400,8 +421,10 @@ class _ActiveSceneTree(_Tree):
         self._folder_items = {}
         state = self._panel._content_state
         valid = {f"actor:{a.name}" for a in scene.actors}
+        valid.add("collision")
         valid |= {f"camera:{c.name}" for c in scene.cameras}
         valid |= {f"area:{a.name}" for a in scene.areas}
+        valid |= {f"grid:{g.name}" for g in scene.grids}
         valid |= {f"ui:{getattr(n, 'layout_name', n)}" for n in scene.ui_layouts}
         layouts = (project.scene_ui_layouts(scene)
                    if project is not None and hasattr(project, "scene_ui_layouts") else [])
@@ -608,6 +631,25 @@ class _ActiveSceneTree(_Tree):
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDragEnabled)
         item.setForeground(0, QColor(_TEXT))
 
+    def _update_collision_item(self, item: QTreeWidgetItem):
+        item.setIcon(0, _ico("view_collision", COLOR_DEFAULT))
+        item.setToolTip(0, tooltip(
+            title=label("scttree.collision_map"),
+            body=label("scttree.collision_ref", handle=_lua_handle(T_COLLISION, self._scene))))
+        item.setText(0, label("scttree.collision_map"))
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDragEnabled)
+        item.setForeground(0, QColor(_TEXT))
+
+    def _update_grid_item(self, item: QTreeWidgetItem, grid):
+        handle = _lua_handle(T_GRID, grid)
+        item.setIcon(0, _ico("view_grid", COLOR_DEFAULT))
+        item.setToolTip(0, tooltip(
+            title=grid.name,
+            body=label("scttree.grid_ref", handle=handle, step=grid.step)))
+        item.setText(0, grid.name)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDragEnabled)
+        item.setForeground(0, QColor(_TEXT))
+
     def highlight_area(self, area: Area):
         self._highlight(T_AREA, area)
 
@@ -703,7 +745,7 @@ class _ActiveSceneTree(_Tree):
         dtype = dragged.data(0, _ROLE_TYPE)
 
         if target is not None and target.data(0, _ROLE_TYPE) in (T_FOLDER, T_SCENE) and \
-                dtype in (T_ACTOR, T_CAMERA, T_AREA, T_UI_LAYOUT):
+                dtype in (T_ACTOR, T_CAMERA, T_AREA, T_COLLISION, T_GRID, T_UI_LAYOUT):
             obj = dragged.data(0, _ROLE_OBJ)
             if dtype == T_ACTOR and getattr(obj, "parent", None):
                 obj = self._root_actor(obj)
@@ -960,6 +1002,12 @@ class _ActiveSceneTree(_Tree):
             self.add_rename_action(menu, item, label("scttree.rename"))
             menu.addAction(label("common.delete")).triggered.connect(
                 lambda: get_dispatcher().delete_areas([area]))
+
+        elif typ == T_COLLISION:
+            self._add_folder_actions(menu, T_COLLISION, item.data(0, _ROLE_OBJ))
+
+        elif typ == T_GRID:
+            self._add_folder_actions(menu, T_GRID, item.data(0, _ROLE_OBJ))
 
         elif typ == T_UI_LAYOUT:
             layout = item.data(0, _ROLE_OBJ)
@@ -1641,6 +1689,8 @@ class SceneTreePanel(QWidget):
             (T_UI_LAYOUT, "ui_layout", "scttree.filter_interface"),
             (T_CAMERA, "camera", "scttree.filter_cameras"),
             (T_AREA, "area", "scttree.filter_areas"),
+            (T_COLLISION, "view_collision", "scttree.filter_collision"),
+            (T_GRID, "view_grid", "scttree.filter_grids"),
             ("unfiled", "folder", "scttree.filter_unfiled"),
         ):
             button = QToolButton(self._filters_bar)
@@ -1788,7 +1838,8 @@ class SceneTreePanel(QWidget):
                 while top.parent() is not None and top.parent() is not self._tree._content_root:
                     top = top.parent()
                 category_match |= top.parent() is self._tree._content_root and \
-                    node_type in (T_ACTOR, T_CAMERA, T_AREA, T_UI_LAYOUT, T_UI_ELEM)
+                    node_type in (T_ACTOR, T_CAMERA, T_AREA, T_COLLISION, T_GRID,
+                                  T_UI_LAYOUT, T_UI_ELEM)
             child_match = False
             for index in range(item.childCount()):
                 child_match |= matches(item.child(index))

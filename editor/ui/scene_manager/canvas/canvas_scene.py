@@ -15,7 +15,7 @@ from core.models.scene import Actor
 from ui.common.theme import C
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from ui.scene_manager.canvas.canvas_items import (
-    SpriteItem, CameraItem, CollisionOverlay, ScreenBezelItem, GridItem,
+    SpriteItem, CameraItem, CollisionOverlay, GridOverlay, ScreenBezelItem, GridItem,
     ActorBoxOverlay, AreaItem, GuideLine, MaskablePixmapItem, hw_layer_z,
 )
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
@@ -61,6 +61,8 @@ class GBAScene(QGraphicsScene):
         self._setup_border()
         self._collision_overlay = CollisionOverlay()
         self.addItem(self._collision_overlay)
+        self._grid_overlay = GridOverlay()
+        self.addItem(self._grid_overlay)
         self._actor_box_overlay = ActorBoxOverlay(canvas_w, canvas_h)
         self.addItem(self._actor_box_overlay)
         # Rafraîchit les boîtes de collision pendant un drag (sinon l'ancienne
@@ -71,6 +73,10 @@ class GBAScene(QGraphicsScene):
     @property
     def collision_overlay(self) -> "CollisionOverlay":
         return self._collision_overlay
+
+    @property
+    def grid_overlay(self) -> "GridOverlay":
+        return self._grid_overlay
 
     def descendant_sprite_items(self, item: "SpriteItem") -> list:
         """SpriteItem des acteurs qui descendent de `item.scene_sprite`
@@ -208,7 +214,7 @@ class GBAScene(QGraphicsScene):
         self._actor_box_overlay.set_actors(actors, var_defaults, sprites)
 
     def set_collision_view(self, visible: bool):
-        """Toggle 'Collisions scène' — indépendant de l'outil CollisionTool."""
+        """Toggle 'Collisions scène' — indépendant des gestes de peinture."""
         self._collision_view = visible
         self._sync_collision_overlay()
         self._collision_overlay.update()

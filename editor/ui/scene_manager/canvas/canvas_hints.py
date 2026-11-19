@@ -9,16 +9,9 @@ _TITLES = {
     "add": "cvtool.add_actor",
     "add_area": "cvtool.add_area",
     "erase": "cvtool.eraser",
-    "collision_8": "cvtool.8_8_px_brush",
-    "collision_16": "cvtool.16_16_px_brush",
-    "collision_slope": "cvtool.floor_slope",
-    "collision_slope_inv": "cvtool.ceiling_slope",
-    "collision_oneway_up": "cvtool.oneway_up",
-    "collision_oneway_down": "cvtool.oneway_down",
-    "collision_oneway_left": "cvtool.oneway_left",
-    "collision_oneway_right": "cvtool.oneway_right",
-    "inpaint_brush": "cvtool.scene_inpainting",
-    "inpaint_rect": "cvtool.scene_inpainting",
+    "paint_brush": "cvtool.surface_painting",
+    "paint_rect": "cvtool.surface_painting",
+    "paint_fill": "cvtool.surface_painting",
     "ui_text": "cvtool.interface_widget",
     "ui_textbox": "cvtool.interface_widget",
     "ui_container": "cvtool.interface_widget",
@@ -26,16 +19,8 @@ _TITLES = {
     "ui_image": "cvtool.interface_widget",
 }
 
-_PAINT = [(mouse("left_drag"), "hints.scene.paint_solid"),
-          (mouse("right_drag"), "hints.scene.erase_tiles")]
-_ONEWAY = [(mouse("left_drag"), "hints.scene.paint_oneway"),
-           (mouse("right_drag"), "hints.scene.erase_tiles")]
-_SLOPE = [(mouse("left_drag"), "hints.scene.draw_slope"),
-          (mouse("right_drag"), "hints.scene.erase_slope")]
-_INPAINT_BRUSH = [(mouse("left_drag"), "hints.scene.inpaint_paint"),
-                  (mouse("right_drag"), "hints.scene.inpaint_clear")]
-_INPAINT_RECT = [(mouse("left_drag"), "hints.scene.inpaint_rect_paint"),
-                 (mouse("right_drag"), "hints.scene.inpaint_rect_clear")]
+_PAINT = [(mouse("left_drag"), "hints.scene.paint_value"),
+          (mouse("right_drag"), "hints.scene.paint_clear")]
 
 
 def _tool_rows(tool: str) -> list:
@@ -54,16 +39,8 @@ def _tool_rows(tool: str) -> list:
         return [(mouse("left_click"), "hints.scene.place_area")]
     if tool == "erase":
         return [(mouse("left_click"), "hints.scene.erase_actor")]
-    if tool in ("collision_8", "collision_16"):
+    if tool in ("paint_brush", "paint_rect", "paint_fill"):
         return _PAINT
-    if tool.startswith("collision_oneway_"):
-        return _ONEWAY
-    if tool in ("collision_slope", "collision_slope_inv"):
-        return _SLOPE
-    if tool == "inpaint_brush":
-        return _INPAINT_BRUSH
-    if tool == "inpaint_rect":
-        return _INPAINT_RECT
     if tool.startswith("ui_"):
         return [(mouse("left_click"), "hints.scene.ui_place_default"),
                 (mouse("left_drag"), "hints.scene.ui_draw_rect")]

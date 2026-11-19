@@ -1,5 +1,4 @@
 """Le slot du script attaché (acteur, Area, scène, caméra) : un seul modèle, `attached_script_slot`."""
-from PyQt6.QtWidgets import QInputDialog
 
 from core.history import CommandHistory
 from core.lua_scripts import BEHAVIOR_MARKER
@@ -14,7 +13,7 @@ def _slot(p, assigned, opened=None, template="actor"):
     return attached_script_slot(
         project=lambda: p, on_assigned=assigned.append, on_cleared=lambda: None,
         open_file=(opened.append if opened is not None else lambda _path: None), template=template,
-        add_label="Add", new_title="New")
+        add_label="Add")
 
 
 def test_only_one_attachable_script_dropped_from_disk_is_attached(tmp_path, qapp):
@@ -39,14 +38,15 @@ def test_a_new_scene_script_is_born_from_the_scene_template_and_undone(tmp_path,
     history = CommandHistory()
     monkeypatch.setattr("core.history.get_history", lambda: history)
     monkeypatch.setattr(import_folder, "_shown_folder", lambda: str(p.user_library_dir))
-    monkeypatch.setattr(QInputDialog, "getText", staticmethod(lambda *_a, **_k: ("Level", True)))
     assigned, opened = [], []
     slot = _slot(p, assigned, opened, template="scene")
 
     shown = []
     monkeypatch.setattr(PickerPopup, "show_below", lambda popup, _anchor: shown.append(popup))
-    slot.open_picker()   # « + » : la liste ; « Nouveau script » y mène à la création
-    shown[0].new_requested.emit()
+    slot.open_picker()   # « + » : la recherche crée le script sans boîte modale
+    assert shown[0]._create_named
+    shown[0]._search.setText("Level")
+    shown[0]._on_new()
 
     created = p.user_library_dir / "Level.lua"
     assert assigned == [p.asset_rel(created)] and opened == [str(created)]

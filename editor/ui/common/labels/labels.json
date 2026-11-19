@@ -189,6 +189,7 @@
     "disk.preview_too_large": { "text": "Background too large for preview" },
     "pick.choose_a_tag": { "text": "Choose a tag" },
     "pick.create_tag_named": { "text": "＋  Create “{name}”" },
+    "pick.create_script_named": { "text": "＋  Create script “{name}”" },
     "wdg.create_named_hint": { "text": "Create" },
     "common.browse": {
       "text": "Browse…"
@@ -409,10 +410,10 @@
       "text": "Erase tool"
     },
     "settings.shortcuts.action.canvas.tool_collision": {
-      "text": "Collision tool"
+      "text": "Paint collision"
     },
     "settings.shortcuts.action.canvas.tool_inpaint": {
-      "text": "Inpaint tool"
+      "text": "Paint tool"
     },
     "settings.shortcuts.action.canvas.tool_ui": {
       "text": "UI tool"
@@ -1729,12 +1730,6 @@
     "comped.exposed_vars": {
       "text": "Exposed variables"
     },
-    "comped.new_script_title": {
-      "text": "New actor script"
-    },
-    "common.name_without_lua": {
-      "text": "Name (without .lua):"
-    },
     "comped.choose_sprite": {
       "text": "Choose a sprite"
     },
@@ -1983,6 +1978,8 @@
     "scttree.filter_cameras": {
       "text": "Cameras"
     },
+    "scttree.filter_collision": { "text": "Collision map" },
+    "scttree.filter_grids": { "text": "Data grids" },
     "scttree.filter_unfiled": {
       "text": "Unfiled elements"
     },
@@ -1993,6 +1990,9 @@
     "scttree.elem_authoring": { "text": "{type}. Authoring only: not referenceable in scripts." },
     "scttree.actor_prefab_tip": { "text": "Instance of the prefab {name}. Referenceable in scripts as {handle}." },
     "scttree.ref_tip": { "text": "Referenceable in scripts as {handle}." },
+    "scttree.collision_map": { "text": "Collision map" },
+    "scttree.collision_ref": { "text": "8 px cells. Referenceable in scripts as {handle}." },
+    "scttree.grid_ref": { "text": "{step} px cells. Referenceable in scripts as {handle}." },
     "scttree.move_top": {
       "text": "Move to top"
     },
@@ -2890,10 +2890,8 @@
       "text": "Edit collisions"
     },
     "cvtool.collision_editing_tip": { "text": "Paints collision cells on the active scene with the chosen brush." },
-    "cvtool.scene_inpainting": {
-      "text": "Repaint background palettes"
-    },
-    "cvtool.scene_inpainting_tip": { "text": "Recolors the palette assigned to the background tiles of the scene with the chosen tool." },
+    "cvtool.surface_painting": { "text": "Paint a surface" },
+    "cvtool.surface_painting_tip": { "text": "Paints collision, data grid or background values on the selected surface." },
     "cvtool.interface_widget": {
       "text": "Add interface element"
     },
@@ -2957,9 +2955,6 @@
     },
     "caminsp.add_a_camera_script": {
       "text": "Add a camera script"
-    },
-    "caminsp.new_camera_script": {
-      "text": "New camera script"
     },
     "caminsp.world_bounds": {
       "text": "World bounds"
@@ -3081,9 +3076,6 @@
     },
     "projset.cur_not_found": {
       "text": "{cur}  (not found)"
-    },
-    "sceneinsp.new_scene_script": {
-      "text": "New scene script"
     },
     "sceneinsp.change_scene_mode": {
       "text": "Change scene mode"
@@ -3478,6 +3470,32 @@
     "scncanvas.no_active_bg_bank": {
       "text": "No active BG bank"
     },
+    "scncanvas.paint_surface": {
+      "text": "Painting surface"
+    },
+    "scncanvas.choose_paint_surface": { "text": "Choose a surface" },
+    "scncanvas.create_grid_named": { "text": "＋  Create grid “{name}”" },
+    "scncanvas.add_grid_history": { "text": "Add grid {name}" },
+    "scncanvas.grid_created": { "text": "Grid “{name}” created." },
+    "scncanvas.grid_step": { "text": "Grid cell size" },
+    "scncanvas.grid_step_option": { "text": "{step} px" },
+    "scncanvas.grid_step_tip": { "text": "Resamples the active data grid in scene space. The painting tools immediately use the new cell size." },
+    "scncanvas.grid_step_history": { "text": "Set {name} grid to {step} px" },
+    "scncanvas.grid_step_changed": { "text": "Grid “{name}” now uses {step} px cells." },
+    "scncanvas.paint_collision": {
+      "text": "Collision"
+    },
+    "scncanvas.paint_background": {
+      "text": "Background BG{slot}"
+    },
+    "scncanvas.collision_empty": { "text": "Empty" },
+    "scncanvas.collision_solid": { "text": "Solid" },
+    "scncanvas.collision_floor_slope": { "text": "Floor slope" },
+    "scncanvas.collision_ceiling_slope": { "text": "Ceiling slope" },
+    "scncanvas.collision_oneway_up": { "text": "One-way face: up" },
+    "scncanvas.collision_oneway_down": { "text": "One-way face: down" },
+    "scncanvas.collision_oneway_left": { "text": "One-way face: left" },
+    "scncanvas.collision_oneway_right": { "text": "One-way face: right" },
     "scncanvas.fit": {
       "text": "Fit scene to view"
     },
@@ -3834,44 +3852,15 @@
       "text": "Erase actor"
     },
     "cvtool.eraser_tip": { "text": "A click on an actor removes it from the active scene." },
-    "cvtool.8_8_px_brush": {
-      "text": "8×8 px brush"
-    },
-    "cvtool.collision_brush_8_8_px": {
-      "text": "Paints collision cells one 8×8 pixel tile at a time."
-    },
-    "cvtool.16_16_px_brush": {
-      "text": "16×16 px brush"
-    },
-    "cvtool.collision_brush_16_16_px": {
-      "text": "Paints collision cells in 16×16 pixel blocks."
-    },
-    "cvtool.floor_slope": {
-      "text": "Floor slope"
-    },
-    "cvtool.floor_slope_triangle_bresenham": {
-      "text": "Paints a rising floor slope as a triangle."
-    },
-    "cvtool.ceiling_slope": {
-      "text": "Ceiling slope"
-    },
-    "cvtool.ceiling_slope_tip": { "text": "Paints an inverted floor slope as a triangle." },
-    "cvtool.oneway_up": { "text": "One-way face: up" },
-    "cvtool.oneway_up_tip": { "text": "Paints a flat face that carries from above and can be crossed from below and from the sides." },
-    "cvtool.oneway_down": { "text": "One-way face: down" },
-    "cvtool.oneway_down_tip": { "text": "Paints a flat face that carries from below and can be crossed from above and from the sides." },
-    "cvtool.oneway_left": { "text": "One-way face: left" },
-    "cvtool.oneway_left_tip": { "text": "Paints a flat face that stops from the left and can be crossed from the right, above and below." },
-    "cvtool.oneway_right": { "text": "One-way face: right" },
-    "cvtool.oneway_right_tip": { "text": "Paints a flat face that stops from the right and can be crossed from the left, above and below." },
     "cvtool.brush": {
       "text": "Brush"
     },
-    "cvtool.inpaint_brush_tip": { "text": "Repaints the palette of each 8×8 tile crossed. The image pixels are not changed." },
+    "cvtool.paint_brush_tip": { "text": "Paints the selected value in each cell crossed." },
     "cvtool.rectangle": {
       "text": "Rectangle"
     },
-    "cvtool.inpaint_rect_tip": { "text": "Repaints the palette of every tile in a rectangular area. The image pixels are not changed." },
+    "cvtool.paint_rect_tip": { "text": "Paints the selected value in every cell of a rectangle." },
+    "cvtool.paint_fill_tip": { "text": "Replaces a contiguous area of identical values." },
     "cvtool.text_tip": { "text": "Places a text string at a point. It never wraps. Its content is written here, or left empty for a script to fill." },
     "cvtool.textbox_tip": { "text": "Creates a text box. The text wraps and aligns inside its rectangle." },
     "common.textbox": { "text": "Textbox" },
@@ -4245,9 +4234,6 @@
     },
     "uinode.sprite_obj": {
       "text": "Sprite (OBJ)"
-    },
-    "wdg.new_script": {
-      "text": "＋  New script"
     },
     "inputs.count": {
       "singular": "{n} input",
@@ -4868,6 +4854,7 @@
     "backdrop.title": { "text": "Proof background" },
     "backdrop.note": { "text": "Reading aid only. It does not change the text or the ROM." },
     "palstrip.select_title": { "text": "Select palette: {name}" },
+    "palstrip.select_value_title": { "text": "Select value: {name}" },
     "rombar.mode_title": { "text": "ROM bar display" },
     "rombar.target_title": { "text": "Target cartridge" },
     "pick.open_palette_title": { "text": "Choose palette color" },
@@ -5006,15 +4993,9 @@
     "hints.scene.nudge": { "text": "Nudges by 1 px (Shift: 8 px)" },
     "hints.scene.place_actor": { "text": "Places an actor on the grid" },
     "hints.scene.erase_actor": { "text": "Deletes the actor or area under the cursor" },
-    "hints.scene.paint_solid": { "text": "Paints solid collision tiles" },
     "hints.scene.erase_tiles": { "text": "Erases collision tiles" },
-    "hints.scene.paint_oneway": { "text": "Paints one-way collision faces" },
-    "hints.scene.draw_slope": { "text": "Draws a slope between two tiles" },
-    "hints.scene.erase_slope": { "text": "Erases the tiles along the line" },
-    "hints.scene.inpaint_paint": { "text": "Paints the active bank on tiles" },
-    "hints.scene.inpaint_clear": { "text": "Removes the bank override from tiles" },
-    "hints.scene.inpaint_rect_paint": { "text": "Paints the active bank over a rectangle" },
-    "hints.scene.inpaint_rect_clear": { "text": "Removes the bank override over a rectangle" },
+    "hints.scene.paint_value": { "text": "Paints the selected value" },
+    "hints.scene.paint_clear": { "text": "Restores the empty value" },
     "hints.scene.ui_place_default": { "text": "Places an element at its default size" },
     "hints.scene.ui_draw_rect": { "text": "Draws the element’s rectangle" },
     "hints.scene.back_to_select": { "text": "Returns to Select" },

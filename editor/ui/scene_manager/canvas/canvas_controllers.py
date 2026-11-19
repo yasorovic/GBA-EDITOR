@@ -346,7 +346,6 @@ class SceneInpaintingController:
         self._layer = None          # BackgroundLayer actif (peint)
         self._raster: Optional[BgLayerRaster] = None
         self._bank: Optional[int] = None   # slot (0-15) de la banque de peinture
-        self._stroke: Optional[dict] = None  # delta en cours {(c,r): (old,new)}
 
     # ── Contexte ─────────────────────────────────────────────────
     def set_context(self, project: Optional[Project], scene):
@@ -354,7 +353,6 @@ class SceneInpaintingController:
         self._scene = scene
         self._layer = None
         self._raster = None
-        self._stroke = None
         # Banque de peinture par défaut = 1re banque BG active (si présente).
         actives = getattr(scene, "active_bg_palettes", []) if scene else []
         self._bank = 0 if actives else None
@@ -409,27 +407,22 @@ class SceneInpaintingController:
         return (self._raster.tiles_w, self._raster.tiles_h)
 
     # ── Peinture ─────────────────────────────────────────────────
-    def begin_stroke(self):
-        self._stroke = {}
-
-    def inpaint_tile(self, col: int, row: int, erase: bool = False):
-        """Peint (ou efface) l'override d'une tuile ; met à jour le canvas en
-        direct. Enregistre l'ancienne valeur dans le stroke courant."""
-        if not self.ready or self._layer is None:
-            return
+    def set_override(self, col: int, row: int, slot: Optional[int], *, refresh: bool = True) -> bool:
+        """Écrit une case depuis l'outil de peinture commun."""
+        if not self.ready or self._layer is None or self._raster is None:
+            return False
         if not (0 <= col < self._raster.tiles_w and 0 <= row < self._raster.tiles_h):
-            return
+            return False
         key = (col, row)
-        new = None if erase else self._bank
         old = self._layer.tile_palette_overrides.get(key)
-        if old == new:
-            return
-        if self._stroke is not None:
-            if key not in self._stroke:
-                self._stroke[key] = (old, new)
-            else:
-                self._stroke[key] = (self._stroke[key][0], new)
-        self._apply_tile(key, new)
+        if old == slot:
+            return False
+        self._apply_tile(key, slot)
+        if refresh:
+            self._refresh()
+        return True
+
+    def refresh(self):
         self._refresh()
 
     def _apply_tile(self, key: tuple[int, int], slot: Optional[int]):
@@ -444,18 +437,7 @@ class SceneInpaintingController:
         if self._raster is not None and self._layer is not None:
             self._gfx.set_bg(self._layer.bg_slot, self._raster.to_pixmap())
 
-    def end_stroke(self):
-        """Clôt le stroke : pousse la commande d'historique + persiste."""
-        delta = self._stroke or {}
-        self._stroke = None
-        if not delta or self._layer is None:
-            return
-        from core.history import SceneInpaintingCmd, get_history
-        cmd = SceneInpaintingCmd(self, self._layer, self._layer.bg_slot, dict(delta))
-        get_history().push_executed(cmd)
-        self._persist()
-
-    # ── Undo/redo (appelé par SceneInpaintingCmd) ────────────────────────
+    # ── Undo/redo (appelé par GridPaintCmd) ──────────────────────────────
     def apply_override_delta(self, layer, bg_slot: int, delta: dict, forward: bool):
         """Réapplique un delta sur un layer (forward=redo, sinon undo), rebâtit
         le pixmap de ce layer, et persiste. Robuste même si ce n'est plus le
@@ -467,7 +449,6 @@ class SceneInpaintingController:
             else:
                 layer.tile_palette_overrides[key] = slot
         self.rebuild_layer_pixmap(bg_slot)
-        self._persist()
 
     def rebuild_layer_pixmap(self, bg_slot: int):
         """Reconstruit le raster + pixmap d'un layer depuis son état courant."""
@@ -489,6 +470,9 @@ class SceneInpaintingController:
             return
         from core.command_dispatcher import get_dispatcher
         get_dispatcher().save_scene()
+
+    def persist(self):
+        self._persist()
 
 
 

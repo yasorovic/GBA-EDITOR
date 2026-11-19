@@ -45,7 +45,6 @@ class BgLayerRow(QFrame):
     pal_bank_changed   = pyqtSignal(int, str)  # slot_index, nom de la PaletteBank
     layer_swap_requested = pyqtSignal(int, int)  # (bg_slot source, bg_slot cible)
     visibility_toggled   = pyqtSignal(int, bool)  # (bg_slot, visible)
-    inpaint_layer_selected = pyqtSignal(int)       # bg_slot du layer peint
     blend_role_changed   = pyqtSignal(int, str)    # (bg_slot, "" | "top" | "bottom")
 
     _SPEED_DEFAULTS = [4.0, 3.0, 1.0, 0.5]
@@ -173,25 +172,8 @@ class BgLayerRow(QFrame):
 
         row.add_trailing_break()
 
-        # Sélecteur du layer peint par l'outil de peinture par palette (pinceau).
-        from ui.common.icons import get as _ico
-        self._inpaint_layer_btn = QToolButton()
-        self._inpaint_layer_btn.setCheckable(True)
-        self._inpaint_layer_btn.setFixedSize(22, 22)
-        self._inpaint_layer_btn.setIconSize(QSize(16, 16))
-        self._inpaint_layer_btn.setIcon(_ico("tool_inpaint_brush", C.TEXT_DIM, self._color))
-        self._inpaint_layer_btn.setToolTip(tooltip(title=label('bglayer.inpaint_title')))
-        self._inpaint_layer_btn.setStyleSheet(
-            "QToolButton{background:transparent;border:none;padding:0;}"
-            f"QToolButton:checked{{background:{C.BG_SEL};border:1px solid {self._color};"
-            "border-radius:3px;}"
-        )
-        self._inpaint_layer_btn.clicked.connect(
-            lambda: self.inpaint_layer_selected.emit(self.slot_index)
-        )
-        row.addWidget(self._inpaint_layer_btn)
-
         # Œil de visibilité (viewport éditeur).
+        from ui.common.icons import get as _ico
         self._eye_btn = QToolButton()
         self._eye_btn.setFixedSize(22, 22)
         self._eye_btn.setIconSize(QSize(16, 16))
@@ -407,10 +389,6 @@ class BgLayerRow(QFrame):
         key = "eye" if visible else "eye_off"
         color = C.TEXT_DIM if visible else "#555"
         self._eye_btn.setIcon(_ico(key, color, self._color))
-
-    def set_inpaint_layer(self, active: bool):
-        """Marque ce layer comme cible active de l'outil de peinture."""
-        self._inpaint_layer_btn.setChecked(active)
 
     def _clear(self):
         self.clear_asset()

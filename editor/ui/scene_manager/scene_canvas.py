@@ -22,15 +22,17 @@ from core.models.scene import Actor, Area
 from core.project import Project
 from core.sprite_compose import compose_frame_image
 from core.models.gba_color import quantize_preview
+from core.models.gba_color import hex_to_bgr555, rgb888_to_bgr555
 from codegen.grit_conversion import resolve_obj_palette_bank
 from core.selection_bus import get_bus, CameraSelection
 from ui.common.theme import T, QSS, C
 from ui.common.palette_bank_strip import PaletteBankStrip
 from ui.common.canvas_top_bar import CanvasTopBar
+from ui.common.widgets import PickerEntry, PickerSlot
 from PyQt6.QtCore import QPointF, QSettings, Qt, QTimer, pyqtSignal
 from core.app_info import APP_NAME
-from PyQt6.QtGui import QColor, QFont, QImage, QPixmap
-from PyQt6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtGui import QColor, QFont, QIcon, QImage, QPainter, QPixmap
+from PyQt6.QtWidgets import QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 # Rasterisation des fonds + aperçus — extrait (A3, sous-package canvas/).
 from ui.scene_manager.canvas.canvas_raster import (
     BgLayerRaster, build_bg_raster, bg_pixmap, preview_frame_for_actor,
@@ -40,7 +42,7 @@ from ui.scene_manager.canvas.canvas_raster import (
 from ui.scene_manager.canvas.canvas_items import (
     SpriteItem, MaskablePixmapItem, CameraItem, ScreenBezelItem, GridItem,
     ActorBoxOverlay, AreaItem, GuideLine, CollisionOverlay, hw_layer_z,
-    make_placeholder_pixmap,
+    make_placeholder_pixmap, grid_value_text,
 )
 # Item de zone d'interface — extrait (A3, sous-package canvas/).
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
@@ -64,6 +66,22 @@ from ui.scene_manager.canvas.canvas_const import (
     GBA_W, GBA_H, MAX_CANVAS_W, MAX_CANVAS_H,
 )
 
+_COLLISION_SLOPE_FLOOR = "collision_slope_floor"
+_COLLISION_SLOPE_CEILING = "collision_slope_ceiling"
+
+
+def _grid_value_icon(value: int) -> QIcon:
+    """Icône textuelle d'une valeur, sans lui inventer une couleur métier."""
+    shown = grid_value_text(value, compact=True)
+    pixmap = QPixmap(22, 22)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setPen(QColor(C.TEXT_NORM))
+    painter.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, shown)
+    painter.end()
+    return QIcon(pixmap)
+
 
 # ──────────────────────────────────────────────────────────────────
 #  Wrapper canvas + toolbar flottante
@@ -72,6 +90,10 @@ class CanvasContainer(QWidget):
     """QWidget superposant GBAView et FloatingToolbar."""
 
     tool_changed = pyqtSignal(str)
+    paint_surface_changed = pyqtSignal(str)
+    paint_value_changed = pyqtSignal(object)
+    grid_creation_requested = pyqtSignal(str)
+    grid_step_changed = pyqtSignal(int)
 
     def __init__(self, view: GBAView, parent=None):
         super().__init__(parent)
@@ -87,12 +109,42 @@ class CanvasContainer(QWidget):
         # Table des raccourcis de l'outil actif (bas-droite, repliée au repos).
         self._hints = ShortcutHints(self, scene_canvas_hints, self._toolbar.current_tool)
 
-        # Bandeau flottant de sélection de la banque de peinture (bas-centre,
-        # même widget que Sprite Editor/Background Editor — cf. palette_bank_strip).
+        # La surface appartient au canvas, le bandeau de valeurs reste le
+        # widget partagé des palettes. Les autres écrans ne connaissent donc
+        # pas les surfaces de scène.
         self._inpaint_ctrl: Optional[SceneInpaintingController] = None
-        self._inpaint_bank_strip = PaletteBankStrip(label('scncanvas.no_active_bg_bank'), self)
+        self._paint_scene = None
+        self._paint_strip = QFrame(self)
+        self._paint_strip.setObjectName('paintStrip')
+        self._paint_strip.setStyleSheet(
+            f"QFrame#paintStrip {{ background:{C.BG_BASE}; border:1px solid {C.BORDER_MID}; border-radius:8px; }}")
+        strip_layout = QHBoxLayout(self._paint_strip)
+        strip_layout.setContentsMargins(6, 5, 6, 5)
+        strip_layout.setSpacing(6)
+        self._paint_surface = PickerSlot(
+            label('scncanvas.choose_paint_surface'), C.ACCENT,
+            self._paint_surface_entries, self._describe_paint_surface,
+            self._on_paint_surface_selected,
+            new_label=label('scncanvas.create_grid_named', name='{name}'),
+            on_new=self.grid_creation_requested.emit, create_named=True,
+            parent=self._paint_strip)
+        self._paint_surface.setMinimumWidth(190)
+        self._paint_surface.setToolTip(tooltip(title=label('scncanvas.paint_surface')))
+        strip_layout.addWidget(self._paint_surface)
+        self._grid_step = QComboBox(self._paint_strip)
+        self._grid_step.setFixedWidth(72)
+        for step in (8, 16, 32):
+            self._grid_step.addItem(label('scncanvas.grid_step_option', step=step), step)
+        self._grid_step.setToolTip(tooltip(
+            title=label('scncanvas.grid_step'), body=label('scncanvas.grid_step_tip')))
+        self._grid_step.currentIndexChanged.connect(self._on_grid_step_selected)
+        self._grid_step.hide()
+        strip_layout.addWidget(self._grid_step)
+        self._inpaint_bank_strip = PaletteBankStrip(label('scncanvas.no_active_bg_bank'), self._paint_strip)
+        strip_layout.addWidget(self._inpaint_bank_strip)
         self._inpaint_bank_strip.selected.connect(self._on_inpaint_bank_selected)
-        self._inpaint_bank_strip.raise_()
+        self._paint_strip.setVisible(False)
+        self._paint_strip.raise_()
 
         # Notice non bloquante (haut-droite) : ce que la scène ne peut pas montrer ni construire tel quel.
         self._notice = QLabel(self)
@@ -119,8 +171,138 @@ class CanvasContainer(QWidget):
         self._inpaint_ctrl = ctrl
 
     def _on_inpaint_bank_selected(self, slot: int):
-        if self._inpaint_ctrl:
+        self._paint_value = slot
+        surface = self._paint_surface.value() or ''
+        if self._inpaint_ctrl and surface.startswith('background:'):
             self._inpaint_ctrl.set_inpaint_bank(slot)
+        self.paint_value_changed.emit(slot)
+
+    def _on_paint_surface_selected(self, surface):
+        if isinstance(surface, str):
+            self.paint_surface_changed.emit(surface)
+            self.refresh_paint_values()
+
+    def _on_grid_step_selected(self, _index: int):
+        step = self._grid_step.currentData()
+        if self._grid_step.isVisible() and isinstance(step, int):
+            self.grid_step_changed.emit(step)
+
+    def _sync_grid_step(self, surface: str):
+        grid = None
+        if surface.startswith('grid:'):
+            name = surface.split(':', 1)[1]
+            grid = next((item for item in getattr(self._paint_scene, 'grids', [])
+                         if item.name == name), None)
+        self._grid_step.setVisible(grid is not None)
+        if grid is not None:
+            self._grid_step.blockSignals(True)
+            index = self._grid_step.findData(grid.step)
+            self._grid_step.setCurrentIndex(index if index >= 0 else 1)
+            self._grid_step.blockSignals(False)
+
+    def _paint_surface_entries(self) -> list[PickerEntry]:
+        """Les surfaces de la scène, avec la grammaire visuelle des pickers."""
+        from ui.common import icons
+
+        entries = [PickerEntry(
+            label('scncanvas.paint_collision'), 'collision',
+            icons.get('view_collision', C.TEXT_DIM))]
+        for grid in getattr(self._paint_scene, 'grids', []) if self._paint_scene else []:
+            entries.append(PickerEntry(
+                grid.name, f'grid:{grid.name}', icons.get('view_grid', C.TEXT_DIM)))
+        for layer in (getattr(self._paint_scene, 'background_layers', [])
+                      if self._paint_scene else []):
+            if layer.background_name:
+                entries.append(PickerEntry(
+                    label('scncanvas.paint_background', slot=layer.bg_slot),
+                    f'background:{layer.bg_slot}', icons.get('background', C.TEXT_DIM)))
+        return entries
+
+    def _describe_paint_surface(self, surface) -> PickerEntry | None:
+        if not isinstance(surface, str) or not surface:
+            return None
+        entry = next((item for item in self._paint_surface_entries()
+                      if item.value == surface), None)
+        if entry is not None:
+            return entry
+        from ui.common import icons
+        name = surface.split(':', 1)[-1]
+        return PickerEntry(label('pick.name_missing', name=name), surface,
+                           icons.get('view_grid', C.TEXT_DIM), missing=True)
+
+    def refresh_paint_surfaces(self, scene):
+        """Réunit les surfaces de la scène dans le seul sélecteur du canvas."""
+        current = self._paint_surface.value()
+        self._paint_scene = scene
+        choices = {entry.value for entry in self._paint_surface_entries()}
+        surface = current if current in choices else 'collision'
+        self._paint_surface.set_value(surface)
+        if isinstance(surface, str):
+            self.paint_surface_changed.emit(surface)
+        self.refresh_paint_values()
+
+    def refresh_paint_values(self):
+        """Charge les valeurs de la surface sélectionnée dans le bandeau partagé."""
+        surface = self._paint_surface.value() or 'collision'
+        self._sync_grid_step(surface)
+        if surface.startswith('background:'):
+            self.refresh_inpaint_banks()
+            return
+        if surface.startswith('grid:'):
+            name = surface.split(':', 1)[1]
+            grid = next((g for g in getattr(self._paint_scene, 'grids', []) if g.name == name), None)
+            values = getattr(grid, 'values', []) if grid else []
+            entries = []
+            icons = {}
+            for value in values:
+                try:
+                    color = hex_to_bgr555(value.color) if value.color else 0
+                except (TypeError, ValueError):
+                    color = 0
+                shown = grid_value_text(value.value)
+                entry_label = f"{value.name} · {shown}" if value.name else shown
+                entries.append((value.value, entry_label, [color]))
+                icons[value.value] = _grid_value_icon(value.value)
+            if not entries:
+                entries = [(value, grid_value_text(value),
+                            [rgb888_to_bgr555(value * 17, value * 17, value * 17)])
+                           for value in range(16)]
+                icons = {value: _grid_value_icon(value) for value in range(16)}
+            self._inpaint_bank_strip.load(
+                entries, active=getattr(self, '_paint_value', None), icons=icons,
+                match_colors=False, value_entries=True)
+            self._paint_value = self._inpaint_bank_strip.active()
+            self.paint_value_changed.emit(self._paint_value)
+            self._position_inpaint_strip()
+            return
+        from core.models import collision_tiles as CT
+        from ui.common.icons import get as icon
+        entries = [
+            (CT.TILE_EMPTY, label('scncanvas.collision_empty'), [0]),
+            (CT.TILE_SOLID, label('scncanvas.collision_solid'), [1]),
+            (_COLLISION_SLOPE_FLOOR, label('scncanvas.collision_floor_slope'), [2]),
+            (_COLLISION_SLOPE_CEILING, label('scncanvas.collision_ceiling_slope'), [3]),
+            (CT.TILE_ONEWAY_UP, label('scncanvas.collision_oneway_up'), [4]),
+            (CT.TILE_ONEWAY_DOWN, label('scncanvas.collision_oneway_down'), [5]),
+            (CT.TILE_ONEWAY_LEFT, label('scncanvas.collision_oneway_left'), [6]),
+            (CT.TILE_ONEWAY_RIGHT, label('scncanvas.collision_oneway_right'), [7]),
+        ]
+        icons = {
+            CT.TILE_EMPTY: icon('tool_erase', C.TEXT_NORM),
+            CT.TILE_SOLID: icon('tool_collision_8', C.TEXT_NORM),
+            _COLLISION_SLOPE_FLOOR: icon('tool_collision_slope', C.TEXT_NORM),
+            _COLLISION_SLOPE_CEILING: icon('tool_collision_slope_inv', C.TEXT_NORM),
+            CT.TILE_ONEWAY_UP: icon('tool_collision_oneway_up', C.TEXT_NORM),
+            CT.TILE_ONEWAY_DOWN: icon('tool_collision_oneway_down', C.TEXT_NORM),
+            CT.TILE_ONEWAY_LEFT: icon('tool_collision_oneway_left', C.TEXT_NORM),
+            CT.TILE_ONEWAY_RIGHT: icon('tool_collision_oneway_right', C.TEXT_NORM),
+        }
+        self._inpaint_bank_strip.load(
+            entries, active=getattr(self, '_paint_value', None), icons=icons,
+            value_entries=True)
+        self._paint_value = self._inpaint_bank_strip.active()
+        self.paint_value_changed.emit(self._paint_value)
+        self._position_inpaint_strip()
 
     def refresh_inpaint_banks(self):
         ctrl = self._inpaint_ctrl
@@ -129,17 +311,25 @@ class CanvasContainer(QWidget):
         self._inpaint_bank_strip.load(entries, active=ctrl.inpaint_bank if ctrl else None)
         if ctrl:
             ctrl.set_inpaint_bank(self._inpaint_bank_strip.active())
+        self._paint_value = self._inpaint_bank_strip.active()
+        self.paint_value_changed.emit(self._paint_value)
         self._position_inpaint_strip()
 
     def set_inpaint_strip_visible(self, visible: bool):
-        if visible:
-            self.refresh_inpaint_banks()
+        was_visible = self._paint_strip.isVisible()
         self._inpaint_bank_strip.setVisible(visible)
-        self._inpaint_bank_strip.raise_()
+        self._paint_strip.setVisible(visible)
+        if visible and not was_visible:
+            self.refresh_paint_values()
+        if visible:
+            self._position_inpaint_strip()
+        self._paint_strip.raise_()
 
     def _position_inpaint_strip(self):
-        strip = self._inpaint_bank_strip
-        strip.reflow()
+        strip = self._paint_strip
+        self._inpaint_bank_strip.reflow()
+        strip.layout().activate()
+        strip.setFixedSize(strip.sizeHint())
         x = max(0, (self.width() - strip.width()) // 2)
         y = max(0, self.height() - strip.height() - 12)
         strip.move(x, y)
@@ -156,6 +346,13 @@ class CanvasContainer(QWidget):
         """Relais des raccourcis clavier d'outil vers la toolbar flottante."""
         self._toolbar.activate_shortcut(group)
 
+    def select_paint_surface(self, surface: str):
+        if any(entry.value == surface for entry in self._paint_surface_entries()):
+            self._paint_surface.pick(surface)
+
+    def activate_paint_gesture(self, mode: str):
+        self._toolbar.activate_paint_gesture(mode)
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         tb = self._toolbar
@@ -163,9 +360,9 @@ class CanvasContainer(QWidget):
         y = max(0, min(tb.y(), self.height() - tb.height()))
         tb.move(x, y)
         tb.raise_()
-        if self._inpaint_bank_strip.isVisible():
+        if self._paint_strip.isVisible():
             self._position_inpaint_strip()
-            self._inpaint_bank_strip.raise_()
+            self._paint_strip.raise_()
         if self._notice.isVisible():
             self._position_notice()
 
@@ -344,6 +541,10 @@ class SceneEditor(QWidget):
         self._inpainting_ctrl = SceneInpaintingController(self._gba_scene)
         self._gba_view.inpainting_controller = self._inpainting_ctrl
         self._canvas_container.bind_inpainting(self._inpainting_ctrl)
+        self._canvas_container.paint_surface_changed.connect(self._on_paint_surface_changed)
+        self._canvas_container.paint_value_changed.connect(self._on_paint_value_changed)
+        self._canvas_container.grid_creation_requested.connect(self._on_grid_creation_requested)
+        self._canvas_container.grid_step_changed.connect(self._on_grid_step_changed)
 
         # Contrôleur des zones de texte (outil « Zone de texte »).
         self._ui_region_ctrl = UIRegionController(self)
@@ -414,7 +615,7 @@ class SceneEditor(QWidget):
         mkb("canvas.tool_add",       lambda: self._shortcut_tool("add"))
         mkb("canvas.tool_erase",     lambda: self._shortcut_tool("erase"))
         mkb("canvas.tool_collision", lambda: self._shortcut_tool("collision"))
-        mkb("canvas.tool_inpaint",   lambda: self._shortcut_tool("inpaint"))
+        mkb("canvas.tool_inpaint",   lambda: self._shortcut_tool("paint"))
         mkb("canvas.tool_ui",        lambda: self._shortcut_tool("ui"))
         # Vue
         mkb("common.fit", self._fit)
@@ -545,6 +746,9 @@ class SceneEditor(QWidget):
         get_history().push(RenameActorCmd(self._project, actor, new_name, refresh))
 
     def _shortcut_tool(self, group: str):
+        if group == "collision":
+            self._canvas_container.select_paint_surface("collision")
+            group = "paint"
         self._canvas_container.activate_tool_shortcut(group)
 
     def _shortcut_escape(self):
@@ -800,15 +1004,59 @@ class SceneEditor(QWidget):
 
     def _on_tool_changed(self, tool_id: str):
         from ui.scene_manager.canvas_tools import (
-            AddActorTool, AddAreaTool, CollisionTool, EraseTool, SelectTool)
+            AddActorTool, AddAreaTool, CollisionSlopeTool, EraseTool, SelectTool)
+
+        if not tool_id.startswith("paint_"):
+            self._gba_scene.grid_overlay.setVisible(False)
+        if not (tool_id.startswith("paint_")
+                and getattr(self, '_paint_surface', '') == 'collision'):
+            scene = self._gba_scene
+            if not (getattr(scene, "_collision_view", False)
+                    or getattr(scene, "_collision_index_view", False)
+                    or getattr(scene, "_collision_normals_view", False)):
+                scene.collision_overlay.setVisible(False)
 
         match tool_id:
-            case t if t.startswith("collision"):
-                self._gba_view.set_tool(CollisionTool(self._gba_view, t))
-            case t if t.startswith("inpaint"):
-                from ui.scene_manager.canvas_tools import SceneInpaintingTool
-
-                self._gba_view.set_tool(SceneInpaintingTool(self._gba_view, t))
+            case t if t.startswith("paint_"):
+                surface_id = getattr(self, '_paint_surface', 'collision')
+                value = getattr(self, '_paint_value', 0)
+                if surface_id == 'collision' and value in (
+                        _COLLISION_SLOPE_FLOOR, _COLLISION_SLOPE_CEILING):
+                    slope_mode = ("collision_slope_inv" if value == _COLLISION_SLOPE_CEILING
+                                  else "collision_slope")
+                    self._gba_view.set_tool(CollisionSlopeTool(self._gba_view, slope_mode))
+                    self._gba_scene.collision_overlay.setVisible(True)
+                    self._canvas_container.set_inpaint_strip_visible(True)
+                    return
+                from ui.scene_manager.canvas_tools import GridPaintTool
+                from ui.scene_manager.grid_paint_surface import GridPaintSurface, SceneInpaintingSurface
+                mode = 'rect' if t == 'paint_rect' else 'fill' if t == 'paint_fill' else 'brush'
+                if surface_id.startswith('grid:'):
+                    grid = self._project.active_scene.grid(surface_id.split(':', 1)[1])
+                    self._gba_scene.grid_overlay.load(grid)
+                    self._gba_scene.grid_overlay.setVisible(True)
+                    surface = GridPaintSurface(grid.name, grid.step, grid.cells,
+                                               changed=self._gba_scene.grid_overlay.update)
+                    persist = get_dispatcher().save_scene
+                elif surface_id.startswith('background:'):
+                    slot = int(surface_id.split(':', 1)[1])
+                    layer = next((layer for layer in self._project.active_scene.background_layers
+                                  if layer.bg_slot == slot), None)
+                    surface = SceneInpaintingSurface(self._inpainting_ctrl, layer, slot) if layer else None
+                    persist = self._inpainting_ctrl.persist
+                else:
+                    overlay = self._gba_scene.collision_overlay
+                    cells = overlay.get_map()
+                    surface = GridPaintSurface(
+                        "Collision", 8, changed=overlay.update,
+                        read=overlay.tile_at, write=overlay.set_tile,
+                        bounds=lambda: (max((len(row) for row in cells), default=0), len(cells)))
+                    persist = self._on_collision_painted
+                    overlay.setVisible(True)
+                if surface is not None:
+                    self._gba_view.set_tool(GridPaintTool(
+                        self._gba_view, surface, mode,
+                        value, persist))
             case "add":
                 self._gba_view.set_tool(AddActorTool(self._gba_view))
             case "add_area":
@@ -823,7 +1071,7 @@ class SceneEditor(QWidget):
             case _:
                 self._gba_view.set_tool(SelectTool(self._gba_view))
         # Bandeau de palette visible seulement pour les outils de peinture BG.
-        self._canvas_container.set_inpaint_strip_visible(tool_id.startswith("inpaint"))
+        self._canvas_container.set_inpaint_strip_visible(tool_id.startswith("paint_"))
 
     def _reload_ui_regions(self):
         """(Re)dessine les éléments de TOUS les nœuds `Interface` de la scène
@@ -908,6 +1156,88 @@ class SceneEditor(QWidget):
 
         get_dispatcher().save_scene()
 
+    def _on_paint_surface_changed(self, surface: str):
+        """Mémorise la surface choisie. Les gestes communs la liront ensuite."""
+        self._paint_surface = surface
+        if surface.startswith('background:'):
+            self._gba_scene.grid_overlay.setVisible(False)
+            self._inpainting_ctrl.set_inpaint_layer(int(surface.split(':', 1)[1]))
+        elif surface.startswith('grid:'):
+            grid = self._project.active_scene.grid(surface.split(':', 1)[1]) if self._project else None
+            self._gba_scene.grid_overlay.load(grid)
+            self._gba_scene.grid_overlay.setVisible(grid is not None)
+        else:
+            self._gba_scene.grid_overlay.setVisible(False)
+        tool = self._canvas_container.current_tool
+        if tool.startswith('paint_'):
+            self._on_tool_changed(tool)
+
+    def _on_grid_creation_requested(self, name: str):
+        """Crée une grille de la scène depuis le picker, puis la sélectionne."""
+        scene = self._project.active_scene if self._project else None
+        name = name.strip()
+        if scene is None or not name:
+            return
+        existing = next((grid for grid in scene.grids
+                         if grid.name.casefold() == name.casefold()), None)
+        if existing is not None:
+            self._canvas_container.select_paint_surface(f'grid:{existing.name}')
+            return
+
+        from core.history import AddListItemCmd, RefreshAfterCmd, get_history
+        from core.models.grid import Grid
+
+        grid = Grid(name=name)
+        grid.ensure_size(self._canvas_w, self._canvas_h)
+
+        def refresh():
+            self._canvas_container.refresh_paint_surfaces(scene)
+            if grid in scene.grids:
+                self._canvas_container.select_paint_surface(f'grid:{grid.name}')
+
+        command = AddListItemCmd(
+            scene.grids, grid, persist_fn=self.scene_changed.emit,
+            label=label('scncanvas.add_grid_history', name=name))
+        get_history().push(RefreshAfterCmd(command, refresh))
+        get_dispatcher().status(label('scncanvas.grid_created', name=name))
+
+    def _on_grid_step_changed(self, step: int):
+        """Rééchantillonne la grille active et réinstalle les outils à son pas."""
+        scene = self._project.active_scene if self._project else None
+        surface = getattr(self, '_paint_surface', '')
+        if scene is None or not surface.startswith('grid:'):
+            return
+        grid = scene.grid(surface.split(':', 1)[1])
+        if grid is None or step == grid.step:
+            return
+        from core.history import GridStepCmd, get_history
+
+        cells = grid.cells_at_step(self._canvas_w, self._canvas_h, step)
+
+        def refresh():
+            self._canvas_container.refresh_paint_surfaces(scene)
+            # Le picker conserve la même valeur et n'émet donc aucun signal.
+            # Réinstaller explicitement la surface renouvelle aussi le pas de
+            # l'outil actif, dans les deux sens de l'historique.
+            self._on_paint_surface_changed(f'grid:{grid.name}')
+
+        get_history().push(GridStepCmd(
+            grid, step, cells, persist_fn=self.scene_changed.emit,
+            refresh_fn=refresh,
+            label=label('scncanvas.grid_step_history', name=grid.name, step=step)))
+        get_dispatcher().status(
+            label('scncanvas.grid_step_changed', name=grid.name, step=step))
+
+    def _on_paint_value_changed(self, value):
+        self._paint_value = value
+        tool = self._canvas_container.current_tool
+        if (value in (_COLLISION_SLOPE_FLOOR, _COLLISION_SLOPE_CEILING)
+                and tool in ('paint_rect', 'paint_fill')):
+            self._canvas_container.activate_paint_gesture('paint_brush')
+            return
+        if tool.startswith('paint_'):
+            self._on_tool_changed(tool)
+
     # ── Chargement projet ─────────────────────────────────────────
 
     def _fit_canvas_to_backgrounds(self, scene):
@@ -981,9 +1311,9 @@ class SceneEditor(QWidget):
 
         # Contexte de peinture par palette + peuplement du bandeau de palettes.
         self._inpainting_ctrl.set_context(project, scene)
+        self._canvas_container.refresh_paint_surfaces(scene)
         self._ui_region_ctrl.set_context(project, scene)
         self._reload_ui_regions()
-        self._canvas_container.refresh_inpaint_banks()
         self._refresh_bg_notice(scene)
 
         self._reload_sprites()
@@ -1610,12 +1940,10 @@ class SceneEditor(QWidget):
 
         # La banque de base / les layers ont pu changer : resynchroniser le
         # contrôleur de peinture (raster du layer actif) et le bandeau.
-        prev_slot = self._inpainting_ctrl.inpaint_layer_slot
         self._inpainting_ctrl.set_context(self._project, scene)
         self._ui_region_ctrl.set_context(self._project, scene)
         self._reload_ui_regions()
-        self._inpainting_ctrl.set_inpaint_layer(prev_slot)
-        self._canvas_container.refresh_inpaint_banks()
+        self._canvas_container.refresh_paint_surfaces(scene)
         self._refresh_bg_notice(scene)
 
     def _refresh_bg_notice(self, scene):
@@ -1630,10 +1958,6 @@ class SceneEditor(QWidget):
         self._canvas_container.set_notice(
             label("scncanvas.bitmap_in_tiled_mode", names=", ".join(names), mode=int(getattr(scene, "render_mode", 0) or 0))
             if names else "")
-
-    def set_inpaint_layer(self, bg_slot: int):
-        """Choisit le layer BG peint par l'outil de peinture (via l'inspecteur)."""
-        self._inpainting_ctrl.set_inpaint_layer(bg_slot)
 
     def set_layer_visible(self, bg_slot: int, visible: bool):
         """Masque/affiche un layer dans le canvas (visibilité viewport éditeur)."""
