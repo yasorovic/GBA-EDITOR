@@ -262,6 +262,36 @@ def test_une_condition_qui_peut_changer_passe(cond):
     assert errs == []
 
 
+# ── La condition est une expression comme une autre ───────────────
+#  Le seul contrôle qu'elle recevait portait sur sa capacité à changer. Tout le
+#  reste (propriété appelée comme une fonction, méthode inconnue, point au lieu
+#  des deux points) traversait le checker, le codegen recopiait l'expression, et
+#  gcc la refusait en parlant du C généré : un message sur un fichier que
+#  l'auteur n'a pas écrit, et une ligne qui n'est pas la sienne.
+
+
+@pytest.mark.parametrize("cond,attendu", [
+    ("self.frame(1)", "is a PROPERTY, not a function"),
+    ("self.bidon(1)", "called with a COLON"),
+    ("self:bidon()", "Unknown method"),
+    ("self.position", "is not a condition"),
+])
+def test_une_condition_fautive_est_refusee_par_le_checker(cond, attendu):
+    errs, _code, _n = _gen(f"function on_sequence_a()\n wait_until({cond})\nend\n")
+    assert any(attendu in e for e in errs), errs
+
+
+def test_la_faute_est_dite_sur_la_ligne_de_l_attente():
+    """Le message doit mener à l'attente, pas au début de la séquence."""
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+    script = parse("function on_sequence_a()\n self:play_anim(\"idle\")\n"
+                   " wait_until(self.frame(1))\nend\n")
+    errs = [e for e in check(script, BuildContext(actor_name="Hero", anim_names=["idle"]))
+            if e.level == "error"]
+    assert [e.line for e in errs] == [3]
+
+
 # ── Ce qui traverse une attente garde son type ───────────────────
 #
 # Le champ d'état d'un local hissé était déclaré `int` en dur : un Vec2, un

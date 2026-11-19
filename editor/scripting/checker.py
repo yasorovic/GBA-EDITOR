@@ -1862,6 +1862,16 @@ class Checker:
             if wait_call(s) is not None:
                 if not seq_top:
                     self._refuse_misplaced_wait(s)
+                    return
+                # L'attente elle-même n'est pas un appel (elle coupe la séquence,
+                # elle n'appelle rien), mais son ARGUMENT est une expression
+                # ordinaire. Sans ce passage, une faute écrite dans la condition
+                # d'un `wait_until` (`self.frame(1)` : une propriété appelée comme
+                # une fonction) traversait le checker, le codegen la recopiait, et
+                # seul gcc la refusait, en parlant du C au lieu du script.
+                for arg in s.call.args:
+                    self._check_expr(arg)
+                    self._check_condition(arg)
                 return
             # Un appel isolé valide aussi ses arguments et son récepteur.
             self._mark_spawn_stmt(s.call)
