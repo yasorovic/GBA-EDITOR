@@ -150,6 +150,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
         return ctx.warnings, ctx.errors
     _check_scene(ctx)
     _check_each_scene(ctx)
+    _check_scene_grids(ctx)
     _check_prefabs(ctx)
     _check_font_sheets(ctx)
     _check_start_scene(ctx)
@@ -631,6 +632,91 @@ def _check_collision_map(ctx):
         col, row, tile = bad[0]
         ctx.error(None, f"Collision map: {len(bad)} tile(s) have an unknown type (first: {tile!r} at column {col}, "
                         f"row {row}). Valid types are 0 to {TILE_COUNT - 1}: repaint or erase them.")
+
+
+def _scene_grid_scripts(project, scene):
+    """Les scripts Lua réellement compilés dans ``scene``, prefabs compris."""
+    from core.models.components import ScriptComponent
+    paths = []
+
+    def add(relative):
+        path = project.asset_abs(relative) if relative else None
+        if path and path.suffix.lower() == ".lua" and path.exists():
+            paths.append(path)
+
+    add(getattr(scene, "script", ""))
+    owners = [*scene.actors, *scene.areas]
+    for actor in scene.actors:
+        prefab_name = getattr(actor, "prefab_name", None)
+        prefab = project.get_prefab(prefab_name) if prefab_name else None
+        if prefab:
+            owners.append(prefab)
+    for owner in owners:
+        component = owner.get_component("script") if hasattr(owner, "get_component") else None
+        if isinstance(component, ScriptComponent) and component.active:
+            add(component.script)
+    for camera in scene.cameras:
+        add(getattr(camera, "script", ""))
+    return list(dict.fromkeys(paths))
+
+
+def _grid_refs_in_script(path, behavior_paths, seen=None):
+    """Grilles lues par ce script et les behaviors qu'il importe."""
+    from core import lua_scripts
+    from scripting.parser import parse as lua_parse, require_target
+    from scripting.refactor import iter_grid_refs
+
+    seen = set() if seen is None else seen
+    path = Path(path).resolve()
+    if path in seen:
+        return set()
+    seen.add(path)
+    try:
+        text = path.read_text(encoding="utf-8")
+        script = lua_parse(text)
+    except Exception:  # tolerated: _check_scripts_parse reports malformed scripts
+        return set()
+    names = {ref.name for ref in iter_grid_refs(text, path)}
+    for local in script.locals:
+        target = require_target(local.value)
+        if target:
+            behavior = behavior_paths.get(lua_scripts.require_name(target))
+            if behavior:
+                names |= _grid_refs_in_script(behavior, behavior_paths, seen)
+    return names
+
+
+def _check_scene_grids(ctx):
+    """Avertit sur les grilles incomplètes, sans nom ou jamais lues."""
+    from core import lua_scripts
+
+    behavior_paths = lua_scripts.behavior_paths(ctx.project)
+    for scene in ctx.project.scenes:
+        # La collision a la taille de l'étendue réellement éditable de la scène.
+        collision = getattr(scene, "collision_map", []) or []
+        width_px = max((len(row) for row in collision), default=30) * 8
+        height_px = max(len(collision), 20) * 8
+        read = set()
+        for path in _scene_grid_scripts(ctx.project, scene):
+            read |= _grid_refs_in_script(path, behavior_paths)
+        ctx.focus(scene)
+        for grid in getattr(scene, "grids", []):
+            want_cols = (width_px + grid.step - 1) // grid.step
+            want_rows = (height_px + grid.step - 1) // grid.step
+            if grid.cols < want_cols or grid.rows < want_rows:
+                ctx.warn(None,
+                    f"Grid '{grid.name}' is {grid.cols}×{grid.rows} cells, smaller than scene '{scene.name}' "
+                    f"({want_cols}×{want_rows} at {grid.step} px): the uncovered area reads as 0. Expand the grid.")
+            painted = {cell for row in grid.cells for cell in row}
+            for value in grid.values:
+                if value.value in painted and not value.name.strip():
+                    ctx.warn(None,
+                        f"Grid '{grid.name}': painted value {value.value} has no name, so scripts cannot use a "
+                        "named constant for it. Name the value or erase its cells.")
+            if grid.name not in read:
+                ctx.warn(None,
+                    f"Grid '{grid.name}' of scene '{scene.name}' is never read by a script compiled for this scene.")
+    ctx.focus(None)
 
 
 _PHYSICS_LUA = re.compile(r"physics_body\s*\(|\bfunction\s+on_crushed\b|\bscene\.gravity\b")

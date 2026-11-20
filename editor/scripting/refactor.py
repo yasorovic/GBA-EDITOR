@@ -34,7 +34,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REF_TYPES, REF_ACTOR, PARAM_STR, D
                   DOMAIN_PREFAB, MODULE_CALLS, COLLISION_EVENTS, BOX_PARAMS, AREA_EVENTS, AREA_PARAM,
                   REF_AREA, REF_COLLISION_SHAPE)
 
-from .parser import DATA_NS, DATA_TABLE_NS, raw_tree
+from .parser import DATA_GRID_NS, DATA_NS, DATA_TABLE_NS, raw_tree
 
 try:
     from luaparser import ast as _lua_ast, astnodes as _nodes
@@ -583,6 +583,14 @@ class DataRef:
     stop:   int             # offset du dernier caractère (inclusif)
 
 
+@dataclass(frozen=True)
+class GridRef:
+    """Une citation de grille de scène dans un script Lua."""
+    path: Path
+    name: str
+    line: int
+
+
 def _table_of(node) -> Optional[str]:
     """`data.table.Objets` → "Objets", pour tout autre noeud → None.
 
@@ -598,6 +606,21 @@ def _table_of(node) -> Optional[str]:
             and isinstance(kind.value, _nodes.Name)
             and kind.value.id == DATA_NS
             and getattr(kind.idx, "id", None) == DATA_TABLE_NS):
+        return None
+    return getattr(node.idx, "id", None)
+
+
+def _grid_of(node) -> Optional[str]:
+    """`data.grid.Terrain` → "Terrain", dans l'arbre brut de luaparser."""
+    if not (isinstance(node, _nodes.Index)
+            and node.notation == _nodes.IndexNotation.DOT):
+        return None
+    kind = node.value
+    if not (isinstance(kind, _nodes.Index)
+            and kind.notation == _nodes.IndexNotation.DOT
+            and isinstance(kind.value, _nodes.Name)
+            and kind.value.id == DATA_NS
+            and getattr(kind.idx, "id", None) == DATA_GRID_NS):
         return None
     return getattr(node.idx, "id", None)
 
@@ -657,6 +680,22 @@ def iter_data_refs(text: str, path: Path | None = None,
         if span:
             yield DataRef(path=path or Path(""), table=owner, column=field,
                           line=_line(span[0]), start=span[0], stop=span[1])
+
+
+def iter_grid_refs(text: str, path: Path | None = None) -> Iterator[GridRef]:
+    """Citations structurelles de ``data.grid.<Nom>`` dans un script."""
+    if not _LUAPARSER_OK:
+        return
+    try:
+        tree = raw_tree(text)
+    except Exception:  # tolerated: unparsable script: the validator reports it
+        return
+    for node in _lua_ast.walk(tree):
+        name = _grid_of(node)
+        start = getattr(node, "start_char", None)
+        if name and start is not None:
+            yield GridRef(path=path or Path(""), name=name,
+                          line=text.count("\n", 0, start) + 1)
 
 
 def _rewrite_data_refs(text: str, refs: list[DataRef], new: str) -> tuple[str, int]:
