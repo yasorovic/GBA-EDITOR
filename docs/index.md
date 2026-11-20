@@ -2,12 +2,12 @@
 :hidden:
 :maxdepth: 2
 
+About <about/index>
 Getting Started <user-guide/index>
 Guides <guides/index>
 Manual <manual/index>
 Architecture <architecture/index>
 Lua API <lua-api/index>
-About <about/index>
 ```
 
 ```{image} assets/backstage-study.svg
@@ -22,14 +22,14 @@ About <about/index>
 # Créez votre jeu Game Boy Advance
 
 :::{div} backstage-home-lead
-Backstage est un logiciel libre pour fabriquer des jeux Game Boy Advance depuis une interface visuelle. Créez, construisez, Backstage s'occupe de la technique.
+Backstage réunit scènes, acteurs, ressources et scripts pour construire un projet Game Boy Advance.
 :::
 
 ::::{div} backstage-home-actions
-:::{button-ref} user-guide/index
+:::{button-ref} about/download
 :ref-type: doc
 :class: backstage-btn backstage-btn-primary
-Créer mon premier jeu
+Télécharger Backstage
 :::
 :::{button-ref} about/index
 :ref-type: doc
@@ -67,7 +67,7 @@ Vous savez programmer ? Écrivez le comportement de vos acteurs et parcourez tou
 :link-type: doc
 :class-card: backstage-card backstage-card-blue
 
-Ce qu'est Backstage, ce qu'il fait, et ce que vous avez le droit d'en faire. _Cette section arrive bientôt._
+Ce qu'est Backstage, ses fonctionnalités et ce qu'il faut pour commencer.
 :::
 
 :::{grid-item-card} Architecture
