@@ -28,7 +28,7 @@ from ui.common.three_column_body import ThreeColumnBody
 from ui.common.asset_library import AssetLibrary
 from ui.common.asset_kinds import DATA_TABLES
 from core.project import Project
-from core.history import get_history, SetFieldCmd
+from core.history import change_label, get_history, SetFieldCmd
 from core.command_dispatcher import get_dispatcher
 from ui.common.deferred_writes import schedule_unwatched
 
@@ -93,7 +93,7 @@ class DataEditorScreen(QWidget):
             schedule_unwatched("save_texts", project.save_texts)
             get_dispatcher().notify_texts_changed()
 
-        get_history().push(SetFieldCmd(text, "content", before, after, label=f"Content of {text.key}",
+        get_history().push(SetFieldCmd(text, "content", before, after, label=change_label(text.key, "content"),
                                        persist_fn=persist))
 
     def refresh_text(self):

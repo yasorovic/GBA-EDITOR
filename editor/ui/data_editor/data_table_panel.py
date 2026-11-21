@@ -38,7 +38,7 @@ from core.models.unique_name import unique_name
 from core.models.text import key_from_path
 from core.models.data_table import (DataTable, DataColumn, COLUMN_CHOICES,
                                     COLUMN_REFERENCES)
-from core.history import get_history, RemoveListItemCmd, SetFieldCmd, AddListItemCmd, MacroCmd
+from core.history import change_label, get_history, RemoveListItemCmd, SetFieldCmd, AddListItemCmd, MacroCmd
 from core.text_sequences import sequences
 from core.text_table_link import (link_state, key_column,
                                   row_changes, LinkTableCmd, UnlinkTableCmd)
@@ -471,7 +471,7 @@ class DataTablePanel(QWidget):
 
         add = AddListItemCmd(project.texts, text, persist_fn=persist_texts, label=f"New text {text.key}")
         write = SetCellCmd(table, row, column.name, table.value(row, column), text.key, self._persist)
-        get_history().push(MacroCmd([add, write], f"{table.name}.{column.name}"))
+        get_history().push(MacroCmd([add, write], change_label(table.name, column.name)))
         self._after_change()
 
     def _persist(self):
@@ -822,7 +822,7 @@ class DataTablePanel(QWidget):
         color = color or ""
         if self._table and column in self._table.columns and column.color != color:
             get_history().push(SetFieldCmd(column, "color", column.color, color,
-                                           label=column.name, persist_fn=self._after_change))
+                                           label=change_label(column.name, "color"), persist_fn=self._after_change))
 
     # ── Après toute écriture de structure ─────────────────────────
 

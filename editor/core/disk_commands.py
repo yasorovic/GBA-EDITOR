@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from core import disk_folders, disk_move
-from core.history import Command
+from core.history import Command, history_label
 
 
 class SuspendedCmd(Command):
@@ -44,7 +44,7 @@ class CreateFileCmd(Command):
         self._path = Path(path)
         self._content = content
         self._around = around
-        self.label = f"Créer {self._path.name}"
+        self.label = history_label("history.create_resource", name=self._path.name)
 
     def execute(self):
         with self._around():
@@ -66,7 +66,7 @@ class ImportFilesCmd(Command):
         self._around = around
         self._made: list[Path] = []                                         # les dossiers créés, du plus haut au plus bas
         self._overwritten: dict[Path, bytes] = {}                           # le contenu d'avant, des copies qui en écrasent un
-        self.label = f"Importer {len(self._copies)} fichier(s)"
+        self.label = history_label("history.import_files", count=len(self._copies))
 
     def execute(self):
         with self._around():
@@ -105,7 +105,7 @@ class MoveFilesCmd(Command):
         self._target = Path(target)
         self._around = around
         self.result: Optional[disk_move.MoveResult] = None
-        self.label = f"Déplacer {len(self._paths)} élément(s)"
+        self.label = history_label("history.move_items", count=len(self._paths))
 
     def execute(self):
         with self._around():
@@ -130,7 +130,7 @@ class DeleteFilesCmd(Command):
         self._bin = project.deleted_files
         self._files = [Path(p) for p in files]
         self._folders = sorted((Path(p) for p in folders), key=lambda p: len(p.parts), reverse=True)
-        self.label = f"Supprimer {len(self._files) + len(self._folders)} élément(s)"
+        self.label = history_label("history.delete_items", count=len(self._files) + len(self._folders))
 
     def execute(self):
         self._bin.stash(self._files)
@@ -153,7 +153,7 @@ class CreateFolderCmd(Command):
         self._parent, self._base, self._root = Path(parent), base, Path(root)
         self._around = around
         self.created: Optional[Path] = None
-        self.label = "Nouveau dossier"
+        self.label = history_label("history.create_folder")
 
     def execute(self):
         with self._around():
@@ -176,7 +176,7 @@ class RenamePathCmd(Command):
         self._project, self._path, self._new_name = project, Path(path), new_name
         self._around = around
         self.renamed: Optional[Path] = None
-        self.label = f"Renommer {self._path.name}"
+        self.label = history_label("history.rename_resource", name=self._path.name)
 
     def execute(self):
         with self._around():

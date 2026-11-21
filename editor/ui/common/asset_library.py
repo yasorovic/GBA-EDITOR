@@ -62,7 +62,7 @@ from ui.common import shortcut_hints
 from core import disk_locate
 from core.asset_usages import usages_of
 from core.command_dispatcher import get_dispatcher
-from core.history import get_history, MacroCmd, RefreshAfterCmd
+from core.history import get_history, history_label, MacroCmd, RefreshAfterCmd
 
 _ROLE_OBJ = Qt.ItemDataRole.UserRole
 _ROLE_FOLDER = Qt.ItemDataRole.UserRole + 1   # id d'un dossier d'auteur (obj None)
@@ -1155,7 +1155,8 @@ class _KindTree(QTreeWidget):
         if not copies:
             return
         commands = [copy.command for copy in copies]
-        command = commands[0] if len(commands) == 1 else MacroCmd(commands, f"Duplicate {len(commands)} {kind.label.lower()}")
+        command = commands[0] if len(commands) == 1 else MacroCmd(
+            commands, history_label("history.duplicate_assets", count=len(commands)))
         get_history().push(RefreshAfterCmd(command, self._panel.refresh))
         scheme = self._panel.folder_scheme(kind.label)
         if scheme is not None:
@@ -1211,7 +1212,7 @@ class _KindTree(QTreeWidget):
             return
         cmds = [kind.delete(project, o) for o in objs]
         get_history().push(RefreshAfterCmd(
-            MacroCmd(cmds, f"Delete {n} {kind.label.lower()}"), self._after_delete))
+            MacroCmd(cmds, history_label("history.delete_assets", count=n)), self._after_delete))
         self._panel.emptied.emit(kind.label)
         get_dispatcher().status(label('assetlibrary.deleted', n=n))
 

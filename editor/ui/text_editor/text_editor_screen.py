@@ -48,7 +48,7 @@ from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from core.history import get_history, SetFieldCmd
+from core.history import change_label, get_history, SetFieldCmd
 from ui.common.deferred_writes import schedule_save, schedule_unwatched
 from ui.common.theme import C
 from ui.common.labels import label
@@ -387,7 +387,7 @@ class TextEditorScreen(QWidget):
             return
         get_history().push(SetFieldCmd(
             asset, field, getattr(asset, field), value,
-            label=f"Set {field} of {asset.name}",
+            label=change_label(asset.name, field),
             persist_fn=lambda: self._after_font_asset_change(asset),
         ))
 
@@ -414,7 +414,7 @@ class TextEditorScreen(QWidget):
         font = self._font_insp._font
         get_history().push(SetFieldCmd(
             glyph, "char", before, after,
-            label=f"Glyphe « {after} »",
+            label=change_label(after, "glyph"),
             persist_fn=lambda: self._after_glyph_change(font),
         ))
 

@@ -19,7 +19,7 @@ from core.models.scene import TRANSITION_INHERIT, EFFECT_NONE, BG_SLOTS_BY_MODE
 from ui.scene_manager.inspectors.bg_layer_row import BgLayerRow
 from ui.scene_manager.inspectors.project_inspector import TRANSITION_LABELS
 from core.history import (
-    get_history, Command, SetFieldCmd, SwapFieldCmd, AddListItemCmd,
+    change_label, get_history, history_label, Command, SetFieldCmd, SwapFieldCmd, AddListItemCmd,
     RemoveListItemCmd, SetSceneModeCmd, MacroCmd,
 )
 from core.command_dispatcher import get_dispatcher
@@ -699,7 +699,7 @@ class SceneInspector(QWidget):
             return
         commands = [
             SetFieldCmd(self._scene, field, getattr(self._scene, field), value,
-                        label=f"{self._scene.name}.{field}")
+                        label=change_label(self._scene.name, field))
             for field, value in fields if getattr(self._scene, field) != value
         ]
         if not commands:
@@ -707,7 +707,7 @@ class SceneInspector(QWidget):
             return
         commands[-1]._persist = self._persist_and_refresh_physics
         get_history().push(commands[0] if len(commands) == 1
-                           else MacroCmd(commands, "Physique de la scène"))
+                           else MacroCmd(commands, history_label("history.change_scene_physics")))
         self.changed.emit()
 
     def _on_physics_value(self, field: str, value):
@@ -1006,7 +1006,7 @@ class SceneInspector(QWidget):
             return
         get_history().push(SetFieldCmd(
             layer, "background_name", layer.background_name, name,
-            label=f"BG{layer.bg_slot}.background_name",
+            label=change_label(f"BG{layer.bg_slot}", "background name"),
             persist_fn=lambda: (self._persist_scene(), self._rebuild_layer_rows()),
         ))
         get_dispatcher()._emit("bg_slot_changed", layer.bg_slot)
@@ -1017,7 +1017,7 @@ class SceneInspector(QWidget):
             return
         get_history().push(SetFieldCmd(
             layer, "scroll_speed", layer.scroll_speed, value,
-            label=f"BG{layer.bg_slot}.scroll_speed", persist_fn=self._persist_scene,
+            label=change_label(f"BG{layer.bg_slot}", "scroll speed"), persist_fn=self._persist_scene,
         ))
 
     def _on_layer_pal_bank(self, layer, pal_name: str):
@@ -1038,7 +1038,7 @@ class SceneInspector(QWidget):
             return
         get_history().push(SetFieldCmd(
             layer, "pal_bank", layer.pal_bank, idx,
-            label=f"BG{layer.bg_slot}.pal_bank", persist_fn=self._persist_scene,
+            label=change_label(f"BG{layer.bg_slot}", "palette bank"), persist_fn=self._persist_scene,
         ))
         self._rebuild_layer_rows()
         get_dispatcher()._emit("bg_slot_changed", layer.bg_slot)
@@ -1603,7 +1603,7 @@ class SceneInspector(QWidget):
 
         get_history().push(SetFieldCmd(
             self._scene, field, old, value,
-            label=f"{self._scene.name}.{field}",
+            label=change_label(self._scene.name, field),
             persist_fn=_do_persist,
         ))
 

@@ -412,7 +412,8 @@ class BgInpaintController:
 
     def end_stroke(self):
         """Clôt le geste : une commande d'historique (deux réunies pour la gomme) + persistance."""
-        from core.history import (BackgroundInpaintingCmd, BackgroundTilePaintCmd, MacroCmd, get_history)
+        from core.history import (BackgroundInpaintingCmd, BackgroundTilePaintCmd, MacroCmd, get_history,
+                                  history_label)
         inpaint, painted = self._stroke or {}, self._tile_stroke or {}
         self._stroke = self._tile_stroke = None
         self._both = False
@@ -423,7 +424,7 @@ class BgInpaintController:
             cmds.append(BackgroundTilePaintCmd(self, self._ba, dict(painted)))
         if not cmds or not self.ready:
             return
-        cmd = cmds[0] if len(cmds) == 1 else MacroCmd(cmds, "Gomme")
+        cmd = cmds[0] if len(cmds) == 1 else MacroCmd(cmds, history_label("history.erase_background_edits"))
         get_history().push_executed(cmd)
         self._persist()
 

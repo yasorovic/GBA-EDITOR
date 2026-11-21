@@ -12,7 +12,7 @@ from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import QFrame, QListWidget, QListWidgetItem, QVBoxLayout
 
-from ui.common.labels import label
+from ui.common.labels import history_text, label
 from ui.common.theme import C, QSS, T
 
 _WIDTH = 300
@@ -35,14 +35,14 @@ class ActionListPopup(QFrame):
         self._list.itemClicked.connect(self._on_clicked)
         lay.addWidget(self._list)
 
-    def set_entries(self, undo_labels: list[str], redo_labels: list[str]) -> None:
+    def set_entries(self, undo_labels: list, redo_labels: list) -> None:
         """`undo_labels` : la plus récente d'abord. `redo_labels` : la prochaine à rejouer d'abord."""
         self._list.clear()
         # Du plus lointain dans le futur au plus proche, puis le passé : une seule ligne du temps, lue de haut en bas.
         for i in reversed(range(len(redo_labels))):
-            self._add(redo_labels[i], i + 1, dim=True)
+            self._add(history_text(redo_labels[i]), i + 1, dim=True)
         for i, text in enumerate(undo_labels):
-            self._add(text, -(i + 1), dim=False)
+            self._add(history_text(text), -(i + 1), dim=False)
         if not undo_labels and not redo_labels:
             item = QListWidgetItem(label("win.undo_none"))
             item.setFlags(Qt.ItemFlag.NoItemFlags)

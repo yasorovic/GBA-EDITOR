@@ -46,7 +46,7 @@ from core.project import Project
 from core.models.settings import (Language, InputBinding, InputSequence, pair_key,
                                   RESERVED_COLLISION_TAGS)
 from core.models.components import CollisionShapeComponent
-from core.history import (get_history, SetFieldCmd, AddListItemCmd,
+from core.history import (change_label, get_history, history_label, SetFieldCmd, AddListItemCmd,
                           RemoveListItemCmd, RenameCollisionTagCmd,
                           RemoveCollisionTagCmd)
 from core.command_dispatcher import get_dispatcher
@@ -175,7 +175,7 @@ class GeneralPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             self._project.settings, field, old, value,
-            label=f"Projet.{field}", persist_fn=self._persist,
+            label=change_label("Project", field), persist_fn=self._persist,
         ))
 
 
@@ -439,7 +439,7 @@ class BuildPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             self._project.settings, field, old, value,
-            label=f"Projet.{field}", persist_fn=self._persist,
+            label=change_label("Project", field), persist_fn=self._persist,
         ))
 
 
@@ -548,7 +548,7 @@ class VisualPanel(QWidget):
 
         get_history().push(SetFieldCmd(
             self._project.settings, field, old, value,
-            label=f"Projet.{field}", persist_fn=_do_persist,
+            label=change_label("Project", field), persist_fn=_do_persist,
         ))
 
 
@@ -636,7 +636,7 @@ class SoundPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             self._project.settings, field, old, value,
-            label=f"Projet.{field}", persist_fn=self._persist,
+            label=change_label("Project", field), persist_fn=self._persist,
         ))
 
 
@@ -698,7 +698,7 @@ class InputsPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             binding, field, old, value,
-            label=f"Input.{field}",
+            label=change_label("Input", field),
             persist_fn=self._refresh_both,
         ))
 
@@ -709,7 +709,7 @@ class InputsPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             settings, "interact_buttons", old, list(buttons),
-            label="Input.interact",
+            label=change_label("Input", "interact"),
             persist_fn=self._refresh_both,
         ))
 
@@ -720,7 +720,7 @@ class InputsPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             settings, "interact_reach", old, int(reach),
-            label="Input.interact_reach",
+            label=change_label("Input", "interact reach"),
             persist_fn=self._persist,
         ))
 
@@ -745,7 +745,7 @@ class InputsPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             axis, field, old, value,
-            label=f"Axis.{field}",
+            label=change_label("Axis", field),
             persist_fn=self._refresh_both,
         ))
 
@@ -772,7 +772,7 @@ class InputsPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             seq, field, old, value,
-            label=f"Sequence.{field}",
+            label=change_label("Sequence", field),
             persist_fn=self._refresh_both,
         ))
 
@@ -877,7 +877,7 @@ class LanguagesPanel(QWidget):
         if old != value:
             get_history().push(SetFieldCmd(
                 self._project.settings, field, old, value,
-                label=f'Projet.{field}', persist_fn=self._persist))
+                label=change_label("Project", field), persist_fn=self._persist))
 
     # ── Police par défaut ─────────────────────────────────────────
 
@@ -915,7 +915,7 @@ class LanguagesPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             self._project.settings, "default_font", old, value,
-            label="Projet.default_font",
+            label=change_label("Project", "default font"),
             persist_fn=lambda: (self._persist(), self._refresh_fallback()),
         ))
 
@@ -941,7 +941,7 @@ class LanguagesPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             obj, field, old, value,
-            label=f"Langue.{field}",
+            label=change_label("Language", field),
             persist_fn=lambda: (self._sync_translation_files(), self._persist(), self._card.refresh()),
         ))
 
@@ -1275,7 +1275,7 @@ class PhysicsCollisionsPanel(QWidget):
 
         get_history().push(SetFieldCmd(
             self._project.settings, field, getattr(self._project.settings, field), value,
-            label=f"Projet.{field}", persist_fn=persist,
+            label=change_label("Project", field), persist_fn=persist,
         ))
 
     # ── Découverte des tags ──────────────────────────────────────
@@ -1451,7 +1451,7 @@ class PhysicsCollisionsPanel(QWidget):
             return
         get_history().push(SetFieldCmd(
             self._project.settings, "collision_disabled_pairs", cur, new,
-            label="Projet.collision_disabled_pairs", persist_fn=self._persist,
+            label=change_label("Project", "collision disabled pairs"), persist_fn=self._persist,
         ))
 
     def _commit_rename(self, old_name: str, raw: str):
@@ -1597,7 +1597,7 @@ class PhysicsCollisionsPanel(QWidget):
             old = list(self._project.settings.collision_tags)
             get_history().push(SetFieldCmd(
                 self._project.settings, "collision_tags", old, new_order,
-                label="Réordonner les tags de collision", persist_fn=self._persist,
+                label=history_label("history.reorder_collision_tags"), persist_fn=self._persist,
             ))
 
 

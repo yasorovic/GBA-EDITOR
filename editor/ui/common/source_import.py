@@ -39,7 +39,7 @@ def import_from_file(project, family: str, title: str, file_filter: str | None =
     copies sont alors retirées et l'erreur dite). Un fichier refusé parmi d'autres est dit, les autres sont importés."""
     from core import asset_creation
     from core.disk_commands import ImportFilesCmd
-    from core.history import MacroCmd, get_history
+    from core.history import MacroCmd, get_history, history_label
     from core import source_collisions
     if file_filter is None:
         extensions = sorted(e for e, families in asset_creation.SOURCE_FAMILIES.items() if family in families)
@@ -68,8 +68,9 @@ def import_from_file(project, family: str, title: str, file_filter: str | None =
         copies.undo()
         QMessageBox.information(parent, error_title or title, " ".join(gesture.errors))
         return None
-    name = gesture.names[0] if len(gesture.names) == 1 else f"{len(gesture.names)} fichiers"
-    get_history().push(MacroCmd([_Executed(copies), gesture.command], f"Importer {name}"))
+    get_history().push(MacroCmd(
+        [_Executed(copies), gesture.command],
+        history_label("history.import_assets", count=len(gesture.names))))
     notices = gesture.errors + gesture.warnings
     if notices:
         QMessageBox.information(parent, error_title or title, " ".join(notices))

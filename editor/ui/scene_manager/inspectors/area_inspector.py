@@ -12,7 +12,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QCheckBox, QFrame, QSpinBox, QVBoxLayout, QWidget
 
 from core.command_dispatcher import get_dispatcher
-from core.history import AddListItemCmd, SetFieldCmd, get_history
+from core.history import AddListItemCmd, SetFieldCmd, change_label, get_history
 from core.models.components import (
     AudioEmitterComponent, CollisionShapeComponent, ForceFieldComponent, GravityOverrideComponent, ScriptComponent,
     TriggerComponent,
@@ -226,7 +226,7 @@ class AreaInspector(QWidget):
             get_history().push(AddListItemCmd(area.components, kind(), persist_fn=self._after_effect,
                                               label=f"{area.name}.{name}"))
         else:
-            get_history().push(SetFieldCmd(existing, "active", not on, on, label=f"{area.name}.{name}.active",
+            get_history().push(SetFieldCmd(existing, "active", not on, on, label=change_label(f"{area.name} {name}", "active"),
                                            persist_fn=self._after_effect))
 
     def _set_effect_field(self, kind, field_name: str, value) -> None:
@@ -234,7 +234,7 @@ class AreaInspector(QWidget):
         if self._blocking or comp is None or getattr(comp, field_name) == value:
             return
         get_history().push(SetFieldCmd(comp, field_name, getattr(comp, field_name), value,
-                                       label=f"{self._actor.name}.{_EFFECT_NAMES[kind]}.{field_name}",
+                                       label=change_label(f"{self._actor.name} {_EFFECT_NAMES[kind]}", field_name),
                                        persist_fn=self._persist))
 
     def _after_effect(self) -> None:
@@ -388,7 +388,7 @@ class AreaInspector(QWidget):
             return
         get_history().push(SetFieldCmd(
             area, field_name, getattr(area, field_name), value,
-            label=f"{area.name}.{field_name}", persist_fn=self._persist))
+            label=change_label(area.name, field_name), persist_fn=self._persist))
 
     def _set_trigger(self, on: bool) -> None:
         """Coche = l'Area a un déclencheur actif : le composant est ajouté, ou réactivé s'il existe déjà. Décoche = il est
@@ -401,7 +401,7 @@ class AreaInspector(QWidget):
             get_history().push(AddListItemCmd(area.components, TriggerComponent(), persist_fn=self._persist,
                                               label=f"{area.name}.trigger"))
         else:
-            get_history().push(SetFieldCmd(existing, "active", not on, on, label=f"{area.name}.trigger.active",
+            get_history().push(SetFieldCmd(existing, "active", not on, on, label=change_label(f"{area.name} trigger", "active"),
                                            persist_fn=self._persist))
 
     def _set_comp(self, comp, field_name: str, value) -> None:
@@ -411,4 +411,4 @@ class AreaInspector(QWidget):
             return
         get_history().push(SetFieldCmd(
             comp, field_name, getattr(comp, field_name), value,
-            label=f"{area.name}.{getattr(comp, 'id', '?')}.{field_name}", persist_fn=self._persist))
+            label=change_label(f"{area.name} {getattr(comp, 'id', '?')}", field_name), persist_fn=self._persist))

@@ -29,7 +29,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import QSize
 
 from core.project import Project
-from core.history import get_history, SetFieldCmd
+from core.history import change_label, get_history, SetFieldCmd
 from ui.common.theme import C, T, QSS
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import CollapsibleCard
@@ -232,7 +232,7 @@ class ProjectInspector(QWidget):
             return
         get_history().push(SetFieldCmd(
             self._project.settings, field, old, value,
-            label=f"Projet.{field}", persist_fn=self._persist,
+            label=change_label("Project", field), persist_fn=self._persist,
         ))
 
     def _on_start_scene_changed(self, name: str):

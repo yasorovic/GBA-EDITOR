@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QLineEdit
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from core.history import get_history, SetFieldCmd
+from core.history import change_label, get_history, SetFieldCmd
 from core.text_markup import parse, resolve, TAGS
 from ui.common.theme import C, T
 from ui.common.widgets import CollapsibleCard
@@ -288,5 +288,5 @@ class TextInspector(QWidget):
         old, self._note_baseline = self._note_baseline, new
         get_history().push(SetFieldCmd(
             self._text, "note", old, new,
-            label=f"Note de {self._text.key}", persist_fn=self.changed.emit,
+            label=change_label(self._text.key, "note"), persist_fn=self.changed.emit,
         ))

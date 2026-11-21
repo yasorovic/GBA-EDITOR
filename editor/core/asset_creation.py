@@ -226,7 +226,7 @@ def create_from_source(project, family: str, paths, folder: Path | None = None, 
     source (ou dans `folder`). Les noms sont uniques entre eux aussi (deux `coin.wav` de deux dossiers donnent `coin`
     et `coin_2`) ; une source qui ne convient pas est signalée dans `errors`, les autres sont créées. `defer_encoding` :
     cf. `build_from_source`."""
-    from core.history import CreateAssetCmd, MacroCmd
+    from core.history import CreateAssetCmd, MacroCmd, history_label
     project.load_all_resources()
     taken = {item.name for item in _store(project, family)}
     gesture, commands = Gesture(), []
@@ -243,7 +243,8 @@ def create_from_source(project, family: str, paths, folder: Path | None = None, 
         if creation.warning:
             gesture.warnings.append(creation.warning)
     if commands:
-        gesture.command = commands[0] if len(commands) == 1 else MacroCmd(commands, f"Créer {len(commands)} assets")
+        gesture.command = commands[0] if len(commands) == 1 else MacroCmd(
+            commands, history_label("history.create_assets", count=len(commands)))
     return gesture
 
 
@@ -269,10 +270,11 @@ def create_interface(project, scene, folder, persist=None) -> Gesture:
     """Un nœud `Interface` : une mise en page vierge, nommée d'après la scène, et le nœud qui la pose dans `scene` —
     UNE commande. `persist` : ce qui écrit la scène et remet les vues d'accord, après chaque sens."""
     from core import blank_assets
-    from core.history import AddListItemCmd, CreateAssetCmd, MacroCmd
+    from core.history import AddListItemCmd, CreateAssetCmd, MacroCmd, history_label
     from core.models.ui_region import InterfaceNode
     store, layout = blank_assets.build_blank(project, "ui_layout", name=scene.name or "ui")
     node = AddListItemCmd(scene.ui_layouts, InterfaceNode(layout_name=layout.name), persist_fn=persist,
-                          label=f"Add interface {layout.name}")
-    return Gesture(MacroCmd([CreateAssetCmd(store, layout, folder), node], f"Créer {layout.name}"),
+                          label=history_label("history.add_interface", name=layout.name))
+    return Gesture(MacroCmd([CreateAssetCmd(store, layout, folder), node],
+                            history_label("history.create_interface", name=layout.name)),
                    [layout.name], [layout])

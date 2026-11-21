@@ -35,7 +35,7 @@ from core.selection_bus import (
 from core.command_dispatcher import get_dispatcher
 from core.models.unique_name import unique_name
 from core.history import (
-    get_history, AddListItemCmd, RemoveListItemCmd, UILayoutOrderCmd,
+    change_label, get_history, AddListItemCmd, RemoveListItemCmd, UILayoutOrderCmd,
     DeleteInterfaceCmd, SceneActorOrderCmd, SetFieldCmd,
 )
 from core.models.ui_region import (
@@ -1542,7 +1542,7 @@ class _PrioritySceneTree(_Tree):
 
             get_history().push(SetFieldCmd(
                 node, "bg_slot", int(node.bg_slot), int(dest),
-                label=f"Set {bound.layout_name} BG{dest}", persist_fn=persist_slot))
+                label=change_label(bound.layout_name, f"BG {dest}"), persist_fn=persist_slot))
             event.accept()
             return
 
@@ -1574,7 +1574,7 @@ class _PrioritySceneTree(_Tree):
         get_history().push(SceneActorOrderCmd(
             self._scene, old_order, new_order,
             ([(actor, old_priority)], [(actor, priority)]),
-            label=f"Set {actor.name} priority {priority}", persist_fn=persist))
+                label=change_label(actor.name, "priority"), persist_fn=persist))
         event.accept()
 
     def highlight_actor(self, actor: Actor):

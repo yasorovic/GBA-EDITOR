@@ -1348,12 +1348,12 @@ class UIRegionItem(QGraphicsRectItem):
             self.update()
             if cancelled or new == old:
                 return
-            from core.history import get_history, SetFieldCmd
+            from core.history import change_label, get_history, SetFieldCmd
             self._region.preview_text = new
             self._region.preview_is_literal = True
             get_history().push(SetFieldCmd(
                 self._region, "preview_text", old, new,
-                label="Edit text", persist_fn=self._save))
+                label=change_label(self._region.name, "preview text"), persist_fn=self._save))
 
         box.done.connect(finish)
         box.show()

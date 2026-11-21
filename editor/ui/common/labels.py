@@ -30,3 +30,17 @@ def label(key: str, **args) -> str:
     """Le libellé résolu. Une clé absente rend la clé elle-même — visible à
     l'écran, retrouvable dans le code (jamais un blanc silencieux)."""
     return _CAT.text(key, **args)
+
+
+def history_text(action) -> str:
+    """Rend une action d'historique au dernier moment.
+
+    Les commandes viennent du cœur et ne doivent pas dépendre du catalogue de
+    l'interface. Une chaîne reste acceptée provisoirement pour les commandes
+    externes qui ne sont pas encore migrées.
+    """
+    from core.history import HistoryLabel
+
+    if isinstance(action, HistoryLabel):
+        return label(action.key, **action.values)
+    return str(action)

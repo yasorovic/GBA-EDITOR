@@ -17,6 +17,7 @@ Règles :
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Optional, TYPE_CHECKING
@@ -29,10 +30,37 @@ if TYPE_CHECKING:
     from core.models.scene import Actor, Scene
 
 
+@dataclass(frozen=True)
+class HistoryLabel:
+    """Description traduisible d'une action de l'historique.
+
+    Le coeur conserve une clé et ses valeurs, jamais une phrase déjà résolue.
+    L'interface la traduit lorsqu'elle l'affiche, ce qui laisse l'historique
+    cohérent si la langue change alors que des actions sont encore empilées.
+    """
+
+    key: str
+    values: dict[str, Any] = field(default_factory=dict)
+
+
+def history_label(key: str, **values: Any) -> HistoryLabel:
+    return HistoryLabel(key, values)
+
+
+def change_label(owner: str, field: str) -> HistoryLabel:
+    """Décrit la modification d'un champ visible sans figer sa phrase.
+
+    Les identifiants de modèle restent en anglais, mais les séparateurs
+    techniques ne sont jamais exposés dans la liste d'actions.
+    """
+    return history_label("history.change_named_field", owner=owner,
+                         field=field.replace("_", " "))
+
+
 # ── Commande abstraite ─────────────────────────────────────────────
 
 class Command(ABC):
-    label: str = ""
+    label: HistoryLabel | str = ""
 
     @abstractmethod
     def execute(self): ...
@@ -106,7 +134,7 @@ class SetFieldCmd(Command):
         self._field = field
         self._old = old_val
         self._new = new_val
-        self.label = label or f"Set {field}"
+        self.label = label or history_label("history.change_field", field=field)
         self._persist = persist_fn   # callable() pour sauvegarder après apply
 
     def execute(self):
@@ -141,7 +169,7 @@ class SwapFieldCmd(Command):
         self._a = obj_a
         self._b = obj_b
         self._field = field
-        self.label = label or f"Swap {field}"
+        self.label = label or history_label("history.swap_field", field=field)
         self._persist = persist_fn
 
     def _swap(self):
@@ -167,7 +195,7 @@ class MoveActorCmd(Command):
         self._actor = actor
         self._old = (old_x, old_y)
         self._new = (new_x, new_y)
-        self.label = f"Déplacer {actor.name}"
+        self.label = history_label("history.move_actor", name=actor.name)
         self._persist = persist_fn
 
     def execute(self):
@@ -197,12 +225,12 @@ class SceneActorOrderCmd(Command):
     """
 
     def __init__(self, scene: "Scene", before: list, after: list,
-                 priorities: tuple[list, list], label: str = "Reorder actors", persist_fn=None):
+                 priorities: tuple[list, list], label: HistoryLabel | str | None = None, persist_fn=None):
         self._scene = scene
         self._before = list(before)
         self._after = list(after)
         self._priorities = (list(priorities[0]), list(priorities[1]))
-        self.label = label
+        self.label = label or history_label("history.reorder_actors")
         self._persist = persist_fn
 
     def _apply(self, order, priority):
@@ -233,7 +261,8 @@ class MoveActorGroupCmd(Command):
         # items : [(actor, old_x, old_y, new_x, new_y), ...] — le premier est
         # l'actor réellement saisi par la souris.
         self._items = items
-        self.label = f"Déplacer {items[0][0].name}" if items else "Déplacer"
+        self.label = (history_label("history.move_actor_group", name=items[0][0].name)
+                      if items else history_label("history.move_actors"))
         self._persist = persist_fn
 
     def execute(self):
@@ -270,7 +299,7 @@ class ResizeCollisionShapeCmd(Command):
         self._shape = shape
         self._old = tuple(old)
         self._new = tuple(new)
-        self.label = "Redimensionner la forme"
+        self.label = history_label("history.resize_collision_shape")
         self._persist = persist_fn
 
     def _apply(self, rect: tuple) -> None:
@@ -298,7 +327,7 @@ class MoveCameraCmd(Command):
         self._cam = camera
         self._old = (old_x, old_y)
         self._new = (new_x, new_y)
-        self.label = f"Déplacer caméra {getattr(camera, 'name', '')}".rstrip()
+        self.label = history_label("history.move_camera", name=getattr(camera, "name", ""))
         self._persist = persist_fn
 
     def execute(self):
@@ -335,7 +364,7 @@ class MoveUIRegionCmd(Command):
         self._region = region
         self._old = (old_x, old_y)
         self._new = (new_x, new_y)
-        self.label = f"Déplacer zone {region.name}"
+        self.label = history_label("history.move_ui_region", name=region.name)
         self._persist = persist_fn
 
     def execute(self):
@@ -370,7 +399,7 @@ class ResizeUIRegionCmd(Command):
         self._region = region
         self._old = tuple(old)   # (x, y, w, h)
         self._new = tuple(new)
-        self.label = f"Redimensionner zone {region.name}"
+        self.label = history_label("history.resize_ui_region", name=region.name)
         self._persist = persist_fn
 
     def _apply(self, g):
@@ -445,7 +474,7 @@ class AddActorCmd(Command):
     def __init__(self, scene: "Scene", actor: "Actor", persist_fn=None):
         self._scene = scene
         self._actor = actor
-        self.label = f"Ajouter {actor.name}"
+        self.label = history_label("history.add_actor", name=actor.name)
         self._persist = persist_fn
 
     def execute(self):
@@ -472,7 +501,7 @@ class PaintFrameCmd(Command):
         self._frame   = frame
         self._old     = old_tiles
         self._new     = new_tiles
-        self.label    = "Peindre frame"
+        self.label    = history_label("history.paint_sprite_frame")
         self._persist = persist_fn
 
     def execute(self):
@@ -501,7 +530,7 @@ class DeleteResourceCmd(Command):
     def __init__(self, manager: Any, item: Any, refresh_fn=None):
         self._mgr     = manager
         self._item    = item
-        self.label    = f"Supprimer {getattr(item, 'name', str(item))}"
+        self.label    = history_label("history.delete_resource", name=getattr(item, "name", str(item)))
         self._refresh = refresh_fn
 
     def execute(self):
@@ -561,7 +590,7 @@ class AddResourceCmd(Command):
     def __init__(self, manager: Any, item: Any, refresh_fn=None):
         self._mgr     = manager
         self._item    = item
-        self.label    = f"Ajouter {getattr(item, 'name', str(item))}"
+        self.label    = history_label("history.add_resource", name=getattr(item, "name", str(item)))
         self._refresh = refresh_fn
 
     def execute(self):
@@ -596,7 +625,7 @@ class CreateAssetCmd(Command):
         self._item    = item
         self._folder  = folder
         self._done    = False
-        self.label    = f"Créer {getattr(item, 'name', str(item))}"
+        self.label    = history_label("history.create_resource", name=getattr(item, "name", str(item)))
         self._refresh = refresh_fn
 
     def execute(self):
@@ -637,7 +666,7 @@ class DeleteInterfaceCmd(Command):
         self._node = next((n for n in ref_list if n.layout_name == self._name), None)
         self._index = (ref_list.index(self._node)
                        if self._node in ref_list else len(ref_list))
-        self.label = f"Supprimer l'interface {self._name}"
+        self.label = history_label("history.delete_interface", name=self._name)
         self._persist = persist_fn
         self._refresh = refresh_fn
 
@@ -679,7 +708,7 @@ class SetPaletteColorCmd(Command):
         self._index = index
         self._old = old_val
         self._new = new_val
-        self.label = f"Couleur index {index}"
+        self.label = history_label("history.change_palette_color", index=index)
         self._apply = apply_fn
 
     def _set(self, value: int):
@@ -709,10 +738,10 @@ class SetPaletteColorsCmd(Command):
     apply_fn(bank) re-render la banque et persiste (voir SetPaletteColorCmd).
     """
 
-    def __init__(self, bank: Any, delta: dict, apply_fn, label: str = "Modifier palette"):
+    def __init__(self, bank: Any, delta: dict, apply_fn, label: HistoryLabel | str | None = None):
         self._bank = bank
         self._delta = delta
-        self.label = label
+        self.label = label or history_label("history.change_palette")
         self._apply = apply_fn
 
     def _set(self, pick: int):
@@ -737,10 +766,10 @@ class GridPaintCmd(Command):
     qu'au refaire.
     """
 
-    def __init__(self, surface, delta: dict, persist_fn=None, label: str = "Peinture de grille"):
+    def __init__(self, surface, delta: dict, persist_fn=None, label: HistoryLabel | str | None = None):
         self._surface = surface
         self._delta = delta
-        self.label = label
+        self.label = label or history_label("history.paint_grid")
         self._persist = persist_fn
 
     def execute(self):
@@ -758,13 +787,13 @@ class GridStepCmd(Command):
     """Change la maille et les cases d'une grille en une seule commande."""
 
     def __init__(self, grid, new_step: int, new_cells: list[list[int]],
-                 persist_fn=None, refresh_fn=None, label: str = "Changer le pas de grille"):
+                 persist_fn=None, refresh_fn=None, label: HistoryLabel | str | None = None):
         self._grid = grid
         self._old = (grid.step, deepcopy(grid.cells))
         self._new = (new_step, deepcopy(new_cells))
         self._persist = persist_fn
         self._refresh = refresh_fn
-        self.label = label
+        self.label = label or history_label("history.change_grid_step")
 
     def _apply(self, state):
         self._grid.step, cells = state
@@ -797,7 +826,7 @@ class RenameActorCmd(Command):
         self._project = project
         self._actor = actor
         self._old, self._new = actor.name, new_name.strip()
-        self.label = f"Renommer {self._old} en {self._new}"
+        self.label = history_label("history.rename", old=self._old, new=self._new)
         self._refresh = refresh_fn
         # La scène propriétaire, fixée maintenant : défaire depuis une autre scène doit sauvegarder CELLE-CI.
         self._scene = next((s for s in project.scenes if any(a is actor for a in s.actors)), None)
@@ -822,7 +851,7 @@ class RenameAreaCmd(Command):
         self._scene = scene            # fixée maintenant : défaire depuis une autre scène doit sauvegarder CELLE-CI
         self._area = area
         self._old, self._new = area.name, new_name.strip()
-        self.label = f"Renommer {self._old} en {self._new}"
+        self.label = history_label("history.rename", old=self._old, new=self._new)
         self._refresh = refresh_fn
 
     def execute(self):
@@ -851,7 +880,7 @@ class RenameCollisionTagCmd(Command):
         self._project = project
         self._old = old_name
         self._new = new_name
-        self.label = label or f"Renommer le tag {old_name}"
+        self.label = label or history_label("history.rename_collision_tag", old=old_name, new=new_name)
         self._persist = persist_fn
         self._components = [
             c for o in _collision_tag_owners(project) for c in getattr(o, "components", [])
@@ -900,7 +929,7 @@ class RemoveCollisionTagCmd(Command):
             raise ValueError(f"The collision tag \"{tag_name}\" is reserved and cannot be removed.")
         self._project = project
         self._tag = tag_name
-        self.label = label or f"Retirer le tag {tag_name}"
+        self.label = label or history_label("history.remove_collision_tag", name=tag_name)
         self._persist = persist_fn
         self._components = [
             c for o in _collision_tag_owners(project) for c in getattr(o, "components", [])
@@ -942,7 +971,7 @@ class BackgroundInpaintingCmd(Command):
         self._ctrl = controller
         self._ba = ba
         self._delta = delta
-        self.label = "Inpainting de fond"
+        self.label = history_label("history.paint_background_palette")
 
     def execute(self):
         self._ctrl.apply_override_delta(self._ba, self._delta, True)
@@ -959,7 +988,7 @@ class BackgroundTilePaintCmd(Command):
         self._ctrl = controller
         self._ba = ba
         self._delta = delta
-        self.label = "Peinture de tiles"
+        self.label = history_label("history.paint_background_tiles")
 
     def execute(self):
         self._ctrl.apply_tile_delta(self._ba, self._delta, True)
@@ -979,7 +1008,7 @@ class SetSceneModeCmd(Command):
         self._old = (scene.render_mode, list(scene.background_layers),
                      list(scene.active_bg_palettes))
         self._new = (new_mode, list(new_layers), list(new_bg_palettes))
-        self.label = f"Mode de scène → Mode {new_mode}"
+        self.label = history_label("history.set_scene_mode", mode=new_mode)
         self._persist = persist_fn
         self._refresh = refresh_fn
 
@@ -1004,7 +1033,7 @@ class AddComponentCmd(Command):
     def __init__(self, actor: "Actor", comp: Any, persist_fn=None):
         self._actor = actor
         self._comp = comp
-        self.label = f"Ajouter component {getattr(comp, 'id', '')}"
+        self.label = history_label("history.add_component", name=getattr(comp, "id", ""))
         self._persist = persist_fn
 
     def execute(self):
@@ -1034,7 +1063,7 @@ class RenameSpriteIdCmd(Command):
         self._comp = comp
         self._old = old
         self._new = new
-        self.label = f"Renommer sprite {old} → {new}"
+        self.label = history_label("history.rename_sprite", old=old, new=new)
         self._persist = persist_fn
 
     def _apply(self, frm: str, to: str):
@@ -1057,7 +1086,7 @@ class RemoveComponentCmd(Command):
         self._actor = actor
         self._comp = comp
         self._index = index
-        self.label = f"Supprimer component {getattr(comp, 'id', '')}"
+        self.label = history_label("history.remove_component", name=getattr(comp, "id", ""))
         self._persist = persist_fn
 
     def execute(self):
@@ -1079,11 +1108,11 @@ class RemoveListItemCmd(Command):
     sprite). Générique pour éviter une Command dédiée par type de liste.
     """
 
-    def __init__(self, container: list, item: Any, persist_fn=None, label: str = "Supprimer"):
+    def __init__(self, container: list, item: Any, persist_fn=None, label: HistoryLabel | str | None = None):
         self._container = container
         self._item = item
         self._index = container.index(item)
-        self.label = label
+        self.label = label or history_label("history.remove_item")
         self._persist = persist_fn
 
     def execute(self):
@@ -1107,10 +1136,10 @@ class AddListItemCmd(Command):
     retirer manuellement pour laisser execute() faire son travail).
     """
 
-    def __init__(self, container: list, item: Any, persist_fn=None, label: str = "Ajouter"):
+    def __init__(self, container: list, item: Any, persist_fn=None, label: HistoryLabel | str | None = None):
         self._container = container
         self._item = item
-        self.label = label
+        self.label = label or history_label("history.add_item")
         self._persist = persist_fn
 
     def execute(self):
@@ -1138,11 +1167,11 @@ class RemoveListItemsCmd(Command):
     """
 
     def __init__(self, container: list, items: list, persist_fn=None,
-                 label: str = "Supprimer"):
+                 label: HistoryLabel | str | None = None):
         self._container = container
         at = {id(x): i for i, x in enumerate(container)}
         self._removed = sorted((at[id(it)], it) for it in items if id(it) in at)
-        self.label = label
+        self.label = label or history_label("history.remove_items")
         self._persist = persist_fn
 
     def execute(self):
@@ -1175,10 +1204,10 @@ class AddListItemsCmd(Command):
     """
 
     def __init__(self, container: list, items: list, persist_fn=None,
-                 label: str = "Ajouter"):
+                 label: HistoryLabel | str | None = None):
         self._container = container
         self._items = list(items)
-        self.label = label
+        self.label = label or history_label("history.add_items")
         self._persist = persist_fn
 
     def _holds(self, item) -> bool:
@@ -1211,7 +1240,7 @@ class RenameFileCmd(Command):
     def __init__(self, old_path: Path, new_path: Path, refresh_fn=None):
         self._old = old_path
         self._new = new_path
-        self.label = f"Renommer {old_path.name} → {new_path.name}"
+        self.label = history_label("history.rename", old=old_path.name, new=new_path.name)
         self._refresh = refresh_fn
 
     def execute(self):
@@ -1238,7 +1267,7 @@ class DeleteFileCmd(Command):
     def __init__(self, path: Path, refresh_fn=None):
         self._path = path
         self._bytes: Optional[bytes] = None
-        self.label = f"Supprimer {path.name}"
+        self.label = history_label("history.delete_resource", name=path.name)
         self._refresh = refresh_fn
 
     def execute(self):
@@ -1332,7 +1361,7 @@ class CommandHistory(QObject):
         self._redo.clear()
         self.trim()
 
-    def undo(self) -> Optional[str]:
+    def undo(self) -> Optional[HistoryLabel | str]:
         """Annule la dernière commande. Retourne son label ou None."""
         if not self._undo:
             return None
@@ -1347,7 +1376,7 @@ class CommandHistory(QObject):
         self.changed.emit()
         return cmd.label
 
-    def redo(self) -> Optional[str]:
+    def redo(self) -> Optional[HistoryLabel | str]:
         """Rejoue la dernière commande annulée. Retourne son label ou None."""
         if not self._redo:
             return None
@@ -1379,21 +1408,21 @@ class CommandHistory(QObject):
         return bool(self._redo)
 
     @property
-    def undo_label(self) -> str:
+    def undo_label(self) -> HistoryLabel | str:
         return self._undo[-1].label if self._undo else ""
 
     @property
-    def undo_labels(self) -> list[str]:
+    def undo_labels(self) -> list[HistoryLabel | str]:
         """Ce que Undo peut défaire, la plus récente en premier."""
         return [cmd.label for cmd in reversed(self._undo)]
 
     @property
-    def redo_labels(self) -> list[str]:
+    def redo_labels(self) -> list[HistoryLabel | str]:
         """Ce que Redo peut rejouer, la prochaine à rejouer en premier."""
         return [cmd.label for cmd in reversed(self._redo)]
 
     @property
-    def redo_label(self) -> str:
+    def redo_label(self) -> HistoryLabel | str:
         return self._redo[-1].label if self._redo else ""
 
 

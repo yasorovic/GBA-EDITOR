@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QSettings, QByteArray, QTimer, QUrl
 from PyQt6.QtGui import QGuiApplication
 
 from ui.common.theme import C, T, QSS, brand_font
-from ui.common.labels import label
+from ui.common.labels import history_text, label
 from ui.common import import_folder, icons
 from ui.common.tooltip import tooltip
 from ui.common.action_list_popup import ActionListPopup
@@ -34,7 +34,8 @@ from ui.scene_manager.canvas.canvas_workspace import CanvasWorkspace
 from core.resources import asset_reconciliation
 from core.toolchain import Toolchain
 from core.project_watcher import ProjectWatcher
-from core.history import get_history, SetFieldCmd, DeleteResourceCmd, MacroCmd, RefreshAfterCmd
+from core.history import (change_label, get_history, history_label, SetFieldCmd,
+                          DeleteResourceCmd, MacroCmd, RefreshAfterCmd)
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher
 from core.models.audio import MUSIC_FILE_EXTS, SFX_FILE_EXTS
@@ -1715,7 +1716,8 @@ class MainWindow(QMainWindow):
                 copied.append(duplication.item.name)
         if not commands:
             return
-        self._disk_push(commands[0] if len(commands) == 1 else MacroCmd(commands, f"Dupliquer {len(commands)} assets"))
+        self._disk_push(commands[0] if len(commands) == 1 else MacroCmd(
+            commands, history_label("history.duplicate_assets", count=len(commands))))
         self._status.showMessage(label("disk.duplicated", name=copied[0]) if len(copied) == 1
                                  else label("disk.duplicated_many", n=len(copied)), 6000)
 
@@ -1794,7 +1796,8 @@ class MainWindow(QMainWindow):
                             else DeleteResourceCmd(store, item))
         commands += extra
         if commands:
-            self._disk_push(MacroCmd(commands, f"Supprimer {len(commands)} élément(s)"))
+            self._disk_push(MacroCmd(
+                commands, history_label("history.delete_items", count=len(commands))))
             if not extra:
                 self._status.showMessage(label("disk.deleted", n=len(commands)), 6000)
 
@@ -2351,8 +2354,8 @@ class MainWindow(QMainWindow):
     def _on_history_changed(self):
         self._btn_undo.setEnabled(self._history.can_undo)
         self._btn_redo.setEnabled(self._history.can_redo)
-        ul = self._history.undo_label
-        rl = self._history.redo_label
+        ul = history_text(self._history.undo_label) if self._history.can_undo else ""
+        rl = history_text(self._history.redo_label) if self._history.can_redo else ""
         self._btn_undo.setToolTip(
             tooltip(title=label("win.undo_tip", label=ul), shortcut="Ctrl+Z") if ul
             else tooltip(title=label("win.undo_none")))
@@ -2377,19 +2380,19 @@ class MainWindow(QMainWindow):
             if last is None:
                 break
         if last is not None:
-            self._status.showMessage(label("win.undone" if steps < 0 else "win.redone", label=last), 2000)
+            self._status.showMessage(label("win.undone" if steps < 0 else "win.redone", label=history_text(last)), 2000)
             self._flush_after_undo_redo()
 
     def _do_undo(self):
         lbl = self._history.undo()
         if lbl:
-            self._status.showMessage(label("win.undone", label=lbl), 2000)
+            self._status.showMessage(label("win.undone", label=history_text(lbl)), 2000)
             self._flush_after_undo_redo()
 
     def _do_redo(self):
         lbl = self._history.redo()
         if lbl:
-            self._status.showMessage(label("win.redone", label=lbl), 2000)
+            self._status.showMessage(label("win.redone", label=history_text(lbl)), 2000)
             self._flush_after_undo_redo()
 
     def _flush_after_undo_redo(self):
@@ -2661,7 +2664,7 @@ class MainWindow(QMainWindow):
 
         get_history().push(SetFieldCmd(
             settings, "cartridge_mib", old, mib,
-            label="Projet.cartridge_mib", persist_fn=_persist,
+            label=change_label("Project", "cartridge mib"), persist_fn=_persist,
         ))
 
     def _explain_missing_toolchain(self, *, web_export=False):

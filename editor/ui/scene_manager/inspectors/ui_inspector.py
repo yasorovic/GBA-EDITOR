@@ -1039,7 +1039,7 @@ class UIInspector(QWidget):
         value = getattr(target, field)
         if value == old:
             return
-        from core.history import get_history, SetFieldCmd
+        from core.history import change_label, get_history, SetFieldCmd
         get_history().push(SetFieldCmd(
             target, field, old, value,
             label=(f"Edit text {t.key}" if t is not None else "Edit local text"),
@@ -1635,7 +1635,7 @@ class UIInspector(QWidget):
         pour que l'historique puisse restaurer fidèlement avant/après."""
         if not (self._scene and self._project):
             return
-        from core.history import get_history, SetFieldCmd
+        from core.history import change_label, get_history, SetFieldCmd
         from core.models.scene import font_pal_key, scene_font_pal_bank
         from codegen.font_emit import scene_default_font
 
@@ -1654,7 +1654,7 @@ class UIInspector(QWidget):
         get_history().push(SetFieldCmd(
             self._scene, "font_pal_banks",
             dict(getattr(self._scene, "font_pal_banks", {}) or {}), banks,
-            label="Text palette bank", persist_fn=self._persist))
+            label=change_label("Text", "palette bank"), persist_fn=self._persist))
         # Changer de banque sans toucher à l'encre ne se voit pas : l'index 0
         # (« défaut ») ne peint rien de la banque. On pose donc la première
         # couleur réelle de la nouvelle banque (index 1, le 0 étant réservé).

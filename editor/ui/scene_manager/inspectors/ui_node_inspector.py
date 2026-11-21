@@ -211,7 +211,7 @@ class UINodeInspector(QWidget):
 
     # ── Écriture ──────────────────────────────────────────────────
     def _set(self, field: str, value, label: str):
-        from core.history import get_history, SetFieldCmd
+        from core.history import change_label, get_history, SetFieldCmd
         old = getattr(self._layout, field)
         if old == value:
             return
@@ -272,4 +272,4 @@ class UINodeInspector(QWidget):
             return
         from core.history import get_history, SetFieldCmd
         get_history().push(SetFieldCmd(node, "bg_slot", int(node.bg_slot), int(slot),
-                                       label="Interface BG slot", persist_fn=self._persist))
+                                       label=change_label("Interface", "BG slot"), persist_fn=self._persist))

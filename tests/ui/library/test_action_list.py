@@ -7,14 +7,15 @@ from types import SimpleNamespace
 import pytest
 
 from core import interface_preferences as prefs
-from core.history import AddListItemCmd, CommandHistory
+from core.history import AddActorCmd, CommandHistory
+from core.models.scene import Actor, Scene
 
 
 def _history(*names):
-    history, box = CommandHistory(), []
+    history, scene = CommandHistory(), Scene(name="Test")
     for name in names:
-        history.push(AddListItemCmd(box, name, label=f"Add {name}"))
-    return history, box
+        history.push(AddActorCmd(scene, Actor(name=name)))
+    return history, scene.actors
 
 
 def test_the_popup_lists_redo_above_undo_and_clicks_report_signed_steps(qapp):
@@ -27,7 +28,7 @@ def test_the_popup_lists_redo_above_undo_and_clicks_report_signed_steps(qapp):
     popup.set_entries(history.undo_labels, history.redo_labels)
 
     rows = [popup._list.item(i) for i in range(popup._list.count())]
-    assert [r.text() for r in rows] == ["Add four", "Add three", "Add two", "Add one"]   # le plus récent en haut
+    assert [r.text() for r in rows] == ["Add actor four", "Add actor three", "Add actor two", "Add actor one"]   # le plus récent en haut
 
     picked = []
     popup.picked.connect(picked.append)
@@ -57,9 +58,12 @@ def test_jumping_plays_every_step_then_refreshes_once():
                         _flush_after_undo_redo=lambda: flushed.append(1))
 
     MainWindow._jump_history(w, -2)
-    assert box == ["one"] and history.redo_labels == ["Add two", "Add three"] and len(flushed) == 1
+    from ui.common.labels import history_text
+    assert [actor.name for actor in box] == ["one"]
+    assert [history_text(action) for action in history.redo_labels] == ["Add actor two", "Add actor three"]
+    assert len(flushed) == 1
     MainWindow._jump_history(w, 2)
-    assert box == ["one", "two", "three"] and len(flushed) == 2
+    assert [actor.name for actor in box] == ["one", "two", "three"] and len(flushed) == 2
     MainWindow._jump_history(w, 5)                   # rien à rejouer : aucun rafraîchissement de plus
     assert len(flushed) == 2
 
@@ -74,7 +78,8 @@ def test_the_undo_depth_is_a_machine_setting_and_trims_at_once(monkeypatch, tmp_
 
     prefs.set_undo_depth(10)
     history.trim()
-    assert history.undo_labels[0] == "Add 29" and len(history.undo_labels) == 10
+    from ui.common.labels import history_text
+    assert history_text(history.undo_labels[0]) == "Add actor 29" and len(history.undo_labels) == 10
 
     prefs.set_undo_depth(5000)                       # borné
     assert prefs.undo_depth() == prefs.UNDO_DEPTH_RANGE[1]

@@ -19,7 +19,7 @@ from core.models.components import (
 )
 from core.models.scene import Actor, Scene, Prefab
 from core.project import Project
-from core.history import (get_history, SetFieldCmd, AddComponentCmd, RemoveComponentCmd,
+from core.history import (get_history, history_label, SetFieldCmd, AddComponentCmd, RemoveComponentCmd,
                           MacroCmd, RenameSpriteIdCmd)
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher
@@ -1143,7 +1143,7 @@ class ActorInspector(QWidget):
 
         get_history().push(SetFieldCmd(
             self._actor, field, old, value,
-            label=f"{self._actor.name}.{field}",
+            label=history_label("history.change_named_field", owner=self._actor.name, field=field),
             persist_fn=_do_persist,
         ))
         self.changed.emit()
@@ -1450,7 +1450,8 @@ class ActorInspector(QWidget):
             self._rename_sprite_id(comp, str(old), str(value).strip())
             return
         comp_id = getattr(comp, "id", "?")
-        label_ = f"{self._actor.name}.{comp_id}.{field}"
+        label_ = history_label("history.change_named_field",
+                               owner=f"{self._actor.name} {comp_id}", field=field)
         persist = lambda c=comp: self._save_component_change(c)
         cmd = SetFieldCmd(comp, field, old, value, label=label_, persist_fn=persist)
         if isinstance(comp, SpriteComponent) and field == "active" and value:

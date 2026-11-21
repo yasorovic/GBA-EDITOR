@@ -383,13 +383,14 @@ class CameraInspector(QWidget):
 
         C'est ce qui rend la caméra ANNULABLE : l'édition ne mute plus l'objet
         en direct, elle passe par l'historique comme l'actor et l'UIRegion."""
-        from core.history import get_history, SetFieldCmd, MacroCmd
-        cmds = [SetFieldCmd(o, f, getattr(o, f, None), v, label=label)
+        from core.history import change_label, get_history, SetFieldCmd, MacroCmd
+        action = change_label(getattr(self._camera, "name", "Camera"), label)
+        cmds = [SetFieldCmd(o, f, getattr(o, f, None), v, label=action)
                 for o, f, v in fields if getattr(o, f, None) != v]
         if not cmds:
             return False
         cmds[-1]._persist = self._save          # un seul save, en fin de groupe
-        get_history().push(cmds[0] if len(cmds) == 1 else MacroCmd(cmds, label))
+        get_history().push(cmds[0] if len(cmds) == 1 else MacroCmd(cmds, action))
         self.changed.emit()
         if refresh:
             self._refresh()

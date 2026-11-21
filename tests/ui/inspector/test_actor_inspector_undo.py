@@ -43,7 +43,8 @@ def test_une_edition_cree_une_entree_annulable(qapp, history):
 
     assert a.priority == 3
     assert history.can_undo
-    assert history.undo_label == "Hero.priority"
+    from ui.common.labels import history_text
+    assert history_text(history.undo_label) == "Change Hero priority"
 
 
 def test_undo_restaure_le_modele_et_linspecteur_le_reflete(qapp, history):

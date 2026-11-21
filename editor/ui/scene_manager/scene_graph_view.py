@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 )
 from ui.common.popup import MessageBox as QMessageBox
 
-from core.history import Command, get_history, SetFieldCmd
+from core.history import Command, change_label, get_history, SetFieldCmd
 from core.models.ids import new_id
 from core.keybindings import bind, get_keybindings
 from core.selection_bus import get_bus
@@ -984,7 +984,7 @@ class SceneGraphView(QWidget):
             return
         get_history().push(SetFieldCmd(
             self._project.settings, "start_scene", old, name,
-            label="Projet.start_scene", persist_fn=self._persist_start_scene))
+            label=change_label("Project", "start scene"), persist_fn=self._persist_start_scene))
 
     def _persist_start_scene(self) -> None:
         """Sauvegarde les réglages et redessine — appelé à l'exécution ET à l'undo

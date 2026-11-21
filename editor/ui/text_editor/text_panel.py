@@ -23,7 +23,7 @@ from PyQt6.QtCore import pyqtSignal
 
 from core.models.text import MAX_DEPTH, SEP, norm_path, repath_segment, moved_text_paths
 from core.text_markup import parse
-from core.history import get_history, SetFieldCmd, AddListItemCmd
+from core.history import change_label, get_history, SetFieldCmd, AddListItemCmd
 from ui.common.labels import label
 from ui.text_editor.text_table import TextTable
 from ui.text_editor.text_workbench import TextWorkbench
@@ -261,7 +261,7 @@ class TextPanel(QWidget):
                 label=f"Translate {text.key} ({lang})", persist_fn=persist)
         else:
             command = SetFieldCmd(text, "content", before, after,
-                                  label=f"Content of {text.key}", persist_fn=persist)
+                                  label=change_label(text.key, "content"), persist_fn=persist)
         get_history().push(command)
 
     def _on_content_committed(self, before: str, after: str):
@@ -279,7 +279,7 @@ class TextPanel(QWidget):
         else:
             get_history().push(SetFieldCmd(
                 t, "content", before, after,
-                label=f"Content of {t.key}", persist_fn=self._after_content,
+                label=change_label(t.key, "content"), persist_fn=self._after_content,
             ))
 
     def _after_content(self):

@@ -6,7 +6,7 @@ from PyQt6.QtCore import Qt, QTimer, QPoint, pyqtSignal
 from PyQt6.QtGui import QFont, QKeySequence
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QToolButton, QLabel
 
-from core.history import get_history, SetFieldCmd
+from core.history import change_label, get_history, SetFieldCmd
 from ui.common.drag_grip import DragGrip
 from ui.common.labels import label
 from ui.common.theme import C, T, QSS
@@ -240,5 +240,5 @@ class TextboxPages(QWidget):
             if value != old:
                 get_history().push(SetFieldCmd(
                     target, field, old, value,
-                    label=f"Edit text {getattr(target, 'key', 'local')}",
+                    label=change_label(getattr(target, "key", "local"), "text"),
                     persist_fn=self.persist_asked.emit))
