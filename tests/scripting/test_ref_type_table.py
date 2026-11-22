@@ -189,7 +189,11 @@ def test_tout_ret_de_reference_est_declare():
 def test_toute_cle_de_methode_ou_de_propriete_designe_un_type_connu():
     """`collison_box:overlaps` (faute de frappe) laisserait ses méthodes sans porteur,
     sans qu'aucun test de fonction ne l'atteigne."""
-    connus = set(REF_TYPE_TABLE) | {"self"}
+    # `self` (l'acteur du script) et les récepteurs locaux au script (une grille
+    # RAM, cf. `SCRIPT_LOCAL_RECEIVERS`) ne sont pas des types de référence, mais
+    # portent des méthodes au catalogue : des entrées vitrine, résolues avant le
+    # catalogue par le checker et le codegen.
+    connus = set(REF_TYPE_TABLE) | {"self"} | api.SCRIPT_LOCAL_RECEIVERS
     for cle in RUNTIME_API:
         if ":" in cle:
             assert cle.split(":")[0] in connus, cle

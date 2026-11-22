@@ -96,6 +96,11 @@ _ENGINE_KEYS: frozenset[str] = frozenset({
     "palette_bank:fade", "palette_bank:grayscale", "palette_bank:invert", "palette_bank:rotate",
     "palette.bg_pool", "palette.obj_pool",
     "palette_pool:fade", "palette_pool:grayscale", "palette_pool:invert",
+    # La grille garde sa face simple (at, fill, fill_rect) en itération ; la
+    # navigation et l'analyse (coût, chemin, vue, zones, échantillon de collision)
+    # sont la couche moteur.
+    "grid:flood", "grid:path_to", "grid:line_of_sight",
+    "grid:flow_map", "grid:regions", "grid:sample_collision",
     # Le son ne replie pas ses trois boîtes ici. Elles sont peu fréquentes,
     # mais les cacher sous un vague « Aller plus loin » les rendait
     # indécouvrables. Elles vivent plus bas dans des sous-groupes nommés de
@@ -232,6 +237,12 @@ _FUNC_HOME: dict[str, str] = {
     "image:play": "Interface", "image:pause": "Interface",
     "textBox:draw": "Interface", "textBox:clear": "Interface",
     "textBox:skip": "Interface",
+    # Les méthodes d'une grille RAM : « grid » n'est ni un module ni un type de
+    # référence (c'est une variable de script), donc `_module_of` ne sait pas les
+    # rattacher. On les range à la main sous « Grid », à côté de la déclaration.
+    "grid:at": "Grid", "grid:fill": "Grid", "grid:fill_rect": "Grid",
+    "grid:flood": "Grid", "grid:path_to": "Grid", "grid:line_of_sight": "Grid",
+    "grid:flow_map": "Grid", "grid:regions": "Grid", "grid:sample_collision": "Grid",
     # Lecture de la carte : l'ancienne méthode de boîte reste compatible mais
     # vit avec son équivalent direct `collision:tile_at`.
     "collision_shape:get_collision_tile": "Collision",
