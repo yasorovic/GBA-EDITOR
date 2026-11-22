@@ -121,14 +121,6 @@ _DISPLAY_LABELS: dict[str, str] = {
     "ui_element:hide": "element:hide()",
 }
 
-# Noms concis réservés à l'affichage de l'API Interface. Les clés du catalogue
-# restent techniques (`ui_element:*`) afin que le checker et le codegen ne
-# changent pas de contrat.
-_DISPLAY_LABELS: dict[str, str] = {
-    "ui_element:show": "element:show()",
-    "ui_element:hide": "element:hide()",
-}
-
 # Où ranger les PROPRIÉTÉS (RUNTIME_PROPS) : contrairement aux fonctions, un
 # module (`self`) ne suffit pas à dire la catégorie : self.position est du
 # Transform, self.velocity de la Physics. Une petite table à jour à la main,
@@ -421,8 +413,6 @@ def _mark_layer(entry: dict, name: str) -> dict:
     faux pour l'itération (le défaut). `name` est la clé API : le préfixe du
     libellé pour une fonction, la clé pointée pour une propriété (`blend.mode`)."""
     entry["engine"] = name in _ENGINE_KEYS
-    if name in _DISPLAY_LABELS:
-        entry["label"] = _DISPLAY_LABELS[name]
     if name in _DISPLAY_LABELS:
         entry["label"] = _DISPLAY_LABELS[name]
     # L'ancre se dérive de la CLÉ du catalogue : le JSON écrit `self:move_to`, le catalogue
