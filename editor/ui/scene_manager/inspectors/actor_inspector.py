@@ -47,6 +47,11 @@ COMPONENT_LABEL_KEYS = {
 # Composants que le build ignore dans une scène sans physique.
 SCENE_PHYSICS_COMPONENTS = frozenset({"physic_material", "physics_body"})
 
+# Composants verrouillés sur un acteur enfant : une passe physique qui le déplacerait serait écrasée
+# par la composition de la hiérarchie. La collision de carte (champ `solid`) se verrouille de même,
+# mais au niveau du champ dans l'éditeur de CollisionShape, pas du composant entier.
+CHILD_LOCKED_COMPONENTS = frozenset({"physics_body"})
+
 # ──────────────────────────────────────────────────────────────────
 #  Liste de components qui accepte le drop d'un Script
 # ──────────────────────────────────────────────────────────────────
@@ -953,6 +958,7 @@ class ActorInspector(QWidget):
         self._child_owner = owner
         self._refresh_parent_choices(part)
         self._refresh_relations()
+        self._refresh_component_list(keep_row=self._comp_list.currentRow())
         # `load()` l'a montrée (une partie n'est ni un template ni une
         # instance) : sans objet ici, une partie de prefab ne s'expose pas
         # elle-même en second prefab.
@@ -1160,6 +1166,15 @@ class ActorInspector(QWidget):
         return (type_name in SCENE_PHYSICS_COMPONENTS and self._scene is not None
                 and not self._scene.physics_enabled)
 
+    def is_child_actor(self) -> bool:
+        """L'acteur courant suit un parent (acteur enfant ou partie de prefab) : certains composants et champs,
+        ceux qui le déplaceraient hors du repère de son parent, lui sont verrouillés."""
+        return self._actor is not None and bool(
+            getattr(self._actor, "parent", None) or self._child_owner is not None)
+
+    def _component_locked(self, type_name: str) -> bool:
+        return type_name in CHILD_LOCKED_COMPONENTS and self.is_child_actor()
+
     def _component_text(self, comp) -> str:
         """Une ligne de la liste : « Type [id] » ; l'id se tait pour un composant unique par acteur."""
         type_name = component_type_name(comp)
@@ -1170,11 +1185,19 @@ class ActorInspector(QWidget):
             text += "  " + label("actorinsp.comp_inactive")
         if self._component_ignored(type_name):
             text += "  " + label("actorinsp.comp_ignored")
+        if self._component_locked(type_name):
+            text = "🔒 " + text + "  " + label("actorinsp.comp_locked")
         return text
 
     def _component_item(self, comp) -> QListWidgetItem:
         item = QListWidgetItem(self._component_text(comp))
-        if self._component_ignored(component_type_name(comp)):
+        type_name = component_type_name(comp)
+        if self._component_locked(type_name):
+            item.setForeground(QColor(C.TEXT_MUTED))
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+            item.setToolTip(tooltip(title=label("actorinsp.comp_locked_title"),
+                                    body=label("actorinsp.comp_locked_tip")))
+        elif self._component_ignored(type_name):
             item.setForeground(QColor(C.TEXT_MUTED))
             item.setToolTip(tooltip(title=item.text(), body=label("actorinsp.comp_ignored_tip")))
         return item
@@ -1210,6 +1233,12 @@ class ActorInspector(QWidget):
         menu.setStyleSheet(QSS.menu)
         for type_name, key in COMPONENT_LABEL_KEYS.items():
             if self._component_ignored(type_name):
+                continue
+            if self._component_locked(type_name):
+                action = menu.addAction("🔒 " + label(key))
+                action.setEnabled(False)
+                action.setToolTip(tooltip(title=label("actorinsp.comp_locked_title"),
+                                          body=label("actorinsp.comp_locked_tip")))
                 continue
             # Un seul composant par acteur pour ces types (le compilateur Lua->C ne lit qu'un
             # ScriptComponent actif ; un second Interactive ou PhysicsBody serait ignoré).

@@ -29,8 +29,7 @@ class PhysicsBodyEditor(BaseComponentEditor):
         for value in PHYSICS_BODY_MODES:
             mode.addItem(labels[value], value)
         self._fields.bind("mode", mode, values=list(PHYSICS_BODY_MODES))
-        mode.setToolTip(tooltip(title=label("comped.physics_mode"),
-                                body=label("comped.physics_mode_tip")))
+        mode.setToolTip(tooltip(title=label("comped.physics_mode"), body=label("comped.physics_mode_tip")))
         W.row(label("comped.physics_mode"), mode, layout, LABEL_WIDTH)
 
         def colliders():

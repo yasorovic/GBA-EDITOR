@@ -84,7 +84,16 @@ def gen_scene_tick(
         L += [f"    {sym}_scene_on_update();"]
 
     # on_update des acteurs, posés puis nés : le crochet se lit au descripteur de modèle.
-    L += hook_pass_lines(scene, pi, placed_scripts, _def, "on_update")
+    # Les scripts des enfants lisent la pose de leur parent dans cette même frame. Les racines passent donc d'abord,
+    # puis chaque profondeur est composée avant son propre crochet.
+    hierarchy_depth = link_depth(scene_actors, pi)
+    if hierarchy_depth:
+        L += hook_pass_lines(scene, pi, placed_scripts, _def, "on_update", depth=0)
+        for depth in range(1, hierarchy_depth + 1):
+            L.append(f"    slot_compose_depth({depth});")
+            L += hook_pass_lines(scene, pi, placed_scripts, _def, "on_update", depth=depth)
+    else:
+        L += hook_pass_lines(scene, pi, placed_scripts, _def, "on_update")
     # on_update des scripts d'Area, après ceux des acteurs.
     L += area_update_lines(p, scene, _def)
 
@@ -96,7 +105,7 @@ def gen_scene_tick(
         p, scene_actors, scene, pi, resolve_initial_appearance)
     L += kinematic_before
     L += physics_motion_lines(scene, p.settings, scene_actors, pi, project_sets_gravity(p), _lay)
-    if link_depth(scene_actors, pi):
+    if hierarchy_depth:
         L.append("    slot_compose_all();   /* actor hierarchy, posed and spawned: parents before children */")
     L += area_parent_lines(scene, scene_actors, actor_offset)
     L += emitter_tick_lines(p, scene)
@@ -125,6 +134,12 @@ def gen_scene_tick(
 
     L += floor_tick_lines(p, scene_actors, scene, pi, resolve_initial_appearance)
 
+    # La carte, les plateformes et le sol peuvent avoir corrigé la pose d'un parent. Les enfants et les Areas doivent
+    # voir cette pose finale avant les contacts de la frame.
+    if hierarchy_depth:
+        L.append("    slot_compose_all();   /* physics-corrected parents before contacts */")
+    L += area_parent_lines(scene, scene_actors, actor_offset)
+
     # `physics_body:drop_through(n)` : un compteur par emplacement, lu par les faces à sens unique de cette phase
     # puis décompté ici, après elles : appelé pendant `on_update`, il compte donc cette frame-ci.
     if project_has_one_way(p):
@@ -152,6 +167,10 @@ def gen_scene_tick(
     # on_late_update scène
     if getattr(scene, "script", ""):
         L.append(f"    {sym}_scene_on_late_update();")
+
+    # Une écriture tardive peut bouger un parent. Le rendu et la caméra lisent toujours la pose recomposée.
+    if hierarchy_depth:
+        L.append("    slot_compose_all();   /* late parent writes before camera and render */")
 
     # Caméra — l'ordre est la règle, et il tient en quatre lignes :
     #   1. la secousse de la frame précédente est retirée, pour que le suivi

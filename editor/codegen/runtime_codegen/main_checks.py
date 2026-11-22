@@ -3,9 +3,34 @@
 Ce qui ne se verrait qu'à l'exécution, chez le joueur, fait échouer le build ici : tuiles OBJ, SRAM, parenté."""
 from __future__ import annotations
 
-from core.diagnostic import build_error
+from core.diagnostic import build_error, build_warning
 from codegen.runtime_codegen.gen_save import save_fatal
 from codegen.runtime_codegen.gen_scene_query import parent_depths
+from core.models.components import PhysicsBodyComponent, CollisionShapeComponent
+
+
+def child_physics_warnings(p, all_scene_data: list[dict]) -> list[str]:
+    """Un enfant suit son parent : une passe physique qui le déplace serait écrasée par la composition. Ni corps mobile
+    ni résolution contre la carte (`solid`) ne sont compilés sur lui ; Block et Sensor, eux, fonctionnent toujours."""
+    warnings = []
+
+    def inspect(components, who: str):
+        if any(isinstance(c, PhysicsBodyComponent) and c.active for c in components):
+            warnings.append(f'PhysicsBody on {who} is not built because the child follows its parent. '
+                            "Block and Sensor collision shapes still work.")
+        if any(isinstance(c, CollisionShapeComponent) and c.active and getattr(c, "solid", True)
+               for c in components):
+            warnings.append(f'Map collision on {who} is not built because the child follows its parent. '
+                            "Block and Sensor collision shapes still work.")
+
+    for data in all_scene_data:
+        for actor, _sprite in data["scene_actors"]:
+            if getattr(actor, "parent", None):
+                inspect(getattr(actor, "components", []), f'child actor "{actor.name}"')
+    for prefab in getattr(p, "prefabs", []) or []:
+        for part in getattr(prefab, "children", []) or []:
+            inspect(getattr(part, "components", []), f'prefab part "{part.name}" of "{prefab.name}"')
+    return warnings
 
 
 def check_main(p, all_scene_data: list[dict], obj_alloc: dict, obj_text_tile: int, any_obj_ui: bool, emit) -> bool:
@@ -41,6 +66,9 @@ def check_main(p, all_scene_data: list[dict], obj_alloc: dict, obj_text_tile: in
     # budget de tuiles, et pour la même raison — ça ne se verrait qu'en jouant.
     for _d in all_scene_data:
         _fatal += parent_depths(_d["scene_actors"])[1]
+    for _message in child_physics_warnings(p, all_scene_data):
+        if emit:
+            emit("diagnostic", build_warning(_message, "build"))
     if _fatal:
         for _m in _fatal:
             if emit:

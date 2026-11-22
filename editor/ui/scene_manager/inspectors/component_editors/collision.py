@@ -98,7 +98,11 @@ class CollisionEditor(BaseComponentEditor):
     def _context(self):
         sensor_only = isinstance(getattr(self.insp, "_actor", None), Area)
         scene = getattr(self.insp, "_scene", None)
-        return self.insp._project, sensor_only, not sensor_only and (scene is None or scene.physics_enabled)
+        # `is_child_actor` entre dans le contexte : passer d'un acteur enfant à un acteur racine (ou l'inverse)
+        # change le verrou du champ `solid`, et l'éditeur réutilisé doit alors se reconstruire.
+        return (self.insp._project, sensor_only,
+                not sensor_only and (scene is None or scene.physics_enabled),
+                self.insp.is_child_actor())
 
     def reload(self, comp) -> bool:
         if self._context() != self._built_context:
@@ -127,6 +131,15 @@ class CollisionEditor(BaseComponentEditor):
         chk_solid.toggled.connect(lambda v: self.set_field(self.comp, "solid", v))
         self.register_syncer("solid", lambda v, w=chk_solid: (
             w.blockSignals(True), w.setChecked(bool(v)), w.blockSignals(False)))
+
+        # Un enfant suit son parent : le build ne compile pas sa résolution contre la carte, qui serait écrasée par la
+        # composition. Le champ est verrouillé et le libellé le marque (`🔒`), comme le composant PhysicsBody l'est.
+        if self.insp.is_child_actor():
+            lbl.setText("🔒 " + label("comped.collision_solid"))
+            tip = tooltip(title=label("comped.collision_solid"), body=label("comped.collision_child_solid_tip"))
+            for widget in (chk_solid, lbl):
+                widget.setEnabled(False)
+                widget.setToolTip(tip)
 
         # ── Blocage entre acteurs ─────────────────────────────────
         # Une réponse à part de « Solid » (qui ne parle que de la carte) : Block repousse le Character

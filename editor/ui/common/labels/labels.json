@@ -762,6 +762,9 @@
     "comped.collision_material_none": { "text": "Default (no bounce, no friction)" },
     "comped.collision_material_missing": { "text": "Missing PhysicMaterial [{name}]" },
     "comped.physics_mode": { "text": "Mode" },
+    "actorinsp.comp_locked": { "text": "Not built" },
+    "actorinsp.comp_locked_title": { "text": "Component not built" },
+    "actorinsp.comp_locked_tip": { "text": "PhysicsBody is not built on a child because the child follows its parent. Remove the parent relation to use this component." },
     "comped.physics_mode_tip": { "text": "How this actor moves and collides: StaticBody never moves, CharacterBody is driven by its script, KinematicBody applies its velocity and carries other bodies, RigidBody is simulated with gravity and impulses." },
     "comped.physics_collider": { "text": "Physics collider" },
     "comped.physics_choose_collider": { "text": "Choose a CollisionShape..." },
@@ -1696,6 +1699,7 @@
     "comped.collision_solid": {
       "text": "Collides with map"
     },
+    "comped.collision_child_solid_tip": { "text": "Map collision is not built on a child: it follows its parent, so the map cannot pin it. Block and Sensor contacts still work." },
     "comped.material_restitution": { "text": "Restitution" },
     "comped.material_restitution_tip": { "text": "Bounciness of this material. The contact keeps the higher coefficient." },
     "comped.material_friction": { "text": "Friction" },

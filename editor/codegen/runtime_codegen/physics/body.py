@@ -47,6 +47,8 @@ def without_scene_physics(owner):
 
 def physics_body(owner) -> PhysicsBodyComponent | None:
     """Composant physique actif, sans le repli Character des scènes héritées."""
+    if getattr(owner, "parent", None):
+        return None
     return next((c for c in getattr(owner, "components", [])
                  if isinstance(c, PhysicsBodyComponent) and c.active), None)
 
@@ -173,6 +175,8 @@ def physics_body_mode(owner) -> str | None:
     body = physics_body(owner)
     if body is not None:
         return body.mode
+    if getattr(owner, "parent", None):
+        return None
     if has_map_collider(owner):
         return PHYSICS_BODY_CHARACTER
     return None

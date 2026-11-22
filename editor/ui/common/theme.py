@@ -427,6 +427,10 @@ QComboBox QAbstractItemView {{
     selection-color: {C.ACCENT};
     outline: none;
 }}
+QComboBox QAbstractItemView::item:hover {{
+    background: {C.BG_HOVER};
+    color: {C.TEXT_HI};
+}}
 """
 
     # Base mate des boutons non spécialisés.

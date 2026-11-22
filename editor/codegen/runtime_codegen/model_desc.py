@@ -60,9 +60,9 @@ def scene_has_moving_bodies(scene_actors, pi) -> bool:
     return any(physics_body_mode(o) in _BODY_MODE for o in scene_owners(scene_actors, pi))
 
 
-def each_slot(step: str) -> list[str]:
+def each_slot(step: str, condition: str = "") -> list[str]:
     """`step` (qui lit `_a`) pour chaque emplacement actif de la scène, posé ou né : un seul parcours (`SLOT_EACH`)."""
-    return ["    SLOT_EACH(_k){", "        Actor* _a=&g_actors[_k];", f"        if(_a->active) {step}", "    }"]
+    return ["    SLOT_EACH(_k){", "        Actor* _a=&g_actors[_k];", f"        if(_a->active{condition}) {step}", "    }"]
 
 
 def sfx_input_desc(p, owner, input_layout) -> tuple[str, int, str] | None:
@@ -75,13 +75,15 @@ def sfx_input_desc(p, owner, input_layout) -> tuple[str, int, str] | None:
     return sfx_sym, sfx_vol, input_layout.masks.get(trigger, key_constant(trigger))
 
 
-def hook_pass_lines(scene, pi, placed_scripts, has_event, event: str) -> list[str]:
+def hook_pass_lines(scene, pi, placed_scripts, has_event, event: str, depth: int | None = None) -> list[str]:
     """`event` (`on_update` ou `on_late_update`) de chaque emplacement actif dont le type le définit, posé ou né : le
     crochet se lit dans la ligne du type. Rien si aucun script de la scène ne le définit."""
     if not (any(s and has_event(s, event) for s in placed_scripts)
             or any(has_event(m["sym"], event) for m in shared_models(pi))):
         return []
-    return each_slot(f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->type_id]; if(_d->{event}) _d->{event}(_a); }}")
+    condition = "" if depth is None else f" && g_slot_link[_k].depth=={depth}"
+    return each_slot(f"{{ const ModelDesc* _d=&{model_desc_sym(scene)}[_a->type_id]; if(_d->{event}) _d->{event}(_a); }}",
+                     condition)
 
 
 def sfx_input_pass_lines(p, scene, scene_actors, pi, input_layout) -> list[str]:

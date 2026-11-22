@@ -24,6 +24,63 @@ def test_les_scenes_heritent_du_character_et_les_modes_explicites_l_emportent():
     assert uses_character_solver(_actor("Crate", mode="RigidBody"))
 
 
+def test_un_enfant_ne_peut_pas_porter_un_corps_mobile_au_build(tmp_path):
+    from codegen.runtime_codegen.main_checks import child_physics_warnings
+    from core.project import Project
+    from core.models.scene import Prefab
+
+    project = Project(tmp_path)
+    parent = _actor("Parent", solid=False)
+    child = _actor("Child", mode="CharacterBody")
+    child.parent = "Parent"
+    # Un enfant « solide » sans corps : sa résolution contre la carte ne serait pas compilée non plus.
+    solid_child = _actor("Pillar", solid=True)
+    solid_child.parent = "Parent"
+    # Un enfant purement capteur ne touche ni carte ni corps mobile : rien à signaler.
+    sensor_child = _actor("Probe", solid=False)
+    sensor_child.parent = "Parent"
+    prefab = Prefab(name="Ship")
+    prefab.children = [_actor("Engine", mode="KinematicBody")]
+    project.prefabs.items = [prefab]
+
+    errors = child_physics_warnings(project, [{"scene_actors": [
+        (parent, None), (child, None), (solid_child, None), (sensor_child, None)]}])
+
+    assert any('PhysicsBody on child actor "Child"' in error for error in errors)
+    assert any('Map collision on child actor "Pillar"' in error for error in errors)
+    assert any('PhysicsBody on prefab part "Engine"' in error for error in errors)
+    assert not any('"Probe"' in error for error in errors)
+
+
+def test_le_tick_recompose_les_enfants_aux_trois_instants_necessaires(tmp_path):
+    """Le C émis pour une vraie scène compose avant le script enfant, les contacts et le rendu."""
+    from codegen.c_names import scene_actor_sym, sym as c_sym
+    from codegen.runtime_codegen.gen_scene_tick import gen_scene_tick
+    from core.project import Project
+
+    project = Project.create(tmp_path / "Tick", "Tick")
+    scene = project.active_scene
+    parent = _actor("Parent", solid=False)
+    child = _actor("Child", solid=False)
+    child.parent = "Parent"
+    scene.actors = [parent, child]
+    actors = [(actor, None) for actor in scene.actors]
+    parent_sym = scene_actor_sym(scene.name, parent.name)
+    child_sym = scene_actor_sym(scene.name, child.name)
+    code = "\n".join(gen_scene_tick(
+        project, scene, 0, [], actors, {0, 1}, [], {}, {},
+        actor_defined_events={parent_sym: {"on_update", "on_late_update"}, child_sym: {"on_update"}},
+    ))
+
+    scene_sym = c_sym(scene.name)
+    hooks = code[code.index(f"scene_tick_{scene_sym}_hooks"):code.index(f"scene_tick_{scene_sym}_physics")]
+    physics = code[code.index(f"scene_tick_{scene_sym}_physics"):code.index(f"scene_tick_{scene_sym}_late")]
+    late = code[code.index(f"scene_tick_{scene_sym}_late"):code.index(f"scene_tick_{scene_sym}_render")]
+    assert hooks.index("g_slot_link[_k].depth==0") < hooks.index("slot_compose_depth(1);") < hooks.index("g_slot_link[_k].depth==1")
+    assert physics.count("slot_compose_all();") == 2
+    assert late.index("slot_compose_all();") < late.index("camera_shake_undo();")
+
+
 def test_static_body_n_emet_ni_mouvement_ni_sommeil():
     from types import SimpleNamespace
     from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines

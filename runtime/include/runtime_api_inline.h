@@ -896,9 +896,11 @@ static inline void slot_compose(int s) {
     if (c->oam_entry >= 0)
         g_oam_entries[c->oam_entry].visible = l->visible && (p->oam_entry < 0 || g_oam_entries[p->oam_entry].visible);
 }
+static inline void slot_compose_depth(int depth) {
+    SLOT_EACH(k) if (g_actors[k].alive && g_slot_link[k].depth == depth) slot_compose(k);
+}
 static inline void slot_compose_all(void) {
-    for (int d = 1; d <= g_slot_depth; d++)
-        SLOT_EACH(k) if (g_actors[k].alive && g_slot_link[k].depth == d) slot_compose(k);
+    for (int d = 1; d <= g_slot_depth; d++) slot_compose_depth(d);
 }
 
 /* Input */
