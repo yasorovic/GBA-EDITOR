@@ -268,3 +268,45 @@ def test_deux_areas_qui_partagent_un_script_portent_chacune_leur_valeur_d_export
     door_b = next(build.rglob("Scene_01_DoorB_area.c")).read_text(encoding="utf-8")
     assert "next_scene = SCENE_IDX_SCENE_02;" in door_a
     assert "next_scene = SCENE_IDX_SCENE_01;" in door_b
+
+
+ACTIVATOR = """exports = {
+  target = { type = "actor_ref", default = "" },
+}
+
+function on_actor_enter(other, other_box)
+  if target then
+    target:hide()
+  end
+end
+"""
+
+
+def test_une_area_resout_son_export_actor_ref_vers_l_acteur_choisi(tmp_path):
+    """L'export appartient � l'Area, pas � l'acteur qui entre : il est r�solu dans le
+    fichier C de cette Area et son handler agit sur l'acteur choisi dans l'inspecteur."""
+    projet = Project.create(tmp_path / "Game", "Game")
+    scripts = projet.user_library_dir / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    (scripts / "Activator.lua").write_text(ACTIVATOR, encoding="utf-8")
+    hero = Actor(name="Hero", x=40, y=56)
+    lever = Actor(name="Lever", x=80, y=56)
+    trigger = Area(name="Activator", x=40, y=56)
+    trigger.components.append(ScriptComponent(
+        script="assets/scripts/Activator.lua", exports_values={"target": "Lever"},
+    ))
+    projet.scenes[0].actors += [hero, lever]
+    projet.scenes[0].areas.append(trigger)
+    projet.save()
+
+    worker = BuildWorker(Project.open(projet.root), Toolchain())
+    worker._step_launch_mgba = lambda _p: True
+    diagnostics, verdict = [], []
+    worker.on("diagnostic", diagnostics.append)
+    worker.on("finished", verdict.append)
+    worker.run()
+    assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
+
+    source = next((projet.root / "build").rglob("Scene_01_Activator_area.c")).read_text(encoding="utf-8")
+    assert "static int __attribute__((unused)) target = ACTOR_SCENE_01_LEVER;" in source
+    assert "actor_set_visible(actor_at(target), 0);" in source

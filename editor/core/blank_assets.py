@@ -92,7 +92,7 @@ def build_blank(project, kind: str, name: str | None = None, **options):
 
 def script_source(kind: str, name: str) -> str:
     """Le contenu d'un script neuf (`kind` : "script", "behavior" — qui porte le marqueur — ou "actor", "scene",
-    "camera", le point d'entrée du script de ce propriétaire)."""
+    "camera", "area", le point d'entrée du script de ce propriétaire)."""
     from scripting.script_templates import ScriptTemplateContext, generate_script_template
-    known = ("behavior", "actor", "scene", "camera")
+    known = ("behavior", "actor", "scene", "camera", "area")
     return generate_script_template(ScriptTemplateContext(kind=kind if kind in known else "empty", name=name))

@@ -51,6 +51,7 @@ class AreaInspector(QWidget):
     et `_script_open_fn` sont ce que `CollisionEditor` et `ScriptEditor` attendent de leur inspecteur (c'est le contrat de
     `BaseComponentEditor`)."""
     changed = pyqtSignal()
+    script_template_kind = "area"
 
     def __init__(self, parent=None):
         super().__init__(parent)

@@ -8,12 +8,13 @@ from scripting.script_templates import ScriptTemplateContext, generate_script_te
 from scripting.api import EVENT_REGISTRY
 
 
-@pytest.mark.parametrize("kind, owner_kind", [
-    ("actor", "actor"),
-    ("scene", "scene"),
-    ("camera", "camera"),
+@pytest.mark.parametrize("kind, owner_kind, expected", [
+    ("actor", "actor", "function on_update()\nend\n"),
+    ("scene", "scene", "function on_update()\nend\n"),
+    ("camera", "camera", "function on_update()\nend\n"),
+    ("area", "area", "function on_actor_enter(other, other_box)\nend\n"),
 ])
-def test_event_template_is_minimal_and_valid(kind, owner_kind):
+def test_event_template_is_minimal_and_valid(kind, owner_kind, expected):
     source = generate_script_template(ScriptTemplateContext(
         kind=kind,
         name="Example",
@@ -24,7 +25,7 @@ def test_event_template_is_minimal_and_valid(kind, owner_kind):
         collision_tags=["body"],
     ))
 
-    assert source == "function on_update()\nend\n"
+    assert source == expected
     assert not [error for error in check(parse(source), BuildContext(
         actor_name="Actor", owner_kind=owner_kind,
     )) if error.level == "error"]

@@ -14,10 +14,12 @@ def _errors(src: str, owner_kind: str = "area") -> list[str]:
     return [e.message for e in check(parse(src), ctx) if e.level == "error"]
 
 
-def _c(src: str) -> str:
+def _c(src: str, **overrides) -> str:
     ctx = CodegenContext(actor_name="Door", actor_sym="Sc_Door", anim_names=[], sfx_names=[], music_names=[],
                          global_names=set(), const_names=set(), all_actor_syms=[], scene_sym="Sc",
                          owner_kind="area", area_ref=3)
+    for name, value in overrides.items():
+        setattr(ctx, name, value)
     return generate(parse(src), ctx)[0]
 
 
@@ -76,6 +78,26 @@ def test_la_completion_de_self_propose_les_membres_de_l_area():
     fields = {c.insert for c in _member_candidates("self", ".", None, "area")}
     assert {"name", "tag", "active", "position", "bounds"} <= fields
     assert "velocity" not in fields
+
+
+def test_un_export_actor_ref_d_area_se_lit_comme_une_reference_d_acteur():
+    src = ("exports = { target = { type = \"actor_ref\", default = \"Hero\" } }\n"
+           "function on_actor_enter(other, other_box)\n"
+           "  if target then target:hide() end\n"
+           "end\n")
+    ctx = BuildContext(actor_name="Door", owner_kind="area", actor_names=["Hero"], box_tag_names=["body"])
+    assert not [error for error in check(parse(src), ctx) if error.level == "error"]
+    code = _c(src, all_actor_syms=["Hero"], export_inits={"target": "ACTOR_SC_HERO"})
+    assert "int target __attribute__((unused)) = ACTOR_SC_HERO;" in code
+    assert "actor_at(target)" in code
+
+
+def test_un_export_actor_ref_d_area_ne_peut_pas_etre_reaffecte():
+    src = ("exports = { target = { type = \"actor_ref\", default = \"Hero\" } }\n"
+           "function on_actor_enter(other, other_box)\n"
+           "  target = other\n"
+           "end\n")
+    assert any("target is an actor_ref export" in error for error in _errors(src))
 
 
 def test_le_validateur_avertit_d_un_script_d_area_sans_declencheur(tmp_path):

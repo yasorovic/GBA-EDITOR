@@ -45,7 +45,7 @@ class ScriptEditor(BaseComponentEditor):
             on_assigned = lambda rel: self._assign_script(self.comp, rel),
             on_cleared  = lambda: self._clear_script(self.comp),
             open_file   = self._open_file,
-            template    = "actor",
+            template    = getattr(self.insp, "script_template_kind", "actor"),
             add_label   = label("comped.script_add"),
             hint        = label("comped.script_hint"),
             parent      = self.insp,

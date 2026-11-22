@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ScriptTemplateContext:
-    """kind: "scene" | "camera" | "actor" | "behavior" | "empty" """
+    """kind: "scene" | "camera" | "actor" | "area" | "behavior" | "empty" """
     kind: str = "empty"
     name: str = ""                 # nom du script (sans .lua)
     scene_name: str = ""           # pour kind="scene"
@@ -32,6 +32,8 @@ def generate_script_template(ctx: ScriptTemplateContext) -> str:
         return _generate_camera_template(ctx)
     if ctx.kind == "actor":
         return _generate_actor_template(ctx)
+    if ctx.kind == "area":
+        return _generate_area_template(ctx)
     if ctx.kind == "behavior":
         return _generate_behavior_template(ctx)
     return ""   # "empty" : fichier vide
@@ -57,3 +59,7 @@ def _generate_behavior_template(ctx: ScriptTemplateContext) -> str:
 
 def _generate_actor_template(ctx: ScriptTemplateContext) -> str:
     return "function on_update()\nend\n"
+
+
+def _generate_area_template(ctx: ScriptTemplateContext) -> str:
+    return "function on_actor_enter(other, other_box)\nend\n"

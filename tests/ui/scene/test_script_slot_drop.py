@@ -53,3 +53,25 @@ def test_a_new_scene_script_is_born_from_the_scene_template_and_undone(tmp_path,
     assert created.read_text(encoding="utf-8") == "function on_update()\nend\n"
     history.undo()
     assert not created.exists()
+
+
+def test_a_new_area_script_is_born_from_the_area_template_and_undone(tmp_path, qapp, monkeypatch):
+    p = Project.create(tmp_path / "Jeu", "Jeu")
+    p.load_all_resources()
+    history = CommandHistory()
+    monkeypatch.setattr("core.history.get_history", lambda: history)
+    monkeypatch.setattr(import_folder, "_shown_folder", lambda: str(p.user_library_dir))
+    assigned, opened = [], []
+    slot = _slot(p, assigned, opened, template="area")
+
+    shown = []
+    monkeypatch.setattr(PickerPopup, "show_below", lambda popup, _anchor: shown.append(popup))
+    slot.open_picker()
+    shown[0]._search.setText("Door")
+    shown[0]._on_new()
+
+    created = p.user_library_dir / "Door.lua"
+    assert assigned == [p.asset_rel(created)] and opened == [str(created)]
+    assert created.read_text(encoding="utf-8") == "function on_actor_enter(other, other_box)\nend\n"
+    history.undo()
+    assert not created.exists()
