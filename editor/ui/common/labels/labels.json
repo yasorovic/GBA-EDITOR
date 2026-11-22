@@ -935,6 +935,8 @@
     },
     "sceneinsp.physics_enabled": { "text": "Scene physics" },
     "sceneinsp.physics_enabled_tip": { "text": "Enables the physics simulation for this scene. Disabled, PhysicsBody and PhysicMaterial components are ignored, CollisionShape keeps only its response, and the Physics card is hidden. Movement against the collision map still works." },
+    "sceneinsp.collision_mutable": { "text": "Mutable collision" },
+    "sceneinsp.collision_mutable_tip": { "text": "Copies this scene's collision map into RAM at scene entry, so a script can rewrite it at runtime with collision:set_tile and collision:fill_rect: a collapsing bridge or a falling wall. Costs one byte of EWRAM per tile. A scene that leaves this off keeps its collision in ROM, read only." },
     "sceneinsp.physics_reset_tip": { "text": "Restores the gravity and simulation values from Project Settings for this scene. Available once the scene has its own values." },
     "sceneinsp.physics_gravity": { "text": "Gravity:" },
     "sceneinsp.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors, in pixels per frame squared. Character and Kinematic bodies follow it while their Use scene gravity box is checked." },

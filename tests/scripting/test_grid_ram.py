@@ -108,6 +108,15 @@ def test_regions_passe():
     assert _erreurs("local n = terrain:regions(zones)", decl=REGIONS_DECL) == []
 
 
+def test_sample_collision_passe():
+    assert _erreurs("ai:sample_collision()", decl="local ai = grid(2, 2, 16)\n") == []
+
+
+def test_sample_collision_prend_zero_argument():
+    (msg,) = _erreurs("ai:sample_collision(1)", decl="local ai = grid(2, 2, 16)\n")
+    assert "takes 0 argument(s)" in msg and ":sample_collision()" in msg
+
+
 def test_le_pas_est_optionnel():
     assert _erreurs("local v = terrain:at(0, 0)", decl="local terrain = grid(4, 3)\n") == []
 
@@ -337,6 +346,13 @@ def test_regions_emet_un_appel_avec_les_deux_grilles():
                                            decl=REGIONS_DECL).splitlines()
                  if "grid_regions(" in L).rstrip(";")
     assert ligne == "int n = grid_regions(terrain, zones, 4, 3)"
+
+
+def test_sample_collision_emet_l_appel_avec_le_pas():
+    ligne = next(L.strip() for L in _emis("ai:sample_collision()",
+                                          decl="local ai = grid(2, 2, 16)\n").splitlines()
+                 if "collision_sample(" in L).rstrip(";")
+    assert ligne == "collision_sample(ai, 2, 2, 16)"
 
 
 # ── Le C réellement émis, compilé et exécuté ──────────────────────

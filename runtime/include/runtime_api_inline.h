@@ -1399,6 +1399,9 @@ extern int collision_map_tile(int px, int py);
    effet). tx, ty en tuiles de 8 px à partir de 1. Définies avec la physique. */
 extern void collision_set_tile(int tx, int ty, int tile);
 extern void collision_fill_rect(int tx, int ty, int w, int h, int tile);
+/* Échantillonne la carte vive dans une grille d'IA (cases de `step` px) : une case
+   bloquée (1) si une sous-tuile de 8 px n'est pas vide, sinon 0. Définie avec la physique. */
+extern void collision_sample(unsigned char *out, int cols, int rows, int step);
 
 /* Grille de valeurs d'une scène — la case qui contient un point du monde.
    Le build passe le tableau, sa géométrie et son décalage, tous connus à la

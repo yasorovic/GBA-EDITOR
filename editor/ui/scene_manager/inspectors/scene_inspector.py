@@ -380,6 +380,13 @@ class SceneInspector(QWidget):
         self._chk_physics_enabled.toggled.connect(self._on_physics_enabled)
         mode_inner.addWidget(self._chk_physics_enabled)
 
+        self._chk_collision_mutable = QCheckBox(label("sceneinsp.collision_mutable"))
+        self._chk_collision_mutable.setFont(QFont(T.UI, T.SM))
+        self._chk_collision_mutable.setToolTip(tooltip(
+            title=label("sceneinsp.collision_mutable"), body=label("sceneinsp.collision_mutable_tip")))
+        self._chk_collision_mutable.toggled.connect(self._on_collision_mutable)
+        mode_inner.addWidget(self._chk_collision_mutable)
+
         cl.addWidget(mode_card)
 
         # ── Carte Physics ─────────────────────────────────────────
@@ -650,6 +657,9 @@ class SceneInspector(QWidget):
         self._chk_physics_enabled.blockSignals(True)
         self._chk_physics_enabled.setChecked(self._scene.physics_enabled)
         self._chk_physics_enabled.blockSignals(False)
+        self._chk_collision_mutable.blockSignals(True)
+        self._chk_collision_mutable.setChecked(self._scene.collision_mutable)
+        self._chk_collision_mutable.blockSignals(False)
         self._physics_card.setVisible(self._scene.physics_enabled)
         inherited = not self._scene.physics_gravity_override
         settings = self._project.settings if self._project else None
@@ -689,6 +699,12 @@ class SceneInspector(QWidget):
         if self._blocking or not self._scene:
             return
         self._set_scene_field("physics_enabled", bool(value), extra_persist=self._refresh_physics)
+        self.changed.emit()
+
+    def _on_collision_mutable(self, value: bool):
+        if self._blocking or not self._scene:
+            return
+        self._set_scene_field("collision_mutable", bool(value))
         self.changed.emit()
 
     def _on_physics_reset(self):

@@ -1199,7 +1199,9 @@ RUNTIME_API: dict[str, ApiFunc] = {
             "a cost map from flood, writes into dirs a direction 0..3 per cell toward the source, "
             "so many agents navigate by reading one cell. map:regions(out) labels each "
             "connected group of equal-value cells with an id 1..N into out and returns N. "
-            "A grid holds gameplay data (cost, range, zones), it draws nothing.",
+            "nav:sample_collision() fills the grid from the live collision map (1 where an 8 px "
+            "tile blocks) so flood and flow_map route the AI around real obstacles. A grid "
+            "holds gameplay data (cost, range, zones), it draws nothing.",
     ),
 
     # ── Diagnostic ───────────────────────────────────

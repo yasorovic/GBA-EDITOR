@@ -1001,6 +1001,7 @@ class Checker:
         "line_of_sight": ((4,), "line_of_sight(x0, y0, x1, y1)"),
         "flow_map": ((1,), "flow_map(dirs)"),
         "regions": ((1,), "regions(out)"),
+        "sample_collision": ((0,), "sample_collision()"),
     }
 
     def _is_grid_expr(self, e) -> bool:
@@ -1023,8 +1024,9 @@ class Checker:
         `:flood(x, y, budget, terrain, costs[, blocked])` (la portée à coût), et
         `:path_to(x, y, out)` (le chemin, écrit dans un array), et
         `:line_of_sight(x0, y0, x1, y1)` (la ligne de vue, un booléen),
-        `:flow_map(dirs)` (une direction par case vers la source) et `:regions(out)`
-        (les zones de valeur égale, un id par case). Une grille peinte reste en
+        `:flow_map(dirs)` (une direction par case vers la source), `:regions(out)`
+        (les zones de valeur égale, un id par case) et `:sample_collision()` (la carte
+        de collision vivante échantillonnée dans la grille). Une grille peinte reste en
         lecture seule (jugée ailleurs)."""
         entry = self._RAM_GRID_METHODS.get(method)
         if entry is None:

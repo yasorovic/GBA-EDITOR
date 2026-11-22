@@ -167,6 +167,65 @@ def test_l_ecriture_par_le_c_emis(tmp_path):
     assert sortie["GUARD"] == "1"
 
 
+ECHANTILLON = r"""
+#include <stdio.h>
+#include <stddef.h>
+typedef unsigned char u8;
+
+const u8 *g_active_cmap = NULL;
+int g_cmap_w = 0, g_cmap_h = 0;
+
+@FUNC@
+
+/* 4 x 4 tuiles de 8 px : un mur en (0, 0) et un en (3, 2). */
+static const u8 coll[4 * 4] = {1,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0};
+static u8 ai[2 * 2];
+
+int main(void){
+    g_active_cmap = coll; g_cmap_w = 4; g_cmap_h = 4;
+    collision_sample(ai, 2, 2, 16);   /* cases d'IA de 16 px = 2 x 2 tuiles */
+    printf("AI %d %d %d %d\n", ai[0], ai[1], ai[2], ai[3]);
+    /* Sans carte (NULL), tout est franchissable. */
+    g_active_cmap = NULL;
+    for(int i = 0; i < 4; i++) ai[i] = 9;
+    collision_sample(ai, 2, 2, 16);
+    printf("NONE %d %d %d %d\n", ai[0], ai[1], ai[2], ai[3]);
+    return 0;
+}
+"""
+
+
+def _collision_sample() -> str:
+    from codegen.runtime_codegen.physics.character import character_solver_lines
+    src = "\n".join(character_solver_lines())
+    m = re.search(r"void collision_sample\(.*?\n\}", src, re.S)
+    assert m, "collision_sample introuvable dans character.py"
+    return m.group(0)
+
+
+def test_sample_collision_par_le_c_emis(tmp_path):
+    compilateur = compilateur_hote()
+    if compilateur is None:
+        pytest.skip("aucun compilateur C hôte ; l'échantillonnage est vérifié en CI")
+    source = ECHANTILLON.replace("@FUNC@", _collision_sample())
+    (tmp_path / "probe.c").write_text(source, encoding="utf-8")
+    binaire = tmp_path / "probe"
+    construit = subprocess.run(
+        [compilateur, "-std=gnu11", "-Wall", "-Werror", "-O0", "-I", str(INCLUDE),
+         "-o", str(binaire), str(tmp_path / "probe.c")],
+        capture_output=True, text=True, env=environnement(compilateur))
+    assert construit.returncode == 0, construit.stderr
+    run = subprocess.run([str(binaire)], capture_output=True, text=True, env=environnement(compilateur))
+    assert run.returncode == 0, run.stderr
+    sortie = {L.split(" ", 1)[0]: L.split(" ", 1)[1] for L in run.stdout.strip().splitlines()}
+
+    # Une case d'IA (16 px) est bloquée si une de ses 2 x 2 tuiles de 8 px n'est pas
+    # vide : les murs (0, 0) et (3, 2) bloquent les cases d'IA (0, 0) et (1, 1).
+    assert sortie["AI"] == "1 0 0 1"
+    # Sans carte active, l'échantillon est entièrement franchissable.
+    assert sortie["NONE"] == "0 0 0 0"
+
+
 def test_une_scene_non_modifiable_garde_le_chemin_rom():
     """Sans le drapeau, l'init pointe la carte ROM et laisse l'alias écrivable à NULL."""
     from codegen.runtime_codegen.gen_scene_init import _scene_state_lines

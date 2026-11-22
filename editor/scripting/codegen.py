@@ -2457,6 +2457,11 @@ class CodeGen:
             if optr is None:
                 return None
             return f"grid_regions({base}, {optr}, {cols}, {rows})"
+        if e.method == "sample_collision" and len(e.args) == 0:
+            # Échantillonne la carte de collision VIVANTE dans la grille réceptrice,
+            # à son pas. `collision_sample` (avec la physique) lit les globals de la
+            # scène active, comme `collision.tile_at` : pas d'accès direct ici.
+            return f"collision_sample({base}, {cols}, {rows}, {_step})"
         return None
 
     def _grid_pointer(self, expr) -> Optional[str]:
