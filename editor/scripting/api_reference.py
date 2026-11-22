@@ -236,6 +236,8 @@ _FUNC_HOME: dict[str, str] = {
     # vit avec son équivalent direct `collision:tile_at`.
     "collision_shape:get_collision_tile": "Collision",
     "collision.tile_at": "Collision",
+    "collision.set_tile": "Collision",
+    "collision.fill_rect": "Collision",
     "area.get": "Area", "area:activate": "Area", "area:deactivate": "Area", "area:overlaps": "Area",
 }
 

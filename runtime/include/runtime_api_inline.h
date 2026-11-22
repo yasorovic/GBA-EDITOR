@@ -1395,6 +1395,10 @@ static inline int scene_frame(void) { return _g_frame; }
 
 /* Carte de collision — le type de tile à une position monde (0 = vide) */
 extern int collision_map_tile(int px, int py);
+/* Écriture de la carte au runtime, sur une scène à collision modifiable (sinon sans
+   effet). tx, ty en tuiles de 8 px à partir de 1. Définies avec la physique. */
+extern void collision_set_tile(int tx, int ty, int tile);
+extern void collision_fill_rect(int tx, int ty, int w, int h, int tile);
 
 /* Grille de valeurs d'une scène — la case qui contient un point du monde.
    Le build passe le tableau, sa géométrie et son décalage, tous connus à la

@@ -1374,6 +1374,27 @@ RUNTIME_API: dict[str, ApiFunc] = {
             "faces. The Collision tile types page lists every index; a one-way tile reads as "
             "non-zero like a solid one. Useful for triggers, spawn zones and custom movement.",
     ),
+    # Écriture de la carte : seulement si la scène a sa collision modifiable (case à
+    # cocher de l'inspecteur). Sinon l'appel est sans effet (la carte reste en ROM).
+    "collision.set_tile": ApiFunc(
+        lua_name="collision.set_tile", c_func="collision_set_tile",
+        params=[Param("tx", PARAM_INT, doc="Column, in 8 px tiles (from 1)"),
+                Param("ty", PARAM_INT, doc="Row, in 8 px tiles (from 1)"),
+                Param("tile", PARAM_INT, doc="Tile type index to write (as collision:tile_at reads)")],
+        doc="Writes the collision-map tile at (tx, ty), in 8 px tiles from 1, on a scene whose collision is "
+            "mutable (the checkbox in the scene inspector). Same type indices as collision:tile_at (0 empty, "
+            "1 solid, 2 to 21 slopes, 22 to 25 one-way). Ignored on a scene whose collision stays in ROM.",
+    ),
+    "collision.fill_rect": ApiFunc(
+        lua_name="collision.fill_rect", c_func="collision_fill_rect",
+        params=[Param("tx", PARAM_INT, doc="Column of the corner, in 8 px tiles (from 1)"),
+                Param("ty", PARAM_INT, doc="Row of the corner, in 8 px tiles (from 1)"),
+                Param("w", PARAM_INT, doc="Width, in tiles"), Param("h", PARAM_INT, doc="Height, in tiles"),
+                Param("tile", PARAM_INT, doc="Tile type index to write")],
+        doc="Writes a rectangle of w x h collision tiles from (tx, ty), in 8 px tiles from 1, on a "
+            "mutable-collision scene: a collapsing bridge or a wall section in one call. Clamped to the map. "
+            "Ignored on a scene whose collision stays in ROM.",
+    ),
 
     # ── Compatibilité CollisionShape ─────────────────────────────────
     f"{REF_COLLISION_SHAPE}:get_collision_tile": ApiFunc(

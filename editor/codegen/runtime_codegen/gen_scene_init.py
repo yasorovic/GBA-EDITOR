@@ -217,10 +217,25 @@ def _scene_state_lines(scene, sym: str, cam_idx: int) -> list[str]:
     L.append(f"    g_sfx_on_destroy_id  = g_sfx_on_destroy_id_{sym};")
     L.append(f"    g_sfx_on_destroy_vol = g_sfx_on_destroy_vol_{sym};")
     # Cmap dispatch
-    if scene_has_cmap(scene):
-        L.append(f"    g_active_cmap = g_cmap_{sym};")
-        L.append(f"    g_cmap_w = CMAP_W_{sym.upper()};")
-        L.append(f"    g_cmap_h = CMAP_H_{sym.upper()};")
+    up = sym.upper()
+    mutable = bool(getattr(scene, "collision_mutable", False)) and bool(scene.collision_map)
+    if mutable:
+        # Collision modifiable : la carte peinte (si elle a du contenu) est copiée
+        # dans le buffer RAM partagé, qui devient la carte active ET écrivable. Les
+        # masques de sens unique restent à NULL : une case ayant pu changer, la
+        # physique relit la carte vive pour les faces à sens unique (`g_ow_any`
+        # couvre les quatre sens).
+        L.append(f"    g_cmap_w = CMAP_W_{up}; g_cmap_h = CMAP_H_{up};")
+        if scene_has_cmap(scene):
+            L.append(f"    for (int _i = 0; _i < CMAP_W_{up} * CMAP_H_{up}; _i++) g_cmap_ram[_i] = g_cmap_{sym}[_i];")
+        else:
+            L.append(f"    for (int _i = 0; _i < CMAP_W_{up} * CMAP_H_{up}; _i++) g_cmap_ram[_i] = 0;")
+        L.append("    g_active_cmap = g_cmap_ram; g_active_cmap_w = g_cmap_ram;")
+        L.append("    g_ow_any = 0x1E; g_ow_rows = NULL; g_ow_cols = NULL;")
+    elif scene_has_cmap(scene):
+        L.append(f"    g_active_cmap = g_cmap_{sym}; g_active_cmap_w = NULL;")
+        L.append(f"    g_cmap_w = CMAP_W_{up};")
+        L.append(f"    g_cmap_h = CMAP_H_{up};")
         dirs = scene_one_way_tile_dirs(scene)
         if dirs:
             mask = sum(1 << d for d in dirs)
@@ -228,7 +243,7 @@ def _scene_state_lines(scene, sym: str, cam_idx: int) -> list[str]:
         else:
             L.append("    g_ow_any = 0; g_ow_rows = NULL; g_ow_cols = NULL;")
     else:
-        L.append("    g_active_cmap = NULL; g_cmap_w = 0; g_cmap_h = 0; g_ow_any = 0;")
+        L.append("    g_active_cmap = NULL; g_active_cmap_w = NULL; g_cmap_w = 0; g_cmap_h = 0; g_ow_any = 0;")
     return L
 
 

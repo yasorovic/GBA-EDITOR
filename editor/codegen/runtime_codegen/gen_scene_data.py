@@ -13,33 +13,52 @@ def scene_data_lines(p, all_scene_data: list[dict]) -> list[str]:
     """Pour toutes les scènes : les cartes de collision, puis les palettes OBJ, puis les palettes BG."""
     L: list[str] = []
     # ── Cmap flat arrays par scène ────────────────────────────────
+    max_ram = 0
     for d in all_scene_data:
         sc = d["scene"]
         sym = c_sym(sc.name)
         cmap = sc.collision_map or []
-        if cmap and any(v != 0 for row in cmap for v in row):
-            rows = len(cmap)
-            cols = max(len(row) for row in cmap)
+        mutable = bool(getattr(sc, "collision_mutable", False)) and bool(cmap)
+        has_rom = bool(cmap) and any(v != 0 for row in cmap for v in row)
+        # Une scène modifiable gagne ses dimensions même si sa carte peinte est vide :
+        # le script peut la bâtir au runtime (un mur qui apparaît). Sinon, rien.
+        if not (has_rom or mutable):
+            continue
+        rows = len(cmap)
+        cols = max(len(row) for row in cmap)
+        L += [
+            f"#define CMAP_W_{sym.upper()} {cols}",
+            f"#define CMAP_H_{sym.upper()} {rows}",
+        ]
+        if has_rom:
             flat = []
             for row in cmap:
                 flat += list(row) + [0] * (cols - len(row))
             L += [
-                f"#define CMAP_W_{sym.upper()} {cols}",
-                f"#define CMAP_H_{sym.upper()} {rows}",
                 f"static const u8 g_cmap_{sym}[{rows*cols}] = {{",
                 "    " + ", ".join(str(v) for v in flat),
                 "};",
-                "",
             ]
-            if scene_one_way_tile_dirs(sc):
+            # Masques de sens unique : seulement sur une scène NON modifiable. Une
+            # scène modifiable les laisse à NULL (la physique relit la carte vive,
+            # une case ayant pu changer), donc les émettre casserait `-Werror` sur
+            # un tableau défini et non utilisé.
+            if not mutable and scene_one_way_tile_dirs(sc):
                 # Quels sens de face portent chaque rangée et chaque colonne (bit `1<<sens`) : `oneway_hit` saute sans
                 # lire la carte toute ligne qui n'en a pas.
                 rows_ow = [sum(1 << d for d in {oneway_dir(v) for v in row} if d) for row in cmap]
                 cols_ow = [sum(1 << d for d in {oneway_dir(row[c]) for row in cmap if c < len(row)} if d)
                            for c in range(cols)]
                 L += [f"static const u8 g_cmow_rows_{sym}[{rows}] = {{{', '.join(map(str, rows_ow))}}};",
-                      f"static const u8 g_cmow_cols_{sym}[{cols}] = {{{', '.join(map(str, cols_ow))}}};",
-                      ""]
+                      f"static const u8 g_cmow_cols_{sym}[{cols}] = {{{', '.join(map(str, cols_ow))}}};"]
+        L.append("")
+        if mutable:
+            max_ram = max(max_ram, rows * cols)
+    # Le buffer RAM partagé de la collision modifiable : une seule scène est active
+    # à la fois, donc une copie dimensionnée au plus grand suffit. Rempli à l'entrée
+    # de scène (`gen_scene_init`) depuis la carte peinte, puis réécrit par les scripts.
+    if max_ram:
+        L += [f"static u8 g_cmap_ram[{max_ram}];", ""]
 
     # ── Palettes OBJ actives par scène (16 banques x 16 couleurs, résolues
     #    depuis Scene.active_obj_palettes -> project.palettes) ────────────

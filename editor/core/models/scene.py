@@ -784,6 +784,11 @@ class Scene(Resource):
     collision_layer: int = 0  # index BG (0-3) portant la carte de collisions
     # Grille de collision en tiles 8×8 — list[row][col] de TILE_* constants
     collision_map: list = field(default_factory=list)
+    # Collision modifiable au runtime : la carte peinte est copiée en RAM à
+    # l'entrée de scène, un script peut la réécrire (pont qui s'effondre, pan de
+    # mur). Coûte cols×rows octets d'EWRAM, donc opt-in : une scène qui ne coche
+    # pas reste en ROM, lecture seule, coût nul.
+    collision_mutable: bool = False
     # Grilles de valeurs de la scène, nommées et citées par un script
     # (`data.grid.<Nom>`). La carte de collision ci-dessus en est l'ancêtre et
     # reste à part : elle a ses pentes, ses faces à sens unique et ses tags.
@@ -949,6 +954,8 @@ class Scene(Resource):
                if self.font_pal_banks else {}),
             "collision_layer": self.collision_layer,
             "collision_map": self.collision_map,
+            # Absente du fichier tant qu'elle vaut faux (le défaut), comme blend/music.
+            **({"collision_mutable": True} if self.collision_mutable else {}),
             # Absentes du fichier tant que la scène n'en a aucune : une scène
             # sans grille ne gagne pas la clé (même règle que blend/music).
             **({"grids": [g.to_dict() for g in self.grids]} if self.grids else {}),
@@ -1044,6 +1051,7 @@ class Scene(Resource):
             font_pal_banks=_font_pal_banks_from_dict(d),
             collision_layer=d.get("collision_layer", 0),
             collision_map=d.get("collision_map", []),
+            collision_mutable=bool(d.get("collision_mutable", False)),
             grids=[Grid.from_dict(g) for g in d.get("grids", []) if isinstance(g, dict)],
             physics_enabled=bool(d.get("physics_enabled", True)),
             # Avant l'héritage projet, la présence d'une valeur de gravité
