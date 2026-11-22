@@ -49,7 +49,7 @@ _TILEMAP_C_PREFIX = "tilemap_"   # les fonctions C de la section Tilemap, toutes
 
 def _on_variable(name: str) -> str:
     """`background_layer:show` → `layer:show` ; `background_layer:set_tile` → `tilemap:set_tile`.
-    Une FONCTION de module (`collision_shape.get_tile`) garde son nom : le point ne
+    Une FONCTION de module (`collision:tile_at`) garde son nom : le point ne
     dit une propriété que si le catalogue la connaît comme telle."""
     for ref, decl in REF_TYPE_TABLE.items():
         if name.startswith(f"{ref}:") or (name.startswith(f"{ref}.") and name in RUNTIME_PROPS):

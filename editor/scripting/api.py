@@ -2226,7 +2226,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         ptype=PARAM_RECT, self_first=True, read_only=True,
         doc="The rectangle of the box in WORLD coordinates (actor position + offset +"
             " size), in pixels. Read-only: it is what detection compares, and what is"
-            " passed to collision_shape.get_tile.",
+            " queried by collision:tile_at using its x and y components.",
     ),
 
     # ── Actor : réglages d'inspecteur fixés au build (lecture seule) ─
