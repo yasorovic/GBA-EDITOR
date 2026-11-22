@@ -31,7 +31,7 @@
   "Image": "Les images d'interface : leur animation, leur état et leur décalage.",
   "textBox": "Les zones de texte : écrire, effacer, révéler le texte d'un coup.",
   "Save": "Écrire, relire et tester les sauvegardes.",
-  "Arrays": "Déclarer des tableaux d'entiers.",
+  "Grid": "Déclarer une grille d'entiers en RAM : la remplir, calculer une carte de portée et un chemin.",
   "Math": "Les fonctions mathématiques sur des entiers.",
   "Sequences": "Lancer, arrêter et suivre des séquences d'actions dans le temps.",
   "Debug": "Écrire dans le journal de mGBA, jamais à l'écran."

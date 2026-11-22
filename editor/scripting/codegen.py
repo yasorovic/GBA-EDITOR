@@ -28,7 +28,7 @@ from .parser import (
     StmtForNum, StmtReturn, StmtBreak, StmtUnsupported,
     ExprNumber, ExprBool, ExprNil, ExprString, ExprName, ExprUnsupported,
     ExprIndex, ExprIndexAt, ExprTable, ExprInvoke, ExprCall, ExprBinop, ExprUnop,
-    array_dims, require_target, DATA_NS, data_grid_ref, data_table_ref,
+    array_dims, grid_dims, require_target, DATA_NS, data_grid_ref, data_table_ref,
     assigned_names, sequence_name, wait_call, WAIT_FN, WAIT_UNTIL_FN,
     local_names,
 )
@@ -509,6 +509,12 @@ class CodeGen:
         # est une constante de compilation : la taille fait partie du type, donc
         # elle n'est rangée nulle part à l'exécution.
         self._arrays: dict[str, tuple[int, ...]] = {}
+        # Grilles RAM déclarées dans ce script : nom → (cols, rows, step). Comme
+        # `_arrays`, c'est de la géométrie connue au build : l'accès par case
+        # (`g[x][y]`) et par pixel (`g:at`) et les littéraux `.cols` / `.rows`
+        # la lisent ici. Une grille est un `unsigned char[rows*cols]` à plat,
+        # pour partager le lecteur `grid_value_at` avec les grilles peintes.
+        self._grids: dict[str, tuple[int, int, int]] = {}
         # Locals vec2/vec3 : nom → type. Rempli au fil de l'émission (comme
         # `_arrays` ci-dessus), pour que `_expr` sache émettre `vec2_add(...)`
         # plutôt que `+` sur un `a + b` dont les deux côtés sont des vecteurs.
@@ -1375,6 +1381,11 @@ class CodeGen:
             c_type, init, _note = self._local_decl(loc)
             self._w(f"static {c_type} {self._unused_attr(loc)}{loc.name} = {init};")
             return
+        gdims = grid_dims(loc.value)
+        if gdims:
+            self._grids[loc.name] = gdims
+            self._w(f"static {self._grid_decl(loc.name, gdims)} = {{0}};")
+            return
         dims = array_dims(loc.value)
         if dims:
             self._arrays[loc.name] = dims
@@ -1424,6 +1435,19 @@ class CodeGen:
                 fields.append(f"{C_TYPES[ex_typ]} {loc.name};")
                 inits.append(f".{loc.name} = {self.ctx.export_inits[loc.name]}")
                 per_instance += _STATE_BYTES[ex_typ]
+                self._pool_state[loc.name] = loc.name
+                continue
+            gdims = grid_dims(loc.value)
+            if gdims:
+                # Une grille de tête d'un prefab poolé vit dans l'état de CHAQUE
+                # instance, comme un tableau. Un octet par case y pèse donc son
+                # poids par slot : la question « par instance ou partagée » reste
+                # ouverte dans la fiche ; le défaut suit le précédent d'`array`.
+                self._grids[loc.name] = gdims
+                cols, rows, _ = gdims
+                fields.append(f"{self._grid_decl(loc.name, gdims)};")
+                inits.append(f".{loc.name} = {{0}}")
+                per_instance += cols * rows
                 self._pool_state[loc.name] = loc.name
                 continue
             dims = array_dims(loc.value)
@@ -1572,6 +1596,22 @@ class CodeGen:
         """`grille`, (20, 12) → « int grille[20][12] ». Le premier argument
         d'`array` est le premier index, en Lua comme en C."""
         return f"int {name}" + "".join(f"[{d}]" for d in dims)
+
+    @staticmethod
+    def _grid_decl(name: str, dims: tuple[int, int, int]) -> str:
+        """`g`, (cols, rows, step) → « unsigned char g[rows*cols] ».
+
+        À PLAT, en rangées concaténées comme les grilles peintes (`grids.c`) :
+        une case fait un octet, et cette disposition partage le lecteur
+        `grid_value_at` avec elles. L'accès par case le remet en forme."""
+        cols, rows, _step = dims
+        return f"unsigned char {name}[{rows * cols}]"
+
+    @staticmethod
+    def _grid_shift(step: int) -> int:
+        """Le décalage de bits qui passe d'un pixel à une case (`px >> shift`).
+        Le pas est une puissance de deux ; la GBA n'a pas de division."""
+        return step.bit_length() - 1
 
     def _array_init(self, value, dims: tuple[int, ...]) -> str:
         """L'initialiseur C. `{1, 2, 4, 8}` recopie les valeurs écrites ;
@@ -1786,6 +1826,13 @@ class CodeGen:
                 val = self._expr(s.value) if s.value is not None else "0"
                 self._w(f"{self._state_ref(lifted)} = {val};")
                 return
+            gdims = grid_dims(s.value)
+            if gdims:
+                # Une grille déclarée DANS un handler est reconstruite à chaque
+                # appel, comme n'importe quel `local` de Lua.
+                self._grids[s.name] = gdims
+                self._w(f"{self._grid_decl(s.name, gdims)} = {{0}};")
+                return
             dims = array_dims(s.value)
             if dims:
                 # Un tableau déclaré DANS un handler est reconstruit à chaque
@@ -1922,6 +1969,12 @@ class CodeGen:
                 val = SCREEN_CONSTANTS.get(e.field)
                 if val is not None:
                     return str(val)
+            # g.cols / g.rows d'une grille RAM : la géométrie est connue au build,
+            # donc un littéral, pas un champ rangé en mémoire (comme `#t`).
+            if (isinstance(e.obj, ExprName) and e.obj.name in self._grids
+                    and e.field in ("cols", "rows")):
+                cols, rows, _step = self._grids[e.obj.name]
+                return str(cols if e.field == "cols" else rows)
             # PROPRIÉTÉ : self.position, camera.bound, other.velocity, scene.size…
             # Un accès pointé se traduit par le GETTER (appel C, ou expression
             # synthétique pour scene.size). Le champ qui suit (`self.position.x`)
@@ -2296,6 +2349,15 @@ class CodeGen:
         sous-ensemble."""
         if not isinstance(e.obj, ExprIndexAt):
             return None
+        # Grille RAM du script : `g[x][y]`, LECTURE ET ÉCRITURE. Le tableau est à
+        # plat (comme les grilles peintes), donc la chaîne `[x][y]` se remet en
+        # forme ici. Dans un prefab poolé, le nom vit dans l'état de l'instance :
+        # `_name_storage` donne `state->g`.
+        if isinstance(e.obj.obj, ExprName) and e.obj.obj.name in self._grids:
+            cols, _rows, _step = self._grids[e.obj.obj.name]
+            base = self._name_storage(e.obj.obj.name)
+            x, y = self._index(e.obj.index), self._index(e.index)
+            return f"{base}[({y}) * {cols} + ({x})]"
         grid = self._grid_of(e.obj.obj)
         if grid is None:
             return None
@@ -2305,11 +2367,19 @@ class CodeGen:
         return f"{grid.sym}[({y}) * {grid.width} + ({x})]"
 
     def _grid_at(self, e: ExprInvoke) -> Optional[str]:
-        """`data.grid.T:at(x, y)` → `grid_value_at(...)`, en pixels monde.
+        """`g:at(px, py)` → `grid_value_at(...)`, en pixels monde.
 
-        Toute la géométrie est connue à la compilation : la grille est résolue par son
-        nom au build, et la fonction inline ne fait qu'un décalage et un test de bornes
-        (cf. `runtime_api_inline.h`)."""
+        Toute la géométrie est connue à la compilation : la fonction inline ne
+        fait qu'un décalage et un test de bornes (cf. `runtime_api_inline.h`), et
+        hors de la grille vaut 0. Vaut pour une grille peinte (`data.grid.T`,
+        résolue par son nom au build) comme pour une grille RAM du script."""
+        if (isinstance(e.obj, ExprName) and e.obj.name in self._grids
+                and e.method == "at" and len(e.args) == 2):
+            cols, rows, step = self._grids[e.obj.name]
+            base = self._name_storage(e.obj.name)
+            px, py = (self._expr(a) for a in e.args)
+            return (f"grid_value_at({base}, {cols}, {rows}, "
+                    f"{self._grid_shift(step)}, {px}, {py})")
         grid = self._grid_of(e.obj)
         if grid is None or e.method != "at" or len(e.args) != 2:
             return None
@@ -2317,6 +2387,94 @@ class CodeGen:
         px, py = (self._expr(a) for a in e.args)
         return (f"grid_value_at({grid.sym}, {grid.width}, {grid.height}, "
                 f"{grid.shift}, {px}, {py})")
+
+    def _grid_write(self, e: ExprInvoke) -> Optional[str]:
+        """`g:fill(v)` / `g:fill_rect(x, y, w, h, v)` sur une grille RAM : une
+        opération d'ÉCRITURE, posée comme une instruction. Le checker a déjà
+        validé la méthode et ses arguments ; l'inline du moteur borne le
+        rectangle à la grille. Les grilles peintes (`data.grid`) n'y passent pas :
+        elles sont en lecture seule, le checker les a déjà refusées."""
+        if not (isinstance(e.obj, ExprName) and e.obj.name in self._grids):
+            return None
+        cols, rows, _step = self._grids[e.obj.name]
+        base = self._name_storage(e.obj.name)
+        if e.method == "fill" and len(e.args) == 1:
+            return f"grid_fill({base}, {rows * cols}, {self._expr(e.args[0])})"
+        if e.method == "fill_rect" and len(e.args) == 5:
+            x, y, w, h, v = e.args
+            # L'origine passe de la base 1 à la base 0 ici, une fois (comme `_index`
+            # pour une case) ; la taille et la valeur sont des expressions nues.
+            return (f"grid_fill_rect({base}, {cols}, {rows}, "
+                    f"{self._index(x)}, {self._index(y)}, "
+                    f"{self._expr(w)}, {self._expr(h)}, {self._expr(v)})")
+        if e.method == "flood" and len(e.args) in (5, 6):
+            sx, sy, budget, terrain, couts = e.args[:5]
+            bloque = e.args[5] if len(e.args) == 6 else None
+            tptr = self._grid_pointer(terrain)
+            cptr = self._array_pointer(couts)
+            if tptr is None or cptr is None:
+                return None          # le checker a déjà nommé le mauvais argument
+            bptr = "0"
+            if bloque is not None:
+                b = self._grid_pointer(bloque)
+                if b is None:
+                    return None
+                bptr = b
+            # La géométrie de la grille RÉSULTAT (le récepteur) fait autorité :
+            # terrain et bloque la partagent (le checker le vérifie quand il peut).
+            return (f"grid_flood({base}, {tptr}, {bptr}, {cols}, {rows}, "
+                    f"{self._index(sx)}, {self._index(sy)}, {self._expr(budget)}, "
+                    f"{cptr[0]}, {cptr[1]})")
+        if e.method == "path_to" and len(e.args) == 3:
+            tx, ty, out = e.args
+            optr = self._array_pointer(out)
+            if optr is None:
+                return None          # le checker a déjà nommé le mauvais argument
+            # Le récepteur porte la carte de coûts (écrite par flood) ; on redescend
+            # de la case visée vers la source. L'origine passe en base 0 ici, une
+            # fois. La sortie et sa longueur, connues au build, bornent le chemin.
+            return (f"grid_path_to({base}, {cols}, {rows}, "
+                    f"{self._index(tx)}, {self._index(ty)}, {optr[0]}, {optr[1]})")
+        if e.method == "line_of_sight" and len(e.args) == 4:
+            x0, y0, x1, y1 = e.args
+            # Le récepteur EST la carte d'obstacles (case non nulle = mur). Les
+            # quatre coordonnées passent en base 0 ici, une fois.
+            return (f"grid_line_of_sight({base}, {cols}, {rows}, "
+                    f"{self._index(x0)}, {self._index(y0)}, "
+                    f"{self._index(x1)}, {self._index(y1)})")
+        if e.method == "flow_map" and len(e.args) == 1:
+            # Le récepteur est une carte de coûts (écrite par flood) ; on en dérive
+            # une direction par case dans la grille de sortie `dirs`. Le checker a
+            # déjà vérifié que `dirs` est une grille RAM de ce script.
+            dptr = self._grid_pointer(e.args[0])
+            if dptr is None:
+                return None
+            return f"grid_flow_map({base}, {dptr}, {cols}, {rows})"
+        if e.method == "regions" and len(e.args) == 1:
+            # Le récepteur est la carte à découper ; `out` reçoit un id par case.
+            # Le checker a déjà vérifié que `out` est une grille RAM de ce script.
+            optr = self._grid_pointer(e.args[0])
+            if optr is None:
+                return None
+            return f"grid_regions({base}, {optr}, {cols}, {rows})"
+        return None
+
+    def _grid_pointer(self, expr) -> Optional[str]:
+        """Le pointeur C d'une grille désignée par `expr` : une grille RAM (son
+        nom) ou une grille peinte (`data.grid.X`, son symbole const). None sinon."""
+        if isinstance(expr, ExprName) and expr.name in self._grids:
+            return self._name_storage(expr.name)
+        grid = self._grid_of(expr)
+        return grid.sym if grid is not None else None
+
+    def _array_pointer(self, expr) -> Optional[tuple[str, int]]:
+        """(pointeur C, longueur) d'un array à une dimension désigné par `expr`,
+        None sinon. La longueur, connue au build, borne la table des coûts."""
+        if isinstance(expr, ExprName):
+            dims = self._arrays.get(expr.name)
+            if dims is not None and len(dims) == 1:
+                return (self._name_storage(expr.name), dims[0])
+        return None
 
     def _invoke(self, e: ExprInvoke) -> str:
         """var:method(args) : var peut être self, une variable Actor*/référence,
@@ -2327,6 +2485,9 @@ class CodeGen:
         cell = self._grid_at(e)
         if cell is not None:
             return cell
+        write = self._grid_write(e)
+        if write is not None:
+            return write
         if isinstance(e.obj, ExprName):
             name = e.obj.name          # "self", "other", "paddle", ...
             ref  = self._ref_types.get(name)
@@ -2776,6 +2937,14 @@ class CodeGen:
         self.warnings.append("array() declares an array and can only be written in a "
                              "`local`: local bag = array(8).")
         return "0 /* array() outside a declaration */"
+
+    def _emit_grid_misuse(self, args: list) -> str:
+        """`grid(...)` DÉCLARE une grille RAM : elle est lue à l'endroit du
+        `local`, et n'arrive ici que si elle a été écrite ailleurs. Rien à
+        émettre, comme pour `array`."""
+        self.warnings.append("grid() declares a grid and can only be written in a "
+                             "`local`: local terrain = grid(30, 20, 16).")
+        return "0 /* grid() outside a declaration */"
 
     def _emit_debug_log(self, args: list) -> str:
         """`debug:log("hp=", hp, " x=", x)` → une séquence d'appels C, un par
@@ -3298,6 +3467,7 @@ def covered_domains() -> frozenset:
 
 _CALL_CUSTOM: dict = {
     "array":       CodeGen._emit_array_misuse,
+    "grid":        CodeGen._emit_grid_misuse,
     "actor.get":   CodeGen._emit_get_actor,
     # `pressed`/`released` n'ont plus de cas particulier depuis que les
     # séquences ont quitté leur espace de noms (2026-09-27) : un simple

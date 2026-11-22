@@ -1409,6 +1409,211 @@ static inline int grid_value_at(const unsigned char *cells, int w, int h,
     return (int)cells[ty * w + tx];
 }
 
+/* Grille de travail (RAM) — remplir toutes les cases d'une même valeur. `n` est
+   le nombre de cases (`rows * cols`), connu au build. Une case fait un octet. */
+static inline void grid_fill(unsigned char *cells, int n, int v) {
+    for (int i = 0; i < n; i++) cells[i] = (unsigned char)v;
+}
+
+/* Grille de travail (RAM) — remplir un rectangle de cases. L'origine (`x0`, `y0`)
+   est en cases, base 0 (le build a déjà retiré 1) ; `rw`, `rh` sont des nombres
+   de cases. Le rectangle est borné à la grille : la partie hors grille est
+   ignorée, jamais un débordement. */
+static inline void grid_fill_rect(unsigned char *cells, int w, int h,
+                                  int x0, int y0, int rw, int rh, int v) {
+    for (int j = 0; j < rh; j++) {
+        const int y = y0 + j;
+        if (y < 0 || y >= h) continue;
+        for (int i = 0; i < rw; i++) {
+            const int x = x0 + i;
+            if (x < 0 || x >= w) continue;
+            cells[y * w + x] = (unsigned char)v;
+        }
+    }
+}
+
+/* Grille de travail (RAM) — portée à coût (flood de Dijkstra, 4 directions).
+   Remplit `out` : chaque case reçoit le plus petit coût pour l'atteindre depuis
+   (sx, sy), en cases ; 255 = hors de portée (le départ vaut 0). Le coût d'ENTRÉE
+   d'une case vient de `costs[valeur_de_terrain]` ; un coût <= 0, une valeur hors
+   de la table (`costs_len`), ou une case `blocked` non nulle valent
+   infranchissable. `budget` plafonne la portée (<= 254, le reste pour la
+   sentinelle). `out`, `terrain` et `blocked` partagent la géométrie (w, h) ;
+   `blocked` peut être NULL. Les coûts sont non négatifs, donc la relaxation
+   converge sans file de priorité : on repasse sur la grille tant qu'une case
+   s'améliore. Mesure du nombre de passes laissée à la tranche de banc de coût. */
+static inline void grid_flood(unsigned char *out, const unsigned char *terrain,
+                              const unsigned char *blocked, int w, int h,
+                              int sx, int sy, int budget,
+                              const int *costs, int costs_len) {
+    static const int dx[4] = {1, -1, 0, 0};
+    static const int dy[4] = {0, 0, 1, -1};
+    const int n = w * h;
+    for (int i = 0; i < n; i++) out[i] = 255;
+    if (sx < 0 || sy < 0 || sx >= w || sy >= h) return;
+    if (budget > 254) budget = 254;
+    out[sy * w + sx] = 0;
+    int changed = 1;
+    while (changed) {
+        changed = 0;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                const int here = out[y * w + x];
+                if (here == 255) continue;      /* pas encore atteinte */
+                for (int d = 0; d < 4; d++) {
+                    const int nx = x + dx[d], ny = y + dy[d];
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    const int ni = ny * w + nx;
+                    if (blocked && blocked[ni]) continue;
+                    const int tv = terrain[ni];
+                    if (tv >= costs_len) continue;          /* terrain inconnu : mur */
+                    const int entry = costs[tv];
+                    if (entry <= 0) continue;               /* coût nul ou négatif : mur */
+                    const int nc = here + entry;
+                    if (nc <= budget && nc < out[ni]) {
+                        out[ni] = (unsigned char)nc;
+                        changed = 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* grid_path_to : rebuild the shortest path to (tx, ty) from a cost map that
+   grid_flood has written (the receiver grid). Walk down the gradient from the
+   target to the source (cost 0), choosing the cheapest predecessor at each
+   step, then reverse so `out` holds the forward steps source -> target.
+   Each step is a direction code 0..3 matching the dx/dy order of grid_flood
+   (0 right, 1 left, 2 down, 3 up). Returns the number of steps written, bounded
+   by out_len; 0 when the target is unreachable (cost 255) or is the source. */
+static inline int grid_path_to(const unsigned char *cost, int w, int h,
+                               int tx, int ty, unsigned char *out, int out_len) {
+    static const int dx[4] = {1, -1, 0, 0};
+    static const int dy[4] = {0, 0, 1, -1};
+    if (tx < 0 || ty < 0 || tx >= w || ty >= h) return 0;
+    if (cost[ty * w + tx] == 255) return 0;     /* out of range: no path */
+    /* Collect the steps backwards (target -> source), then reverse. A path can
+       be at most 254 steps long (budget is clamped to 254 in grid_flood and
+       each step costs at least 1), so this local stack never overflows. */
+    unsigned char rev[255];
+    int count = 0;
+    int cx = tx, cy = ty;
+    while (cost[cy * w + cx] != 0 && count < 255) {
+        int best = -1, bestdir = -1;
+        for (int d = 0; d < 4; d++) {
+            /* predecessor of a forward step d sits at here - (dx, dy) */
+            const int px = cx - dx[d], py = cy - dy[d];
+            if (px < 0 || py < 0 || px >= w || py >= h) continue;
+            const int pc = cost[py * w + px];
+            if (pc == 255) continue;
+            if (pc < cost[cy * w + cx] && (best < 0 || pc < best)) {
+                best = pc;
+                bestdir = d;
+            }
+        }
+        if (bestdir < 0) break;                  /* stuck: should not happen */
+        rev[count++] = (unsigned char)bestdir;
+        cx -= dx[bestdir];
+        cy -= dy[bestdir];
+    }
+    const int written = count < out_len ? count : out_len;
+    for (int i = 0; i < written; i++)
+        out[i] = rev[count - 1 - i];
+    return written;
+}
+
+/* grid_line_of_sight : is the straight line from (x0, y0) to (x1, y1) clear of
+   blockers on THIS grid? A cell blocks when it is non-zero (the grid is the
+   obstacle map). A thin integer Bresenham walk; the two endpoints are NOT
+   tested, so the viewer and the target may each stand on a cell. Returns 1 when
+   clear, 0 when a cell between them blocks or an endpoint is off the grid. */
+static inline int grid_line_of_sight(const unsigned char *cells, int w, int h,
+                                     int x0, int y0, int x1, int y1) {
+    if (x0 < 0 || y0 < 0 || x0 >= w || y0 >= h) return 0;
+    if (x1 < 0 || y1 < 0 || x1 >= w || y1 >= h) return 0;
+    int dx = x1 - x0, dy = y1 - y0;
+    const int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    int x = x0, y = y0, err = dx - dy;
+    for (;;) {
+        if (x == x1 && y == y1) return 1;            /* reached the target: clear */
+        if (!(x == x0 && y == y0) && cells[y * w + x])
+            return 0;                                /* a cell between them blocks */
+        const int e2 = 2 * err;
+        if (e2 > -dy) { err -= dy; x += sx; }
+        if (e2 <  dx) { err += dx; y += sy; }
+    }
+}
+
+/* grid_flow_map : from a cost map that grid_flood wrote (0 at the source, 255
+   unreachable), fill `dirs` with, per cell, the direction 0..3 of the cheapest
+   neighbour, i.e. the step toward the source (same dx/dy order as grid_flood).
+   4 marks the source cell (arrived), 255 an unreachable cell. Computed once, so
+   many agents read one cell instead of each running a path search. */
+static inline void grid_flow_map(const unsigned char *cost, unsigned char *dirs,
+                                 int w, int h) {
+    static const int dx[4] = {1, -1, 0, 0};
+    static const int dy[4] = {0, 0, 1, -1};
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            const int i = y * w + x;
+            const int c = cost[i];
+            if (c == 255) { dirs[i] = 255; continue; }   /* unreachable */
+            if (c == 0)   { dirs[i] = 4;   continue; }    /* the source: arrived */
+            int best = c, bestdir = 4;
+            for (int d = 0; d < 4; d++) {
+                const int nx = x + dx[d], ny = y + dy[d];
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                const int nc = cost[ny * w + nx];
+                if (nc < best) { best = nc; bestdir = d; }
+            }
+            dirs[i] = (unsigned char)bestdir;            /* step toward the source */
+        }
+    }
+}
+
+/* grid_regions : label the connected groups of EQUAL-value cells with an id
+   1..N (4-connectivity); every cell is labelled, zeros included. Writes each
+   cell's id into `out` and returns N, the number of regions. Regions are grown
+   by relaxation, no stack or queue; ids are a byte, so N is capped at 255. */
+static inline int grid_regions(const unsigned char *cells, unsigned char *out,
+                               int w, int h) {
+    static const int dx[4] = {1, -1, 0, 0};
+    static const int dy[4] = {0, 0, 1, -1};
+    const int n = w * h;
+    for (int i = 0; i < n; i++) out[i] = 0;
+    int label = 0;
+    for (int s = 0; s < n; s++) {
+        if (out[s]) continue;                        /* already labelled */
+        if (label >= 255) break;                     /* ids are a byte */
+        label++;
+        const int v = cells[s];                      /* this region's value */
+        out[s] = (unsigned char)label;
+        int changed = 1;
+        while (changed) {
+            changed = 0;
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    const int i = y * w + x;
+                    if (out[i] != label) continue;
+                    for (int d = 0; d < 4; d++) {
+                        const int nx = x + dx[d], ny = y + dy[d];
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                        const int ni = ny * w + nx;
+                        if (!out[ni] && cells[ni] == v) {
+                            out[ni] = (unsigned char)label;
+                            changed = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return label;
+}
+
 /* Aléatoire — LCG 32-bit, zéro overhead, pas de division flottante */
 /* La graine est définie dans main.c : `static` ici, chaque unité de script
    aurait sa propre suite, identique aux autres. */

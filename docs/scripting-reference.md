@@ -16,6 +16,7 @@ Un script contient des variables, des événements proposés dans le panneau **E
 | Vecteur | `vec2(x, y)`, `vec3(x, y, z)` | `+`, `-`, multiplication par un entier. |
 | Rectangle | `rect(x, y, w, h)` | Pour les bornes et zones. |
 | Tableau | `{1, 2, 4}` ou `array(20, 12)` | Taille fixe, entiers, indexation à partir de 1. |
+| Grille | `grid(30, 20, 16)` | Tableau 2D d'un octet par case, avec un pas en pixels. Voir **Données**. |
 | Chaîne | `"walk"`, `"Arena"` | Nom d'une ressource. Un littéral est aussi accepté par `text.draw`. |
 
 **La vérité, ce n'est pas celle du vrai Lua.** En vrai Lua, seuls `nil` et `false` sont faux dans un `if` — `0` y est VRAI. Ici, `0` est FAUX, comme en C, comme partout ailleurs dans ce moteur entièrement entier : `if not hp then` fonctionne comme on l'attend d'un `hp` qui peut valoir 0, sans avoir à écrire `if hp == 0 then`. Décision volontaire, assumée — pas un oubli.
@@ -244,14 +245,37 @@ local coin = data.grid.Terrain[1][1]       -- la même grille, par case : colonn
 
 Une **table** a un contenu différent d'une colonne à l'autre et vit dans le projet : elle est la même partout. Une **grille** a un contenu identique dans toutes ses cases, retrouvées par leur position, et appartient à **sa scène** : `data.grid.Terrain` dans le script de la scène 2 désigne le terrain de la scène 2.
 
-Les deux sont `const` en ROM : elles se lisent, elles ne s'écrivent pas. Pour une valeur qui change en jeu, une variable globale ou un tableau de travail.
+Les deux sont `const` en ROM : elles se lisent, elles ne s'écrivent pas. Pour une valeur qui change en jeu, une variable globale, un tableau de travail, ou une **grille RAM** (voir plus bas).
 
-Sur une grille :
+Sur une grille peinte (`data.grid`) :
 
 - `:at(x, y)` prend des **pixels monde**, comme `collision.tile_at`, et rend la case qui contient ce point. Hors de la grille vaut `0`, comme hors de la carte de collision.
 - `[x][y]` prend des **cases**, la colonne puis la rangée, numérotées à partir de 1 comme tout tableau. Un index écrit en clair est borné au build.
 - Le pas d'une grille est une puissance de deux (8, 16 ou 32 px) : passer d'un pixel à une case est un décalage de bits, la console n'ayant pas d'instruction de division.
 - Les valeurs nommées de sa légende sont des constantes du build.
+
+### Une grille de travail (`grid`)
+
+Une grille peinte est en lecture seule. Pour une grille **calculée par le jeu** (une carte de portée, une zone de danger), `grid` déclare une grille en RAM, modifiable, comme `array` déclare un tableau :
+
+```lua
+local portee = grid(30, 20, 16)   -- 30 colonnes, 20 rangées, des cases de 16 px
+portee[4][7] = 3                   -- écriture par case : colonne, puis rangée, à partir de 1
+local c = portee[4][7]             -- lecture par case
+local v = portee:at(px, py)        -- la case qui contient un point du monde, en pixels
+for x = 1, portee.cols do for y = 1, portee.rows do ... end end
+```
+
+- Les deux premiers nombres sont les **colonnes** et les **rangées** (des cases, pas des pixels). Le troisième, facultatif, est le **pas** d'une case en pixels (8, 16 ou 32, 16 par défaut), pour `:at`.
+- Une case tient sur **un octet** (valeurs de 0 à 255), remplie de zéros au départ.
+- `:at(x, y)` lit la case d'un point du monde ; hors de la grille vaut `0`. `portee.cols` et `portee.rows` donnent la taille.
+- `:fill(v)` met **toutes** les cases à `v`. `:fill_rect(x, y, w, h, v)` remplit un **rectangle** de cases, l'origine `x, y` à partir de 1, `w, h` en cases ; la partie hors grille est ignorée, jamais un débordement.
+- `:flood(x, y, budget, terrain, couts[, bloque])` écrit dans la grille une **carte de portée à coût** depuis la case `x, y` (à partir de 1) : `terrain` est une grille, `couts` un `array` indexé par la valeur de terrain (un coût nul ou négatif, ou une valeur hors table, est un **mur**), `bloque` une grille d'occupation facultative. Une case atteinte porte son coût cumulé (plafonné à 254), une case hors de portée vaut `255`. Quatre directions.
+- `:path_to(x, y, out)` relit cette carte de coûts pour écrire le **chemin** vers la case `x, y` dans l'`array` `out` : chaque pas est une **direction de 0 à 3** (0 droite, 1 gauche, 2 bas, 3 haut, l'ordre de `flood`), rangés de la **source vers la cible**, prêts à rejouer. La méthode retourne le **nombre de pas** écrits, borné par la taille de `out` ; `0` si la cible est hors de portée.
+- `:line_of_sight(x0, y0, x1, y1)` dit si la **ligne de vue** entre deux cases est **dégagée** : le récepteur est la carte d'obstacles (une case non nulle bloque), le tracé est un Bresenham fin, et les deux extrémités ne sont **pas** testées (l'observateur et la cible peuvent occuper une case). Rend `true` si rien ne bloque entre elles, `false` sinon.
+- `:flow_map(dirs)` lit la **carte de coûts** du récepteur (celle qu'a écrite `:flood`) et écrit dans la grille `dirs` une **carte de flux** : chaque case reçoit la **direction de 0 à 3** vers son voisin le moins cher, c'est-à-dire le pas vers la source (même ordre que `flood`), `4` pour la case source (arrivé) et `255` pour une case hors de portée. Calculée une fois, elle laisse N agents naviguer en lisant une seule case (`dirs[x][y]`), sans refaire un chemin chacun.
+- `:regions(out)` découpe le récepteur en **régions connexes** : deux cases voisines de **valeur égale** appartiennent à la même région (voisinage à 4). Chaque case reçoit dans `out` l'**id de sa région**, de `1` à `N` (toute case est étiquetée, les `0` compris), et la méthode retourne `N`, le nombre de régions.
+- Comme `array`, une grille se **déclare dans un `local`** et ne se réaffecte pas nue (`portee = …` est refusé) ; on écrit ses cases.
 
 ## Script
 

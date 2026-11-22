@@ -897,6 +897,46 @@ def array_dims(expr) -> Optional[tuple[int, ...]]:
     return None
 
 
+# ─── Déclaration d'une grille RAM ─────────────────────────────────
+
+# Une grille calculée par un script est une VARIABLE, déclarée comme `array`,
+# mais d'un OCTET par case et munie d'un PAS en pixels. Elle complète les grilles
+# peintes de `data.grid` (lecture seule, en ROM) : celle-ci se lit ET s'écrit.
+# La forme est reconnue ICI, avec l'AST qu'elle lit, et ses consommateurs
+# l'appellent : le checker (déclaration valide, bornes) et le codegen (émission
+# du tableau à plat, accès par case et par pixel).
+GRID_CTOR = "grid"
+
+# Le pas est une PUISSANCE DE DEUX : passer d'un pixel à une case est alors un
+# décalage de bits, et la GBA n'a pas d'instruction de division. Même fait
+# matériel que `core.models.grid.GRID_STEPS` (les grilles peintes), répété ici
+# pour garder ce reconnaisseur feuille, sans dépendance vers les modèles.
+GRID_STEPS = (8, 16, 32)
+GRID_STEP_DEFAULT = 16
+
+
+def grid_dims(expr) -> Optional[tuple[int, int, int]]:
+    """`grid(cols, rows)` ou `grid(cols, rows, step)` → (cols, rows, step), sinon
+    None (forme fautive comprise : c'est au checker de dire laquelle).
+
+    `cols` et `rows` sont des NOMBRES DE CASES, `step` le pas d'une case en
+    pixels (8, 16 ou 32, 16 par défaut). L'ordre des arguments est l'ordre des
+    index, comme `array` : `grid(30, 20)` se lit `g[1..30][1..20]`."""
+    if not (isinstance(expr, ExprCall) and isinstance(expr.func, ExprName)
+            and expr.func.name == GRID_CTOR):
+        return None
+    args = expr.args
+    if not (2 <= len(args) <= 3):
+        return None
+    for a in args:
+        if not isinstance(a, ExprNumber) or a.value <= 0:
+            return None
+    step = args[2].value if len(args) == 3 else GRID_STEP_DEFAULT
+    if step not in GRID_STEPS:
+        return None
+    return (args[0].value, args[1].value, step)
+
+
 # ─── What a syntax error must say ─────────────────────────────────
 #
 # luaparser raises `SyntaxException`; antlr's own exception sits in

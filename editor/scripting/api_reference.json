@@ -1103,26 +1103,6 @@
       ]
     },
     {
-      "name": "Arrays",
-      "group": "language",
-      "entries": [
-        {
-          "label": "array(taille)",
-          "snippet": "local sac = array(8)",
-          "description": "Declares an array of integers filled with zeros. With two sizes, creates a grid whose argument order follows that of the indices. Lua arrays are indexed from 1.",
-          "params": [
-            {
-              "name": "taille",
-              "type": "number",
-              "description": "Number of elements. Give one size, or two for a grid."
-            }
-          ],
-          "returns": "tableau",
-          "doc_anchor": "array"
-        }
-      ]
-    },
-    {
       "name": "Scene",
       "group": "gameplay",
       "entries": [
@@ -1444,6 +1424,36 @@
       "name": "Tilemap",
       "group": "gameplay",
       "entries": []
+    },
+    {
+      "name": "Grid",
+      "group": "gameplay",
+      "entries": [
+        {
+          "label": "grid(cols, rows, step)",
+          "snippet": "local portee = grid(30, 20, 16)",
+          "description": "Declares a RAM grid of bytes filled with zeros, a 2D array that advances by a pixel step (8, 16 or 32), the sibling of a tilemap but holding gameplay data, not tile numbers. Read or write a cell by index with grid[x][y] (from 1), or read the cell at a world point with grid:at(px, py); grid.cols and grid.rows give the size. Fill it with grid:fill(v) or grid:fill_rect(x, y, w, h, v). Compute a cost map with grid:flood(x, y, budget, terrain, costs[, blocked]) and read the path to a cell with grid:path_to(x, y, out). A grid draws nothing; a painted scene grid is read instead through data.grid.",
+          "params": [
+            {
+              "name": "cols",
+              "type": "number",
+              "description": "Number of columns, in cells."
+            },
+            {
+              "name": "rows",
+              "type": "number",
+              "description": "Number of rows, in cells."
+            },
+            {
+              "name": "step",
+              "type": "number",
+              "description": "Cell step in pixels (8, 16 or 32, 16 by default), for :at."
+            }
+          ],
+          "returns": "grid",
+          "doc_anchor": "grid"
+        }
+      ]
     },
     {
       "name": "Debug",

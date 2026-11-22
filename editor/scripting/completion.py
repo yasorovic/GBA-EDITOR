@@ -36,6 +36,7 @@ from scripting.api import (
 )
 
 from scripting.expr_types import VEC_CONSTRUCTORS, VEC_FUNCTIONS
+from scripting.parser import ARRAY_CTOR
 from scripting import api_snippets
 from scripting.api_reference import tooltip_parts
 
@@ -115,7 +116,8 @@ _SELF_PROPS   = [m for m in _MODULE_PROPS.pop("actor", [])
 # encore `display`/`send`, disparus, et ignorait la moitié des modules vivants).
 MODULES: tuple[str, ...] = tuple(sorted(set(_MODULE_FUNCS) | set(_MODULE_PROPS)))
 
-# Fonctions globales : sans module (`array`).
+# Fonctions globales : sans module (`grid`). `array` n'en est pas : c'est une
+# construction du langage (cf. `api.py`), proposée avec les constructeurs.
 _GLOBAL_FUNCS = [k for k in RUNTIME_API if _split(k)[0] == ""]
 
 # Constructeurs de valeurs composées (`vec2`, `vec3`, `rect`) : leur arité vit
@@ -428,6 +430,13 @@ def _bare_candidates(context: str) -> list[Candidate]:
         out.append(Candidate(insert=ctor, label=f"{ctor}(…)", kind=KIND_CONSTRUCTOR,
                              tip=_plain_tip(f"{ctor}(…)",
                                  f"Builds a value with {n} components.")))
+    # `array` est un constructeur du langage, pas un verbe du moteur : il ne vit
+    # donc pas dans le catalogue, mais la complétion le propose comme `vec2`/`rect`.
+    out.append(Candidate(insert=ARRAY_CTOR, label=f"{ARRAY_CTOR}(…)",
+                         kind=KIND_CONSTRUCTOR,
+                         tip=_plain_tip(f"{ARRAY_CTOR}(size)",
+                             "Declares a fixed-size array of integers, indexed from 1: "
+                             f"local bag = {ARRAY_CTOR}(8).")))
     for fn in sorted(VEC_FUNCTIONS):
         out.append(Candidate(insert=fn, label=f"{fn}(…)", kind=KIND_CONSTRUCTOR,
                              tip=_plain_tip(f"{fn}(a, b)",

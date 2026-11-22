@@ -63,11 +63,11 @@ _FALLBACK_GROUP: dict[str, str] = {
 # ne code pas de texte visible en dur.
 SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("scrsb.sec.actor",   ("Actor", "Instance", "Transform", "Movement", "Physics", "CollisionShape", "Collision", "Area", "Sprite", "Animation", "Juiciness", "Input")),
-    ("scrsb.sec.scene",   ("Scene", "Layer", "Tilemap", "Palette", "Window", "Blend")),
+    ("scrsb.sec.scene",   ("Scene", "Layer", "Palette", "Window", "Blend")),
     ("scrsb.sec.camera",  ("Camera",)),
     ("scrsb.sec.sound",   ("Audio",)),
     ("scrsb.sec.text_ui", ("Text", "Interface", "Language")),
-    ("scrsb.sec.data",    ("Save", "Arrays")),
+    ("scrsb.sec.data",    ("Save", "Grid", "Tilemap")),
     ("scrsb.sec.script",  ("Math", "Sequences", "Debug")),
 )
 

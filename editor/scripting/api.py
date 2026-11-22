@@ -1165,20 +1165,41 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # `global.nom[i]`, lecture ET écriture, borné par `_check_global_indexed`.
 
     # ── Tableaux ───────────────────────────────────────────────────
-    # `array` n'est pas un appel : c'est la DÉCLARATION d'un tableau, lue par le
-    # codegen à l'endroit du `local` (cf. parser.array_dims). Elle figure quand
-    # même au catalogue, parce que c'est lui qui remplit la sidebar et la
-    # référence de l'écran de script : une forme absente d'ici est une forme que
-    # personne ne découvre.
-    "array": ApiFunc(
-        lua_name="array", c_func="_array",   # résolu par codegen (déclaration)
-        params=[Param("taille", PARAM_INT)],
+    # `array` n'a pas d'entrée ici : ce n'est pas un verbe du moteur mais une
+    # CONSTRUCTION DU LANGAGE, au même titre que `for`, `vec2` ou `rect`. La
+    # déclaration `local bag = array(8)` est lue en place par le parser
+    # (`parser.array_dims`), puis par le checker et le codegen, qui ne consultent
+    # jamais le catalogue pour elle. Sa place est la référence de scripting
+    # (`docs/scripting-reference.md`), pas la sidebar de l'API ; la complétion la
+    # propose quand même, rangée avec les constructeurs du langage
+    # (`completion._bare_candidates`).
+
+    # `grid`, lui, RESTE un verbe du moteur : une grille RAM est une structure de
+    # données du moteur (méthodes `:fill`, `:flood`, `:path_to`, du gameplay),
+    # pas une simple construction du langage. Sa déclaration `local terrain =
+    # grid(30, 20, 16)` est elle aussi lue par le codegen (`parser.grid_dims`),
+    # mais elle figure au catalogue pour peupler la sidebar et la référence, et
+    # complète les grilles peintes de `data.grid` (en ROM, lecture seule) qu'elle
+    # lit ET écrit.
+    "grid": ApiFunc(
+        lua_name="grid", c_func="_grid",     # résolu par codegen (déclaration)
+        params=[Param("cols", PARAM_INT), Param("rows", PARAM_INT)],
         variadic=True,
         ret="int",
-        doc="Declares an array of integers filled with zeros: local bag = array(8). "
-            "Two sizes for a grid: array(20, 12) is read grid[1..20][1..12]. The "
-            "size is fixed at build; arrays are indexed from 1, and #bag is their "
-            "size.",
+        doc="Declares a RAM grid of bytes filled with zeros: local terrain = "
+            "grid(30, 20, 16). Columns, rows, then an optional cell step in pixels "
+            "(8, 16 or 32, 16 by default). Read and write a cell by index, terrain[x][y] "
+            "from 1, or read the cell at a world point with terrain:at(px, py); "
+            "terrain.cols and terrain.rows give the size. Fill it with terrain:fill(v) "
+            "or a block with terrain:fill_rect(x, y, w, h, v). Write a cost map with "
+            "range:flood(x, y, budget, terrain, costs[, blocked]), then read the path to a "
+            "cell with range:path_to(x, y, out), which fills out with direction steps 0..3 "
+            "and returns their count. walls:line_of_sight(x0, y0, x1, y1) tells whether the "
+            "line between two cells is clear (a non-zero cell blocks). cost:flow_map(dirs), on "
+            "a cost map from flood, writes into dirs a direction 0..3 per cell toward the source, "
+            "so many agents navigate by reading one cell. map:regions(out) labels each "
+            "connected group of equal-value cells with an id 1..N into out and returns N. "
+            "A grid holds gameplay data (cost, range, zones), it draws nothing.",
     ),
 
     # ── Diagnostic ───────────────────────────────────

@@ -26,7 +26,8 @@ from .parser import (
     StmtBreak, StmtUnsupported, ExprUnsupported,
     ExprInvoke, ExprCall, ExprIndex, ExprIndexAt, ExprTable, ExprName, ExprString,
     ExprNumber, ExprUnop, ExprBool, ExprBinop, ExprNil,
-    ARRAY_CTOR, array_dims, DATA_NS, DATA_TABLE_NS, data_grid_ref, data_kind_alone,
+    ARRAY_CTOR, array_dims, GRID_CTOR, GRID_STEPS, grid_dims,
+    DATA_NS, DATA_TABLE_NS, data_grid_ref, data_kind_alone,
     data_legacy_ref, data_table_ref, REQUIRE_FN, require_target, local_names,
     assigned_names, sequence_name, wait_call, WAIT_FN, WAIT_UNTIL_FN, WAIT_FNS,
     SEQUENCE_PREFIX,
@@ -230,8 +231,17 @@ class Checker:
         # le récepteur après l'avoir jugé : sans cette marque, une grille lue
         # correctement serait signalée une seconde fois comme citée nue.
         self._grids_lues: set[int] = set()
+        # Noeuds d'une grille RAM passée comme RÉFÉRENCE à une opération (le terrain
+        # ou le bloque de `flood`) : là, une grille n'est pas une valeur fautive, elle
+        # EST l'argument. Sans cette marque, la marche des expressions la refuserait.
+        self._grid_ref_ok: set[int] = set()
         # Dimensions des tableaux du script. `None` indique des déclarations incompatibles.
         self._arrays: dict[str, Optional[tuple[int, ...]]] = {}
+        # Grilles RAM du script : nom → (cols, rows, step), `None` si déclarations
+        # incompatibles. Sert aux accès (`g[x][y]`, `g:at`, `g.cols`/`.rows`) et à
+        # refuser une grille citée comme une valeur. Complète `data.grid` (peinte,
+        # en ROM) : la grille RAM se lit ET s'écrit.
+        self._grids: dict[str, Optional[tuple[int, int, int]]] = {}
         # Types des variables vectorielles. `None` indique des types incompatibles.
         self._vec_types: dict[str, Optional[str]] = {}
         # Étiquettes des exports `enum`, dans l'ordre déclaré : l'index est la valeur.
@@ -283,6 +293,7 @@ class Checker:
             self._helpers = {fn.name: fn for fn in helper_list}
             self._check_helpers(helper_list)
         self._collect_arrays(script)
+        self._collect_grids(script)
         self._collect_local_types(script)
         self._collect_namespaces(script)
         self._collect_local_names(script)
@@ -292,6 +303,7 @@ class Checker:
         self._assigned = assigned_names(script)
         for loc in script.locals:
             self._check_array_decl(loc.name, loc.value)
+            self._check_grid_decl(loc.name, loc.value)
             self._check_literals_in(loc.value)
             # Les exports composites sont typés dès leur déclaration.
             if loc.export_type in ("vec2", "vec3", "rect"):
@@ -588,6 +600,37 @@ class Checker:
         for fn in script.functions:
             walk(fn.body)
 
+    def _collect_grids(self, script: LuaScript):
+        """Relève toutes les déclarations de grille RAM du script, de tête comme
+        de corps de handler. Même parcours à plat que `_collect_arrays`."""
+        def note(name: str, value):
+            dims = grid_dims(value)
+            if dims is None:
+                return
+            if name in self._grids and self._grids[name] != dims:
+                self._grids[name] = None       # deux géométries : on ne conclut rien
+            else:
+                self._grids[name] = dims
+
+        def walk(stmts):
+            for s in stmts:
+                if isinstance(s, StmtLocalAssign):
+                    note(s.name, s.value)
+                elif isinstance(s, StmtIf):
+                    walk(s.then)
+                    for _, b in s.elseifs:
+                        walk(b)
+                    walk(s.else_)
+                elif isinstance(s, (StmtWhile, StmtForNum)):
+                    walk(s.body)
+
+        for loc in script.locals:
+            if loc.export_type in ("vec2", "vec3", "rect"):
+                continue
+            note(loc.name, loc.value)
+        for fn in script.functions:
+            walk(fn.body)
+
     def _collect_local_types(self, script: LuaScript):
         """Relève le type de chaque `local` du script, où qu'il soit déclaré :
         même parcours à plat que `_collect_arrays`, dans le même ordre que le
@@ -859,6 +902,19 @@ class Checker:
                     "a data table."))
                 return
 
+    def _check_grid_decl(self, name: str, value):
+        """Ce qui rend une déclaration de grille RAM invalide, dit sur la ligne
+        fautive. `grid(cols, rows)` ou `grid(cols, rows, step)` : des nombres en
+        clair, strictement positifs, et un pas parmi 8, 16, 32."""
+        if (isinstance(value, ExprCall) and isinstance(value.func, ExprName)
+                and value.func.name == GRID_CTOR and grid_dims(value) is None):
+            steps = ", ".join(str(s) for s in GRID_STEPS)
+            self.errors.append(CheckError(
+                "error",
+                f"{GRID_CTOR}() for '{name}': two or three sizes expected, written as plain"
+                f" numbers and strictly positive : {GRID_CTOR}(30, 20) or {GRID_CTOR}(30, 20, 16)."
+                f" The columns, the rows, then an optional cell step in pixels ({steps}, 16 by"
+                " default). The geometry is part of the type and must be known at build."))
 
     def _array_chain(self, e: ExprIndexAt):
         """Vérifie `t[i]` et `t[i][j]` : le nom indexé, le nombre de dimensions
@@ -883,6 +939,9 @@ class Checker:
         if not isinstance(cur, ExprName):
             return
         name = cur.name
+        if name in self._grids:
+            self._check_ram_grid_cells(name, indices)
+            return
         if name not in self._arrays:
             self.errors.append(CheckError(
                 "warning",
@@ -905,6 +964,168 @@ class Checker:
                     "error",
                     f"'{name}[{k}]': out of bounds : this array runs from 1 to "
                     f"{dims[level]} (arrays are indexed from 1, as everywhere in Lua)."))
+
+    # Grilles RAM du script
+
+    def _check_ram_grid_cells(self, name: str, indices: list) -> None:
+        """`g[x][y]` : deux dimensions, la colonne puis la rangée, et les bornes
+        quand elles sont écrites en clair. Indices à partir de 1, comme tout
+        tableau du sous-ensemble."""
+        dims = self._grids[name]
+        if dims is None:
+            return
+        cols, rows, _step = dims
+        if len(indices) != 2:
+            self.errors.append(CheckError(
+                "error",
+                f"'{name}' is a grid of two dimensions: write {name}[x][y], the column"
+                f" then the row, or read one cell by pixel with {name}:at(x, y)."))
+            return
+        for index, size, axe in zip(indices, (cols, rows), "xy"):
+            k = self._literal_int(index)
+            if k is None:
+                continue
+            if not (1 <= k <= size):
+                self.errors.append(CheckError(
+                    "error",
+                    f"'{name}[{k}]': out of bounds on {axe} : this grid runs from 1 to "
+                    f"{size} (grids are indexed from 1, as everywhere in Lua)."))
+
+    # Méthodes d'une grille RAM : nom → arités acceptées et forme montrée.
+    _RAM_GRID_METHODS = {
+        "at": ((2,), "at(x, y)"),
+        "fill": ((1,), "fill(value)"),
+        "fill_rect": ((5,), "fill_rect(x, y, w, h, value)"),
+        "flood": ((5, 6), "flood(x, y, budget, terrain, costs[, blocked])"),
+        "path_to": ((3,), "path_to(x, y, out)"),
+        "line_of_sight": ((4,), "line_of_sight(x0, y0, x1, y1)"),
+        "flow_map": ((1,), "flow_map(dirs)"),
+        "regions": ((1,), "regions(out)"),
+    }
+
+    def _is_grid_expr(self, e) -> bool:
+        """`e` désigne-t-il une grille : une grille RAM (nom) ou une grille peinte
+        (`data.grid.X`) ?"""
+        return ((isinstance(e, ExprName) and e.name in self._grids)
+                or data_grid_ref(e) is not None)
+
+    def _is_array_expr(self, e) -> bool:
+        """`e` désigne-t-il un array à une dimension déclaré dans ce script ?"""
+        if not isinstance(e, ExprName):
+            return False
+        dims = self._arrays.get(e.name)
+        return dims is not None and len(dims) == 1
+
+    def _check_ram_grid_method(self, name: str, method: str, args: list) -> None:
+        """Les méthodes d'une grille RAM, leur arité et le type de leurs arguments :
+        `:at(x, y)` (la case d'un point, en pixels), `:fill(v)` (toute la grille),
+        `:fill_rect(x, y, w, h, v)` (un rectangle de cases, l'origine à partir de 1),
+        `:flood(x, y, budget, terrain, costs[, blocked])` (la portée à coût), et
+        `:path_to(x, y, out)` (le chemin, écrit dans un array), et
+        `:line_of_sight(x0, y0, x1, y1)` (la ligne de vue, un booléen),
+        `:flow_map(dirs)` (une direction par case vers la source) et `:regions(out)`
+        (les zones de valeur égale, un id par case). Une grille peinte reste en
+        lecture seule (jugée ailleurs)."""
+        entry = self._RAM_GRID_METHODS.get(method)
+        if entry is None:
+            noms = ", ".join(f":{m}" for m in self._RAM_GRID_METHODS)
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:{method}(): a grid's methods are {noms}; read a cell by index"
+                f" with {name}[x][y]."))
+            return
+        arites, forme = entry
+        # Une grille passée comme argument à `flood` ou `path_to` EST une référence,
+        # jamais une valeur : on la marque avant tout, même si l'arité est fautive,
+        # pour que la marche des expressions ne la refuse pas et ne double pas le
+        # message (une sortie fautive reste jugée par `_check_path_to_args`).
+        if method in ("flood", "path_to", "flow_map", "regions"):
+            for arg in args:
+                self._mark_grid_ref(arg)
+        if len(args) not in arites:
+            attendu = " or ".join(str(a) for a in arites)
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:{method}() takes {attendu} argument(s): {name}:{forme}."))
+            return
+        if method == "flood":
+            self._check_flood_args(name, args)
+        elif method == "path_to":
+            self._check_path_to_args(name, args)
+        elif method == "flow_map":
+            self._check_flow_map_args(name, args)
+        elif method == "regions":
+            self._check_regions_args(name, args)
+
+    def _check_path_to_args(self, name: str, args: list) -> None:
+        """`path_to` écrit ses pas dans un array : le 3e argument est la sortie,
+        un array à une dimension de ce script (l'appelant le dimensionne, le C émis
+        la borne). Les deux premiers sont la case visée."""
+        if not self._is_array_expr(args[2]):
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:path_to(): the 3rd argument is the output, an array this"
+                " script declares (a `array(...)`); each step is a direction 0..3."))
+
+    def _check_flow_map_args(self, name: str, args: list) -> None:
+        """`flow_map` lit la carte de coûts du récepteur (écrite par `flood`) et écrit
+        une direction par case dans la grille de sortie : l'argument est une grille RAM
+        de ce script (en écriture, donc pas une grille peinte en lecture seule)."""
+        if not (isinstance(args[0], ExprName) and args[0].name in self._grids):
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:flow_map(): the argument is the output, a grid this script"
+                " declares (a `grid(...)`) of the same size; each cell gets a direction"
+                " 0..3 toward the source."))
+
+    def _check_regions_args(self, name: str, args: list) -> None:
+        """`regions` découpe le récepteur en zones de valeur égale et écrit un id par
+        case dans la grille de sortie : l'argument est une grille RAM de ce script (en
+        écriture, donc pas une grille peinte en lecture seule)."""
+        if not (isinstance(args[0], ExprName) and args[0].name in self._grids):
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:regions(): the argument is the output, a grid this script"
+                " declares (a `grid(...)`) of the same size; each cell gets its region"
+                " id 1..N."))
+
+    def _mark_grid_ref(self, e) -> None:
+        """Une grille passée comme RÉFÉRENCE à une opération : on la soustrait au
+        refus « une grille n'est pas une valeur », qu'elle soit RAM ou peinte."""
+        if isinstance(e, ExprName) and e.name in self._grids:
+            self._grid_ref_ok.add(id(e))
+        elif data_grid_ref(e) is not None:
+            self._grids_lues.add(id(e))
+
+    def _check_flood_args(self, name: str, args: list) -> None:
+        """`flood` lit une grille de terrain, un array de coûts, et une grille
+        d'occupation facultative : chacun à sa place et de son type, sinon le C
+        émis ne tiendrait pas. (Les grilles passées en argument sont déjà marquées
+        comme références par `_check_ram_grid_method`.)"""
+        if not self._is_grid_expr(args[3]):
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:flood(): the 4th argument is the terrain, a grid (a `grid(...)`"
+                " of this script or a painted data.grid.<Name>)."))
+        if not self._is_array_expr(args[4]):
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:flood(): the 5th argument is the costs, an array indexed by"
+                " terrain value (a `array(...)` of this script)."))
+        if len(args) == 6 and not self._is_grid_expr(args[5]):
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:flood(): the 6th argument, when present, is the blocked map,"
+                " a grid of occupancy."))
+
+    def _check_ram_grid_field(self, name: str, field: str) -> None:
+        """`g.cols` / `g.rows` : les deux seules propriétés d'une grille RAM, en
+        lecture seule (littéraux connus au build). Tout autre champ est refusé."""
+        if field not in ("cols", "rows"):
+            self.errors.append(CheckError(
+                "error",
+                f"{name}.{field}: a grid exposes only .cols and .rows; read a cell with"
+                f" {name}[x][y] in cells or {name}:at(x, y) in pixels."))
 
     # Tables de données
 
@@ -1703,6 +1924,17 @@ class Checker:
                 f"`{value.name}` is an array: an array is not a value. Read or write an "
                 f"element : {value.name}[i]."))
             return
+        # Une grille nue, comme valeur ou comme cible, est refusée par la branche
+        # `ExprName` de `_check_expr`, un seul endroit pour un seul message.
+        # `g.cols = …` : les dimensions d'une grille sont connues au build, en
+        # lecture seule ; la cible émise serait un littéral, pas une case.
+        if (isinstance(target, ExprIndex) and isinstance(target.obj, ExprName)
+                and target.obj.name in self._grids):
+            self.errors.append(CheckError(
+                "error",
+                f"`{target.obj.name}.{target.field}` is read-only: a grid's size is fixed at"
+                f" build. To change a cell, write {target.obj.name}[x][y] = value."))
+            return
         if not isinstance(target, ExprName):
             return
         name = target.name
@@ -1878,6 +2110,7 @@ class Checker:
             self._check_expr(s.call)
         elif isinstance(s, StmtLocalAssign):
             self._check_array_decl(s.name, s.value)
+            self._check_grid_decl(s.name, s.value)
             self._mark_spawn_stmt(s.value)
             self._check_expr(s.value)
         elif isinstance(s, StmtAssign):
@@ -2036,10 +2269,24 @@ class Checker:
                     f"{e.name}({', '.join(VEC_FIELDS[e.name])})."
                     if e.name in VEC_CONSTRUCTORS else
                     f"`{e.name}` is a function, not a value : write {e.name}(a, b)."))
+            elif e.name in self._grids and id(e) not in self._grid_ref_ok:
+                # Une grille isolée n'arrive ici qu'en position de VALEUR : le
+                # récepteur d'un accès (`g[x][y]`, `g:at`, `g.cols`) ne redescend
+                # pas sur son nom nu, et une grille passée en RÉFÉRENCE à `flood`
+                # est marquée. Partout ailleurs, une grille n'est pas une valeur.
+                self.errors.append(CheckError(
+                    "error",
+                    f"`{e.name}` is a grid: a grid is not a value. Read a cell with "
+                    f"{e.name}[x][y] or {e.name}:at(x, y)."))
             else:
                 # Un nom nu doit être une variable connue ou un espace de noms.
                 self._check_bare_name(e.name, ecrit=False)
         elif isinstance(e, ExprIndex):
+            # `g.cols` / `g.rows` d'une grille RAM : jugé ici, avant les
+            # propriétés d'acteur, qui ne connaissent pas ce récepteur.
+            if isinstance(e.obj, ExprName) and e.obj.name in self._grids:
+                self._check_ram_grid_field(e.obj.name, e.field)
+                return
             # Les accès aux tables et à leurs colonnes sont résolus ici.
             # Un accès aux données est dit une fois, sur le nœud complet : on ne
             # redescend pas dans `data.table` ou `data.grid`, qui n'ont rien à
@@ -2210,6 +2457,11 @@ class Checker:
             # Les méthodes d'acteur sont valides sur tout acteur nommé.
             if isinstance(e.obj, ExprName):
                 receiver = e.obj.name
+                # Une grille RAM n'a qu'`at` : on la juge ici, avant le catalogue
+                # d'acteur, qui rejetterait `g:at` comme une méthode inconnue.
+                if receiver in self._grids:
+                    self._check_ram_grid_method(receiver, e.method, e.args)
+                    return
                 # Une variable de référence utilise le catalogue de son propre type.
                 ref = self._ref_types.get(receiver)
                 key, api = self._method_of(ref, e.method)
