@@ -249,8 +249,12 @@ def add_asset_actions(menu: QMenu, nodes: list, callbacks: DiskCallbacks,
         menu.addAction(_icon("folder"), label('common.reveal')).triggered.connect(
             lambda _=False: reveal_in_file_manager(path))
     if removable:
+        # La suppression peut ouvrir une fenêtre de confirmation (asset encore cité, scène de départ, dossier…). Lancée
+        # en synchrone depuis `menu.exec()`, cette boucle modale naît alors que le menu tient encore le *grab* du clic :
+        # la fenêtre ne reçoit pas les évènements et paraît ne pas répondre. On rend la main au tour d'évènements
+        # d'abord, le menu se referme, puis la fenêtre s'ouvre (même raison que `crash_dialog.show_crash_dialog`).
         menu.addAction(_icon("remove"), label('disk.delete_items', n=len(removable))).triggered.connect(
-            lambda _=False: callbacks.delete_items(removable))
+            lambda _=False: QTimer.singleShot(0, lambda: callbacks.delete_items(removable)))
 
 
 def add_folder_actions(menu: QMenu, folder: str, callbacks: DiskCallbacks,

@@ -44,7 +44,7 @@ import copy
 from core.resources import asset_reconciliation
 from core.events import EventEmitter
 from core.models.scene import Actor, Area, Prefab
-from core.models.unique_name import unique_name
+from core.models.unique_name import copy_name, unique_name
 from core.history import get_history, AddActorCmd
 from core.text_table_link import TableSync
 from core.selection_bus import get_bus
@@ -336,7 +336,7 @@ class CommandDispatcher(EventEmitter):
         copies: list[Actor] = []
         for src in sources:
             new = copy.deepcopy(src)
-            new.name = unique_name(src.name, taken)
+            new.name = copy_name(src.name, taken)
             taken.add(new.name)
             new.x = FieldValue.parse(src.x, _vn).px(r) + dx
             new.y = FieldValue.parse(src.y, _vn).px(r) + dy
@@ -475,7 +475,7 @@ class CommandDispatcher(EventEmitter):
             new.id = ""                          # l'id appartient à la scène : `assign_member_ids` en donne un neuf
             if new.parent not in actors:
                 new.parent = None                # collée dans une scène sans ce parent : libre, plutôt que pendante
-            new.name = unique_name(src.name, taken)
+            new.name = copy_name(src.name, taken)
             taken.add(new.name)
             new.x, new.y = src.x + dx, src.y + dy
             copies.append(new)
@@ -691,7 +691,7 @@ class CommandDispatcher(EventEmitter):
         if source is None:
             return self.create_prefab_from_actor(actor, folder)
         duplicate = copy.deepcopy(source)           # son id, copié, est remplacé à l'enregistrement
-        duplicate.name = unique_name(source.name, {pf.name for pf in self._project.prefabs})
+        duplicate.name = copy_name(source.name, {pf.name for pf in self._project.prefabs})
         duplicate.actor.name = duplicate.name
         self._project.prefabs.append(duplicate)
         with self._watcher.suspended():

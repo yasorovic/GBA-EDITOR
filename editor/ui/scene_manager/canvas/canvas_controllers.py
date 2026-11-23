@@ -285,7 +285,7 @@ class UIRegionController(QObject):
         refs `parent` réécrites vers les copies, décalage sur la seule RACINE
         (les enfants sont positionnés relativement à leur parent, les décaler
         aussi les ferait glisser deux fois)."""
-        from core.models.unique_name import unique_name
+        from core.models.unique_name import copy_name
         from core.history import get_history, AddListItemsCmd
         taken = set(lay.element_names()) | set(self._project.ui_element_names())
         copies: list = []
@@ -301,7 +301,7 @@ class UIRegionController(QObject):
                 # Espace de noms : le projet entier, tous types confondus (cf.
                 # Project.ui_element_names) — les refs `parent` restent ainsi
                 # sans ambiguïté et les constantes C ne collisionnent pas.
-                new.name = unique_name(src.name, taken)
+                new.name = copy_name(src.name, taken)
                 taken.add(new.name)
                 rename[src.name] = new.name
                 pairs.append((src, new))

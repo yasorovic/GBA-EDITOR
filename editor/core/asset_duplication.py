@@ -21,16 +21,12 @@ Ce module construit la commande ; il ne l'exécute pas (l'historique est affaire
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from core.models import project_json
-from core.models.unique_name import unique_name
-
-# `coin_2` : la forme que `unique_name` écrit. Dupliquer `coin_2` redonne `coin_3`, pas `coin_2_2`.
-_NUMBERED = re.compile(r"^(?P<base>.+)_\d+$")
+from core.models.unique_name import copy_name
 
 
 @dataclass
@@ -50,15 +46,6 @@ def duplicable_families(project) -> tuple[str, ...]:
 
 def is_duplicable(project, family: str) -> bool:
     return family in duplicable_families(project)
-
-
-def copy_name(base: str, taken) -> str:
-    """Le nom de la copie de `base` : `base_2`, `base_3`… Si `base` est lui-même un `x_N` dont `x` existe (une copie
-    d'une copie), la suite continue sur `x` plutôt que de s'empiler en `x_2_2`."""
-    taken = set(taken)
-    numbered = _NUMBERED.match(base)
-    root = numbered.group("base") if numbered and numbered.group("base") in taken else base
-    return unique_name(root, taken | {root})
 
 
 def _taken_names(store) -> set[str]:

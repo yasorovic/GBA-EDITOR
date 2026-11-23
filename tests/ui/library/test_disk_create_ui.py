@@ -107,6 +107,7 @@ def test_the_context_menu_of_one_source_creates_and_of_assets_deletes(qapp):
     add_asset_actions(assets, [nodes["hero.sprite"], nodes["Level.scene"], nodes["texts.json"]], spy.callbacks())
     assert _texts(assets) == ["Delete 2 items"]                                     # les textes ne se suppriment pas ici
     assets.actions()[0].trigger()
+    qapp.processEvents()                                                            # la suppression est différée hors de la boucle du menu
     assert spy.deleted == [["hero.sprite", "Level.scene"]]
 
 
