@@ -147,6 +147,18 @@ def test_une_grille_fait_l_aller_retour_par_le_json(tmp_path):
     assert relue.cells[0][:2] == [0, 1] and relue.cells[1][:2] == [2, 0]
 
 
+def test_une_grille_en_ram_fait_l_aller_retour_mais_le_defaut_reste_muet(tmp_path):
+    """Le drapeau `ram` ne s'écrit que s'il est vrai, comme `collision_mutable`,
+    et une grille relue retrouve son état modifiable au runtime."""
+    _, muette = _saved(tmp_path, Scene(name="Arena", grids=[Grid(name="Terrain")]))
+    assert "ram" not in muette["grids"][0]
+    assert Scene.from_dict(muette).grid("Terrain").ram is False
+
+    _, ecrite = _saved(tmp_path, Scene(name="Arena", grids=[Grid(name="Flow", ram=True)]))
+    assert ecrite["grids"][0]["ram"] is True
+    assert Scene.from_dict(ecrite).grid("Flow").ram is True
+
+
 def test_les_rangees_d_une_grille_tiennent_une_ligne_chacune(tmp_path):
     """Sans cette règle, une grille au pas de 8 ajoute 600 lignes au fichier."""
     grid = Grid(name="Terrain", step=16)

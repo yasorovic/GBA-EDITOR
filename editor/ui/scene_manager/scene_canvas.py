@@ -32,7 +32,8 @@ from ui.common.widgets import PickerEntry, PickerSlot
 from PyQt6.QtCore import QPointF, QSettings, Qt, QTimer, pyqtSignal
 from core.app_info import APP_NAME
 from PyQt6.QtGui import QColor, QFont, QIcon, QImage, QPainter, QPixmap
-from PyQt6.QtWidgets import QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel,
+                             QVBoxLayout, QWidget)
 # Rasterisation des fonds + aperçus — extrait (A3, sous-package canvas/).
 from ui.scene_manager.canvas.canvas_raster import (
     BgLayerRaster, build_bg_raster, bg_pixmap, preview_frame_for_actor,
@@ -94,6 +95,7 @@ class CanvasContainer(QWidget):
     paint_value_changed = pyqtSignal(object)
     grid_creation_requested = pyqtSignal(str)
     grid_step_changed = pyqtSignal(int)
+    grid_ram_changed = pyqtSignal(bool)
 
     def __init__(self, view: GBAView, parent=None):
         super().__init__(parent)
@@ -140,6 +142,16 @@ class CanvasContainer(QWidget):
         self._grid_step.currentIndexChanged.connect(self._on_grid_step_selected)
         self._grid_step.hide()
         strip_layout.addWidget(self._grid_step)
+        # Grille partagée en RAM : un réglage PAR GRILLE (une scène peut mêler des
+        # grilles ROM et RAM), donc ici près du pas, pas dans l'inspecteur de scène
+        # comme la collision modifiable (qui est unique par scène).
+        self._grid_ram = QCheckBox(label('scncanvas.grid_ram'), self._paint_strip)
+        self._grid_ram.setFont(QFont(T.UI, T.SM))
+        self._grid_ram.setToolTip(tooltip(
+            title=label('scncanvas.grid_ram'), body=label('scncanvas.grid_ram_tip')))
+        self._grid_ram.toggled.connect(self._on_grid_ram_toggled)
+        self._grid_ram.hide()
+        strip_layout.addWidget(self._grid_ram)
         self._inpaint_bank_strip = PaletteBankStrip(label('scncanvas.no_active_bg_bank'), self._paint_strip)
         strip_layout.addWidget(self._inpaint_bank_strip)
         self._inpaint_bank_strip.selected.connect(self._on_inpaint_bank_selected)
@@ -187,6 +199,10 @@ class CanvasContainer(QWidget):
         if self._grid_step.isVisible() and isinstance(step, int):
             self.grid_step_changed.emit(step)
 
+    def _on_grid_ram_toggled(self, checked: bool):
+        if self._grid_ram.isVisible():
+            self.grid_ram_changed.emit(bool(checked))
+
     def _sync_grid_step(self, surface: str):
         grid = None
         if surface.startswith('grid:'):
@@ -194,11 +210,15 @@ class CanvasContainer(QWidget):
             grid = next((item for item in getattr(self._paint_scene, 'grids', [])
                          if item.name == name), None)
         self._grid_step.setVisible(grid is not None)
+        self._grid_ram.setVisible(grid is not None)
         if grid is not None:
             self._grid_step.blockSignals(True)
             index = self._grid_step.findData(grid.step)
             self._grid_step.setCurrentIndex(index if index >= 0 else 1)
             self._grid_step.blockSignals(False)
+            self._grid_ram.blockSignals(True)
+            self._grid_ram.setChecked(bool(getattr(grid, 'ram', False)))
+            self._grid_ram.blockSignals(False)
 
     def _paint_surface_entries(self) -> list[PickerEntry]:
         """Les surfaces de la scène, avec la grammaire visuelle des pickers."""
@@ -545,6 +565,7 @@ class SceneEditor(QWidget):
         self._canvas_container.paint_value_changed.connect(self._on_paint_value_changed)
         self._canvas_container.grid_creation_requested.connect(self._on_grid_creation_requested)
         self._canvas_container.grid_step_changed.connect(self._on_grid_step_changed)
+        self._canvas_container.grid_ram_changed.connect(self._on_grid_ram_changed)
 
         # Contrôleur des zones de texte (outil « Zone de texte »).
         self._ui_region_ctrl = UIRegionController(self)
@@ -1227,6 +1248,26 @@ class SceneEditor(QWidget):
             label=label('scncanvas.grid_step_history', name=grid.name, step=step)))
         get_dispatcher().status(
             label('scncanvas.grid_step_changed', name=grid.name, step=step))
+
+    def _on_grid_ram_changed(self, value: bool):
+        """Bascule une grille entre RAM (partagée, inscriptible au runtime) et ROM
+        (lecture seule), de façon annulable. N'affecte pas le rendu du canvas : seul
+        le C émis change, donc on resynchronise juste la case à cocher."""
+        scene = self._project.active_scene if self._project else None
+        surface = getattr(self, '_paint_surface', '')
+        if scene is None or not surface.startswith('grid:'):
+            return
+        grid = scene.grid(surface.split(':', 1)[1])
+        if grid is None or bool(grid.ram) == bool(value):
+            return
+        from core.history import RefreshAfterCmd, SetFieldCmd, get_history
+
+        key = 'scncanvas.grid_ram_on_history' if value else 'scncanvas.grid_ram_off_history'
+        command = SetFieldCmd(
+            grid, 'ram', bool(grid.ram), bool(value),
+            label=label(key, name=grid.name), persist_fn=self.scene_changed.emit)
+        get_history().push(RefreshAfterCmd(
+            command, lambda: self._canvas_container.refresh_paint_values()))
 
     def _on_paint_value_changed(self, value):
         self._paint_value = value

@@ -14,6 +14,7 @@ import pytest
 
 from codegen.runtime_codegen.grids import (
     array_name, emitted_grids, generate_grids_c, generate_grids_h,
+    project_has_ram_grid, scene_ram_grids, seed_name,
     step_macro, value_macro, width_macro, write_grids,
 )
 from core.models.grid import Grid, GridValue
@@ -144,6 +145,63 @@ def test_le_rapport_rom_classe_les_grilles_dans_leur_poste():
     assert "Grilles" in CATEGORY_ORDER
     # La carte de collision garde son propre poste.
     assert next(c for c, motif in _SYMBOL_RULES if motif.search("g_cmap_Arena")) == "Collision"
+
+
+# ── Les grilles RAM (partagées, inscriptibles au runtime) ─────────
+
+def _flow_peinte() -> Grid:
+    """Une grille RAM 2 x 2 avec un germe peint."""
+    return Grid(name="Flow", step=16, ram=True, cells=[[0, 5], [0, 0]])
+
+
+def test_l_en_tete_d_une_grille_ram_declare_un_tampon_non_const_et_son_germe():
+    scene = Scene(name="Arena", grids=[_flow_peinte()])
+    h = generate_grids_h(emitted_grids(_Projet(scene)))
+    assert "extern unsigned char g_grid_Arena_Flow[4];" in h
+    assert "extern const unsigned char g_grid_Arena_Flow_seed[4];" in h
+    assert "RAM, runtime-writable" in h
+
+
+def test_une_grille_ram_vide_n_a_pas_de_germe():
+    """Rien de peint : le tampon part de zéro, aucun germe ROM n'est émis."""
+    grid = Grid(name="Flow", step=16, ram=True)
+    grid.ensure_size(32, 32)
+    h = generate_grids_h(emitted_grids(_Projet(Scene(name="Arena", grids=[grid]))))
+    assert "extern unsigned char g_grid_Arena_Flow[" in h
+    assert "_seed" not in h
+
+
+def test_le_c_d_une_grille_ram_est_un_tampon_ewram_plus_son_germe():
+    scene = Scene(name="Arena", grids=[_flow_peinte()])
+    c = generate_grids_c(emitted_grids(_Projet(scene)))
+    assert '#include "gba_engine.h"' in c            # pour EWRAM_BSS
+    assert "unsigned char g_grid_Arena_Flow[4] EWRAM_BSS;" in c
+    assert "const unsigned char g_grid_Arena_Flow_seed[4] = {" in c
+    assert "    0, 5," in c and "    0, 0," in c
+    # Le tampon n'est jamais émis `const` : les scripts l'écrivent.
+    assert "const unsigned char g_grid_Arena_Flow[" not in c
+
+
+def test_grids_c_reste_sans_dependance_libgba_quand_tout_est_rom():
+    """gba_engine.h n'est inclus que si une grille RAM l'exige."""
+    c = generate_grids_c(emitted_grids(_Projet(_arena())))
+    assert "gba_engine.h" not in c
+
+
+def test_la_scene_liste_ses_grilles_ram_a_germer():
+    scene = Scene(name="Arena", grids=[_flow_peinte(),
+                                       Grid(name="Cost", step=16, ram=True, cells=[[0]]),
+                                       _terrain()])  # ROM : pas germée
+    inits = scene_ram_grids(scene)
+    assert [g.sym for g in inits] == ["g_grid_Arena_Flow", "g_grid_Arena_Cost"]
+    # Flow a un germe (contenu peint), Cost non (toute à zéro).
+    assert inits[0].seed == seed_name(scene, scene.grids[0])
+    assert inits[1].seed is None
+
+
+def test_le_projet_sait_s_il_a_une_grille_ram():
+    assert project_has_ram_grid(_Projet(_arena())) is False
+    assert project_has_ram_grid(_Projet(Scene(name="Arena", grids=[_flow_peinte()]))) is True
 
 
 # ── Le C réellement émis, compilé et exécuté ──────────────────────

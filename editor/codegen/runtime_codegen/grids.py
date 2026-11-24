@@ -35,8 +35,23 @@ import codegen.build_output as build_output
 
 
 def array_name(scene, grid) -> str:
-    """Le tableau des cases : son nom dit la scène d'où il vient."""
+    """Le tableau des cases : son nom dit la scène d'où il vient.
+
+    Pour une grille RAM, ce nom désigne le tampon RAM que les scripts lisent ET
+    écrivent (non `const`) ; son germe peint, lui, prend le suffixe `_seed`."""
     return grid_sym(scene.name, grid.name)
+
+
+def seed_name(scene, grid) -> str:
+    """Le germe ROM d'une grille RAM : recopié dans le tampon RAM à l'entrée de
+    scène. N'existe que si la grille a des cases non nulles peintes."""
+    return f"{array_name(scene, grid)}_seed"
+
+
+def _has_seed(grid) -> bool:
+    """La grille porte-t-elle un contenu peint non nul ? Sinon le tampon RAM part
+    de zéro, et aucun germe n'est émis (ni ROM gaspillée, ni tableau inutilisé)."""
+    return any(v != 0 for row in grid.cells for v in row)
 
 
 def width_macro(scene, grid) -> str:
@@ -83,6 +98,7 @@ class GridAccess:
     width: str         # GRID_W_<SCÈNE>_<GRILLE>
     height: str        # GRID_H_...
     shift: str         # GRID_SHIFT_...
+    ram: bool          # grille RAM : lisible ET inscriptible par les scripts
 
 
 def grid_access(scene, grid) -> GridAccess:
@@ -91,6 +107,7 @@ def grid_access(scene, grid) -> GridAccess:
         name=grid.name, cols=grid.cols, rows=grid.rows, step=grid.step,
         sym=array_name(scene, grid), width=width_macro(scene, grid),
         height=height_macro(scene, grid), shift=shift_macro(scene, grid),
+        ram=bool(getattr(grid, "ram", False)),
     )
 
 
@@ -102,6 +119,40 @@ def scene_grid_access(scene) -> dict:
     return {grid.name: grid_access(scene, grid)
             for grid in getattr(scene, "grids", [])
             if grid.cells and grid.cols}
+
+
+@dataclass(frozen=True)
+class RamGridInit:
+    """Ce dont l'entrée de scène a besoin pour germer une grille RAM : le tampon,
+    son germe (ou None si vide), et les macros de géométrie pour la boucle."""
+    sym: str
+    seed: str | None       # None : germer à zéro
+    width: str
+    height: str
+
+
+def scene_ram_grids(scene) -> list[RamGridInit]:
+    """Les grilles RAM émises de cette scène, à germer à l'entrée de scène.
+
+    Même filtre que `scene_grid_access` : une grille jamais dimensionnée n'émet
+    rien, donc rien à germer."""
+    out: list[RamGridInit] = []
+    for grid in getattr(scene, "grids", []):
+        if not (grid.cells and grid.cols and getattr(grid, "ram", False)):
+            continue
+        out.append(RamGridInit(
+            sym=array_name(scene, grid),
+            seed=seed_name(scene, grid) if _has_seed(grid) else None,
+            width=width_macro(scene, grid), height=height_macro(scene, grid),
+        ))
+    return out
+
+
+def project_has_ram_grid(p) -> bool:
+    """Un projet a-t-il au moins une grille RAM émise ? main.c inclut alors
+    grids.h (pour les `extern` des tampons et les macros de germination)."""
+    return any(getattr(grid, "ram", False)
+               for scene, grid in emitted_grids(p))
 
 
 def emitted_grids(p) -> list[tuple]:
@@ -137,9 +188,10 @@ def generate_grids_h(pairs: list[tuple]) -> str:
         lines.append("/* no value grid in this project */")
     for scene, grid in pairs:
         cols, rows = grid.cols, grid.rows
+        kind = "RAM, runtime-writable" if getattr(grid, "ram", False) else "ROM, read-only"
         lines += [
             f"/* {scene.name} / {grid.name} - {cols}x{rows} cell(s) of {grid.step} px"
-            f" = {cols * rows} byte(s) */",
+            f" = {cols * rows} byte(s), {kind} */",
             f"#define {width_macro(scene, grid)} {cols}",
             f"#define {height_macro(scene, grid)} {rows}",
             f"#define {step_macro(scene, grid)} {grid.step}",
@@ -147,12 +199,27 @@ def generate_grids_h(pairs: list[tuple]) -> str:
         ]
         lines += [f"#define {value_macro(scene, grid, v.name)} {v.value}"
                   for v in grid.values if v.name]
-        lines += [
-            f"extern const unsigned char {array_name(scene, grid)}[{cols * rows}];",
-            "",
-        ]
+        if getattr(grid, "ram", False):
+            # Tampon RAM non `const` : les scripts le lisent ET l'écrivent. Son
+            # germe ROM (s'il y a du contenu peint) est recopié à l'entrée de
+            # scène par main.c. Déclaré `extern` ici, défini dans grids.c.
+            lines.append(f"extern unsigned char {array_name(scene, grid)}[{cols * rows}];")
+            if _has_seed(grid):
+                lines.append(f"extern const unsigned char {seed_name(scene, grid)}[{cols * rows}];")
+        else:
+            lines.append(f"extern const unsigned char {array_name(scene, grid)}[{cols * rows}];")
+        lines.append("")
     lines += ["#endif /* GRIDS_H */", ""]
     return "\n".join(lines)
+
+
+def _rows_of(lines: list[str], scene, grid) -> None:
+    """Les cases d'une grille, une rangée par ligne : le C émis se relit comme la
+    carte dans le fichier de scène (cf. models/project_json.py, même raison)."""
+    cols = grid.cols
+    flat = _flat(grid)
+    for start in range(0, len(flat), cols):
+        lines.append("    " + ", ".join(str(v) for v in flat[start:start + cols]) + ",")
 
 
 def generate_grids_c(pairs: list[tuple]) -> str:
@@ -161,16 +228,28 @@ def generate_grids_c(pairs: list[tuple]) -> str:
         f"/* Generated by {APP_NAME} - do not edit */",
         "",
         '#include "grids.h"',
-        "",
     ]
+    # Une grille RAM se définit avec EWRAM_BSS (sinon le .bss part en IWRAM, les
+    # 32 Kio précieux) : il faut alors le macro, apporté par gba_engine.h, comme
+    # dans main.c. On ne l'inclut que si une grille RAM existe, pour garder
+    # grids.c sans dépendance libgba quand tout est en ROM.
+    if any(getattr(grid, "ram", False) for _scene, grid in pairs):
+        lines.append('#include "gba_engine.h"')
+    lines.append("")
     for scene, grid in pairs:
-        cols = grid.cols
-        lines.append(f"const unsigned char {array_name(scene, grid)}[{cols * grid.rows}] = {{")
-        # Une rangée par ligne : le C émis se relit comme la carte dans le
-        # fichier de scène (cf. models/project_json.py, meme raison).
-        flat = _flat(grid)
-        for start in range(0, len(flat), cols):
-            lines.append("    " + ", ".join(str(v) for v in flat[start:start + cols]) + ",")
+        n = grid.cols * grid.rows
+        if getattr(grid, "ram", False):
+            # Le tampon RAM, non initialisé (germé à l'entrée de scène), plus son
+            # germe ROM s'il y a du contenu peint.
+            lines.append(f"unsigned char {array_name(scene, grid)}[{n}] EWRAM_BSS;")
+            if _has_seed(grid):
+                lines.append(f"const unsigned char {seed_name(scene, grid)}[{n}] = {{")
+                _rows_of(lines, scene, grid)
+                lines.append("};")
+            lines.append("")
+            continue
+        lines.append(f"const unsigned char {array_name(scene, grid)}[{n}] = {{")
+        _rows_of(lines, scene, grid)
         lines += ["};", ""]
     return "\n".join(lines)
 

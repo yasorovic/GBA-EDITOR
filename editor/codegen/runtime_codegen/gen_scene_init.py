@@ -16,6 +16,7 @@ from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
 from codegen.runtime_codegen.gen_actor_hierarchy import link_depth, placed_link_lines
 from codegen.runtime_codegen.gen_pool import dispatch_sym
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
+from codegen.runtime_codegen.grids import scene_ram_grids
 from codegen.runtime_codegen.physics.areas import area_init_lines, area_start_lines
 from codegen.runtime_codegen.physics.audio_emitters import emitter_init_lines
 from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
@@ -244,6 +245,15 @@ def _scene_state_lines(scene, sym: str, cam_idx: int) -> list[str]:
             L.append("    g_ow_any = 0; g_ow_rows = NULL; g_ow_cols = NULL;")
     else:
         L.append("    g_active_cmap = NULL; g_active_cmap_w = NULL; g_cmap_w = 0; g_cmap_h = 0; g_ow_any = 0;")
+    # Grilles RAM de la scène : le tampon part de son germe peint (s'il y a du
+    # contenu) ou de zéro. Même geste que la carte de collision modifiable
+    # ci-dessus, par grille : la copie se refait à chaque entrée de scène (pas de
+    # persistance), et le partage inter-scripts passe par ce seul tampon.
+    for g in scene_ram_grids(scene):
+        if g.seed:
+            L.append(f"    for (int _i = 0; _i < {g.width} * {g.height}; _i++) {g.sym}[_i] = {g.seed}[_i];")
+        else:
+            L.append(f"    for (int _i = 0; _i < {g.width} * {g.height}; _i++) {g.sym}[_i] = 0;")
     return L
 
 

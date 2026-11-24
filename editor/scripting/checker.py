@@ -1022,6 +1022,30 @@ class Checker:
         dims = self._arrays.get(e.name)
         return dims is not None and len(dims) == 1
 
+    def _scene_ram_grid(self, name: str):
+        """La fiche d'accès d'une grille RAM de la scène (`data.grid.<Nom>`), ou
+        None : une grille peinte en ROM (lecture seule) n'en est pas une, et hors
+        build (`scene_grids` absent) rien n'est jugé."""
+        g = (self.ctx.scene_grids or {}).get(name)
+        return g if (g is not None and getattr(g, "ram", False)) else None
+
+    def _ram_grid_dims(self, name: str):
+        """La géométrie `(cols, rows, step)` d'une grille INSCRIPTIBLE nommée :
+        une grille RAM du script, ou une grille RAM de la scène. None sinon."""
+        if name in self._grids:
+            return self._grids[name]
+        g = self._scene_ram_grid(name)
+        return (g.cols, g.rows, g.step) if g is not None else None
+
+    def _is_writable_grid_expr(self, e) -> bool:
+        """`e` désigne-t-il une grille où l'on peut ÉCRIRE : une grille RAM du
+        script (nom) ou une grille RAM de la scène (`data.grid.<Nom>`) ? Une grille
+        peinte en ROM est en lecture seule, donc non."""
+        if isinstance(e, ExprName) and e.name in self._grids:
+            return True
+        name = data_grid_ref(e)
+        return name is not None and self._scene_ram_grid(name) is not None
+
     def _check_ram_grid_method(self, name: str, method: str, args: list) -> None:
         """Les méthodes d'une grille RAM, leur arité et le type de leurs arguments :
         `:at(x, y)` (la case d'un point, en pixels), `:fill(v)` (toute la grille),
@@ -1078,7 +1102,7 @@ class Checker:
                 "error",
                 f"{name}:target(): the first argument is a world position, a vec2"
                 " (self.position, or a vec2 of this script)."))
-        dims = self._grids.get(name)
+        dims = self._ram_grid_dims(name)
         if dims and dims[0] * dims[1] > self._GRID_TARGET_MAX:
             self.errors.append(CheckError(
                 "error",
@@ -1108,25 +1132,27 @@ class Checker:
 
     def _check_flow_map_args(self, name: str, args: list) -> None:
         """`flow_map` lit la carte de coûts du récepteur (écrite par `flood`) et écrit
-        une direction par case dans la grille de sortie : l'argument est une grille RAM
-        de ce script (en écriture, donc pas une grille peinte en lecture seule)."""
-        if not (isinstance(args[0], ExprName) and args[0].name in self._grids):
+        une direction par case dans la grille de sortie : l'argument est une grille où
+        l'on peut écrire (une `grid(...)` de ce script ou une grille RAM de la scène),
+        jamais une grille peinte en lecture seule."""
+        if not self._is_writable_grid_expr(args[0]):
             self.errors.append(CheckError(
                 "error",
-                f"{name}:flow_map(): the argument is the output, a grid this script"
-                " declares (a `grid(...)`) of the same size; each cell gets a direction"
-                " 0..3 toward the source."))
+                f"{name}:flow_map(): the argument is the output, a writable grid (a"
+                " `grid(...)` of this script or a RAM data.grid.<Name>) of the same size;"
+                " each cell gets a direction 0..3 toward the source."))
 
     def _check_regions_args(self, name: str, args: list) -> None:
         """`regions` découpe le récepteur en zones de valeur égale et écrit un id par
-        case dans la grille de sortie : l'argument est une grille RAM de ce script (en
-        écriture, donc pas une grille peinte en lecture seule)."""
-        if not (isinstance(args[0], ExprName) and args[0].name in self._grids):
+        case dans la grille de sortie : l'argument est une grille où l'on peut écrire
+        (une `grid(...)` de ce script ou une grille RAM de la scène), jamais une grille
+        peinte en lecture seule."""
+        if not self._is_writable_grid_expr(args[0]):
             self.errors.append(CheckError(
                 "error",
-                f"{name}:regions(): the argument is the output, a grid this script"
-                " declares (a `grid(...)`) of the same size; each cell gets its region"
-                " id 1..N."))
+                f"{name}:regions(): the argument is the output, a writable grid (a"
+                " `grid(...)` of this script or a RAM data.grid.<Name>) of the same size;"
+                " each cell gets its region id 1..N."))
 
     def _mark_grid_ref(self, e) -> None:
         """Une grille passée comme RÉFÉRENCE à une opération : on la soustrait au
@@ -2564,8 +2590,16 @@ class Checker:
                         self._check_args(_key, api, e.args, receiver=f"self.{e.obj.field}",
                                          library=(self.ctx.child_sprites or {}).get(e.obj.field))
                 elif data_grid_ref(e.obj) is not None:
+                    gname = data_grid_ref(e.obj)
                     self._grids_lues.add(id(e.obj))
-                    self._check_grid_method(data_grid_ref(e.obj), e.method, e.args)
+                    # Une grille RAM de la scène accepte les mêmes méthodes d'écriture
+                    # qu'une grille RAM de script (fill, target, flood…), partagées par
+                    # tous les scripts de la scène ; une grille peinte en ROM n'a que
+                    # :at (lecture seule).
+                    if self._scene_ram_grid(gname) is not None:
+                        self._check_ram_grid_method(gname, e.method, e.args)
+                    else:
+                        self._check_grid_method(gname, e.method, e.args)
                 elif ref is None and not is_actor_call(e.obj):
                     self.errors.append(CheckError(
                         "error",

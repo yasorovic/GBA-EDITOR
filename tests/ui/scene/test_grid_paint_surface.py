@@ -240,6 +240,38 @@ def test_creer_une_grille_la_dimensionne_la_selectionne_et_l_annule(qapp, monkey
     history.clear()
 
 
+def test_la_case_ram_bascule_la_grille_et_s_annule(qapp):
+    """La case « Partagée (RAM) » n'apparaît que pour une grille, bascule son
+    drapeau `ram` de façon annulable, et reflète l'état du modèle."""
+    history = get_history()
+    history.clear()
+    editor = SceneEditor()
+    grid = Grid(name="Flow", step=16, cells=[[0, 0], [0, 0]])
+    scene = Scene(name="Arena", grids=[grid])
+    editor._project = type("Project", (), {"active_scene": scene})()
+    editor._canvas_w = editor._canvas_h = 32
+    saves = []
+    editor.scene_changed.connect(lambda: saves.append(True))
+    editor._canvas_container.refresh_paint_surfaces(scene)
+    editor._canvas_container.select_paint_surface("grid:Flow")
+
+    chk = editor._canvas_container._grid_ram
+    # Montrée pour une grille, décochée tant que la grille est en ROM.
+    assert not chk.isHidden() and chk.isChecked() is False
+
+    editor._on_grid_ram_changed(True)
+    assert grid.ram is True and saves == [True]
+
+    assert history.undo() and grid.ram is False
+    assert chk.isChecked() is False           # resynchronisée par l'annulation
+    assert history.redo() and grid.ram is True
+    history.clear()
+
+    # Sur la collision, la case disparaît : le drapeau RAM est propre aux grilles.
+    editor._canvas_container.select_paint_surface("collision")
+    assert editor._canvas_container._grid_ram.isHidden()
+
+
 def test_changer_le_pas_reinstalle_l_outil_et_s_annule(qapp, monkeypatch):
     class Dispatcher:
         def __init__(self):

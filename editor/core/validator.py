@@ -714,8 +714,13 @@ def _check_scene_grids(ctx):
                         f"Grid '{grid.name}': painted value {value.value} has no name, so scripts cannot use a "
                         "named constant for it. Name the value or erase its cells.")
             if grid.name not in read:
+                # `read` réunit toute citation `data.grid.<Nom>` de tous les scripts
+                # de la scène, lecture comme écriture : une grille RAM écrite par un
+                # script (la scène) et lue par un autre (un acteur) n'est donc pas
+                # signalée. L'avertissement ne tombe que sur une grille citée nulle part.
                 ctx.warn(None,
-                    f"Grid '{grid.name}' of scene '{scene.name}' is never read by a script compiled for this scene.")
+                    f"Grid '{grid.name}' of scene '{scene.name}' is never read or written by a script "
+                    "compiled for this scene.")
     ctx.focus(None)
 
 

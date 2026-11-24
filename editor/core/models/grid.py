@@ -83,6 +83,12 @@ class Grid:
     step: int = GRID_STEP_DEFAULT
     values: list = field(default_factory=list)   # list[GridValue], la légende
     cells: list = field(default_factory=list)    # list[row][col], un octet par case
+    # Grille modifiable au runtime : ses cases sont copiées en RAM à l'entrée de
+    # scène (germe = `cells`, ou zéro si vide), partagées par tous les scripts de
+    # la scène via `data.grid.<Nom>`, et inscriptibles par les méthodes de grille.
+    # Fausse par défaut : une grille reste `const` en ROM, lue seule. Même patron
+    # que `Scene.collision_mutable`.
+    ram: bool = False
 
     def __post_init__(self):
         # Invariant : `values` tient toujours des `GridValue`, quel que soit le
@@ -152,6 +158,8 @@ class Grid:
             "step": self.step,
             "values": [v.to_dict() for v in self.values],
             "cells": self.cells,
+            # Absent du JSON quand faux, comme `Scene.collision_mutable`.
+            **({"ram": True} if self.ram else {}),
         }
 
     @classmethod
@@ -163,4 +171,5 @@ class Grid:
             values=[GridValue.from_dict(v) for v in d.get("values", []) if isinstance(v, dict)],
             cells=[[max(GRID_VALUE_EMPTY, min(GRID_VALUE_MAX, int(c))) for c in row]
                    for row in d.get("cells", [])],
+            ram=bool(d.get("ram", False)),
         )

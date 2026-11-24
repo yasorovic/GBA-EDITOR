@@ -5,6 +5,7 @@ from __future__ import annotations
 from codegen.c_names import sym as c_sym, scene_actor_sym
 from codegen.runtime_codegen.gen_scene_query import actor_script, ui_image_sprites
 from codegen.runtime_codegen.physics.areas import area_extern_lines
+from codegen.runtime_codegen.grids import project_has_ram_grid
 from scripting.api import AREA_EVENTS
 
 
@@ -25,6 +26,11 @@ def include_lines(p, all_scene_data: list[dict], scene_bgi: list[list[dict]], pr
     _add_inc('#include "globals.h"')
     _add_inc('#include "constants.h"')
     _add_inc('#include "gba_debug.h"')   # mesure de budget par frame
+    # Grilles RAM : main.c en germe les tampons à l'entrée de scène, il lui faut
+    # donc leurs `extern` et leurs macros de géométrie (grids.h). Inclus seulement
+    # si le projet en a une, pour ne rien ajouter aux projets sans grille RAM.
+    if project_has_ram_grid(p):
+        _add_inc('#include "grids.h"')
     if has_sound and soundbank_h.exists():
         _add_inc('#include <maxmod.h>')
         _add_inc(f'#include "{soundbank_h.name}"')

@@ -61,6 +61,25 @@ def test_une_grille_lue_par_un_behavior_n_est_pas_dite_inutilisee(tmp_path):
     assert not any("never read" in message for message in _messages(project))
 
 
+def test_une_grille_ram_ecrite_mais_pas_lue_n_est_pas_dite_jamais_lue(tmp_path):
+    """Une grille RAM que la scène ÉCRIT (sans la lire) est utilisée : l'écriture
+    `data.grid.<Nom>:...` compte comme citation, donc pas de faux positif."""
+    project = _project(tmp_path)
+    project.active_scene.grids.append(Grid(name="Flow", ram=True, cells=[[0]]))
+    project.active_scene.script = _script(
+        project, "Scene.lua", "function on_update()\n  data.grid.Flow:fill(0)\nend\n")
+
+    assert not any("never read" in message for message in _messages(project))
+
+
+def test_une_grille_ram_citee_nulle_part_reste_signalee(tmp_path):
+    """Écrite ou lue par aucun script : toujours signalée, RAM ou non."""
+    project = _project(tmp_path)
+    project.active_scene.grids.append(Grid(name="Flow", ram=True, cells=[[0]]))
+
+    assert any("never read or written" in message for message in _messages(project))
+
+
 def test_un_commentaire_ou_une_chaine_ne_compte_pas_comme_lecture(tmp_path):
     project = _project(tmp_path)
     project.active_scene.grids.append(Grid(name="Terrain", cells=[[0]]))

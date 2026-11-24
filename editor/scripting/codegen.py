@@ -2392,27 +2392,44 @@ class CodeGen:
         """`g:step_at(position)` → `grid_step_at(...)` : lit le champ de flux à une
         position MONDE (vec2) et rend le pas UNITAIRE vers la source (un vec2
         -1/0/1 par axe ; (0,0) à la source ou hors de portée). Couche itération
-        au-dessus de `:at` : évite de décoder la direction à la main. Grille RAM du
-        script seulement (une grille peinte n'est pas un champ de flux)."""
-        if not (isinstance(e.obj, ExprName) and e.obj.name in self._grids
-                and e.method == "step_at" and len(e.args) == 1):
+        au-dessus de `:at` : évite de décoder la direction à la main. Le récepteur
+        est une grille RAM du script, ou une grille RAM de la scène
+        (`data.grid.<Nom>`, le champ de flux partagé que l'acteur lit) : une grille
+        peinte en ROM n'est pas un champ de flux, le checker l'a refusée."""
+        if not (e.method == "step_at" and len(e.args) == 1):
             return None
-        cols, rows, step = self._grids[e.obj.name]
-        base = self._name_storage(e.obj.name)
+        if isinstance(e.obj, ExprName) and e.obj.name in self._grids:
+            cols, rows, step = self._grids[e.obj.name]
+            base = self._name_storage(e.obj.name)
+        else:
+            grid = self._grid_of(e.obj)
+            if grid is None or not grid.ram:
+                return None
+            cols, rows, step = grid.cols, grid.rows, grid.step
+            base = grid.sym
+            self._uses_grids = True
         pe = self._expr(e.args[0])
         return (f"grid_step_at({base}, {cols}, {rows}, {self._grid_shift(step)}, "
                 f"({pe}).x, ({pe}).y)")
 
     def _grid_write(self, e: ExprInvoke) -> Optional[str]:
-        """`g:fill(v)` / `g:fill_rect(x, y, w, h, v)` sur une grille RAM : une
-        opération d'ÉCRITURE, posée comme une instruction. Le checker a déjà
-        validé la méthode et ses arguments ; l'inline du moteur borne le
-        rectangle à la grille. Les grilles peintes (`data.grid`) n'y passent pas :
-        elles sont en lecture seule, le checker les a déjà refusées."""
-        if not (isinstance(e.obj, ExprName) and e.obj.name in self._grids):
-            return None
-        cols, rows, _step = self._grids[e.obj.name]
-        base = self._name_storage(e.obj.name)
+        """`g:fill(v)` / `g:fill_rect(x, y, w, h, v)` : une opération d'ÉCRITURE,
+        posée comme une instruction. Le récepteur est soit une grille RAM du
+        script (une variable), soit une grille RAM de la scène (`data.grid.<Nom>`,
+        partagée par tous ses scripts) : le même tampon RAM, écrit par l'une et lu
+        par l'autre. Le checker a déjà validé la méthode, ses arguments et que la
+        grille est bien inscriptible ; une grille peinte en ROM est en lecture
+        seule, refusée là-bas. L'inline du moteur borne le rectangle à la grille."""
+        if isinstance(e.obj, ExprName) and e.obj.name in self._grids:
+            cols, rows, _step = self._grids[e.obj.name]
+            base = self._name_storage(e.obj.name)
+        else:
+            grid = self._grid_of(e.obj)
+            if grid is None or not grid.ram:
+                return None
+            cols, rows, _step = grid.cols, grid.rows, grid.step
+            base = grid.sym
+            self._uses_grids = True
         if e.method == "fill" and len(e.args) == 1:
             return f"grid_fill({base}, {rows * cols}, {self._expr(e.args[0])})"
         if e.method == "fill_rect" and len(e.args) == 5:

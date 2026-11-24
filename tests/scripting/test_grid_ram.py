@@ -262,7 +262,7 @@ def test_flow_map_prend_un_argument():
 
 def test_flow_map_refuse_une_sortie_qui_n_est_pas_une_grille():
     (msg,) = _erreurs("portee:flow_map(couts)", decl=FLOW_DECL)
-    assert "the argument is the output, a grid" in msg
+    assert "the argument is the output, a writable grid" in msg
 
 
 def test_regions_prend_un_argument():
@@ -273,7 +273,7 @@ def test_regions_prend_un_argument():
 def test_regions_refuse_une_sortie_qui_n_est_pas_une_grille():
     (msg,) = _erreurs("local n = terrain:regions(sac)",
                       decl=REGIONS_DECL + "local sac = array(4)\n")
-    assert "the argument is the output, a grid" in msg
+    assert "the argument is the output, a writable grid" in msg
 
 
 def test_une_grille_peinte_reste_en_lecture_seule():
