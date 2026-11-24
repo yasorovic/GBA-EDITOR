@@ -459,6 +459,15 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc=("Moves this frame by at most `speed` px toward the position `target` (a "
              "vec2); stops exactly on it without overshooting."),
     ),
+    "actor:move_and_collide": ApiFunc(
+        lua_name="actor:move_and_collide", c_func="actor_move_and_collide",
+        params=[Param("delta", PARAM_VEC2)], ret="bool", self_first=True,
+        doc=("Moves by `delta` (a vec2 of pixels: direction AND distance) and stops at "
+             "solid map tiles (walls), sliding along the free axis. Returns true if a wall "
+             "stopped part of the move. Unlike `move`, it reacts to the map; actor-vs-actor "
+             "separation stays the job of block-response shapes. Ex: "
+             "self:move_and_collide(flow:step_at(self.position) * 2)"),
+    ),
 
     # ── Physics : vélocité stockée sur l'actor ────────────────────────
     # La vélocité est un état : la propriété `body.velocity` (cf. RUNTIME_PROPS).

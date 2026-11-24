@@ -1002,7 +1002,12 @@ class Checker:
         "flow_map": ((1,), "flow_map(dirs)"),
         "regions": ((1,), "regions(out)"),
         "sample_collision": ((0,), "sample_collision()"),
+        "step_at": ((1,), "step_at(position)"),
+        "target": ((1, 2), "target(position[, budget])"),
     }
+    # Plafond du scratch interne de `target` (cf. GRID_TARGET_MAX dans
+    # runtime_api_inline.h) : une grille plus grande déborderait les tampons.
+    _GRID_TARGET_MAX = 1024
 
     def _is_grid_expr(self, e) -> bool:
         """`e` désigne-t-il une grille : une grille RAM (nom) ou une grille peinte
@@ -1058,6 +1063,38 @@ class Checker:
             self._check_flow_map_args(name, args)
         elif method == "regions":
             self._check_regions_args(name, args)
+        elif method == "step_at":
+            self._check_step_at_args(name, args)
+        elif method == "target":
+            self._check_target_args(name, args)
+
+    def _check_target_args(self, name: str, args: list) -> None:
+        """`target(position[, budget])` : remplit la grille d'un champ de flux vers
+        une POSITION monde (un vec2), en contournant la collision de la scène ;
+        `budget` facultatif plafonne la portée. Le scratch interne borne la taille
+        de la grille (`_GRID_TARGET_MAX`)."""
+        if infer_vec_type(args[0], self._vec_types, self._ref_types, self._kinds) != "vec2":
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:target(): the first argument is a world position, a vec2"
+                " (self.position, or a vec2 of this script)."))
+        dims = self._grids.get(name)
+        if dims and dims[0] * dims[1] > self._GRID_TARGET_MAX:
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:target(): the grid is too large ({dims[0]}x{dims[1]} ="
+                f" {dims[0] * dims[1]} cells); target()'s internal scratch is capped at"
+                f" {self._GRID_TARGET_MAX} cells. Flood and flow_map it by hand for a bigger grid."))
+
+    def _check_step_at_args(self, name: str, args: list) -> None:
+        """`step_at` prend une POSITION monde (un vec2), pas deux entiers : la case
+        se déduit du pas de la grille, et le résultat est un vec2 (le pas unitaire
+        vers la source)."""
+        if infer_vec_type(args[0], self._vec_types, self._ref_types, self._kinds) != "vec2":
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:step_at(): the argument is a world position, a vec2"
+                " (self.position, or a vec2 of this script)."))
 
     def _check_path_to_args(self, name: str, args: list) -> None:
         """`path_to` écrit ses pas dans un array : le 3e argument est la sortie,

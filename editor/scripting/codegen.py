@@ -2388,6 +2388,21 @@ class CodeGen:
         return (f"grid_value_at({grid.sym}, {grid.width}, {grid.height}, "
                 f"{grid.shift}, {px}, {py})")
 
+    def _grid_step_at(self, e: ExprInvoke) -> Optional[str]:
+        """`g:step_at(position)` → `grid_step_at(...)` : lit le champ de flux à une
+        position MONDE (vec2) et rend le pas UNITAIRE vers la source (un vec2
+        -1/0/1 par axe ; (0,0) à la source ou hors de portée). Couche itération
+        au-dessus de `:at` : évite de décoder la direction à la main. Grille RAM du
+        script seulement (une grille peinte n'est pas un champ de flux)."""
+        if not (isinstance(e.obj, ExprName) and e.obj.name in self._grids
+                and e.method == "step_at" and len(e.args) == 1):
+            return None
+        cols, rows, step = self._grids[e.obj.name]
+        base = self._name_storage(e.obj.name)
+        pe = self._expr(e.args[0])
+        return (f"grid_step_at({base}, {cols}, {rows}, {self._grid_shift(step)}, "
+                f"({pe}).x, ({pe}).y)")
+
     def _grid_write(self, e: ExprInvoke) -> Optional[str]:
         """`g:fill(v)` / `g:fill_rect(x, y, w, h, v)` sur une grille RAM : une
         opération d'ÉCRITURE, posée comme une instruction. Le checker a déjà
@@ -2407,6 +2422,15 @@ class CodeGen:
             return (f"grid_fill_rect({base}, {cols}, {rows}, "
                     f"{self._index(x)}, {self._index(y)}, "
                     f"{self._expr(w)}, {self._expr(h)}, {self._expr(v)})")
+        if e.method == "target" and len(e.args) in (1, 2):
+            # Couche itération : remplit le récepteur d'un champ de flux vers une
+            # position MONDE (vec2), en contournant la collision vivante. L'inline
+            # fait sample_collision + flood uniforme + flow_map avec son propre
+            # scratch. `budget` facultatif (254 = portée maximale par défaut).
+            pe = self._expr(e.args[0])
+            budget = self._expr(e.args[1]) if len(e.args) == 2 else "254"
+            return (f"grid_target({base}, {cols}, {rows}, {self._grid_shift(_step)}, "
+                    f"({pe}).x, ({pe}).y, {budget})")
         if e.method == "flood" and len(e.args) in (3, 5, 6):
             sx, sy, budget = e.args[:3]
             terrain = e.args[3] if len(e.args) >= 5 else None
@@ -2497,6 +2521,9 @@ class CodeGen:
         cell = self._grid_at(e)
         if cell is not None:
             return cell
+        step = self._grid_step_at(e)
+        if step is not None:
+            return step
         write = self._grid_write(e)
         if write is not None:
             return write

@@ -1403,6 +1403,10 @@ extern void collision_fill_rect(int tx, int ty, int w, int h, int tile);
    bloquée (1) si une sous-tuile de 8 px n'est pas vide, sinon 0. Définie avec la physique. */
 extern void collision_sample(unsigned char *out, int cols, int rows, int step);
 
+/* Déplace l'acteur de `delta` (px) puis le repousse des murs (couche mouvement).
+   Définie avec la physique, après `resolve_actor_tiles`. Rend 1 si un mur a buté. */
+extern int actor_move_and_collide(Actor* s, Vec2 delta);
+
 /* Grille de valeurs d'une scène — la case qui contient un point du monde.
    Le build passe le tableau, sa géométrie et son décalage, tous connus à la
    compilation (`grids.h`) : la grille est résolue par son nom au build, elle n'a
@@ -1414,6 +1418,21 @@ static inline int grid_value_at(const unsigned char *cells, int w, int h,
     const int tx = px >> shift, ty = py >> shift;
     if (tx < 0 || ty < 0 || tx >= w || ty >= h) return 0;
     return (int)cells[ty * w + tx];
+}
+
+/* grid_step_at : lit un champ de flux (écrit par grid_flow_map) à une position
+   MONDE et rend le pas UNITAIRE vers la source : (1,0) droite, (-1,0) gauche,
+   (0,1) bas, (0,-1) haut, (0,0) à la source (4), hors de portée (255) ou hors
+   grille. Couche itération au-dessus de grid_value_at. */
+static inline Vec2 grid_step_at(const unsigned char *dirs, int w, int h,
+                                int shift, int px, int py) {
+    switch (grid_value_at(dirs, w, h, shift, px, py)) {
+        case 0:  return (Vec2){ 1,  0};
+        case 1:  return (Vec2){-1,  0};
+        case 2:  return (Vec2){ 0,  1};
+        case 3:  return (Vec2){ 0, -1};
+        default: return (Vec2){ 0,  0};
+    }
 }
 
 /* Grille de travail (RAM) — remplir toutes les cases d'une même valeur. `n` est
@@ -1584,6 +1603,22 @@ static inline void grid_flow_map(const unsigned char *cost, unsigned char *dirs,
             dirs[i] = (unsigned char)bestdir;            /* step toward the source */
         }
     }
+}
+
+/* grid_target : couche itération. Remplit `dirs` d'un champ de flux vers une
+   position MONDE, en contournant la collision VIVANTE de la scène. Fait tout en
+   interne : échantillonne la collision, flood à coût uniforme, flow_map. Le
+   scratch (cost + obstacles) est borné à GRID_TARGET_MAX cases ; le checker
+   refuse une grille plus grande. `budget` plafonne la portée. */
+#define GRID_TARGET_MAX 1024
+static inline void grid_target(unsigned char *dirs, int w, int h, int shift,
+                               int px, int py, int budget) {
+    static unsigned char grid_target_cost[GRID_TARGET_MAX];
+    static unsigned char grid_target_obst[GRID_TARGET_MAX];
+    collision_sample(grid_target_obst, w, h, 1 << shift);
+    grid_flood(grid_target_cost, 0, grid_target_obst, w, h,
+               px >> shift, py >> shift, budget, 0, 0);
+    grid_flow_map(grid_target_cost, dirs, w, h);
 }
 
 /* grid_regions : label the connected groups of EQUAL-value cells with an id

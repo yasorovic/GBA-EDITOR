@@ -361,6 +361,11 @@ def infer_vec_type(expr, local_types: dict[str, Optional[str]],
         return api.ret if (api and api.ret in VEC_CONSTRUCTORS) else None
 
     if isinstance(expr, ExprInvoke):
+        # `grid:step_at(position)` rend un vec2 (le pas unitaire vers la source).
+        # Méthode de grille interceptée avant le catalogue : son type est connu
+        # ici sans passer par `RUNTIME_API`. Le checker a garanti le récepteur.
+        if expr.method == "step_at":
+            return "vec2"
         api = RUNTIME_API.get(f"{REF_ACTOR}:{expr.method}")
         return api.ret if (api and api.ret in VEC_CONSTRUCTORS) else None
 

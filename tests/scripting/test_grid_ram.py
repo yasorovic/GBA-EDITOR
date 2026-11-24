@@ -200,6 +200,51 @@ def test_path_to_prend_trois_arguments():
     assert "takes 3 argument(s)" in msg and ":path_to(x, y, out)" in msg
 
 
+def test_step_at_prend_une_position_vec2():
+    """`step_at` prend une position monde (un vec2), pas deux entiers."""
+    assert _erreurs("local d = flux:step_at(self.position)",
+                    decl="local flux = grid(4, 3, 16)\n") == []
+    (msg,) = _erreurs("local d = flux:step_at(2, 1)",
+                      decl="local flux = grid(4, 3, 16)\n")
+    assert "takes 1 argument(s)" in msg
+
+
+def test_step_at_refuse_un_argument_scalaire():
+    (msg,) = _erreurs("local d = flux:step_at(3)",
+                      decl="local flux = grid(4, 3, 16)\n")
+    assert "a world position, a vec2" in msg
+
+
+def test_step_at_rend_un_vec2():
+    """Le résultat est un vec2 : il s'affecte à une vélocité et se met à l'échelle."""
+    code = _emis("self.velocity = flux:step_at(self.position) * 220",
+                 decl="local flux = grid(4, 3, 16)\n")
+    assert "grid_step_at(flux, 4, 3, 4," in code
+    assert "vec2_scale(" in code
+
+
+def test_target_sans_budget_emet_la_portee_maximale():
+    """`target(position)` : une seule grille, l'inline fait tout en interne."""
+    code = _emis("flux:target(self.position)", decl="local flux = grid(4, 3, 16)\n")
+    assert "grid_target(flux, 4, 3, 4," in code and ", 254)" in code
+
+
+def test_target_accepte_un_budget():
+    code = _emis("flux:target(self.position, 6)", decl="local flux = grid(4, 3, 16)\n")
+    assert "grid_target(flux, 4, 3, 4," in code and ", 6)" in code
+
+
+def test_target_refuse_une_position_scalaire():
+    (msg,) = _erreurs("flux:target(3)", decl="local flux = grid(4, 3, 16)\n")
+    assert "a world position, a vec2" in msg
+
+
+def test_target_refuse_une_grille_trop_grande():
+    """Le scratch interne borne la taille (GRID_TARGET_MAX = 1024 cases)."""
+    (msg,) = _erreurs("flux:target(self.position)", decl="local flux = grid(40, 30, 8)\n")
+    assert "too large" in msg and "1024 cells" in msg
+
+
 def test_path_to_refuse_une_sortie_qui_n_est_pas_un_array():
     (msg,) = _erreurs("local n = portee:path_to(3, 2, sol)", decl=PATH_DECL)
     assert "the 3rd argument is the output, an array" in msg
