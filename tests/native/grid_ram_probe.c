@@ -18,7 +18,7 @@ unsigned char sol[GRID_RAM_ROWS * GRID_RAM_COLS];
 int couts[3];
 
 /* Output of path_to: one direction code (0..3) per step, sized by the caller. */
-unsigned char pas[8];
+int pas[8];   /* comme un `array` de script : des entiers (cf. grid_path_to) */
 
 /* Output of flow_map: one direction code per cell toward the source. */
 unsigned char flux[GRID_RAM_ROWS * GRID_RAM_COLS];

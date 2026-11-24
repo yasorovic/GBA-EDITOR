@@ -175,9 +175,14 @@ def test_fill_rect_prend_cinq_arguments():
     assert "takes 5 argument(s)" in msg and ":fill_rect(x, y, w, h, value)" in msg
 
 
-def test_flood_prend_cinq_ou_six_arguments():
+def test_flood_prend_trois_cinq_ou_six_arguments():
     (msg,) = _erreurs("portee:flood(1, 1, 5, sol)", decl=FLOOD_DECL)
-    assert "takes 5 or 6 argument(s)" in msg
+    assert "takes 3 or 5 or 6 argument(s)" in msg
+
+
+def test_flood_sans_terrain_est_un_cout_uniforme():
+    """`flood(x, y, budget)` : terrain et coûts facultatifs, rien à signaler."""
+    assert _erreurs("portee:flood(1, 1, 5)", decl=FLOOD_DECL) == []
 
 
 def test_flood_refuse_un_terrain_qui_n_est_pas_une_grille():

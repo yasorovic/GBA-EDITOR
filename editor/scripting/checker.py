@@ -996,7 +996,7 @@ class Checker:
         "at": ((2,), "at(x, y)"),
         "fill": ((1,), "fill(value)"),
         "fill_rect": ((5,), "fill_rect(x, y, w, h, value)"),
-        "flood": ((5, 6), "flood(x, y, budget, terrain, costs[, blocked])"),
+        "flood": ((3, 5, 6), "flood(x, y, budget[, terrain, costs[, blocked]])"),
         "path_to": ((3,), "path_to(x, y, out)"),
         "line_of_sight": ((4,), "line_of_sight(x0, y0, x1, y1)"),
         "flow_map": ((1,), "flow_map(dirs)"),
@@ -1100,10 +1100,14 @@ class Checker:
             self._grids_lues.add(id(e))
 
     def _check_flood_args(self, name: str, args: list) -> None:
-        """`flood` lit une grille de terrain, un array de coûts, et une grille
-        d'occupation facultative : chacun à sa place et de son type, sinon le C
-        émis ne tiendrait pas. (Les grilles passées en argument sont déjà marquées
-        comme références par `_check_ram_grid_method`.)"""
+        """`flood` prend une case de départ et un budget ; le terrain (une grille)
+        et les coûts (un array indexé par la valeur de terrain) sont FACULTATIFS,
+        et vont ensemble (sans eux, le coût est uniforme de 1 par pas) ; une grille
+        d'occupation `blocked` est facultative par-dessus. Chacun à sa place et de
+        son type, sinon le C émis ne tiendrait pas. (Les grilles passées en argument
+        sont déjà marquées comme références par `_check_ram_grid_method`.)"""
+        if len(args) == 3:
+            return                      # flood(x, y, budget) : coût uniforme, rien à vérifier
         if not self._is_grid_expr(args[3]):
             self.errors.append(CheckError(
                 "error",

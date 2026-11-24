@@ -2407,13 +2407,20 @@ class CodeGen:
             return (f"grid_fill_rect({base}, {cols}, {rows}, "
                     f"{self._index(x)}, {self._index(y)}, "
                     f"{self._expr(w)}, {self._expr(h)}, {self._expr(v)})")
-        if e.method == "flood" and len(e.args) in (5, 6):
-            sx, sy, budget, terrain, couts = e.args[:5]
+        if e.method == "flood" and len(e.args) in (3, 5, 6):
+            sx, sy, budget = e.args[:3]
+            terrain = e.args[3] if len(e.args) >= 5 else None
+            couts = e.args[4] if len(e.args) >= 5 else None
             bloque = e.args[5] if len(e.args) == 6 else None
-            tptr = self._grid_pointer(terrain)
-            cptr = self._array_pointer(couts)
-            if tptr is None or cptr is None:
-                return None          # le checker a déjà nommé le mauvais argument
+            # Terrain et coûts facultatifs : sans eux, coût uniforme (terrain NULL,
+            # costs NULL, costs_len 0), l'inline ajoute 1 par pas.
+            tptr, cp0, cp1 = "0", "0", "0"
+            if terrain is not None:
+                t = self._grid_pointer(terrain)
+                c = self._array_pointer(couts)
+                if t is None or c is None:
+                    return None      # le checker a déjà nommé le mauvais argument
+                tptr, cp0, cp1 = t, c[0], c[1]
             bptr = "0"
             if bloque is not None:
                 b = self._grid_pointer(bloque)
@@ -2424,7 +2431,7 @@ class CodeGen:
             # terrain et bloque la partagent (le checker le vérifie quand il peut).
             return (f"grid_flood({base}, {tptr}, {bptr}, {cols}, {rows}, "
                     f"{self._index(sx)}, {self._index(sy)}, {self._expr(budget)}, "
-                    f"{cptr[0]}, {cptr[1]})")
+                    f"{cp0}, {cp1})")
         if e.method == "path_to" and len(e.args) == 3:
             tx, ty, out = e.args
             optr = self._array_pointer(out)

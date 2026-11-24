@@ -1472,11 +1472,16 @@ static inline void grid_flood(unsigned char *out, const unsigned char *terrain,
                     if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
                     const int ni = ny * w + nx;
                     if (blocked && blocked[ni]) continue;
-                    const int tv = terrain[ni];
-                    if (tv >= costs_len) continue;          /* terrain inconnu : mur */
-                    const int entry = costs[tv];
-                    if (entry <= 0) continue;               /* coût nul ou négatif : mur */
-                    const int nc = here + entry;
+                    int nc;
+                    if (terrain && costs) {                 /* coût par type de terrain */
+                        const int tv = terrain[ni];
+                        if (tv >= costs_len) continue;      /* terrain inconnu : mur */
+                        const int entry = costs[tv];
+                        if (entry <= 0) continue;           /* coût nul ou négatif : mur */
+                        nc = here + entry;
+                    } else {
+                        nc = here + 1;                      /* coût uniforme : aucun terrain donné */
+                    }
                     if (nc <= budget && nc < out[ni]) {
                         out[ni] = (unsigned char)nc;
                         changed = 1;
@@ -1495,7 +1500,7 @@ static inline void grid_flood(unsigned char *out, const unsigned char *terrain,
    (0 right, 1 left, 2 down, 3 up). Returns the number of steps written, bounded
    by out_len; 0 when the target is unreachable (cost 255) or is the source. */
 static inline int grid_path_to(const unsigned char *cost, int w, int h,
-                               int tx, int ty, unsigned char *out, int out_len) {
+                               int tx, int ty, int *out, int out_len) {
     static const int dx[4] = {1, -1, 0, 0};
     static const int dy[4] = {0, 0, 1, -1};
     if (tx < 0 || ty < 0 || tx >= w || ty >= h) return 0;
