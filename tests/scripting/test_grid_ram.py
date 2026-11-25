@@ -158,7 +158,7 @@ def test_une_seule_dimension_ne_designe_pas_une_case():
 
 def test_une_methode_inconnue_est_refusee():
     (msg,) = _erreurs("local v = terrain:lire(1, 2)")
-    assert "a grid's methods are :value_at, :fill, :fill_rect, :regions" in msg
+    assert "a grid's methods are :value_at, :contains, :fill, :fill_rect, :copy_from, :regions" in msg
 
 
 def test_value_at_prend_deux_arguments():
@@ -410,6 +410,101 @@ def test_sample_collision_emet_l_appel_avec_le_pas():
     assert ligne == "collision_sample(ai, 2, 2, 16)"
 
 
+# ── Tranche 2 : contains, copy_from, reachable, cost_at, arrived ───
+
+COPY_DECL = DECL + "local src = grid(4, 3, 16)\n"
+NAV2_DECL = "local field = grid(4, 3, 16)\n"
+
+
+def test_contains_passe():
+    assert _erreurs("local b = terrain:contains(32, 16)") == []
+
+
+def test_contains_prend_deux_arguments():
+    (msg,) = _erreurs("local b = terrain:contains(1)")
+    assert "takes 2 argument(s)" in msg and ":contains(x, y)" in msg
+
+
+def test_contains_emet_la_geometrie_sans_pointeur():
+    """`contains` ne lit aucune case : juste la géométrie, pas de pointeur de grille."""
+    assert _expression("local v = terrain:contains(32, 16)") == "grid_contains(4, 3, 4, 32, 16)"
+
+
+def test_copy_from_passe():
+    assert _erreurs("terrain:copy_from(src)", decl=COPY_DECL) == []
+
+
+def test_copy_from_refuse_une_source_qui_n_est_pas_une_grille():
+    (msg,) = _erreurs("terrain:copy_from(5)", decl=COPY_DECL)
+    assert "the argument is the source, a grid" in msg
+
+
+def test_copy_from_refuse_une_geometrie_differente():
+    (msg,) = _erreurs("terrain:copy_from(small)", decl=DECL + "local small = grid(2, 2, 16)\n")
+    assert "same geometry" in msg
+
+
+def test_copy_from_emet_une_copie_de_n_cases():
+    ligne = next(L.strip() for L in _emis("terrain:copy_from(src)", decl=COPY_DECL).splitlines()
+                 if L.strip().startswith("grid_copy_from(")).rstrip(";")
+    assert ligne == "grid_copy_from(terrain, src, 12)"
+
+
+def test_reachable_cost_at_arrived_passent():
+    assert _erreurs("local b = navigation:reachable(field, self.position)", decl=NAV2_DECL) == []
+    assert _erreurs("local c = navigation:cost_at(field, self.position)", decl=NAV2_DECL) == []
+    assert _erreurs("local b = navigation:arrived(field, self.position)", decl=NAV2_DECL) == []
+
+
+def test_reachable_refuse_une_position_scalaire():
+    (msg,) = _erreurs("local b = navigation:reachable(field, 3)", decl=NAV2_DECL)
+    assert "a world position, a vec2" in msg
+
+
+def test_cost_at_refuse_un_premier_argument_non_grille():
+    (msg,) = _erreurs("local c = navigation:cost_at(sac, self.position)", decl="local sac = array(4)\n")
+    assert "the first argument, the cost map," in msg
+
+
+def test_reachable_cost_at_arrived_emettent_leur_inline():
+    assert "grid_reachable(field, 4, 3, 4," in _emis(
+        "local b = navigation:reachable(field, self.position)", decl=NAV2_DECL)
+    assert "grid_cost_at(field, 4, 3, 4," in _emis(
+        "local c = navigation:cost_at(field, self.position)", decl=NAV2_DECL)
+    assert "grid_arrived(field, 4, 3, 4," in _emis(
+        "local b = navigation:arrived(field, self.position)", decl=NAV2_DECL)
+
+
+# ── Navigation sans grille : arrive, keep_distance ────────────────
+
+def test_arrive_et_keep_distance_passent():
+    assert _erreurs("local d = navigation:arrive(self.position, self.position, 8, 48, 2)") == []
+    assert _erreurs("local d = navigation:keep_distance(self.position, self.position, 16, 64, 2)") == []
+
+
+def test_arrive_prend_cinq_arguments():
+    (msg,) = _erreurs("local d = navigation:arrive(self.position, self.position, 8, 48)")
+    assert ("takes 5 argument(s)" in msg
+            and ":arrive(position, target, stop_radius, slow_radius, max_speed)" in msg)
+
+
+def test_arrive_refuse_une_cible_non_vec2():
+    (msg,) = _erreurs("local d = navigation:arrive(self.position, 3, 8, 48, 2)")
+    assert "the second argument, the target," in msg
+
+
+def test_keep_distance_refuse_une_position_non_vec2():
+    (msg,) = _erreurs("local d = navigation:keep_distance(3, self.position, 16, 64, 2)")
+    assert "the first argument, the position," in msg
+
+
+def test_arrive_et_keep_distance_emettent_leur_inline():
+    assert "nav_arrive(actor_get_position(self), actor_get_position(self), 8, 48, 2)" in _emis(
+        "local d = navigation:arrive(self.position, self.position, 8, 48, 2)")
+    assert "nav_keep_distance(actor_get_position(self), actor_get_position(self), 16, 64, 2)" in _emis(
+        "local d = navigation:keep_distance(self.position, self.position, 16, 64, 2)")
+
+
 # ── Le C réellement émis, compilé et exécuté ──────────────────────
 
 def _inline_du_moteur() -> str:
@@ -424,7 +519,15 @@ def _inline_du_moteur() -> str:
                       r"static inline int grid_path_to\(.*?\n\}\n",
                       r"static inline int grid_line_of_sight\(.*?\n\}\n",
                       r"static inline void grid_flow_map\(.*?\n\}\n",
-                      r"static inline int grid_regions\(.*?\n\}\n"):
+                      r"static inline int grid_regions\(.*?\n\}\n",
+                      r"static inline int grid_contains\(.*?\n\}\n",
+                      r"static inline void grid_copy_from\(.*?\n\}\n",
+                      r"static inline int grid_reachable\(.*?\n\}\n",
+                      r"static inline int grid_cost_at\(.*?\n\}\n",
+                      r"static inline int grid_arrived\(.*?\n\}\n",
+                      r"static inline int isqrt\(.*?\n\}\n",
+                      r"static inline Vec2 nav_arrive\(.*?\n\}\n",
+                      r"static inline Vec2 nav_keep_distance\(.*?\n\}\n"):
         trouve = re.search(signature, source, re.S)
         assert trouve, f"inline introuvable dans runtime_api_inline.h : {signature}"
         morceaux.append(trouve.group(0))
@@ -466,6 +569,37 @@ def test_la_sonde_ecrit_et_relit_dans_le_c_emis(tmp_path):
                                              decl=REGIONS_DECL).splitlines()
                    if "grid_regions(" in L)
     regions = regions[regions.index("grid_regions"):].rstrip(";")
+
+    # Tranche 2 : contains (géométrie seule), copy_from (statement), et les trois
+    # lecteurs de sentinelle du module navigation (position en vec2 littéral,
+    # paramétrée par (px, py) comme `at`).
+    contains = _expression("local v = terrain:contains(111, 222)").replace("111", "(px)").replace("222", "(py)")
+    copy = next(L.strip() for L in _emis("terrain:copy_from(src)", decl=COPY_DECL).splitlines()
+                if L.strip().startswith("grid_copy_from(")).rstrip(";")
+
+    def _nav2(call: str, fn: str) -> str:
+        code = _emis(f"local v = {call}",
+                     decl="local portee = grid(4, 3, 16)\nlocal flux = grid(4, 3, 16)\n")
+        ligne = next(L.strip() for L in code.splitlines() if fn in L)
+        return ligne[ligne.index(fn):].rstrip(";").replace("111", "(px)").replace("222", "(py)")
+
+    reach = _nav2("navigation:reachable(portee, vec2(111, 222))", "grid_reachable(")
+    cost = _nav2("navigation:cost_at(portee, vec2(111, 222))", "grid_cost_at(")
+    arrived = _nav2("navigation:arrived(flux, vec2(111, 222))", "grid_arrived(")
+
+    # Navigation sans grille : deux positions vec2 + trois entiers, paramétrés par
+    # des littéraux distincts (901..907) remplacés par les arguments de la macro.
+    def _steer(call: str, fn: str) -> str:
+        ligne = next(L.strip() for L in _emis(f"local v = {call}").splitlines() if fn in L)
+        expr = ligne[ligne.index(fn):].rstrip(";")
+        for lit, arg in (("901", "(px)"), ("902", "(py)"), ("903", "(tx)"),
+                         ("904", "(ty)"), ("905", "(a)"), ("906", "(b)"), ("907", "(c)")):
+            expr = expr.replace(lit, arg)
+        return expr
+
+    arrive = _steer("navigation:arrive(vec2(901, 902), vec2(903, 904), 905, 906, 907)", "nav_arrive(")
+    keep = _steer("navigation:keep_distance(vec2(901, 902), vec2(903, 904), 905, 906, 907)",
+                  "nav_keep_distance(")
     (tmp_path / "grid_ram_expr.h").write_text(
         "#define GRID_RAM_COLS 4\n"
         "#define GRID_RAM_ROWS 3\n"
@@ -478,7 +612,14 @@ def test_la_sonde_ecrit_et_relit_dans_le_c_emis(tmp_path):
         "#define GRID_RAM_PATH(tx, ty) " + path + "\n"
         "#define GRID_RAM_LOS(x0, y0, x1, y1) " + los + "\n"
         "#define GRID_RAM_FLOW " + flow + "\n"
-        "#define GRID_RAM_REGIONS " + regions + "\n", encoding="utf-8")
+        "#define GRID_RAM_REGIONS " + regions + "\n"
+        "#define GRID_RAM_CONTAINS(px, py) " + contains + "\n"
+        "#define GRID_RAM_COPY " + copy + "\n"
+        "#define GRID_RAM_REACH(px, py) " + reach + "\n"
+        "#define GRID_RAM_COST(px, py) " + cost + "\n"
+        "#define GRID_RAM_ARRIVED(px, py) " + arrived + "\n"
+        "#define GRID_RAM_ARRIVE(px, py, tx, ty, a, b, c) " + arrive + "\n"
+        "#define GRID_RAM_KEEP(px, py, tx, ty, a, b, c) " + keep + "\n", encoding="utf-8")
 
     binaire = tmp_path / "grid_ram_probe"
     env = environnement(compilateur)
@@ -538,3 +679,19 @@ def test_la_sonde_ecrit_et_relit_dans_le_c_emis(tmp_path):
                                          "1", "1", "2", "2",
                                          "1", "3", "3", "2",
                                          "1", "3", "3", "3"]
+    # contains : un point dans la grille (1), un point hors grille (0).
+    assert sortie["CONTAINS"].split() == ["1", "0"]
+    # copy_from : la grille source (100..111) recopiée case pour case.
+    assert sortie["COPY"].split() == [str(100 + i) for i in range(12)]
+    # reachable / cost_at sur la carte de coûts (budget 5) : case (4, 3) atteignable
+    # à coût 5 ; case murée (2, 2) hors de portée (non atteignable, coût -1).
+    assert sortie["REACH"].split() == ["1", "0"]
+    assert sortie["COST"].split() == ["5", "-1"]
+    # arrived sur le champ de flux : la source (1, 1) vaut 4 (arrivé), une autre case non.
+    assert sortie["ARRIVED"].split() == ["1", "0"]
+    # arrive : rampe à mi-approche (dist 50, stop 10, slow 100 -> speed 4 -> (2,3)),
+    # plein régime (slow 40 -> speed 10 -> (6,8)), et nul dans le rayon d'arrêt.
+    assert sortie["ARRIVE"].split() == ["2", "3", "6", "8", "0", "0"]
+    # keep_distance : (0,0) dans la bande, se rapproche au-delà de max (dist 50 > 40
+    # -> (3,4)), s'éloigne sous min (dist 5 < 20 -> (-3,-4)).
+    assert sortie["KEEP"].split() == ["0", "0", "3", "4", "-3", "-4"]

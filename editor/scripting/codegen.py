@@ -2367,26 +2367,32 @@ class CodeGen:
         return f"{grid.sym}[({y}) * {grid.width} + ({x})]"
 
     def _grid_at(self, e: ExprInvoke) -> Optional[str]:
-        """`g:at(px, py)` → `grid_value_at(...)`, en pixels monde.
+        """`g:value_at(px, py)` → `grid_value_at(...)` (la valeur de la case) et
+        `g:contains(px, py)` → `grid_contains(...)` (le point tombe-t-il dans la
+        grille), en pixels monde.
 
         Toute la géométrie est connue à la compilation : la fonction inline ne
         fait qu'un décalage et un test de bornes (cf. `runtime_api_inline.h`), et
-        hors de la grille vaut 0. Vaut pour une grille peinte (`data.grid.T`,
-        résolue par son nom au build) comme pour une grille RAM du script."""
-        if (isinstance(e.obj, ExprName) and e.obj.name in self._grids
-                and e.method == "value_at" and len(e.args) == 2):
-            cols, rows, step = self._grids[e.obj.name]
-            base = self._name_storage(e.obj.name)
-            px, py = (self._expr(a) for a in e.args)
-            return (f"grid_value_at({base}, {cols}, {rows}, "
-                    f"{self._grid_shift(step)}, {px}, {py})")
-        grid = self._grid_of(e.obj)
-        if grid is None or e.method != "value_at" or len(e.args) != 2:
+        hors de la grille `value_at` vaut 0. Vaut pour une grille peinte
+        (`data.grid.T`, résolue par son nom au build) comme pour une grille RAM du
+        script."""
+        if not (e.method in ("value_at", "contains") and len(e.args) == 2):
             return None
-        self._uses_grids = True
+        if isinstance(e.obj, ExprName) and e.obj.name in self._grids:
+            cols, rows, step = self._grids[e.obj.name]
+            base, shift = self._name_storage(e.obj.name), self._grid_shift(step)
+        else:
+            grid = self._grid_of(e.obj)
+            if grid is None:
+                return None
+            self._uses_grids = True
+            cols, rows, base, shift = grid.width, grid.height, grid.sym, grid.shift
         px, py = (self._expr(a) for a in e.args)
-        return (f"grid_value_at({grid.sym}, {grid.width}, {grid.height}, "
-                f"{grid.shift}, {px}, {py})")
+        # `contains` ne lit aucune case : juste la géométrie (le point tombe-t-il
+        # dans la grille), là où `value_at` rend la valeur de la case.
+        if e.method == "contains":
+            return f"grid_contains({cols}, {rows}, {shift}, {px}, {py})"
+        return f"grid_value_at({base}, {cols}, {rows}, {shift}, {px}, {py})"
 
     def _grid_write(self, e: ExprInvoke) -> Optional[str]:
         """`g:fill(v)` / `g:fill_rect(x, y, w, h, v)` / `g:regions(out)` : une
@@ -2423,6 +2429,13 @@ class CodeGen:
             if optr is None:
                 return None
             return f"grid_regions({base}, {optr}, {cols}, {rows})"
+        if e.method == "copy_from" and len(e.args) == 1:
+            # `source` est copiée dans le récepteur ; le checker a vérifié la même
+            # géométrie. `n = rows * cols` cases, un octet chacune.
+            sptr = self._grid_pointer(e.args[0])
+            if sptr is None:
+                return None
+            return f"grid_copy_from({base}, {sptr}, {rows * cols})"
         return None
 
     # ── Le module navigation : analyser une ou plusieurs grilles ─────
@@ -2529,6 +2542,43 @@ class CodeGen:
         pe = self._expr(args[1])
         return (f"grid_step_at({base}, {cols}, {rows}, {self._grid_shift(step)}, "
                 f"({pe}).x, ({pe}).y)")
+
+    def _emit_nav_reachable(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # cost_map : grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, step = info
+        pe = self._expr(args[1])
+        return (f"grid_reachable({base}, {cols}, {rows}, {self._grid_shift(step)}, "
+                f"({pe}).x, ({pe}).y)")
+
+    def _emit_nav_cost_at(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # cost_map : grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, step = info
+        pe = self._expr(args[1])
+        return (f"grid_cost_at({base}, {cols}, {rows}, {self._grid_shift(step)}, "
+                f"({pe}).x, ({pe}).y)")
+
+    def _emit_nav_arrived(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # flow : grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, step = info
+        pe = self._expr(args[1])
+        return (f"grid_arrived({base}, {cols}, {rows}, {self._grid_shift(step)}, "
+                f"({pe}).x, ({pe}).y)")
+
+    # Navigation sans grille : des positions vec2 en entrée, un vec2 en sortie ;
+    # aucune grille à résoudre, juste les expressions d'arguments.
+    def _emit_nav_arrive(self, args: list) -> str:
+        a = [self._expr(x) for x in args]
+        return f"nav_arrive({a[0]}, {a[1]}, {a[2]}, {a[3]}, {a[4]})"
+
+    def _emit_nav_keep_distance(self, args: list) -> str:
+        a = [self._expr(x) for x in args]
+        return f"nav_keep_distance({a[0]}, {a[1]}, {a[2]}, {a[3]}, {a[4]})"
 
     def _grid_pointer(self, expr) -> Optional[str]:
         """Le pointeur C d'une grille désignée par `expr` : une grille RAM (son
@@ -3546,6 +3596,11 @@ _CALL_CUSTOM: dict = {
     "navigation.make_flow":        CodeGen._emit_nav_make_flow,
     "navigation.flow_to":          CodeGen._emit_nav_flow_to,
     "navigation.direction_at":     CodeGen._emit_nav_direction_at,
+    "navigation.reachable":        CodeGen._emit_nav_reachable,
+    "navigation.cost_at":          CodeGen._emit_nav_cost_at,
+    "navigation.arrived":          CodeGen._emit_nav_arrived,
+    "navigation.arrive":           CodeGen._emit_nav_arrive,
+    "navigation.keep_distance":    CodeGen._emit_nav_keep_distance,
     "actor.get":   CodeGen._emit_get_actor,
     # `pressed`/`released` n'ont plus de cas particulier depuis que les
     # séquences ont quitté leur espace de noms (2026-09-27) : un simple

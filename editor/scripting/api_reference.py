@@ -235,14 +235,16 @@ _FUNC_HOME: dict[str, str] = {
     # Les méthodes d'une grille RAM : « grid » n'est ni un module ni un type de
     # référence (c'est une variable de script), donc `_module_of` ne sait pas les
     # rattacher. On les range à la main sous « Grid », à côté de la déclaration.
-    "grid:value_at": "Grid", "grid:fill": "Grid", "grid:fill_rect": "Grid",
-    "grid:regions": "Grid",
+    "grid:value_at": "Grid", "grid:contains": "Grid", "grid:fill": "Grid",
+    "grid:fill_rect": "Grid", "grid:copy_from": "Grid", "grid:regions": "Grid",
     # Le module `navigation` : nouveau, aucune catégorie du JSON ne dit encore où
     # il vit, donc on le range à la main sous « Navigation » (section Gameplay).
     "navigation.sample_collision": "Navigation", "navigation.line_of_sight": "Navigation",
     "navigation.spread_from": "Navigation", "navigation.path_to": "Navigation",
     "navigation.make_flow": "Navigation", "navigation.flow_to": "Navigation",
-    "navigation.direction_at": "Navigation",
+    "navigation.direction_at": "Navigation", "navigation.reachable": "Navigation",
+    "navigation.cost_at": "Navigation", "navigation.arrived": "Navigation",
+    "navigation.arrive": "Navigation", "navigation.keep_distance": "Navigation",
     # Lecture de la carte : l'ancienne méthode de boîte reste compatible mais
     # vit avec son équivalent direct `collision:tile_at`.
     "collision_shape:get_collision_tile": "Collision",

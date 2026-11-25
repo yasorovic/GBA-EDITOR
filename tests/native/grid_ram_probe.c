@@ -6,7 +6,12 @@
  * so this probe runs the very code the build would ship. */
 #include <stdio.h>
 
-#include "grid_inline.h"      /* grid_value_at */
+/* Minimal Vec2 for the navigation macros that pass a world position (vec2(px, py)
+ * emits a `(Vec2){x, y}` compound literal). The engine's Vec2 is richer; here only
+ * .x / .y are read by the emitted expressions. */
+typedef struct { int x, y; } Vec2;
+
+#include "grid_inline.h"      /* grid_value_at, grid_contains, grid_copy_from, grid_reachable, grid_cost_at, grid_arrived */
 #include "grid_ram_expr.h"    /* GRID_RAM_CELL / GRID_RAM_AT / sizes, from codegen */
 
 unsigned char terrain[GRID_RAM_ROWS * GRID_RAM_COLS];
@@ -16,6 +21,9 @@ unsigned char terrain[GRID_RAM_ROWS * GRID_RAM_COLS];
 unsigned char portee[GRID_RAM_ROWS * GRID_RAM_COLS];
 unsigned char sol[GRID_RAM_ROWS * GRID_RAM_COLS];
 int couts[3];
+
+/* Source of the copy_from scenario. */
+unsigned char src[GRID_RAM_ROWS * GRID_RAM_COLS];
 
 /* Output of path_to: one direction code (0..3) per step, sized by the caller. */
 int pas[8];   /* comme un `array` de script : des entiers (cf. grid_path_to) */
@@ -136,5 +144,56 @@ int main(void) {
         for (int x = 0; x < GRID_RAM_COLS; x++)
             printf(" %d", zones[y * GRID_RAM_COLS + x]);
     printf("\n");
+
+    /* --- Tranche 2 : contains, copy_from, reachable, cost_at, arrived --- */
+    const int half = GRID_RAM_STEP / 2;
+
+    /* contains: a point inside the grid vs outside. A cell holding 0 still counts
+     * as inside, which value_at alone cannot tell from out-of-grid. */
+    printf("CONTAINS %d %d\n",
+           GRID_RAM_CONTAINS(GRID_RAM_STEP + half, GRID_RAM_STEP + half),   /* inside */
+           GRID_RAM_CONTAINS(-1, -1));                                      /* outside */
+
+    /* copy_from: a source grid of the same geometry is copied cell for cell. */
+    for (int i = 0; i < GRID_RAM_ROWS * GRID_RAM_COLS; i++) src[i] = (unsigned char)(100 + i);
+    GRID_RAM_COPY;
+    printf("COPY");
+    for (int y = 1; y <= GRID_RAM_ROWS; y++)
+        for (int x = 1; x <= GRID_RAM_COLS; x++)
+            printf(" %d", GRID_RAM_CELL(x, y));
+    printf("\n");
+
+    /* reachable / cost_at: on the budget-5 cost map, cell (4, 3) holds cost 5 and
+     * the walled cell (2, 2) is out of range (255 -> not reachable, cost -1). */
+    GRID_RAM_FLOOD(1, 1, 5);
+    printf("REACH %d %d\n",
+           GRID_RAM_REACH(3 * GRID_RAM_STEP + half, 2 * GRID_RAM_STEP + half),   /* cell (4,3) -> 1 */
+           GRID_RAM_REACH(1 * GRID_RAM_STEP + half, 1 * GRID_RAM_STEP + half));  /* cell (2,2) -> 0 */
+    printf("COST %d %d\n",
+           GRID_RAM_COST(3 * GRID_RAM_STEP + half, 2 * GRID_RAM_STEP + half),    /* 5 */
+           GRID_RAM_COST(1 * GRID_RAM_STEP + half, 1 * GRID_RAM_STEP + half));   /* -1 */
+
+    /* arrived: on the flow map, the source cell (1, 1) holds 4 (arrived); any
+     * other reachable cell holds a direction, not 4. */
+    GRID_RAM_FLOOD(1, 1, 5);
+    GRID_RAM_FLOW;
+    printf("ARRIVED %d %d\n",
+           GRID_RAM_ARRIVED(half, half),                                        /* cell (1,1) -> 1 */
+           GRID_RAM_ARRIVED(3 * GRID_RAM_STEP + half, 2 * GRID_RAM_STEP + half)); /* cell (4,3) -> 0 */
+
+    /* --- Navigation sans grille : arrive, keep_distance (vec2 -> vec2) --- */
+    /* arrive from (0,0) to (30,40), dist 50 : ramp (stop 10, slow 100 -> speed 4
+     * -> (2,3)), full speed (slow 40 -> speed 10 -> (6,8)), inside stop -> (0,0). */
+    Vec2 ar = GRID_RAM_ARRIVE(0, 0, 30, 40, 10, 100, 10);
+    Vec2 af = GRID_RAM_ARRIVE(0, 0, 30, 40, 10, 40, 10);
+    Vec2 az = GRID_RAM_ARRIVE(0, 0, 3, 4, 10, 100, 10);
+    printf("ARRIVE %d %d %d %d %d %d\n", ar.x, ar.y, af.x, af.y, az.x, az.y);
+
+    /* keep_distance : (0,0) in the band, close in past max (dist 50 > 40 -> (3,4)),
+     * back away below min (dist 5 < 20 -> (-3,-4)). */
+    Vec2 kb = GRID_RAM_KEEP(0, 0, 30, 40, 20, 60, 5);
+    Vec2 kc = GRID_RAM_KEEP(0, 0, 30, 40, 20, 40, 5);
+    Vec2 kf = GRID_RAM_KEEP(0, 0, 3, 4, 20, 60, 5);
+    printf("KEEP %d %d %d %d %d %d\n", kb.x, kb.y, kc.x, kc.y, kf.x, kf.y);
     return 0;
 }

@@ -1235,6 +1235,15 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc="Reads the cell value at a world point, terrain:value_at(px, py), in pixels "
             "like collision.tile_at. Read a cell by index instead with terrain[x][y] from 1.",
     ),
+    "grid:contains": ApiFunc(
+        lua_name="grid:contains", c_func="_grid_contains",   # vitrine
+        params=[Param("px", PARAM_INT, doc="World x in pixels."),
+                Param("py", PARAM_INT, doc="World y in pixels.")],
+        ret="bool",
+        doc="Tells whether the world point (px, py) falls inside the grid: "
+            "terrain:contains(px, py). Distinguishes a point outside the grid from a cell "
+            "that really holds 0, which value_at cannot tell apart.",
+    ),
     "grid:fill": ApiFunc(
         lua_name="grid:fill", c_func="_grid_fill",   # vitrine
         params=[Param("value", PARAM_INT, doc="Byte written to every cell (0..255).")],
@@ -1249,6 +1258,13 @@ RUNTIME_API: dict[str, ApiFunc] = {
                 Param("value", PARAM_INT, doc="Byte written to the block.")],
         doc="Sets a rectangle of cells to one value: terrain:fill_rect(x, y, w, h, v). "
             "Cells, origin from 1.",
+    ),
+    "grid:copy_from": ApiFunc(
+        lua_name="grid:copy_from", c_func="_grid_copy_from",   # vitrine
+        params=[Param("source", PARAM_INT, doc="A grid of the same size and step.")],
+        doc="Copies every cell of `source` into this grid: work:copy_from(data.grid.Terrain). "
+            "Both grids must share columns, rows and step (checked at build when known). Clone "
+            "a painted grid or a mask before changing it at runtime.",
     ),
     "grid:regions": ApiFunc(
         lua_name="grid:regions", c_func="_grid_regions",   # vitrine
@@ -1342,6 +1358,56 @@ RUNTIME_API: dict[str, ApiFunc] = {
             "-1/0/1 per axis) toward the source: navigation:direction_at(flow, position). "
             "(0, 0) at the source or on an unreachable cell. Apply it with "
             "self:move_and_collide(navigation:direction_at(flow, self.position) * 2).",
+    ),
+    "navigation.reachable": ApiFunc(
+        lua_name="navigation.reachable", c_func="_nav_reachable",   # vitrine
+        params=[Param("cost_map", PARAM_INT, doc="A cost map written by spread_from."),
+                Param("position", PARAM_VEC2, doc="A world position, a vec2.")],
+        ret="bool",
+        doc="Tells whether the cell at a world position is reachable on a cost map: "
+            "navigation:reachable(cost_map, position). Hides the internal 255 sentinel "
+            "(out of range); a point outside the grid is not reachable.",
+    ),
+    "navigation.cost_at": ApiFunc(
+        lua_name="navigation.cost_at", c_func="_nav_cost_at",   # vitrine
+        params=[Param("cost_map", PARAM_INT, doc="A cost map written by spread_from."),
+                Param("position", PARAM_VEC2, doc="A world position, a vec2.")],
+        ret="int",
+        doc="The cumulative cost of the cell at a world position on a cost map, or -1 if it "
+            "is out of range or outside the grid: navigation:cost_at(cost_map, position).",
+    ),
+    "navigation.arrived": ApiFunc(
+        lua_name="navigation.arrived", c_func="_nav_arrived",   # vitrine
+        params=[Param("flow", PARAM_INT, doc="A flow grid written by flow_to or make_flow."),
+                Param("position", PARAM_VEC2, doc="A world position, a vec2.")],
+        ret="bool",
+        doc="Tells whether the agent at a world position has reached the flow's source: "
+            "navigation:arrived(flow, position). Distinguishes 'at destination' from 'no "
+            "direction possible', which both give the zero vector with direction_at.",
+    ),
+    "navigation.arrive": ApiFunc(
+        lua_name="navigation.arrive", c_func="_nav_arrive",   # vitrine
+        params=[Param("position", PARAM_VEC2, doc="The agent's world position, a vec2."),
+                Param("target", PARAM_VEC2, doc="The world position to reach, a vec2."),
+                Param("stop_radius", PARAM_INT, doc="Distance at which the move becomes (0, 0)."),
+                Param("slow_radius", PARAM_INT, doc="Distance from which the speed ramps down."),
+                Param("max_speed", PARAM_INT, doc="Top speed in pixels per call.")],
+        ret="vec2",
+        doc="Returns the move toward target, a vec2 of pixels: (0, 0) within stop_radius, then "
+            "ramped linearly up to max_speed between stop_radius and slow_radius, full speed "
+            "beyond. Apply it with self:move_and_collide(...). No grid, no state.",
+    ),
+    "navigation.keep_distance": ApiFunc(
+        lua_name="navigation.keep_distance", c_func="_nav_keep_distance",   # vitrine
+        params=[Param("position", PARAM_VEC2, doc="The agent's world position, a vec2."),
+                Param("target", PARAM_VEC2, doc="The world position to keep distance from, a vec2."),
+                Param("min_distance", PARAM_INT, doc="Below this, the agent backs away."),
+                Param("max_distance", PARAM_INT, doc="Above this, the agent closes in."),
+                Param("speed", PARAM_INT, doc="Move speed in pixels per call.")],
+        ret="vec2",
+        doc="Returns a move that closes in past max_distance, backs away below min_distance, and "
+            "is (0, 0) inside the band: navigation:keep_distance(position, target, min, max, speed). "
+            "Apply it with self:move_and_collide(...). No grid, no state.",
     ),
 
     # ── Diagnostic ───────────────────────────────────

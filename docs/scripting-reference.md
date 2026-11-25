@@ -269,7 +269,9 @@ for x = 1, portee.cols do for y = 1, portee.rows do ... end end
 - Les deux premiers nombres sont les **colonnes** et les **rangées** (des cases, pas des pixels). Le troisième, facultatif, est le **pas** d'une case en pixels (8, 16 ou 32, 16 par défaut), pour `:value_at`.
 - Une case tient sur **un octet** (valeurs de 0 à 255), remplie de zéros au départ.
 - `:value_at(x, y)` lit la case d'un point du monde ; hors de la grille vaut `0`. `portee.cols` et `portee.rows` donnent la taille.
+- `:contains(px, py)` dit si le point monde `(px, py)` **tombe dans la grille** : il distingue une position hors grille d'une case qui porte réellement la valeur `0`, que `value_at` seul ne sépare pas.
 - `:fill(v)` met **toutes** les cases à `v`. `:fill_rect(x, y, w, h, v)` remplit un **rectangle** de cases, l'origine `x, y` à partir de 1, `w, h` en cases ; la partie hors grille est ignorée, jamais un débordement.
+- `:copy_from(source)` recopie `source` case pour case dans la grille : les deux grilles doivent avoir les **mêmes** colonnes, rangées et pas (vérifié au build quand c'est connu). Utile pour cloner une grille peinte ou un masque avant de le modifier au runtime.
 - `:regions(out)` découpe la grille en **régions connexes** : deux cases voisines de **valeur égale** appartiennent à la même région (voisinage à 4). Chaque case reçoit dans `out` l'**id de sa région**, de `1` à `N` (toute case est étiquetée, les `0` compris), et la méthode retourne `N`, le nombre de régions.
 - Comme `array`, une grille se **déclare dans un `local`** et ne se réaffecte pas nue (`portee = …` est refusé) ; on écrit ses cases.
 
@@ -289,6 +291,17 @@ Une grille est un **type de donnée** : lire, écrire, découper. L'**analyse de
 
 - `navigation:flow_to(out, position[, budget])` remplit `out` d'un **champ de flux** vers une **position monde** (un vec2, en pixels), en contournant la collision vivante. En interne : `sample_collision` + propagation à coût uniforme + flux, avec son propre tampon. `budget` facultatif plafonne la portée. La grille est bornée à **1024 cases** (le tampon interne) ; au-delà, on enchaîne `spread_from` et `make_flow` à la main.
 - `navigation:direction_at(flow, position)` lit le champ de flux à une **position monde** (vec2) et rend le **pas unitaire** (un vec2, -1/0/1 par axe) vers la source ; `(0, 0)` à la source ou hors de portée. Ex : `self:move_and_collide(navigation:direction_at(flow, self.position) * 2)`.
+
+**Lecteurs de confort**, qui cachent les valeurs réservées d'une carte de coûts ou d'un flux, à une **position monde** (vec2) :
+
+- `navigation:reachable(cost_map, position)` dit si la case de `position` est **atteignable** sur une carte de coûts (cache la sentinelle `255` ; hors grille vaut non atteignable).
+- `navigation:cost_at(cost_map, position)` rend le **coût cumulé** de la case de `position`, ou `-1` si elle est hors de portée ou hors grille, sans imposer de connaître les coordonnées de case ni les valeurs réservées.
+- `navigation:arrived(flow, position)` dit si `position` est la **source** d'un champ de flux (arrivé) : il distingue « à destination » de « aucune direction possible », que `direction_at` donne tous deux comme le vecteur nul.
+
+**Déplacement sans grille.** La navigation calcule aussi un déplacement à partir de **positions** seules, sans carte : elle rend un `vec2` de déplacement (en pixels), **sans état** et **sans grille**, que le script applique avec `self:move_and_collide(delta)`. Les positions sont en **monde** (vec2) ; tout est calculé en entiers.
+
+- `navigation:arrive(position, target, stop_radius, slow_radius, max_speed)` rend le déplacement vers `target` : **nul** dans `stop_radius`, puis **ralenti** linéairement jusqu'à `max_speed` entre `stop_radius` et `slow_radius`, et plein régime au-delà. Rejoindre un repère sans osciller autour. Ex : `self:move_and_collide(navigation:arrive(self.position, p.position, 8, 48, 2))`.
+- `navigation:keep_distance(position, target, min_distance, max_distance, speed)` **rapproche** au-delà de `max_distance`, **éloigne** sous `min_distance`, et rend `(0, 0)` dans la bande voulue. Un ennemi à distance, un compagnon, une zone de confort, sans règle de combat.
 
 ## Script
 

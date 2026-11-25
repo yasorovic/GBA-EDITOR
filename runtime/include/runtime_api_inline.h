@@ -1661,6 +1661,85 @@ static inline int grid_regions(const unsigned char *cells, unsigned char *out,
     return label;
 }
 
+/* grid_contains : le point MONDE (px, py) tombe-t-il dans la grille ? Distingue
+   une position hors grille d'une case qui porte réellement la valeur 0, que
+   grid_value_at ne sépare pas (il rend 0 dans les deux cas). */
+static inline int grid_contains(int w, int h, int shift, int px, int py) {
+    const int tx = px >> shift, ty = py >> shift;
+    return (tx >= 0 && ty >= 0 && tx < w && ty < h) ? 1 : 0;
+}
+
+/* grid_copy_from : copie `n` cases d'une grille source vers une grille de
+   destination de même géométrie (le checker vérifie dimensions et pas quand il
+   les connaît). `n` est le nombre de cases (`rows * cols`), connu au build. */
+static inline void grid_copy_from(unsigned char *dest, const unsigned char *source, int n) {
+    for (int i = 0; i < n; i++) dest[i] = source[i];
+}
+
+/* grid_reachable : la case du point MONDE (px, py) est-elle atteignable sur une
+   carte de coûts (écrite par grid_flood) ? Cache la sentinelle 255 (hors de
+   portée). Hors grille vaut non atteignable. */
+static inline int grid_reachable(const unsigned char *cost, int w, int h,
+                                 int shift, int px, int py) {
+    const int tx = px >> shift, ty = py >> shift;
+    if (tx < 0 || ty < 0 || tx >= w || ty >= h) return 0;
+    return cost[ty * w + tx] != 255 ? 1 : 0;
+}
+
+/* grid_cost_at : le coût cumulé de la case du point MONDE sur une carte de coûts,
+   ou -1 si la case est hors de portée (sentinelle 255) ou hors grille. Expose le
+   coût sans imposer de connaître les coordonnées de case ni les valeurs réservées. */
+static inline int grid_cost_at(const unsigned char *cost, int w, int h,
+                               int shift, int px, int py) {
+    const int tx = px >> shift, ty = py >> shift;
+    if (tx < 0 || ty < 0 || tx >= w || ty >= h) return -1;
+    const int v = (int)cost[ty * w + tx];
+    return v == 255 ? -1 : v;
+}
+
+/* grid_arrived : la case du point MONDE est-elle la source d'un champ de flux
+   (valeur 4, « arrivé ») ? Distingue « à destination » de « aucune direction
+   possible » : grid_step_at rend (0,0) dans les deux cas. */
+static inline int grid_arrived(const unsigned char *dirs, int w, int h,
+                               int shift, int px, int py) {
+    return grid_value_at(dirs, w, h, shift, px, py) == 4 ? 1 : 0;
+}
+
+/* Navigation sans grille — des primitives de déplacement : une position et une
+   cible (MONDE, pixels) en entrée, un vec2 de DÉPLACEMENT en sortie, à appliquer
+   avec move_and_collide. Aucun état, aucune grille, tout en entiers (isqrt pour
+   la magnitude, dx*speed/dist pour la direction, comme actor_move_to). */
+
+/* nav_arrive : déplacement vers `target`, nul à `stop_radius`, puis ralenti
+   linéairement de 0 à `max_speed` entre stop_radius et slow_radius, et plein
+   régime au-delà. Pour rejoindre un repère sans osciller autour. */
+static inline Vec2 nav_arrive(Vec2 position, Vec2 target,
+                              int stop_radius, int slow_radius, int max_speed) {
+    int dx = target.x - position.x, dy = target.y - position.y;
+    int dist = isqrt(dx * dx + dy * dy);
+    if (dist == 0 || dist <= stop_radius) return (Vec2){0, 0};
+    int speed = max_speed;
+    if (dist < slow_radius && slow_radius > stop_radius)
+        speed = max_speed * (dist - stop_radius) / (slow_radius - stop_radius);
+    if (speed < 0) speed = 0;
+    if (speed > max_speed) speed = max_speed;
+    return (Vec2){ dx * speed / dist, dy * speed / dist };
+}
+
+/* nav_keep_distance : rapproche au-delà de `max_distance`, éloigne sous
+   `min_distance`, et rend (0,0) dans la bande voulue. Pour un ennemi à distance,
+   un compagnon, une zone de confort. */
+static inline Vec2 nav_keep_distance(Vec2 position, Vec2 target,
+                                     int min_distance, int max_distance, int speed) {
+    int dx = target.x - position.x, dy = target.y - position.y;
+    int dist = isqrt(dx * dx + dy * dy);
+    if (dist == 0) return (Vec2){0, 0};
+    if (speed < 0) speed = 0;
+    if (dist > max_distance) return (Vec2){ dx * speed / dist, dy * speed / dist };
+    if (dist < min_distance) return (Vec2){ -dx * speed / dist, -dy * speed / dist };
+    return (Vec2){0, 0};
+}
+
 /* Aléatoire — LCG 32-bit, zéro overhead, pas de division flottante */
 /* La graine est définie dans main.c : `static` ici, chaque unité de script
    aurait sa propre suite, identique aux autres. */

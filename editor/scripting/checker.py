@@ -997,8 +997,10 @@ class Checker:
     # qui prend la grille en argument. nom → arités acceptées et forme montrée.
     _RAM_GRID_METHODS = {
         "value_at": ((2,), "value_at(x, y)"),
+        "contains": ((2,), "contains(x, y)"),
         "fill": ((1,), "fill(value)"),
         "fill_rect": ((5,), "fill_rect(x, y, w, h, value)"),
+        "copy_from": ((1,), "copy_from(source)"),
         "regions": ((1,), "regions(out)"),
     }
     # Les fonctions du module `navigation` : nom → arités acceptées et forme
@@ -1011,6 +1013,11 @@ class Checker:
         "make_flow": ((2,), "make_flow(cost_map, out)"),
         "flow_to": ((2, 3), "flow_to(out, position[, budget])"),
         "direction_at": ((2,), "direction_at(flow, position)"),
+        "reachable": ((2,), "reachable(cost_map, position)"),
+        "cost_at": ((2,), "cost_at(cost_map, position)"),
+        "arrived": ((2,), "arrived(flow, position)"),
+        "arrive": ((5,), "arrive(position, target, stop_radius, slow_radius, max_speed)"),
+        "keep_distance": ((5,), "keep_distance(position, target, min_distance, max_distance, speed)"),
     }
     # Plafond du scratch interne de `flow_to` (cf. GRID_TARGET_MAX dans
     # runtime_api_inline.h) : une grille plus grande déborderait les tampons.
@@ -1069,10 +1076,11 @@ class Checker:
                 f" navigation module); read a cell by index with {name}[x][y]."))
             return
         arites, forme = entry
-        # La grille de sortie de `regions` EST une référence, jamais une valeur : on
-        # la marque avant tout, même si l'arité est fautive, pour que la marche des
-        # expressions ne la refuse pas et ne double pas le message.
-        if method == "regions":
+        # La grille passée à `regions` (sortie) ou `copy_from` (source) EST une
+        # référence, jamais une valeur : on la marque avant tout, même si l'arité est
+        # fautive, pour que la marche des expressions ne la refuse pas et ne double
+        # pas le message.
+        if method in ("regions", "copy_from"):
             for arg in args:
                 self._mark_grid_ref(arg)
         if len(args) not in arites:
@@ -1083,6 +1091,28 @@ class Checker:
             return
         if method == "regions":
             self._check_regions_args(name, args)
+        elif method == "copy_from":
+            self._check_copy_from_args(name, args)
+
+    def _check_copy_from_args(self, name: str, args: list) -> None:
+        """`copy_from(source)` copie une grille dans le récepteur : `source` est une
+        grille (RAM du script, ou peinte/RAM de la scène), et sa géométrie doit être
+        IDENTIQUE à celle du récepteur (colonnes, rangées, pas) quand les deux sont
+        connues au build, sinon la copie déborderait ou tronquerait."""
+        if not self._is_grid_expr(args[0]):
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:copy_from(): the argument is the source, a grid (a `grid(...)` of"
+                " this script or a data.grid.<Name>) of the same size and step."))
+            return
+        dst = self._ram_grid_dims(name)
+        src = self._grid_dims_of_expr(args[0])
+        if dst and src and dst != src:
+            self.errors.append(CheckError(
+                "error",
+                f"{name}:copy_from(): the source is {src[0]}x{src[1]} at step {src[2]},"
+                f" but {name} is {dst[0]}x{dst[1]} at step {dst[2]}; copy_from needs the"
+                " same geometry."))
 
     def _check_regions_args(self, name: str, args: list) -> None:
         """`regions` découpe le récepteur en zones de valeur égale et écrit un id par
@@ -1108,11 +1138,14 @@ class Checker:
 
     def _grid_dims_of_expr(self, e):
         """La géométrie `(cols, rows, step)` de la grille que `e` désigne, ou None :
-        une grille RAM du script (nom) ou une grille RAM de la scène."""
+        une grille RAM du script (nom) ou une grille de la scène (peinte ou RAM)."""
         if isinstance(e, ExprName) and e.name in self._grids:
             return self._grids[e.name]
         name = data_grid_ref(e)
-        return self._ram_grid_dims(name) if name is not None else None
+        if name is None:
+            return None
+        g = (self.ctx.scene_grids or {}).get(name)
+        return (g.cols, g.rows, g.step) if g is not None else None
 
     def _check_navigation_call(self, func: str, args: list) -> None:
         """Les fonctions du module `navigation` : échantillonner la collision, tracer
@@ -1234,6 +1267,48 @@ class Checker:
             self._nav_bad_grid("direction_at", "the first argument, the flow grid,")
         if not self._is_vec2(args[1]):
             self._nav_bad_vec2("direction_at", "the second argument")
+
+    def _check_nav_reachable(self, args: list) -> None:
+        """`reachable(cost_map, position)` → bool : la case de la position monde est-elle
+        atteignable sur la carte de coûts (cache la sentinelle 255) ?"""
+        if not self._is_grid_expr(args[0]):
+            self._nav_bad_grid("reachable", "the first argument, the cost map,")
+        if not self._is_vec2(args[1]):
+            self._nav_bad_vec2("reachable", "the second argument")
+
+    def _check_nav_cost_at(self, args: list) -> None:
+        """`cost_at(cost_map, position)` → coût (ou -1) : le coût cumulé de la case de la
+        position monde sur la carte de coûts."""
+        if not self._is_grid_expr(args[0]):
+            self._nav_bad_grid("cost_at", "the first argument, the cost map,")
+        if not self._is_vec2(args[1]):
+            self._nav_bad_vec2("cost_at", "the second argument")
+
+    def _check_nav_arrived(self, args: list) -> None:
+        """`arrived(flow, position)` → bool : la position monde est-elle la source du
+        champ de flux (arrivé) ?"""
+        if not self._is_grid_expr(args[0]):
+            self._nav_bad_grid("arrived", "the first argument, the flow grid,")
+        if not self._is_vec2(args[1]):
+            self._nav_bad_vec2("arrived", "the second argument")
+
+    def _check_nav_arrive(self, args: list) -> None:
+        """`arrive(position, target, stop_radius, slow_radius, max_speed)` → vec2 : le
+        déplacement vers `target`, sans grille. Les deux premiers sont des positions
+        monde (vec2) ; le reste, des entiers (rayons et vitesse)."""
+        if not self._is_vec2(args[0]):
+            self._nav_bad_vec2("arrive", "the first argument, the position,")
+        if not self._is_vec2(args[1]):
+            self._nav_bad_vec2("arrive", "the second argument, the target,")
+
+    def _check_nav_keep_distance(self, args: list) -> None:
+        """`keep_distance(position, target, min_distance, max_distance, speed)` → vec2 :
+        le déplacement qui tient une distance. Les deux premiers sont des positions
+        monde (vec2) ; le reste, des entiers."""
+        if not self._is_vec2(args[0]):
+            self._nav_bad_vec2("keep_distance", "the first argument, the position,")
+        if not self._is_vec2(args[1]):
+            self._nav_bad_vec2("keep_distance", "the second argument, the target,")
 
     def _check_ram_grid_field(self, name: str, field: str) -> None:
         """`g.cols` / `g.rows` : les deux seules propriétés d'une grille RAM, en
