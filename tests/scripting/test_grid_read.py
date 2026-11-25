@@ -1,7 +1,7 @@
 """Lire une grille de valeurs depuis un script : `data.grid.<Nom>`.
 
 Tranche 3b du chantier des cartes de valeurs peintes. Deux accès, tous deux en
-lecture seule : `:at(x, y)` en pixels monde, comme `collision.tile_at`, et
+lecture seule : `:value_at(x, y)` en pixels monde, comme `collision.tile_at`, et
 `[x][y]` en cases, la colonne puis la rangée, index à partir de 1 comme tout
 tableau du sous-ensemble.
 
@@ -87,39 +87,39 @@ def _expression(corps: str) -> str:
 # ── Ce que le vérificateur accepte ────────────────────────────────
 
 def test_les_deux_acces_passent():
-    assert _erreurs("local v = data.grid.Terrain:at(32, 16)") == []
+    assert _erreurs("local v = data.grid.Terrain:value_at(32, 16)") == []
     assert _erreurs("local v = data.grid.Terrain[2][1]") == []
     assert _erreurs("local v = data.grid.Terrain[x][y]") == []
 
 
 def test_hors_build_une_grille_n_est_pas_jugee():
     """Comme pour les tables : sans contexte de scène, on ne juge pas."""
-    assert _erreurs("local v = data.grid.Terrain:at(0, 0)", acces=None) == []
+    assert _erreurs("local v = data.grid.Terrain:value_at(0, 0)", acces=None) == []
     ctx = BuildContext(actor_name="Ball")
-    assert [e for e in check(parse(_handler("local v = data.grid.Peu_importe:at(0, 0)")), ctx)
+    assert [e for e in check(parse(_handler("local v = data.grid.Peu_importe:value_at(0, 0)")), ctx)
             if e.level == "error"] == []
 
 
 # ── Ce qu'il refuse ───────────────────────────────────────────────
 
 def test_une_grille_absente_de_la_scene_nomme_la_scene_et_les_grilles():
-    (msg,) = _erreurs("local v = data.grid.Absente:at(0, 0)")
+    (msg,) = _erreurs("local v = data.grid.Absente:value_at(0, 0)")
     assert "no painted grid of scene Arena by that name (Terrain)" in msg
 
 
 def test_une_grille_citee_seule_n_est_pas_une_valeur():
     (msg,) = _erreurs("local v = data.grid.Terrain")
     assert "is a grid, not a value" in msg
-    assert ":at(x, y)" in msg and "[x][y]" in msg
+    assert ":value_at(x, y)" in msg and "[x][y]" in msg
 
 
 def test_la_seule_methode_est_at():
     (msg,) = _erreurs("local v = data.grid.Terrain:lire(1, 2)")
-    assert "read-only, and its only method is :at(x, y)" in msg
+    assert "read-only, and its only method is :value_at(x, y)" in msg
 
 
 def test_at_prend_deux_arguments():
-    (msg,) = _erreurs("local v = data.grid.Terrain:at(1)")
+    (msg,) = _erreurs("local v = data.grid.Terrain:value_at(1)")
     assert "takes two arguments, x and y in world pixels (1 given)" in msg
 
 
@@ -143,8 +143,8 @@ def test_une_grille_ne_s_ecrit_pas():
 def test_une_faute_ne_donne_qu_un_message():
     """La marche des expressions redescend dans le récepteur : sans la marque des
     nœuds déjà lus, chaque faute en produirait deux."""
-    for corps in ("local v = data.grid.Absente:at(0, 0)",
-                  "local v = data.grid.Terrain:at(1)",
+    for corps in ("local v = data.grid.Absente:value_at(0, 0)",
+                  "local v = data.grid.Terrain:value_at(1)",
                   "local v = data.grid.Terrain[9][1]",
                   "data.grid.Terrain[1][1] = 4"):
         assert len(_erreurs(corps)) == 1, corps
@@ -153,7 +153,7 @@ def test_une_faute_ne_donne_qu_un_message():
 # ── Ce que le traducteur émet ─────────────────────────────────────
 
 def test_l_acces_par_pixel_passe_par_l_inline_du_moteur():
-    assert _expression("local v = data.grid.Terrain:at(32, 16)") == (
+    assert _expression("local v = data.grid.Terrain:value_at(32, 16)") == (
         "grid_value_at(g_grid_Arena_Terrain, GRID_W_ARENA_TERRAIN, "
         "GRID_H_ARENA_TERRAIN, GRID_SHIFT_ARENA_TERRAIN, 32, 16)")
 
@@ -168,7 +168,7 @@ def test_l_acces_par_case_indexe_le_tableau_mis_a_plat():
 
 
 def test_l_unite_inclut_l_en_tete_des_grilles():
-    assert '#include "grids.h"' in _emis("local v = data.grid.Terrain:at(0, 0)")
+    assert '#include "grids.h"' in _emis("local v = data.grid.Terrain:value_at(0, 0)")
 
 
 # ── Le C réellement émis, compilé et exécuté ──────────────────────
@@ -190,7 +190,7 @@ def test_la_sonde_lit_dans_le_c_emis_ce_que_l_editeur_a_peint(tmp_path):
 
     # Les deux expressions du traducteur, paramétrées par leurs coordonnées : le
     # littéral écrit dans le script est remplacé par le paramètre de la macro.
-    at = _expression("local v = data.grid.Terrain:at(111, 222)")
+    at = _expression("local v = data.grid.Terrain:value_at(111, 222)")
     at = at.replace("111", "(px)").replace("222", "(py)")
     cell = _expression("local v = data.grid.Terrain[x][y]")
     (tmp_path / "grid_expr.h").write_text(

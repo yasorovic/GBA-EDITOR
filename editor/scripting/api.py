@@ -466,7 +466,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
              "solid map tiles (walls), sliding along the free axis. Returns true if a wall "
              "stopped part of the move. Unlike `move`, it reacts to the map; actor-vs-actor "
              "separation stays the job of block-response shapes. Ex: "
-             "self:move_and_collide(flow:step_at(self.position) * 2)"),
+             "self:move_and_collide(navigation:direction_at(flow, self.position) * 2)"),
     ),
 
     # ── Physics : vélocité stockée sur l'actor ────────────────────────
@@ -1193,12 +1193,14 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # (`completion._bare_candidates`).
 
     # `grid`, lui, RESTE un verbe du moteur : une grille RAM est une structure de
-    # données du moteur (méthodes `:fill`, `:flood`, `:path_to`, du gameplay),
-    # pas une simple construction du langage. Sa déclaration `local terrain =
-    # grid(30, 20, 16)` est elle aussi lue par le codegen (`parser.grid_dims`),
-    # mais elle figure au catalogue pour peupler la sidebar et la référence, et
-    # complète les grilles peintes de `data.grid` (en ROM, lecture seule) qu'elle
-    # lit ET écrit.
+    # données du moteur (un type de donnée 2D générique : `:fill`, `:value_at`,
+    # `:regions`), pas une simple construction du langage. Sa déclaration `local
+    # terrain = grid(30, 20, 16)` est elle aussi lue par le codegen
+    # (`parser.grid_dims`), mais elle figure au catalogue pour peupler la sidebar
+    # et la référence, et complète les grilles peintes de `data.grid` (en ROM,
+    # lecture seule) qu'elle lit ET écrit. L'ANALYSE d'une grille (collision,
+    # chemin, flux, vue) ne vit plus sur la grille : elle passe par le module
+    # `navigation` (plus bas), qui prend la grille en argument.
     "grid": ApiFunc(
         lua_name="grid", c_func="_grid",     # résolu par codegen (déclaration)
         params=[Param("cols", PARAM_INT), Param("rows", PARAM_INT)],
@@ -1207,30 +1209,31 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc="Declares a RAM grid of bytes filled with zeros: local terrain = "
             "grid(30, 20, 16). Columns, rows, then an optional cell step in pixels "
             "(8, 16 or 32, 16 by default). Read and write a cell by index, terrain[x][y] "
-            "from 1, or read the cell at a world point with terrain:at(px, py); "
+            "from 1, or read the cell at a world point with terrain:value_at(px, py); "
             "terrain.cols and terrain.rows give the size. Its methods (fill, fill_rect, "
-            "flood, path_to, line_of_sight, flow_map, regions, sample_collision) hold "
-            "gameplay data (cost, range, zones); a grid draws nothing.",
+            "value_at, regions) hold gameplay data (cost, range, zones); a grid draws "
+            "nothing. Analyse a grid (cost, path, flow, sight) with the navigation module.",
     ),
 
-    # ── Les méthodes d'une grille RAM ───────────────────────────────
+    # ── Grid : les méthodes d'une grille RAM ────────────────────────
     # Entrées VITRINE : elles ne servent qu'à peupler la sidebar et la référence
     # sous « Grid » (rangées par `api_reference._FUNC_HOME`). Le vrai appel
-    # (`terrain:flood(...)`) est intercepté AVANT le catalogue, par le checker
+    # (`terrain:value_at(...)`) est intercepté AVANT le catalogue, par le checker
     # (`_check_ram_grid_method`) et le codegen (`_grid_at`/`_grid_write`) : une
     # grille est une variable de script (indexation base 1, grilles et arrays
     # passés par RÉFÉRENCE) qu'aucun `c_func` générique ne sait exprimer. D'où le
     # `c_func` en « _ », jamais émis et jamais déclaré dans le moteur (même
     # convention que `grid`, `_destroy`, `_spawn` : le générateur de prototypes
     # l'ignore). Le récepteur s'écrit `grid:` comme `tilemap:` : la section tient
-    # lieu de nom de variable.
-    "grid:at": ApiFunc(
-        lua_name="grid:at", c_func="_grid_at",   # vitrine
+    # lieu de nom de variable. Grid = lire, écrire, découper une grille de valeurs ;
+    # l'ANALYSE de passage (coût, chemin, flux, vue) est le module `navigation`.
+    "grid:value_at": ApiFunc(
+        lua_name="grid:value_at", c_func="_grid_value_at",   # vitrine
         params=[Param("px", PARAM_INT, doc="World x in pixels."),
                 Param("py", PARAM_INT, doc="World y in pixels.")],
         ret="int",
-        doc="Reads the cell at a world point, terrain:at(px, py), in pixels like "
-            "collision.tile_at. Read a cell by index instead with terrain[x][y] from 1.",
+        doc="Reads the cell value at a world point, terrain:value_at(px, py), in pixels "
+            "like collision.tile_at. Read a cell by index instead with terrain[x][y] from 1.",
     ),
     "grid:fill": ApiFunc(
         lua_name="grid:fill", c_func="_grid_fill",   # vitrine
@@ -1247,46 +1250,6 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc="Sets a rectangle of cells to one value: terrain:fill_rect(x, y, w, h, v). "
             "Cells, origin from 1.",
     ),
-    "grid:flood": ApiFunc(
-        lua_name="grid:flood", c_func="_grid_flood",   # vitrine
-        params=[Param("x", PARAM_INT, doc="Source cell x, from 1."),
-                Param("y", PARAM_INT, doc="Source cell y, from 1."),
-                Param("budget", PARAM_INT, doc="Maximum cost spread from the source."),
-                Param("terrain", PARAM_INT, doc="The terrain grid read for each cell's kind."),
-                Param("costs", PARAM_INT, doc="An array: cost to enter a cell of each kind.")],
-        variadic=True,   # argument optionnel `blocked`
-        doc="Writes a cost map into the receiver from a source cell, spending at most "
-            "budget: flood(x, y, budget, terrain, costs[, blocked]). costs is an array "
-            "(the cost to enter each terrain kind); blocked, when given, is the kind that "
-            "stops the spread. Feeds path_to and flow_map.",
-    ),
-    "grid:path_to": ApiFunc(
-        lua_name="grid:path_to", c_func="_grid_path_to",   # vitrine
-        params=[Param("x", PARAM_INT, doc="Target cell x, from 1."),
-                Param("y", PARAM_INT, doc="Target cell y, from 1."),
-                Param("out", PARAM_INT, doc="An array this script declares; filled with steps.")],
-        ret="int",
-        doc="On a cost map from flood, reads the path to a cell: path_to(x, y, out) fills "
-            "out with direction steps 0..3 and returns their count. out is an array this "
-            "script declares (the caller sizes it).",
-    ),
-    "grid:line_of_sight": ApiFunc(
-        lua_name="grid:line_of_sight", c_func="_grid_line_of_sight",   # vitrine
-        params=[Param("x0", PARAM_INT, doc="Start cell x, from 1."),
-                Param("y0", PARAM_INT, doc="Start cell y, from 1."),
-                Param("x1", PARAM_INT, doc="End cell x, from 1."),
-                Param("y1", PARAM_INT, doc="End cell y, from 1.")],
-        ret="bool",
-        doc="Tells whether the line between two cells is clear: "
-            "walls:line_of_sight(x0, y0, x1, y1). A non-zero cell blocks the view.",
-    ),
-    "grid:flow_map": ApiFunc(
-        lua_name="grid:flow_map", c_func="_grid_flow_map",   # vitrine
-        params=[Param("dirs", PARAM_INT, doc="The output grid, same size; gets a direction per cell.")],
-        doc="On a cost map from flood, writes into dirs a direction 0..3 per cell toward the "
-            "source: cost:flow_map(dirs). Many agents then navigate by reading one cell. dirs "
-            "is a grid this script declares.",
-    ),
     "grid:regions": ApiFunc(
         lua_name="grid:regions", c_func="_grid_regions",   # vitrine
         params=[Param("out", PARAM_INT, doc="The output grid, same size; gets a region id per cell.")],
@@ -1294,11 +1257,91 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc="Labels each connected group of equal-value cells with an id 1..N into out and "
             "returns N: map:regions(out). out is a grid this script declares, same size.",
     ),
-    "grid:sample_collision": ApiFunc(
-        lua_name="grid:sample_collision", c_func="_grid_sample_collision",   # vitrine
-        params=[],
-        doc="Fills the grid from the live collision map (1 where an 8 px tile blocks): "
-            "nav:sample_collision(). flood and flow_map then route the AI around real obstacles.",
+
+    # ── Navigation : analyser une grille (module, façon collision) ──
+    # Un module récepteur singleton, appelé avec « : » comme `collision` : il
+    # emploie une ou plusieurs grilles pour échantillonner un passage, propager un
+    # coût, tracer un chemin ou produire un champ de directions. La grille est
+    # TOUJOURS un argument explicite ; le module ne crée pas de faux types
+    # `obstacles`, `costs` ou `flow`. Entrées VITRINE (`c_func` en « _nav_* »,
+    # jamais émis) : l'appel réel `navigation:spread_from(...)` est intercepté par
+    # le checker (`_check_navigation_call`) et le codegen (`_navigation_call`),
+    # parce qu'une grille passée en argument est une référence qu'aucun `c_func`
+    # générique n'exprime. `flow_to` est la couche itération (collision vivante,
+    # flood uniforme, champ de flux en un appel) ; `spread_from`, `path_to` et
+    # `make_flow` restent la couche moteur, composables.
+    "navigation.sample_collision": ApiFunc(
+        lua_name="navigation.sample_collision", c_func="_nav_sample_collision",   # vitrine
+        params=[Param("out", PARAM_INT, doc="The output grid, filled 1 where an 8 px tile blocks.")],
+        doc="Fills a grid from the live collision map (1 where an 8 px tile blocks): "
+            "navigation:sample_collision(map). spread_from and make_flow then route the "
+            "AI around real obstacles.",
+    ),
+    "navigation.line_of_sight": ApiFunc(
+        lua_name="navigation.line_of_sight", c_func="_nav_line_of_sight",   # vitrine
+        params=[Param("blockers", PARAM_INT, doc="The blocking grid: a non-zero cell blocks the view."),
+                Param("x0", PARAM_INT, doc="Start cell x, from 1."),
+                Param("y0", PARAM_INT, doc="Start cell y, from 1."),
+                Param("x1", PARAM_INT, doc="End cell x, from 1."),
+                Param("y1", PARAM_INT, doc="End cell y, from 1.")],
+        ret="bool",
+        doc="Tells whether the line between two cells is clear on a blocking grid: "
+            "navigation:line_of_sight(blockers, x0, y0, x1, y1). A non-zero cell blocks "
+            "the view. The blocking grid is a game rule, not the physical collision.",
+    ),
+    "navigation.spread_from": ApiFunc(
+        lua_name="navigation.spread_from", c_func="_nav_spread_from",   # vitrine
+        params=[Param("out", PARAM_INT, doc="The output grid: gets the cost map."),
+                Param("x", PARAM_INT, doc="Source cell x, from 1."),
+                Param("y", PARAM_INT, doc="Source cell y, from 1."),
+                Param("budget", PARAM_INT, doc="Maximum cost spread from the source."),
+                Param("terrain", PARAM_INT, doc="The terrain grid read for each cell's kind."),
+                Param("costs", PARAM_INT, doc="An array: cost to enter a cell of each kind.")],
+        variadic=True,   # argument optionnel `blockers`
+        doc="Writes a cost map into out from a source cell, spending at most budget: "
+            "navigation:spread_from(out, x, y, budget[, terrain, costs[, blockers]]). "
+            "Without terrain and costs the cost is a uniform 1 per step; blockers, when "
+            "given, is an occupancy grid that stops the spread. Feeds path_to and make_flow.",
+    ),
+    "navigation.path_to": ApiFunc(
+        lua_name="navigation.path_to", c_func="_nav_path_to",   # vitrine
+        params=[Param("cost_map", PARAM_INT, doc="A cost map written by spread_from."),
+                Param("x", PARAM_INT, doc="Target cell x, from 1."),
+                Param("y", PARAM_INT, doc="Target cell y, from 1."),
+                Param("out", PARAM_INT, doc="An array this script declares; filled with steps.")],
+        ret="int",
+        doc="On a cost map from spread_from, reads the path to a cell: "
+            "navigation:path_to(cost_map, x, y, out) fills out with direction steps 0..3 "
+            "and returns their count. out is an array this script declares (the caller sizes it).",
+    ),
+    "navigation.make_flow": ApiFunc(
+        lua_name="navigation.make_flow", c_func="_nav_make_flow",   # vitrine
+        params=[Param("cost_map", PARAM_INT, doc="A cost map written by spread_from."),
+                Param("out", PARAM_INT, doc="The output grid, same size; gets a direction per cell.")],
+        doc="On a cost map from spread_from, writes into out a direction 0..3 per cell "
+            "toward the source: navigation:make_flow(cost_map, out). Many agents then "
+            "navigate by reading one cell. out is a grid this script declares.",
+    ),
+    "navigation.flow_to": ApiFunc(
+        lua_name="navigation.flow_to", c_func="_nav_flow_to",   # vitrine
+        params=[Param("out", PARAM_INT, doc="The output grid: gets a flow field toward the position."),
+                Param("position", PARAM_VEC2, doc="A world position, a vec2 (the target)."),
+                Param("budget", PARAM_INT, doc="Optional maximum range; default is the full range.")],
+        variadic=True,   # argument optionnel `budget`
+        doc="Iteration layer: fills out with a flow field toward a world position, going "
+            "around the live collision: navigation:flow_to(out, position[, budget]). "
+            "Samples collision, floods at a uniform cost and makes the flow in one call. "
+            "Many agents then read it with direction_at. out's size is capped (internal scratch).",
+    ),
+    "navigation.direction_at": ApiFunc(
+        lua_name="navigation.direction_at", c_func="_nav_direction_at",   # vitrine
+        params=[Param("flow", PARAM_INT, doc="A flow grid written by flow_to or make_flow."),
+                Param("position", PARAM_VEC2, doc="A world position, a vec2 (the agent).")],
+        ret="vec2",
+        doc="Reads the flow grid at a world position and returns the unit step (a vec2, "
+            "-1/0/1 per axis) toward the source: navigation:direction_at(flow, position). "
+            "(0, 0) at the source or on an unreachable cell. Apply it with "
+            "self:move_and_collide(navigation:direction_at(flow, self.position) * 2).",
     ),
 
     # ── Diagnostic ───────────────────────────────────

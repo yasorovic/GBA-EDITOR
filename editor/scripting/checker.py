@@ -979,7 +979,7 @@ class Checker:
             self.errors.append(CheckError(
                 "error",
                 f"'{name}' is a grid of two dimensions: write {name}[x][y], the column"
-                f" then the row, or read one cell by pixel with {name}:at(x, y)."))
+                f" then the row, or read one cell by pixel with {name}:value_at(x, y)."))
             return
         for index, size, axe in zip(indices, (cols, rows), "xy"):
             k = self._literal_int(index)
@@ -991,21 +991,28 @@ class Checker:
                     f"'{name}[{k}]': out of bounds on {axe} : this grid runs from 1 to "
                     f"{size} (grids are indexed from 1, as everywhere in Lua)."))
 
-    # Méthodes d'une grille RAM : nom → arités acceptées et forme montrée.
+    # Méthodes récepteur d'une grille : lire, écrire, découper une grille de
+    # valeurs. L'ANALYSE (coût, chemin, flux, vue) n'est plus une méthode de
+    # grille : elle passe par le module `navigation` (`_check_navigation_call`),
+    # qui prend la grille en argument. nom → arités acceptées et forme montrée.
     _RAM_GRID_METHODS = {
-        "at": ((2,), "at(x, y)"),
+        "value_at": ((2,), "value_at(x, y)"),
         "fill": ((1,), "fill(value)"),
         "fill_rect": ((5,), "fill_rect(x, y, w, h, value)"),
-        "flood": ((3, 5, 6), "flood(x, y, budget[, terrain, costs[, blocked]])"),
-        "path_to": ((3,), "path_to(x, y, out)"),
-        "line_of_sight": ((4,), "line_of_sight(x0, y0, x1, y1)"),
-        "flow_map": ((1,), "flow_map(dirs)"),
         "regions": ((1,), "regions(out)"),
-        "sample_collision": ((0,), "sample_collision()"),
-        "step_at": ((1,), "step_at(position)"),
-        "target": ((1, 2), "target(position[, budget])"),
     }
-    # Plafond du scratch interne de `target` (cf. GRID_TARGET_MAX dans
+    # Les fonctions du module `navigation` : nom → arités acceptées et forme
+    # montrée. La grille est toujours un argument explicite.
+    _NAVIGATION_FNS = {
+        "sample_collision": ((1,), "sample_collision(out)"),
+        "line_of_sight": ((5,), "line_of_sight(blockers, x0, y0, x1, y1)"),
+        "spread_from": ((4, 6, 7), "spread_from(out, x, y, budget[, terrain, costs[, blockers]])"),
+        "path_to": ((4,), "path_to(cost_map, x, y, out)"),
+        "make_flow": ((2,), "make_flow(cost_map, out)"),
+        "flow_to": ((2, 3), "flow_to(out, position[, budget])"),
+        "direction_at": ((2,), "direction_at(flow, position)"),
+    }
+    # Plafond du scratch interne de `flow_to` (cf. GRID_TARGET_MAX dans
     # runtime_api_inline.h) : une grille plus grande déborderait les tampons.
     _GRID_TARGET_MAX = 1024
 
@@ -1047,30 +1054,25 @@ class Checker:
         return name is not None and self._scene_ram_grid(name) is not None
 
     def _check_ram_grid_method(self, name: str, method: str, args: list) -> None:
-        """Les méthodes d'une grille RAM, leur arité et le type de leurs arguments :
-        `:at(x, y)` (la case d'un point, en pixels), `:fill(v)` (toute la grille),
-        `:fill_rect(x, y, w, h, v)` (un rectangle de cases, l'origine à partir de 1),
-        `:flood(x, y, budget, terrain, costs[, blocked])` (la portée à coût), et
-        `:path_to(x, y, out)` (le chemin, écrit dans un array), et
-        `:line_of_sight(x0, y0, x1, y1)` (la ligne de vue, un booléen),
-        `:flow_map(dirs)` (une direction par case vers la source), `:regions(out)`
-        (les zones de valeur égale, un id par case) et `:sample_collision()` (la carte
-        de collision vivante échantillonnée dans la grille). Une grille peinte reste en
-        lecture seule (jugée ailleurs)."""
+        """Les méthodes RÉCEPTEUR d'une grille : `:value_at(x, y)` (la valeur de la
+        case d'un point, en pixels), `:fill(v)` (toute la grille), `:fill_rect(x, y,
+        w, h, v)` (un rectangle de cases, l'origine à partir de 1) et `:regions(out)`
+        (les zones de valeur égale, un id par case). L'ANALYSE de passage (coût,
+        chemin, flux, vue) n'est plus une méthode de grille : c'est le module
+        `navigation`. Une grille peinte reste en lecture seule (jugée ailleurs)."""
         entry = self._RAM_GRID_METHODS.get(method)
         if entry is None:
             noms = ", ".join(f":{m}" for m in self._RAM_GRID_METHODS)
             self.errors.append(CheckError(
                 "error",
-                f"{name}:{method}(): a grid's methods are {noms}; read a cell by index"
-                f" with {name}[x][y]."))
+                f"{name}:{method}(): a grid's methods are {noms} (analyse a grid with the"
+                f" navigation module); read a cell by index with {name}[x][y]."))
             return
         arites, forme = entry
-        # Une grille passée comme argument à `flood` ou `path_to` EST une référence,
-        # jamais une valeur : on la marque avant tout, même si l'arité est fautive,
-        # pour que la marche des expressions ne la refuse pas et ne double pas le
-        # message (une sortie fautive reste jugée par `_check_path_to_args`).
-        if method in ("flood", "path_to", "flow_map", "regions"):
+        # La grille de sortie de `regions` EST une référence, jamais une valeur : on
+        # la marque avant tout, même si l'arité est fautive, pour que la marche des
+        # expressions ne la refuse pas et ne double pas le message.
+        if method == "regions":
             for arg in args:
                 self._mark_grid_ref(arg)
         if len(args) not in arites:
@@ -1079,68 +1081,8 @@ class Checker:
                 "error",
                 f"{name}:{method}() takes {attendu} argument(s): {name}:{forme}."))
             return
-        if method == "flood":
-            self._check_flood_args(name, args)
-        elif method == "path_to":
-            self._check_path_to_args(name, args)
-        elif method == "flow_map":
-            self._check_flow_map_args(name, args)
-        elif method == "regions":
+        if method == "regions":
             self._check_regions_args(name, args)
-        elif method == "step_at":
-            self._check_step_at_args(name, args)
-        elif method == "target":
-            self._check_target_args(name, args)
-
-    def _check_target_args(self, name: str, args: list) -> None:
-        """`target(position[, budget])` : remplit la grille d'un champ de flux vers
-        une POSITION monde (un vec2), en contournant la collision de la scène ;
-        `budget` facultatif plafonne la portée. Le scratch interne borne la taille
-        de la grille (`_GRID_TARGET_MAX`)."""
-        if infer_vec_type(args[0], self._vec_types, self._ref_types, self._kinds) != "vec2":
-            self.errors.append(CheckError(
-                "error",
-                f"{name}:target(): the first argument is a world position, a vec2"
-                " (self.position, or a vec2 of this script)."))
-        dims = self._ram_grid_dims(name)
-        if dims and dims[0] * dims[1] > self._GRID_TARGET_MAX:
-            self.errors.append(CheckError(
-                "error",
-                f"{name}:target(): the grid is too large ({dims[0]}x{dims[1]} ="
-                f" {dims[0] * dims[1]} cells); target()'s internal scratch is capped at"
-                f" {self._GRID_TARGET_MAX} cells. Flood and flow_map it by hand for a bigger grid."))
-
-    def _check_step_at_args(self, name: str, args: list) -> None:
-        """`step_at` prend une POSITION monde (un vec2), pas deux entiers : la case
-        se déduit du pas de la grille, et le résultat est un vec2 (le pas unitaire
-        vers la source)."""
-        if infer_vec_type(args[0], self._vec_types, self._ref_types, self._kinds) != "vec2":
-            self.errors.append(CheckError(
-                "error",
-                f"{name}:step_at(): the argument is a world position, a vec2"
-                " (self.position, or a vec2 of this script)."))
-
-    def _check_path_to_args(self, name: str, args: list) -> None:
-        """`path_to` écrit ses pas dans un array : le 3e argument est la sortie,
-        un array à une dimension de ce script (l'appelant le dimensionne, le C émis
-        la borne). Les deux premiers sont la case visée."""
-        if not self._is_array_expr(args[2]):
-            self.errors.append(CheckError(
-                "error",
-                f"{name}:path_to(): the 3rd argument is the output, an array this"
-                " script declares (a `array(...)`); each step is a direction 0..3."))
-
-    def _check_flow_map_args(self, name: str, args: list) -> None:
-        """`flow_map` lit la carte de coûts du récepteur (écrite par `flood`) et écrit
-        une direction par case dans la grille de sortie : l'argument est une grille où
-        l'on peut écrire (une `grid(...)` de ce script ou une grille RAM de la scène),
-        jamais une grille peinte en lecture seule."""
-        if not self._is_writable_grid_expr(args[0]):
-            self.errors.append(CheckError(
-                "error",
-                f"{name}:flow_map(): the argument is the output, a writable grid (a"
-                " `grid(...)` of this script or a RAM data.grid.<Name>) of the same size;"
-                " each cell gets a direction 0..3 toward the source."))
 
     def _check_regions_args(self, name: str, args: list) -> None:
         """`regions` découpe le récepteur en zones de valeur égale et écrit un id par
@@ -1162,30 +1104,136 @@ class Checker:
         elif data_grid_ref(e) is not None:
             self._grids_lues.add(id(e))
 
-    def _check_flood_args(self, name: str, args: list) -> None:
-        """`flood` prend une case de départ et un budget ; le terrain (une grille)
-        et les coûts (un array indexé par la valeur de terrain) sont FACULTATIFS,
-        et vont ensemble (sans eux, le coût est uniforme de 1 par pas) ; une grille
-        d'occupation `blocked` est facultative par-dessus. Chacun à sa place et de
-        son type, sinon le C émis ne tiendrait pas. (Les grilles passées en argument
-        sont déjà marquées comme références par `_check_ram_grid_method`.)"""
-        if len(args) == 3:
-            return                      # flood(x, y, budget) : coût uniforme, rien à vérifier
-        if not self._is_grid_expr(args[3]):
+    # ── Le module navigation : analyser une ou plusieurs grilles ─────
+
+    def _grid_dims_of_expr(self, e):
+        """La géométrie `(cols, rows, step)` de la grille que `e` désigne, ou None :
+        une grille RAM du script (nom) ou une grille RAM de la scène."""
+        if isinstance(e, ExprName) and e.name in self._grids:
+            return self._grids[e.name]
+        name = data_grid_ref(e)
+        return self._ram_grid_dims(name) if name is not None else None
+
+    def _check_navigation_call(self, func: str, args: list) -> None:
+        """Les fonctions du module `navigation` : échantillonner la collision, tracer
+        une ligne de vue, propager un coût, en tirer un chemin ou un champ de flux. La
+        ou les grilles sont des ARGUMENTS explicites : on les marque comme références
+        avant tout (une grille n'est pas une valeur), puis chaque argument est vérifié
+        selon son rôle (grille en lecture, grille inscriptible, array de sortie,
+        position monde)."""
+        entry = self._NAVIGATION_FNS.get(func)
+        if entry is None:
+            noms = ", ".join(f":{m}" for m in self._NAVIGATION_FNS)
+            self.errors.append(CheckError(
+                "error", f"navigation:{func}(): the navigation functions are {noms}."))
+            return
+        for arg in args:
+            self._mark_grid_ref(arg)
+        arites, forme = entry
+        if len(args) not in arites:
+            attendu = " or ".join(str(a) for a in arites)
             self.errors.append(CheckError(
                 "error",
-                f"{name}:flood(): the 4th argument is the terrain, a grid (a `grid(...)`"
-                " of this script or a painted data.grid.<Name>)."))
-        if not self._is_array_expr(args[4]):
+                f"navigation:{func}() takes {attendu} argument(s): navigation:{forme}."))
+            return
+        getattr(self, f"_check_nav_{func}")(args)
+
+    def _nav_bad_writable(self, func: str, pos: str) -> None:
+        self.errors.append(CheckError(
+            "error",
+            f"navigation:{func}(): {pos} is the output, a writable grid (a `grid(...)`"
+            " of this script or a RAM data.grid.<Name>)."))
+
+    def _nav_bad_grid(self, func: str, pos: str) -> None:
+        self.errors.append(CheckError(
+            "error",
+            f"navigation:{func}(): {pos} is a grid (a `grid(...)` of this script or a"
+            " data.grid.<Name>)."))
+
+    def _nav_bad_vec2(self, func: str, pos: str) -> None:
+        self.errors.append(CheckError(
+            "error",
+            f"navigation:{func}(): {pos} is a world position, a vec2 (self.position, or"
+            " a vec2 of this script)."))
+
+    def _is_vec2(self, e) -> bool:
+        return infer_vec_type(e, self._vec_types, self._ref_types, self._kinds) == "vec2"
+
+    def _check_nav_sample_collision(self, args: list) -> None:
+        """`sample_collision(out)` : remplit `out` depuis la collision vivante (1 où
+        une tuile de 8 px bloque). `out` est une grille inscriptible."""
+        if not self._is_writable_grid_expr(args[0]):
+            self._nav_bad_writable("sample_collision", "the argument")
+
+    def _check_nav_line_of_sight(self, args: list) -> None:
+        """`line_of_sight(blockers, x0, y0, x1, y1)` : la ligne entre deux cases est-elle
+        libre sur la grille de blocage `blockers` (une case non nulle bloque la vue) ?"""
+        if not self._is_grid_expr(args[0]):
+            self._nav_bad_grid("line_of_sight", "the first argument, the blocking map,")
+
+    def _check_nav_spread_from(self, args: list) -> None:
+        """`spread_from(out, x, y, budget[, terrain, costs[, blockers]])` : propage un
+        coût depuis une case dans `out`. `terrain` (grille) et `costs` (array) vont
+        ensemble ; sans eux, coût uniforme de 1 par pas. `blockers` (grille
+        d'occupation) est facultative par-dessus."""
+        if not self._is_writable_grid_expr(args[0]):
+            self._nav_bad_writable("spread_from", "the first argument")
+        if len(args) >= 6:
+            if not self._is_grid_expr(args[4]):
+                self._nav_bad_grid("spread_from", "the 5th argument, the terrain,")
+            if not self._is_array_expr(args[5]):
+                self.errors.append(CheckError(
+                    "error",
+                    "navigation:spread_from(): the 6th argument is the costs, an array"
+                    " indexed by terrain value (a `array(...)` of this script)."))
+        if len(args) == 7 and not self._is_grid_expr(args[6]):
+            self._nav_bad_grid("spread_from", "the 7th argument, the blockers,")
+
+    def _check_nav_path_to(self, args: list) -> None:
+        """`path_to(cost_map, x, y, out)` : sur une carte de coûts (écrite par
+        spread_from), redescend de la case visée vers la source. `out` est un array à
+        une dimension de ce script (l'appelant le dimensionne)."""
+        if not self._is_grid_expr(args[0]):
+            self._nav_bad_grid("path_to", "the first argument, the cost map,")
+        if not self._is_array_expr(args[3]):
             self.errors.append(CheckError(
                 "error",
-                f"{name}:flood(): the 5th argument is the costs, an array indexed by"
-                " terrain value (a `array(...)` of this script)."))
-        if len(args) == 6 and not self._is_grid_expr(args[5]):
+                "navigation:path_to(): the 4th argument is the output, an array this"
+                " script declares (a `array(...)`); each step is a direction 0..3."))
+
+    def _check_nav_make_flow(self, args: list) -> None:
+        """`make_flow(cost_map, out)` : sur une carte de coûts (écrite par spread_from),
+        écrit dans `out` une direction par case vers la source. `out` est une grille
+        inscriptible."""
+        if not self._is_grid_expr(args[0]):
+            self._nav_bad_grid("make_flow", "the first argument, the cost map,")
+        if not self._is_writable_grid_expr(args[1]):
+            self._nav_bad_writable("make_flow", "the second argument")
+
+    def _check_nav_flow_to(self, args: list) -> None:
+        """`flow_to(out, position[, budget])` : remplit `out` d'un champ de flux vers une
+        POSITION monde (vec2), en contournant la collision vivante. Le scratch interne
+        borne la taille de la grille (`_GRID_TARGET_MAX`)."""
+        if not self._is_writable_grid_expr(args[0]):
+            self._nav_bad_writable("flow_to", "the first argument")
+        if not self._is_vec2(args[1]):
+            self._nav_bad_vec2("flow_to", "the second argument")
+        dims = self._grid_dims_of_expr(args[0])
+        if dims and dims[0] * dims[1] > self._GRID_TARGET_MAX:
             self.errors.append(CheckError(
                 "error",
-                f"{name}:flood(): the 6th argument, when present, is the blocked map,"
-                " a grid of occupancy."))
+                f"navigation:flow_to(): the grid is too large ({dims[0]}x{dims[1]} ="
+                f" {dims[0] * dims[1]} cells); flow_to()'s internal scratch is capped at"
+                f" {self._GRID_TARGET_MAX} cells. Use spread_from and make_flow by hand"
+                " for a bigger grid."))
+
+    def _check_nav_direction_at(self, args: list) -> None:
+        """`direction_at(flow, position)` : lit la grille de flux à une POSITION monde
+        (vec2) et rend le pas unitaire (vec2) vers la source."""
+        if not self._is_grid_expr(args[0]):
+            self._nav_bad_grid("direction_at", "the first argument, the flow grid,")
+        if not self._is_vec2(args[1]):
+            self._nav_bad_vec2("direction_at", "the second argument")
 
     def _check_ram_grid_field(self, name: str, field: str) -> None:
         """`g.cols` / `g.rows` : les deux seules propriétés d'une grille RAM, en
@@ -1194,7 +1242,7 @@ class Checker:
             self.errors.append(CheckError(
                 "error",
                 f"{name}.{field}: a grid exposes only .cols and .rows; read a cell with"
-                f" {name}[x][y] in cells or {name}:at(x, y) in pixels."))
+                f" {name}[x][y] in cells or {name}:value_at(x, y) in pixels."))
 
     # Tables de données
 
@@ -1242,7 +1290,7 @@ class Checker:
     def _check_data_grid(self, name: str) -> None:
         """`data.grid.<Nom>` cité SEUL : la grille existe, mais ce n'est pas une valeur.
 
-        Une grille se lit case par case : par pixel (`:at(x, y)`) ou par case
+        Une grille se lit case par case : par pixel (`:value_at(x, y)`) ou par case
         (`[x][y]`). Sans ce refus, le C émis serait `int v = g_grid_…;`, que gcc
         refuserait bien plus loin, sur une ligne que l'auteur n'a pas écrite."""
         if self._grid(name) is None:
@@ -1250,27 +1298,27 @@ class Checker:
         self.errors.append(CheckError(
             "error",
             f"data.grid.{name} is a grid, not a value: read one cell, with"
-            f" data.grid.{name}:at(x, y) in pixels or data.grid.{name}[x][y] in cells."))
+            f" data.grid.{name}:value_at(x, y) in pixels or data.grid.{name}[x][y] in cells."))
 
     def _check_grid_method(self, name: str, method: str, args: list) -> None:
-        """`data.grid.<Nom>:at(x, y)` : la seule méthode, et ses deux arguments.
+        """`data.grid.<Nom>:value_at(x, y)` : la seule méthode, et ses deux arguments.
 
-        `at` prend des PIXELS monde, comme `collision.tile_at` : c'est la même question
-        posée à la même échelle, et la grille rend la case qui contient ce point."""
+        `value_at` prend des PIXELS monde, comme `collision.tile_at` : c'est la même
+        question posée à la même échelle, et la grille rend la case qui contient ce point."""
         grid = self._grid(name)
         if grid is None:
             return
-        if method != "at":
+        if method != "value_at":
             self.errors.append(CheckError(
                 "error",
                 f"data.grid.{name}:{method}(): a painted grid is read-only, and its only"
-                f" method is :at(x, y), in world pixels. One cell is also read as"
+                f" method is :value_at(x, y), in world pixels. One cell is also read as"
                 f" data.grid.{name}[x][y]."))
             return
         if len(args) != 2:
             self.errors.append(CheckError(
                 "error",
-                f"data.grid.{name}:at() takes two arguments, x and y in world pixels"
+                f"data.grid.{name}:value_at() takes two arguments, x and y in world pixels"
                 f" ({len(args)} given)."))
 
     def _check_grid_cells(self, name: str, indices: list) -> None:
@@ -1286,7 +1334,7 @@ class Checker:
             self.errors.append(CheckError(
                 "error",
                 f"data.grid.{name} has two dimensions: write data.grid.{name}[x][y]"
-                f" (column then row), or :at(x, y) in pixels."))
+                f" (column then row), or :value_at(x, y) in pixels."))
             return
         for k, (index, size, axe) in enumerate(zip(indices, (grid.cols, grid.rows), "xy")):
             value = self._literal_int(index)
@@ -2346,7 +2394,7 @@ class Checker:
                 self.errors.append(CheckError(
                     "error",
                     f"`{e.name}` is a grid: a grid is not a value. Read a cell with "
-                    f"{e.name}[x][y] or {e.name}:at(x, y)."))
+                    f"{e.name}[x][y] or {e.name}:value_at(x, y)."))
             else:
                 # Un nom nu doit être une variable connue ou un espace de noms.
                 self._check_bare_name(e.name, ecrit=False)
@@ -2662,6 +2710,12 @@ class Checker:
             if key.startswith("input.") and key != "input.pressed":
                 self._check_input_call(key, e.args)
                 # Le nombre d'arguments est vérifié par `_check_args`.
+            if key.startswith("navigation."):
+                # Une fonction du module navigation prend une ou plusieurs grilles en
+                # argument (références, pas valeurs) : le contrôle générique
+                # `_check_args` les refuserait. On la juge à part, ici.
+                self._check_navigation_call(key.split(".", 1)[1], e.args)
+                return
             api = RUNTIME_API.get(key)
             if api is None:
                 self._check_unknown_call(key, e.args)

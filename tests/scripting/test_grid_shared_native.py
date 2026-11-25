@@ -95,7 +95,7 @@ def test_un_script_ecrit_la_grille_ram_de_scene_un_autre_la_relit(tmp_path):
     (tmp_path / "grid_inline.h").write_text(_inline_du_moteur(), encoding="utf-8")
 
     write_rect = _ligne("data.grid.Flow:fill_rect(x, y, w, h, v)", "grid_fill_rect(")
-    read_at = _expression("local v = data.grid.Flow:at(px, py)")
+    read_at = _expression("local v = data.grid.Flow:value_at(px, py)")
     cell = _expression("local v = data.grid.Flow[x][y]")
     # Les symboles émis doivent bien viser le tampon partagé, qualifié par la scène.
     assert "g_grid_Arena_Flow" in write_rect

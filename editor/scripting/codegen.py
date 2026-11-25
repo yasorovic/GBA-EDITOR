@@ -2374,52 +2374,29 @@ class CodeGen:
         hors de la grille vaut 0. Vaut pour une grille peinte (`data.grid.T`,
         résolue par son nom au build) comme pour une grille RAM du script."""
         if (isinstance(e.obj, ExprName) and e.obj.name in self._grids
-                and e.method == "at" and len(e.args) == 2):
+                and e.method == "value_at" and len(e.args) == 2):
             cols, rows, step = self._grids[e.obj.name]
             base = self._name_storage(e.obj.name)
             px, py = (self._expr(a) for a in e.args)
             return (f"grid_value_at({base}, {cols}, {rows}, "
                     f"{self._grid_shift(step)}, {px}, {py})")
         grid = self._grid_of(e.obj)
-        if grid is None or e.method != "at" or len(e.args) != 2:
+        if grid is None or e.method != "value_at" or len(e.args) != 2:
             return None
         self._uses_grids = True
         px, py = (self._expr(a) for a in e.args)
         return (f"grid_value_at({grid.sym}, {grid.width}, {grid.height}, "
                 f"{grid.shift}, {px}, {py})")
 
-    def _grid_step_at(self, e: ExprInvoke) -> Optional[str]:
-        """`g:step_at(position)` → `grid_step_at(...)` : lit le champ de flux à une
-        position MONDE (vec2) et rend le pas UNITAIRE vers la source (un vec2
-        -1/0/1 par axe ; (0,0) à la source ou hors de portée). Couche itération
-        au-dessus de `:at` : évite de décoder la direction à la main. Le récepteur
-        est une grille RAM du script, ou une grille RAM de la scène
-        (`data.grid.<Nom>`, le champ de flux partagé que l'acteur lit) : une grille
-        peinte en ROM n'est pas un champ de flux, le checker l'a refusée."""
-        if not (e.method == "step_at" and len(e.args) == 1):
-            return None
-        if isinstance(e.obj, ExprName) and e.obj.name in self._grids:
-            cols, rows, step = self._grids[e.obj.name]
-            base = self._name_storage(e.obj.name)
-        else:
-            grid = self._grid_of(e.obj)
-            if grid is None or not grid.ram:
-                return None
-            cols, rows, step = grid.cols, grid.rows, grid.step
-            base = grid.sym
-            self._uses_grids = True
-        pe = self._expr(e.args[0])
-        return (f"grid_step_at({base}, {cols}, {rows}, {self._grid_shift(step)}, "
-                f"({pe}).x, ({pe}).y)")
-
     def _grid_write(self, e: ExprInvoke) -> Optional[str]:
-        """`g:fill(v)` / `g:fill_rect(x, y, w, h, v)` : une opération d'ÉCRITURE,
-        posée comme une instruction. Le récepteur est soit une grille RAM du
-        script (une variable), soit une grille RAM de la scène (`data.grid.<Nom>`,
-        partagée par tous ses scripts) : le même tampon RAM, écrit par l'une et lu
-        par l'autre. Le checker a déjà validé la méthode, ses arguments et que la
-        grille est bien inscriptible ; une grille peinte en ROM est en lecture
-        seule, refusée là-bas. L'inline du moteur borne le rectangle à la grille."""
+        """`g:fill(v)` / `g:fill_rect(x, y, w, h, v)` / `g:regions(out)` : une
+        opération récepteur d'ÉCRITURE ou d'analyse locale, posée comme une
+        instruction. Le récepteur est soit une grille RAM du script (une variable),
+        soit une grille RAM de la scène (`data.grid.<Nom>`, partagée par tous ses
+        scripts) : le même tampon RAM. Le checker a déjà validé la méthode, ses
+        arguments et que la grille est inscriptible ; une grille peinte en ROM est
+        en lecture seule, refusée là-bas. L'ANALYSE de passage (coût, chemin, flux,
+        vue) passe par le module `navigation` (`_emit_nav_*`), pas par le récepteur."""
         if isinstance(e.obj, ExprName) and e.obj.name in self._grids:
             cols, rows, _step = self._grids[e.obj.name]
             base = self._name_storage(e.obj.name)
@@ -2439,78 +2416,119 @@ class CodeGen:
             return (f"grid_fill_rect({base}, {cols}, {rows}, "
                     f"{self._index(x)}, {self._index(y)}, "
                     f"{self._expr(w)}, {self._expr(h)}, {self._expr(v)})")
-        if e.method == "target" and len(e.args) in (1, 2):
-            # Couche itération : remplit le récepteur d'un champ de flux vers une
-            # position MONDE (vec2), en contournant la collision vivante. L'inline
-            # fait sample_collision + flood uniforme + flow_map avec son propre
-            # scratch. `budget` facultatif (254 = portée maximale par défaut).
-            pe = self._expr(e.args[0])
-            budget = self._expr(e.args[1]) if len(e.args) == 2 else "254"
-            return (f"grid_target({base}, {cols}, {rows}, {self._grid_shift(_step)}, "
-                    f"({pe}).x, ({pe}).y, {budget})")
-        if e.method == "flood" and len(e.args) in (3, 5, 6):
-            sx, sy, budget = e.args[:3]
-            terrain = e.args[3] if len(e.args) >= 5 else None
-            couts = e.args[4] if len(e.args) >= 5 else None
-            bloque = e.args[5] if len(e.args) == 6 else None
-            # Terrain et coûts facultatifs : sans eux, coût uniforme (terrain NULL,
-            # costs NULL, costs_len 0), l'inline ajoute 1 par pas.
-            tptr, cp0, cp1 = "0", "0", "0"
-            if terrain is not None:
-                t = self._grid_pointer(terrain)
-                c = self._array_pointer(couts)
-                if t is None or c is None:
-                    return None      # le checker a déjà nommé le mauvais argument
-                tptr, cp0, cp1 = t, c[0], c[1]
-            bptr = "0"
-            if bloque is not None:
-                b = self._grid_pointer(bloque)
-                if b is None:
-                    return None
-                bptr = b
-            # La géométrie de la grille RÉSULTAT (le récepteur) fait autorité :
-            # terrain et bloque la partagent (le checker le vérifie quand il peut).
-            return (f"grid_flood({base}, {tptr}, {bptr}, {cols}, {rows}, "
-                    f"{self._index(sx)}, {self._index(sy)}, {self._expr(budget)}, "
-                    f"{cp0}, {cp1})")
-        if e.method == "path_to" and len(e.args) == 3:
-            tx, ty, out = e.args
-            optr = self._array_pointer(out)
-            if optr is None:
-                return None          # le checker a déjà nommé le mauvais argument
-            # Le récepteur porte la carte de coûts (écrite par flood) ; on redescend
-            # de la case visée vers la source. L'origine passe en base 0 ici, une
-            # fois. La sortie et sa longueur, connues au build, bornent le chemin.
-            return (f"grid_path_to({base}, {cols}, {rows}, "
-                    f"{self._index(tx)}, {self._index(ty)}, {optr[0]}, {optr[1]})")
-        if e.method == "line_of_sight" and len(e.args) == 4:
-            x0, y0, x1, y1 = e.args
-            # Le récepteur EST la carte d'obstacles (case non nulle = mur). Les
-            # quatre coordonnées passent en base 0 ici, une fois.
-            return (f"grid_line_of_sight({base}, {cols}, {rows}, "
-                    f"{self._index(x0)}, {self._index(y0)}, "
-                    f"{self._index(x1)}, {self._index(y1)})")
-        if e.method == "flow_map" and len(e.args) == 1:
-            # Le récepteur est une carte de coûts (écrite par flood) ; on en dérive
-            # une direction par case dans la grille de sortie `dirs`. Le checker a
-            # déjà vérifié que `dirs` est une grille RAM de ce script.
-            dptr = self._grid_pointer(e.args[0])
-            if dptr is None:
-                return None
-            return f"grid_flow_map({base}, {dptr}, {cols}, {rows})"
         if e.method == "regions" and len(e.args) == 1:
             # Le récepteur est la carte à découper ; `out` reçoit un id par case.
-            # Le checker a déjà vérifié que `out` est une grille RAM de ce script.
+            # Le checker a déjà vérifié que `out` est une grille inscriptible.
             optr = self._grid_pointer(e.args[0])
             if optr is None:
                 return None
             return f"grid_regions({base}, {optr}, {cols}, {rows})"
-        if e.method == "sample_collision" and len(e.args) == 0:
-            # Échantillonne la carte de collision VIVANTE dans la grille réceptrice,
-            # à son pas. `collision_sample` (avec la physique) lit les globals de la
-            # scène active, comme `collision.tile_at` : pas d'accès direct ici.
-            return f"collision_sample({base}, {cols}, {rows}, {_step})"
         return None
+
+    # ── Le module navigation : analyser une ou plusieurs grilles ─────
+    # Même émission inline qu'avant, mais la grille vient d'un ARGUMENT (plus du
+    # récepteur). `_grid_emit` rend (base, cols, rows, step) de la grille PRIMAIRE
+    # (celle dont la géométrie fait autorité) ; les autres grilles sont de simples
+    # pointeurs (`_grid_pointer`). Le checker a déjà validé le rôle de chaque
+    # argument : une sortie fautive rend "0", le C ne sera pas atteint.
+
+    def _grid_emit(self, expr):
+        """(base, cols, rows, step) de la grille désignée par `expr` : une grille RAM
+        du script (nom) ou une grille de la scène (`data.grid.<Nom>`). None sinon."""
+        if isinstance(expr, ExprName) and expr.name in self._grids:
+            cols, rows, step = self._grids[expr.name]
+            return self._name_storage(expr.name), cols, rows, step
+        grid = self._grid_of(expr)
+        if grid is None:
+            return None
+        self._uses_grids = True
+        return grid.sym, grid.cols, grid.rows, grid.step
+
+    def _emit_nav_sample_collision(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # out : grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, step = info
+        return f"collision_sample({base}, {cols}, {rows}, {step})"
+
+    def _emit_nav_line_of_sight(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # blockers : grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, _step = info
+        x0, y0, x1, y1 = args[1:5]
+        return (f"grid_line_of_sight({base}, {cols}, {rows}, "
+                f"{self._index(x0)}, {self._index(y0)}, "
+                f"{self._index(x1)}, {self._index(y1)})")
+
+    def _emit_nav_spread_from(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # out : carte de coûts, grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, _step = info
+        sx, sy, budget = args[1:4]
+        terrain = args[4] if len(args) >= 6 else None
+        couts = args[5] if len(args) >= 6 else None
+        bloque = args[6] if len(args) == 7 else None
+        # Terrain et coûts facultatifs : sans eux, coût uniforme (terrain NULL,
+        # costs NULL, costs_len 0), l'inline ajoute 1 par pas.
+        tptr, cp0, cp1 = "0", "0", "0"
+        if terrain is not None:
+            t = self._grid_pointer(terrain)
+            c = self._array_pointer(couts)
+            if t is None or c is None:
+                return "0"
+            tptr, cp0, cp1 = t, c[0], c[1]
+        bptr = "0"
+        if bloque is not None:
+            b = self._grid_pointer(bloque)
+            if b is None:
+                return "0"
+            bptr = b
+        return (f"grid_flood({base}, {tptr}, {bptr}, {cols}, {rows}, "
+                f"{self._index(sx)}, {self._index(sy)}, {self._expr(budget)}, "
+                f"{cp0}, {cp1})")
+
+    def _emit_nav_path_to(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # cost_map : grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, _step = info
+        tx, ty, out = args[1], args[2], args[3]
+        optr = self._array_pointer(out)
+        if optr is None:
+            return "0"
+        return (f"grid_path_to({base}, {cols}, {rows}, "
+                f"{self._index(tx)}, {self._index(ty)}, {optr[0]}, {optr[1]})")
+
+    def _emit_nav_make_flow(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # cost_map : grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, _step = info
+        dptr = self._grid_pointer(args[1])  # out
+        if dptr is None:
+            return "0"
+        return f"grid_flow_map({base}, {dptr}, {cols}, {rows})"
+
+    def _emit_nav_flow_to(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # out : champ de flux, grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, step = info
+        pe = self._expr(args[1])
+        budget = self._expr(args[2]) if len(args) == 3 else "254"
+        return (f"grid_target({base}, {cols}, {rows}, {self._grid_shift(step)}, "
+                f"({pe}).x, ({pe}).y, {budget})")
+
+    def _emit_nav_direction_at(self, args: list) -> str:
+        info = self._grid_emit(args[0])     # flow : grille primaire
+        if info is None:
+            return "0"
+        base, cols, rows, step = info
+        pe = self._expr(args[1])
+        return (f"grid_step_at({base}, {cols}, {rows}, {self._grid_shift(step)}, "
+                f"({pe}).x, ({pe}).y)")
 
     def _grid_pointer(self, expr) -> Optional[str]:
         """Le pointeur C d'une grille désignée par `expr` : une grille RAM (son
@@ -2538,9 +2556,6 @@ class CodeGen:
         cell = self._grid_at(e)
         if cell is not None:
             return cell
-        step = self._grid_step_at(e)
-        if step is not None:
-            return step
         write = self._grid_write(e)
         if write is not None:
             return write
@@ -3524,6 +3539,13 @@ def covered_domains() -> frozenset:
 _CALL_CUSTOM: dict = {
     "array":       CodeGen._emit_array_misuse,
     "grid":        CodeGen._emit_grid_misuse,
+    "navigation.sample_collision": CodeGen._emit_nav_sample_collision,
+    "navigation.line_of_sight":    CodeGen._emit_nav_line_of_sight,
+    "navigation.spread_from":      CodeGen._emit_nav_spread_from,
+    "navigation.path_to":          CodeGen._emit_nav_path_to,
+    "navigation.make_flow":        CodeGen._emit_nav_make_flow,
+    "navigation.flow_to":          CodeGen._emit_nav_flow_to,
+    "navigation.direction_at":     CodeGen._emit_nav_direction_at,
     "actor.get":   CodeGen._emit_get_actor,
     # `pressed`/`released` n'ont plus de cas particulier depuis que les
     # séquences ont quitté leur espace de noms (2026-09-27) : un simple

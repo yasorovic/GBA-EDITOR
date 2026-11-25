@@ -144,6 +144,14 @@ def _module_cases():
     for key, api in RUNTIME_API.items():
         if "." not in key or ":" in key or key == "actor.get":   # actor.get accepte aussi un index
             continue
+        # Les fonctions du module `navigation` prennent des grilles en argument et
+        # sont validées à part (`checker._check_navigation_call` : grille en lecture,
+        # grille inscriptible, array de sortie, position vec2), pas par le contrôle
+        # générique `_check_args` qui nomme le paramètre. Leur jugement par argument
+        # est couvert dans `test_grid_ram.py`. Hors de ce test générique, comme les
+        # méthodes récepteur à « : ».
+        if key.startswith("navigation."):
+            continue
         for i, p in enumerate(api.params):
             yield pytest.param(key, i, id=f"{key}[{p.name}:{p.ptype}]")
 

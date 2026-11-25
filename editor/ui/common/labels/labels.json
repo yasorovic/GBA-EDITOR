@@ -2707,7 +2707,7 @@
       "text": "Active scene."
     },
     "scrsb.require_desc": { "text": "Imports the behavior module {name}." },
-    "scrsb.sec.actor": {
+    "scrsb.sec.gameplay": {
       "text": "Gameplay"
     },
     "scrsb.sec.sound": {

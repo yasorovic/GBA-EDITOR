@@ -239,7 +239,7 @@ Le module `data` porte un niveau par **nature** de donnée, et la nature se lit 
 
 ```lua
 local prix = data.table.Objets[i].prix     -- une table du PROJET : des colonnes nommées
-local sol  = data.grid.Terrain:at(x, y)    -- une grille de la SCÈNE : la case qui contient ce point
+local sol  = data.grid.Terrain:value_at(x, y)  -- une grille de la SCÈNE : la case qui contient ce point
 local coin = data.grid.Terrain[1][1]       -- la même grille, par case : colonne, puis rangée
 ```
 
@@ -249,7 +249,7 @@ Les deux sont `const` en ROM : elles se lisent, elles ne s'écrivent pas. Pour u
 
 Sur une grille peinte (`data.grid`) :
 
-- `:at(x, y)` prend des **pixels monde**, comme `collision.tile_at`, et rend la case qui contient ce point. Hors de la grille vaut `0`, comme hors de la carte de collision.
+- `:value_at(x, y)` prend des **pixels monde**, comme `collision.tile_at`, et rend la case qui contient ce point. Hors de la grille vaut `0`, comme hors de la carte de collision.
 - `[x][y]` prend des **cases**, la colonne puis la rangée, numérotées à partir de 1 comme tout tableau. Un index écrit en clair est borné au build.
 - Le pas d'une grille est une puissance de deux (8, 16 ou 32 px) : passer d'un pixel à une case est un décalage de bits, la console n'ayant pas d'instruction de division.
 - Les valeurs nommées de sa légende sont des constantes du build.
@@ -262,26 +262,33 @@ Une grille peinte est en lecture seule. Pour une grille **calculée par le jeu**
 local portee = grid(30, 20, 16)   -- 30 colonnes, 20 rangées, des cases de 16 px
 portee[4][7] = 3                   -- écriture par case : colonne, puis rangée, à partir de 1
 local c = portee[4][7]             -- lecture par case
-local v = portee:at(px, py)        -- la case qui contient un point du monde, en pixels
+local v = portee:value_at(px, py)  -- la case qui contient un point du monde, en pixels
 for x = 1, portee.cols do for y = 1, portee.rows do ... end end
 ```
 
-- Les deux premiers nombres sont les **colonnes** et les **rangées** (des cases, pas des pixels). Le troisième, facultatif, est le **pas** d'une case en pixels (8, 16 ou 32, 16 par défaut), pour `:at`.
+- Les deux premiers nombres sont les **colonnes** et les **rangées** (des cases, pas des pixels). Le troisième, facultatif, est le **pas** d'une case en pixels (8, 16 ou 32, 16 par défaut), pour `:value_at`.
 - Une case tient sur **un octet** (valeurs de 0 à 255), remplie de zéros au départ.
-- `:at(x, y)` lit la case d'un point du monde ; hors de la grille vaut `0`. `portee.cols` et `portee.rows` donnent la taille.
+- `:value_at(x, y)` lit la case d'un point du monde ; hors de la grille vaut `0`. `portee.cols` et `portee.rows` donnent la taille.
 - `:fill(v)` met **toutes** les cases à `v`. `:fill_rect(x, y, w, h, v)` remplit un **rectangle** de cases, l'origine `x, y` à partir de 1, `w, h` en cases ; la partie hors grille est ignorée, jamais un débordement.
-- `:flood(x, y, budget[, terrain, couts[, bloque]])` écrit dans la grille une **carte de portée à coût** depuis la case `x, y` (à partir de 1). **`terrain` et `couts` sont facultatifs** : sans eux, le coût est **uniforme** de 1 par pas. Avec eux, `terrain` est une grille et `couts` un `array` indexé par la valeur de terrain (un coût nul ou négatif, ou une valeur hors table, est un **mur**) ; `bloque` est une grille d'occupation facultative. Une case atteinte porte son coût cumulé (plafonné à 254), une case hors de portée vaut `255`. Quatre directions.
-- `:path_to(x, y, out)` relit cette carte de coûts pour écrire le **chemin** vers la case `x, y` dans l'`array` `out` : chaque pas est une **direction de 0 à 3** (0 droite, 1 gauche, 2 bas, 3 haut, l'ordre de `flood`), rangés de la **source vers la cible**, prêts à rejouer. La méthode retourne le **nombre de pas** écrits, borné par la taille de `out` ; `0` si la cible est hors de portée.
-- `:line_of_sight(x0, y0, x1, y1)` dit si la **ligne de vue** entre deux cases est **dégagée** : le récepteur est la carte d'obstacles (une case non nulle bloque), le tracé est un Bresenham fin, et les deux extrémités ne sont **pas** testées (l'observateur et la cible peuvent occuper une case). Rend `true` si rien ne bloque entre elles, `false` sinon.
-- `:flow_map(dirs)` lit la **carte de coûts** du récepteur (celle qu'a écrite `:flood`) et écrit dans la grille `dirs` une **carte de flux** : chaque case reçoit la **direction de 0 à 3** vers son voisin le moins cher, c'est-à-dire le pas vers la source (même ordre que `flood`), `4` pour la case source (arrivé) et `255` pour une case hors de portée. Calculée une fois, elle laisse N agents naviguer en lisant une seule case (`dirs[x][y]`), sans refaire un chemin chacun.
-- `:regions(out)` découpe le récepteur en **régions connexes** : deux cases voisines de **valeur égale** appartiennent à la même région (voisinage à 4). Chaque case reçoit dans `out` l'**id de sa région**, de `1` à `N` (toute case est étiquetée, les `0` compris), et la méthode retourne `N`, le nombre de régions.
-- `:sample_collision()` remplit la grille depuis la **carte de collision vivante** de la scène (celle que `collision:fill_rect` peut modifier) : chaque case reçoit `1` si une de ses sous-tuiles de 8 px n'est pas vide (conservateur), `0` sinon. La grille et la carte partagent l'origine `(0, 0)`. On l'enchaîne avec `:flood` et `:flow_map` pour une **IA qui esquive les obstacles réels**, y compris un pont qui vient de tomber. Sans carte de collision, tout est franchissable.
-
-**La couche d'itération** réunit les trois gestes ci-dessus pour le cas le plus courant, poursuivre une cible en contournant les murs, en une grille et deux appels :
-
-- `:target(position[, budget])` remplit le récepteur d'un **champ de flux** vers une **position monde** (un vec2, en pixels), en contournant la collision vivante de la scène. En interne : `sample_collision` + `flood` à coût uniforme + `flow_map`, avec son propre tampon. `budget` facultatif plafonne la portée. La grille est bornée à **1024 cases** (le tampon interne) ; au-delà, on enchaîne `flood` et `flow_map` à la main. Remplace la déclaration des grilles de terrain, d'obstacles et de coût.
-- `:step_at(position)` lit le champ de flux à une **position monde** (vec2) et rend le **pas unitaire** (un vec2, -1/0/1 par axe) vers la source ; `(0, 0)` à la source ou hors de portée. Évite de décoder la direction à la main. Ex : `self.velocity = flow:step_at(self.position) * 220`.
+- `:regions(out)` découpe la grille en **régions connexes** : deux cases voisines de **valeur égale** appartiennent à la même région (voisinage à 4). Chaque case reçoit dans `out` l'**id de sa région**, de `1` à `N` (toute case est étiquetée, les `0` compris), et la méthode retourne `N`, le nombre de régions.
 - Comme `array`, une grille se **déclare dans un `local`** et ne se réaffecte pas nue (`portee = …` est refusé) ; on écrit ses cases.
+
+### Analyser une grille (`navigation`)
+
+Une grille est un **type de donnée** : lire, écrire, découper. L'**analyse de passage** (collision, ligne de vue, propagation de coût, chemin, champ de directions) passe par le module `navigation`, qui prend la grille en **argument**. Il n'invente pas de types `obstacles`, `couts` ou `flow` : une grille reste une grille.
+
+**Couche moteur**, composable, une grille par rôle :
+
+- `navigation:sample_collision(out)` remplit `out` depuis la **carte de collision vivante** de la scène (celle que `collision:fill_rect` peut modifier) : chaque case reçoit `1` si une de ses sous-tuiles de 8 px n'est pas vide (conservateur), `0` sinon. La grille et la carte partagent l'origine `(0, 0)`.
+- `navigation:spread_from(out, x, y, budget[, terrain, couts[, bloque]])` écrit dans `out` une **carte de portée à coût** depuis la case `x, y` (à partir de 1). **`terrain` et `couts` sont facultatifs** : sans eux, le coût est **uniforme** de 1 par pas. Avec eux, `terrain` est une grille et `couts` un `array` indexé par la valeur de terrain (un coût nul ou négatif, ou une valeur hors table, est un **mur**) ; `bloque` est une grille d'occupation facultative. Une case atteinte porte son coût cumulé (plafonné à 254), une case hors de portée vaut `255`. Quatre directions.
+- `navigation:path_to(cost_map, x, y, out)` relit la carte de coûts pour écrire le **chemin** vers la case `x, y` dans l'`array` `out` : chaque pas est une **direction de 0 à 3** (0 droite, 1 gauche, 2 bas, 3 haut), rangés de la **source vers la cible**, prêts à rejouer. Retourne le **nombre de pas** écrits, borné par la taille de `out` ; `0` si la cible est hors de portée.
+- `navigation:make_flow(cost_map, out)` lit la **carte de coûts** et écrit dans `out` une **carte de flux** : chaque case reçoit la **direction de 0 à 3** vers son voisin le moins cher (le pas vers la source), `4` pour la case source (arrivé) et `255` pour une case hors de portée. Calculée une fois, elle laisse N agents naviguer en lisant une seule case (`out[x][y]`).
+- `navigation:line_of_sight(blockers, x0, y0, x1, y1)` dit si la **ligne de vue** entre deux cases est **dégagée** sur la grille de blocage `blockers` (une case non nulle bloque) : le tracé est un Bresenham fin, les deux extrémités ne sont **pas** testées. Rend `true` si rien ne bloque, `false` sinon. La grille de blocage est une **règle de jeu** (buisson, fumée, case tactique), pas forcément la collision physique.
+
+**Couche itération**, le cas le plus courant (poursuivre une cible en contournant les murs) en une grille et deux appels :
+
+- `navigation:flow_to(out, position[, budget])` remplit `out` d'un **champ de flux** vers une **position monde** (un vec2, en pixels), en contournant la collision vivante. En interne : `sample_collision` + propagation à coût uniforme + flux, avec son propre tampon. `budget` facultatif plafonne la portée. La grille est bornée à **1024 cases** (le tampon interne) ; au-delà, on enchaîne `spread_from` et `make_flow` à la main.
+- `navigation:direction_at(flow, position)` lit le champ de flux à une **position monde** (vec2) et rend le **pas unitaire** (un vec2, -1/0/1 par axe) vers la source ; `(0, 0)` à la source ou hors de portée. Ex : `self:move_and_collide(navigation:direction_at(flow, self.position) * 2)`.
 
 ## Script
 
