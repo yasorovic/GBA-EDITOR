@@ -100,9 +100,11 @@ class CollisionEditor(BaseComponentEditor):
         scene = getattr(self.insp, "_scene", None)
         # `is_child_actor` entre dans le contexte : passer d'un acteur enfant à un acteur racine (ou l'inverse)
         # change le verrou du champ `solid`, et l'éditeur réutilisé doit alors se reconstruire.
+        # Une Area n'a pas de parent : son inspecteur n'expose pas `is_child_actor`, le champ n'est jamais verrouillé.
+        is_child = getattr(self.insp, "is_child_actor", None)
         return (self.insp._project, sensor_only,
                 not sensor_only and (scene is None or scene.physics_enabled),
-                self.insp.is_child_actor())
+                bool(is_child()) if is_child is not None else False)
 
     def reload(self, comp) -> bool:
         if self._context() != self._built_context:
