@@ -107,8 +107,10 @@ class SpriteCanvas(QWidget):
         self._sprite   = sprite
         self._abs_path = abs_path
         self._frame    = frame
-        self._tile_w   = sprite.tile_w if sprite else 1
-        self._tile_h   = sprite.tile_h if sprite else 1
+        # Grille DESSINÉE (taille libre de l'auteur), pas la forme OAM padded :
+        # le canvas peint à la taille voulue, le build complète au build.
+        self._tile_w   = sprite.draw_cols if sprite else 1
+        self._tile_h   = sprite.draw_rows if sprite else 1
         self._src_pixmap = QPixmap(str(abs_path)) if abs_path and abs_path.exists() else None
         # Ne réinitialiser le zoom/pan que si le sprite change (dimensions
         # potentiellement différentes) — sinon la navigation de frames ET la

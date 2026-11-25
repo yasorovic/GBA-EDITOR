@@ -160,17 +160,35 @@ def resolve_direction_mirrors(active_dirs, h_mirror: bool, v_mirror: bool) -> di
 # et les passes `reconcile_*` lisent, jamais la chaîne « .png ».
 IMAGE_FILE_EXTS = {".png"}
 
-VALID_FRAME_SIZES = {
-    8:  [8, 16, 32],
-    16: [8, 16, 32],
-    32: [8, 16, 32, 64],
-    64: [32, 64],
+# Les douze formes OAM (largeur, hauteur) du matériel GBA, avec leur (shape, size)
+# écrits dans attr0/attr1. La taille DESSINÉE d'une frame est libre (tout multiple
+# de 8 jusqu'à 64) ; au build elle est complétée de transparent jusqu'à la plus
+# petite de ces formes qui la contient (cf. oam_fit, SpriteAsset.oam_dims). Le
+# matériel ne voit toujours qu'un OBJ par acteur : c'est cette forme-là.
+OAM_SHAPE_SIZE = {
+    (8, 8): (0, 0), (16, 16): (0, 1), (32, 32): (0, 2), (64, 64): (0, 3),
+    (16, 8): (1, 0), (32, 8): (1, 1), (32, 16): (1, 2), (64, 32): (1, 3),
+    (8, 16): (2, 0), (8, 32): (2, 1), (16, 32): (2, 2), (32, 64): (2, 3),
 }
 
+# Bornes de la taille dessinée d'une frame : multiple de 8, de 8 à 64.
+FRAME_SIZE_MIN = 8
+FRAME_SIZE_MAX = 64
 
-def valid_frame_heights(frame_w: int) -> list[int]:
-    """Hauteurs de frame valides pour une largeur donnée (formes OAM GBA)."""
-    return VALID_FRAME_SIZES.get(frame_w, [8])
+
+def snap_frame_size(v: int) -> int:
+    """Ramène une taille dessinée à un multiple de 8 dans [8, 64]."""
+    v = round(v / 8) * 8
+    return max(FRAME_SIZE_MIN, min(FRAME_SIZE_MAX, v))
+
+
+def oam_fit(frame_w: int, frame_h: int) -> tuple[int, int]:
+    """Plus petite forme OAM (w, h) qui contient une frame dessinée fw×fh.
+    Minimise d'abord le nombre de tuiles (donc la VRAM), puis préfère la forme
+    la plus carrée. Toute frame ≤ 64×64 est contenue par (64, 64)."""
+    candidates = [(w, h) for (w, h) in OAM_SHAPE_SIZE
+                  if w >= frame_w and h >= frame_h]
+    return min(candidates, key=lambda wh: (wh[0] * wh[1], abs(wh[0] - wh[1])))
 
 
 @dataclass
@@ -214,13 +232,36 @@ class SpriteAsset(SubPaletteAssetMixin, Resource):
     # d'avant ce champ). Cf. core.resources.asset_reconciliation.resync_sprite_png.
     source_stamp: str = ""
 
+    # ── Taille DESSINÉE (libre, multiple de 8) : grille du canvas ────
     @property
-    def tile_w(self) -> int:
+    def draw_cols(self) -> int:
         return max(1, self.frame_w // 8)
 
     @property
-    def tile_h(self) -> int:
+    def draw_rows(self) -> int:
         return max(1, self.frame_h // 8)
+
+    # ── Taille OAM (padded) : ce que lit le matériel et la VRAM ──────
+    @property
+    def oam_dims(self) -> tuple[int, int]:
+        """(oam_w, oam_h) : plus petite forme OAM qui contient la frame dessinée."""
+        return oam_fit(self.frame_w, self.frame_h)
+
+    @property
+    def oam_w(self) -> int:
+        return self.oam_dims[0]
+
+    @property
+    def oam_h(self) -> int:
+        return self.oam_dims[1]
+
+    @property
+    def tile_w(self) -> int:
+        return self.oam_w // 8
+
+    @property
+    def tile_h(self) -> int:
+        return self.oam_h // 8
 
     @property
     def tiles_per_frame(self) -> int:
@@ -228,29 +269,11 @@ class SpriteAsset(SubPaletteAssetMixin, Resource):
 
     @property
     def oam_shape(self) -> int:
-        fw, fh = self.frame_w, self.frame_h
-        if fw == fh: return 0
-        return 1 if fw > fh else 2
+        return OAM_SHAPE_SIZE[self.oam_dims][0]
 
     @property
     def oam_size(self) -> int:
-        fw, fh = self.frame_w, self.frame_h
-        if self.oam_shape == 0:
-            return {8: 0, 16: 1, 32: 2, 64: 3}.get(fw, 1)
-        if self.oam_shape == 1:
-            return {(16, 8): 0, (32, 8): 1, (32, 16): 2, (64, 32): 3}.get((fw, fh), 0)
-        return {(8, 16): 0, (8, 32): 1, (16, 32): 2, (32, 64): 3}.get((fw, fh), 0)
-
-    @property
-    def oam_dims(self) -> tuple[int, int]:
-        """Retourne (oam_w, oam_h) : taille OAM valide qui contient ce sprite."""
-        sh, sz = self.oam_shape, self.oam_size
-        if sh == 0:
-            s = [8, 16, 32, 64][sz]
-            return (s, s)
-        if sh == 1:
-            return [(16, 8), (32, 8), (32, 16), (64, 32)][sz]
-        return [(8, 16), (8, 32), (16, 32), (32, 64)][sz]
+        return OAM_SHAPE_SIZE[self.oam_dims][1]
 
     def to_dict(self) -> dict:
         return {

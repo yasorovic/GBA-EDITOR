@@ -1703,6 +1703,8 @@
     "sprpanel.frame_width": { "text": "Largeur d’image" },
     "sprpanel.frame_height": { "text": "Hauteur d’image" },
     "sprpanel.frame_size_tip": { "text": "Définit la zone en pixels utilisée pour composer chaque image de l’animation." },
+    "sprpanel.oam_form": { "text": "Forme OAM" },
+    "sprpanel.oam_form_tip": { "text": "Forme OAM que lit le matériel : l’image dessinée est complétée de transparent jusqu’à elle au build." },
     "dirwidget.direction_tip": { "text": "Crée ou modifie les images jouées lorsque l’acteur regarde dans cette direction." },
     "dirwidget.direction_0": { "text": "Toutes les directions" },
     "dirwidget.direction_1": { "text": "Nord" },

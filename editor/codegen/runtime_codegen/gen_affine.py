@@ -112,8 +112,11 @@ def affine_oam_lines(idx, sprite, bt: int, screen_space: bool = False, entry=Non
     3 Ko par type affine."""
     e = idx if entry is None else entry   # entrée OAM ; `idx` reste l'acteur
     cam = "0,0" if screen_space else "cam_x,cam_y"
+    # w/h = taille OAM (padded) : le runtime s'en sert pour le centre du cadre
+    # (w/2) et la boîte de culling double taille, qui sont la géométrie hardware
+    # de l'OBJ, pas la taille dessinée.
     return [f"        _oamn=oam_write_affine(&g_actors[{idx}],&g_oam_entries[{e}],&g_aff_cache[{e}],_oamn,&_affn,{cam},"
-            f"{sprite.frame_w},{sprite.frame_h},{bt},{sprite.tiles_per_frame},{sprite.oam_shape},{sprite.oam_size});"]
+            f"{sprite.oam_w},{sprite.oam_h},{bt},{sprite.tiles_per_frame},{sprite.oam_shape},{sprite.oam_size});"]
 
 
 def pool_affine(p, owner):

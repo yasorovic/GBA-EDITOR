@@ -86,6 +86,7 @@ def test_compute_affine_info_designe_les_poses_affines():
 def test_oam_dynamic_appelle_le_moteur():
     class SpriteShape:
         frame_w, frame_h = 8, 8
+        oam_w, oam_h = 8, 8           # forme OAM (padded) passée au moteur
         oam_shape, oam_size = 1, 0     # 8×8 affine
         tiles_per_frame = 1
 

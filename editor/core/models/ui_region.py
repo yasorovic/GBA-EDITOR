@@ -543,9 +543,9 @@ def strip_geometry(region: "UIText", animated: int = 0) -> dict:
 
 
 # ── Images : géométrie d'allocation ───────────────────────────────
-# Une image est UN sprite, pas une bande : sa frame a déjà une forme OAM légale
-# (VALID_FRAME_SIZES l'impose au Sprite Editor), donc un seul slot suffit et il
-# n'y a rien à paver.
+# Une image est UN sprite, pas une bande : sa taille dessinée est libre (multiple
+# de 8), mais l'appelant passe ici la forme OAM qui la contient (oam_w/oam_h <= 64),
+# donc un seul slot suffit et il n'y a rien à paver.
 #
 # **Toutes les frames de toutes les directions sont résidentes**, pas seulement
 # celles de l'état déclaré. Un script peut basculer d'état à n'importe quelle

@@ -1637,6 +1637,8 @@
     "sprpanel.frame_width": { "text": "Frame width" },
     "sprpanel.frame_height": { "text": "Frame height" },
     "sprpanel.frame_size_tip": { "text": "Defines the pixel area used to compose each animation frame." },
+    "sprpanel.oam_form": { "text": "OAM form" },
+    "sprpanel.oam_form_tip": { "text": "OAM form the hardware reads: the drawn frame is padded with transparency up to it at build time." },
     "sprpanel.animation": {
       "text": "Animation"
     },

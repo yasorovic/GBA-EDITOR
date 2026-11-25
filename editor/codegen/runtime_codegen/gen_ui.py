@@ -68,9 +68,11 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
         base = sprite_offsets.get(sprite.name, 0)
         pl = obj_place.get(im.name) if target_obj else None
         oam_rel = pl["oam_rel"] if pl else 0
-        # `w`/`h` de la table sont ceux de la FRAME, pas du rectangle : c'est ce
-        # que le matériel dessine, et le pavage se dit en `cols`/`rows`. Pour un
-        # UIImage les deux coïncident (cf. sync_size_from) ; pour un conteneur non.
+        # `w`/`h` de la table sont ceux de la FORME OAM (padded) de la frame, pas
+        # du rectangle : c'est ce que le matériel dessine (un OBJ), et le pavage se
+        # dit en `cols`/`rows`. Pour un UIImage à taille OAM légale, ils égalent le
+        # rectangle (sync_size_from) ; une taille dessinée libre est complétée, le
+        # dessin restant en haut à gauche de l'OBJ.
         g = ui_item_geometry(im, sprite, 1)
         # Priorité HÉRITÉE : -1 (défaut / fond de container) devient 255, la
         # sentinelle que `ui_obj_prio` résout à la volée sur l'acteur ancré ;

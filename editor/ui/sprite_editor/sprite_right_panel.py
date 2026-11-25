@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QComboBox, QScrollArea
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QLabel, QScrollArea
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 
@@ -15,7 +15,9 @@ from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from core.models.sprite import AnimFrame, AnimState, SpriteAsset, StateDirection
 from core.project import Project
-from core.models.sprite import valid_frame_heights, resolve_direction_mirrors
+from core.models.sprite import (
+    FRAME_SIZE_MIN, FRAME_SIZE_MAX, snap_frame_size, resolve_direction_mirrors,
+)
 from core.command_dispatcher import get_dispatcher
 from .direction_widget import DirectionWidget
 
@@ -88,20 +90,29 @@ class SpriteRightPanel(QWidget):
     def _build_params(self):
         lay = self._card(label("sprpanel.canvas_size")).body_layout
 
-        # Frame W / H
-        self._cb_w = QComboBox(); self._cb_w.setFont(QFont(T.MONO, T.SM))
-        self._cb_h = QComboBox(); self._cb_h.setFont(QFont(T.MONO, T.SM))
-        for v in [8, 16, 32, 64]:
-            self._cb_w.addItem(str(v))
-        self._cb_w.currentIndexChanged.connect(self._on_frame_w_changed)
-        self._cb_h.currentIndexChanged.connect(self._on_frame_h_changed)
-        self._cb_w.setToolTip(tooltip(
+        # Frame W / H : taille DESSINÉE libre, multiple de 8 de 8 à 64. Le
+        # matériel, lui, voit la forme OAM qui la contient (affichée en dessous).
+        self._sp_w = W.spinbox(16, min_v=FRAME_SIZE_MIN, max_v=FRAME_SIZE_MAX, step=8)
+        self._sp_h = W.spinbox(16, min_v=FRAME_SIZE_MIN, max_v=FRAME_SIZE_MAX, step=8)
+        self._sp_w.valueChanged.connect(self._on_frame_w_changed)
+        self._sp_h.valueChanged.connect(self._on_frame_h_changed)
+        self._sp_w.setToolTip(tooltip(
             title=label("sprpanel.frame_width"), body=label("sprpanel.frame_size_tip")
         ))
-        self._cb_h.setToolTip(tooltip(
+        self._sp_h.setToolTip(tooltip(
             title=label("sprpanel.frame_height"), body=label("sprpanel.frame_size_tip")
         ))
-        W.pair(label("common.frame"), "W", C.AXIS_X, self._cb_w, "H", C.AXIS_Y, self._cb_h, lay)
+        W.pair(label("common.frame"), "W", C.AXIS_X, self._sp_w, "H", C.AXIS_Y, self._sp_h, lay)
+
+        # Forme OAM retenue : ce que le matériel lit réellement (un OBJ). La frame
+        # est complétée de transparent jusqu'à cette forme au build.
+        self._lbl_oam = QLabel("")
+        self._lbl_oam.setFont(QFont(T.MONO, T.SM))
+        self._lbl_oam.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent;")
+        self._lbl_oam.setToolTip(tooltip(
+            title=label("sprpanel.oam_form"), body=label("sprpanel.oam_form_tip")
+        ))
+        W.row(label("sprpanel.oam_form"), self._lbl_oam, lay)
 
         lay = self._card(label("sprpanel.animation")).body_layout
 
@@ -233,9 +244,10 @@ class SpriteRightPanel(QWidget):
 
         self._header.set_header("sprite", label("common.sprite"), sprite.name)
 
-        # Frame size
-        self._cb_w.setCurrentText(str(sprite.frame_w))
-        self._refresh_h_combo(sprite.frame_w, sprite.frame_h)
+        # Frame size (taille dessinée) + forme OAM retenue
+        self._sp_w.setValue(sprite.frame_w)
+        self._sp_h.setValue(sprite.frame_h)
+        self._refresh_oam_label()
 
         # Animation (premier state)
         if self._state:
@@ -259,15 +271,13 @@ class SpriteRightPanel(QWidget):
 
     # ── Helpers ───────────────────────────────────────────────────
 
-    def _refresh_h_combo(self, w_val: int, keep_h: int = 0):
-        self._cb_h.blockSignals(True)
-        self._cb_h.clear()
-        valid = valid_frame_heights(w_val)
-        for v in valid:
-            self._cb_h.addItem(str(v))
-        target = str(keep_h) if keep_h in valid else str(valid[0])
-        self._cb_h.setCurrentText(target)
-        self._cb_h.blockSignals(False)
+    def _refresh_oam_label(self):
+        """Affiche la forme OAM (padded) que le matériel lira pour la taille
+        dessinée courante. Égale la frame quand celle-ci est déjà une forme OAM."""
+        if not self._sprite:
+            return
+        ow, oh = self._sprite.oam_dims
+        self._lbl_oam.setText(f"{ow}×{oh}")
 
     def _save(self):
         # Un champ qu'on tourne (vitesse d'animation…) passe ici à chaque cran : le sidecar s'écrit après un silence (cf.
@@ -287,20 +297,27 @@ class SpriteRightPanel(QWidget):
             get_dispatcher().rename_sprite(self._sprite, new_name)
             self.sprite_changed.emit()
 
-    def _on_frame_w_changed(self, _):
-        if self._blocking or not self._sprite:
-            return
-        w = int(self._cb_w.currentText())
-        old_h = int(self._cb_h.currentText()) if self._cb_h.currentText() else 16
-        self._refresh_h_combo(w, old_h)
-        self._sprite.frame_w = w
-        self._sprite.frame_h = int(self._cb_h.currentText())
-        self._save()
+    def _on_frame_w_changed(self, value: int):
+        self._apply_frame_size(self._sp_w, value, is_width=True)
 
-    def _on_frame_h_changed(self, _):
+    def _on_frame_h_changed(self, value: int):
+        self._apply_frame_size(self._sp_h, value, is_width=False)
+
+    def _apply_frame_size(self, spin, value: int, is_width: bool):
         if self._blocking or not self._sprite:
             return
-        self._sprite.frame_h = int(self._cb_h.currentText())
+        snapped = snap_frame_size(value)
+        if snapped != value:
+            # Une saisie hors multiple de 8 est ramenée à la grille sans
+            # redéclencher le slot (cf. blocage ci-dessous).
+            self._blocking = True
+            spin.setValue(snapped)
+            self._blocking = False
+        if is_width:
+            self._sprite.frame_w = snapped
+        else:
+            self._sprite.frame_h = snapped
+        self._refresh_oam_label()
         self._save()
 
     def _on_speed_changed(self, value: int):

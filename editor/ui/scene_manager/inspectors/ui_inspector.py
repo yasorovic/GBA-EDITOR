@@ -877,7 +877,11 @@ class UIInspector(QWidget):
         self._img_missing.clear()
         self._img_none.clear()
         frames = self._sprite_frame_count(sprite)
-        g = image_geometry(el, frames)
+        # Taille OAM (padded) : le coût VRAM annoncé est celui de la forme OAM
+        # réellement chargée, pas de la taille dessinée libre.
+        g = image_geometry(el, frames,
+                           int(getattr(sprite, "oam_w", 0) or 0),
+                           int(getattr(sprite, "oam_h", 0) or 0))
         target = self._layout_asset.resolved_target(el, self._render_mode())
         # Une image OBJ ne réserve RIEN : ses tuiles sont celles du sprite, déjà
         # résidentes. Annoncer un coût VRAM là serait compter deux fois le même
@@ -1309,8 +1313,10 @@ class UIInspector(QWidget):
             self._fill_why.show_text("ui.fill.sprite")
             self._fill_overflow.clear()
             return
-        fw = int(getattr(sprite, "frame_w", 0) or 0)
-        fh = int(getattr(sprite, "frame_h", 0) or 0)
+        # Taille OAM (padded) : chaque OBJ du pavage occupe sa forme OAM, c'est
+        # elle qui compte les slots et doit coller au build (gen_scene_query).
+        fw = int(getattr(sprite, "oam_w", 0) or 0)
+        fh = int(getattr(sprite, "oam_h", 0) or 0)
         cols, rows = sprite_grid(self._element, fw, fh)
         n = cols * rows
         over = (cols * fw - int(self._element.w), rows * fh - int(self._element.h))

@@ -324,9 +324,12 @@ def ui_item_geometry(el, sprite, frames: int = 1) -> dict:
     taille de frame, seule inconnue qui sépare un `UIImage` (dont le rectangle
     EST la frame) d'un `UIContainer` à fond sprite (dont le rectangle se pave)."""
     from core.models.ui_region import image_geometry
+    # Taille OAM (padded) et non dessinée : un sprite d'UI occupe en VRAM et à
+    # l'écran la forme OAM qui contient sa frame (un OBJ ne s'étire pas). C'est
+    # ce que réserve le build (sprite.tiles_per_frame, padded).
     return image_geometry(el, frames,
-                          int(getattr(sprite, "frame_w", 0) or 0),
-                          int(getattr(sprite, "frame_h", 0) or 0))
+                          int(getattr(sprite, "oam_w", 0) or 0),
+                          int(getattr(sprite, "oam_h", 0) or 0))
 
 
 def actor_script(actor: Actor) -> Optional[str]:

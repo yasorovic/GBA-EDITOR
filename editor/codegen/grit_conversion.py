@@ -313,7 +313,11 @@ def build_sprite_sheet_indexed(
     render_indexed(source, own_palette)."""
     try:
         from PIL import Image
-        fw, fh = sprite.frame_w, sprite.frame_h
+        # La feuille est composée à la taille OAM (padded) : la frame dessinée,
+        # libre (multiple de 8), est collée en haut à gauche et complétée de
+        # transparent jusqu'à la forme OAM qui la contient. C'est ce que lisent
+        # grit (-Mw/-Mh = tile_w/tile_h padded) et la VRAM.
+        fw, fh = sprite.oam_w, sprite.oam_h
         src_img = Image.open(src)
         if src_img.mode != "P":
             emit("diagnostic", build_error(

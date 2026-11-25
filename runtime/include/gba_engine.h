@@ -4743,10 +4743,10 @@ static void ui_image_draw_bg(const UIImageInfo *I, UIImageState *S, int sx, int 
     }
 }
 
-/* Forme/taille OAM d'une frame w×h. Les couples légaux sont ceux de
-   VALID_FRAME_SIZES (models/sprite.py), que le Sprite Editor impose déjà : une
-   frame est donc toujours affichable, et le défaut ne sert qu'à une donnée
-   produite autrement. */
+/* Forme/taille OAM d'une frame w×h. Le build passe ici la forme OAM (padded)
+   qui contient la taille dessinée (cf. SpriteAsset.oam_dims, gen_scene_query) :
+   w et h sont donc toujours un couple légal, et une frame est toujours
+   affichable. */
 static int ui_image_shape(int w, int h) {
     if (w == h) return 0;            /* carré */
     return (w > h) ? 1 : 2;          /* large / haut */
