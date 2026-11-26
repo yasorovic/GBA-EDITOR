@@ -60,7 +60,7 @@ end
 ```
 
 On y lit un numéro de tuile sans avoir besoin de le connaître : il vient de la carte. Les autres fonctions
-(`fill`, `set_tile_palette`, `set_tile_flip`) sont dans le [groupe Tilemap](../../lua-api/api/scene/tilemap.md)
+(`fill`, `set_tile_palette`, `set_tile_flip`) sont dans le [groupe Tilemap](../../lua-api/api/data/tilemap.md)
 du catalogue.
 
 ## À savoir
