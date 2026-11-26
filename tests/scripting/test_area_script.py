@@ -88,7 +88,7 @@ def test_un_export_actor_ref_d_area_se_lit_comme_une_reference_d_acteur():
     ctx = BuildContext(actor_name="Door", owner_kind="area", actor_names=["Hero"], box_tag_names=["body"])
     assert not [error for error in check(parse(src), ctx) if error.level == "error"]
     code = _c(src, all_actor_syms=["Hero"], export_inits={"target": "ACTOR_SC_HERO"})
-    assert "int target __attribute__((unused)) = ACTOR_SC_HERO;" in code
+    assert "static int __attribute__((unused)) target = ACTOR_SC_HERO;" in code
     assert "actor_at(target)" in code
 
 
