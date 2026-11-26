@@ -74,6 +74,19 @@ def test_un_commentaire_simple_n_ouvre_pas_de_bloc(qapp):
     assert not _est_commente(ed, 1)
 
 
+def test_le_commentaire_long_indente_reste_un_commentaire(qapp):
+    ed = _editor(qapp, "function f()\n    --[[ une note\n    encore\n    ]]\nend")
+    assert _est_commente(ed, 1)
+    assert _est_commente(ed, 2)
+    assert _est_commente(ed, 3)
+
+
+def test_un_faux_commentaire_long_dans_une_chaine_ne_colore_pas_la_suite(qapp):
+    ed = _editor(qapp, 'local note = "--[[ pas un commentaire"\nlocal a = 1')
+    assert not _est_commente(ed, 1)
+    assert ed.fold_end(0) is None
+
+
 # ── Repli ─────────────────────────────────────────────────────────
 def test_un_commentaire_multiligne_se_replie(qapp):
     """Il n'indente rien, mais c'est souvent la plus longue chose à passer."""
@@ -87,4 +100,9 @@ def test_un_commentaire_multiligne_se_replie(qapp):
 
 def test_un_commentaire_ferme_sur_sa_ligne_ne_se_replie_pas(qapp):
     ed = _editor(qapp, "--[[ note ]]\nlocal a = 1")
+    assert ed.fold_end(0) is None
+
+
+def test_un_commentaire_long_sans_fermeture_ne_se_replie_pas(qapp):
+    ed = _editor(qapp, "--[[ note\nencore")
     assert ed.fold_end(0) is None

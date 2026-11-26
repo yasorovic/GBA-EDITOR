@@ -399,6 +399,32 @@ def test_le_json_de_reference_ne_decrit_que_lapi_vivante():
     assert sorted(set(api_reference.STALE)) == []
 
 
+def test_move_and_collide_est_range_dans_movement():
+    """Le geste qui glisse contre la carte reste avec les autres mouvements."""
+    from scripting import api_reference
+
+    categories = {category["name"]: category["entries"]
+                  for category in api_reference.get_categories()}
+    movement = {entry["label"] for entry in categories["Movement"]}
+    instance = {entry["label"] for entry in categories["Instance"]}
+
+    assert "self:move_and_collide(delta)" in movement
+    assert "self:move_and_collide(delta)" not in instance
+
+
+def test_collision_shape_by_tag_est_range_avec_les_formes():
+    """La recherche dynamique d'une forme n'est pas une action d'Instance."""
+    from scripting import api_reference
+
+    categories = {category["name"]: category["entries"]
+                  for category in api_reference.get_categories()}
+    shapes = {entry["label"] for entry in categories["CollisionShape"]}
+    instance = {entry["label"] for entry in categories["Instance"]}
+
+    assert "self:collision_shape_by_tag(tag)" in shapes
+    assert "self:collision_shape_by_tag(tag)" not in instance
+
+
 # ── 7. L'identité d'un acteur se cite par son nom ──────────────────
 # `self.tag` rendait un entier opaque qu'aucune écriture Lua ne permettait de
 # nommer : sa doc disait « utile pour identifier other » sans dire comment.

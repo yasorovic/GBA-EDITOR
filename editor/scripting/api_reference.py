@@ -200,6 +200,10 @@ _PROP_HOME: dict[str, str] = {
 # dans « Actor » ou « Other ». Ne figurent ici que celles à ranger ailleurs ; le
 # reste est décrit par le JSON.
 _FUNC_HOME: dict[str, str] = {
+    # Le déplacement contre la carte est un geste de mouvement, au même titre
+    # que move et move_to. Sans ce rangement, il retombe dans Instance car les
+    # appels actor:* sont volontairement ambigus entre Actor et Instance.
+    "actor:move_and_collide": "Movement",
     # La vélocité est un état de Physics ; l'appliquer est le geste qui le
     # transforme en déplacement, pas une opération générique d'Actor.
     "actor:apply_velocity": "Physics",
@@ -208,6 +212,7 @@ _FUNC_HOME: dict[str, str] = {
     "physics_body:apply_velocity": "Physics",
     "physics_body:drop_through": "Physics",
     "actor:collision_shape":     "CollisionShape",
+    "actor:collision_shape_by_tag": "CollisionShape",
     "collision_shape:overlaps": "CollisionShape",
     "actor:activate_sprite": "Sprite",
     "layer.get": "Layer", "window.get": "Window",

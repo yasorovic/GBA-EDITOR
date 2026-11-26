@@ -174,7 +174,8 @@ def test_une_grille_ram_vide_n_a_pas_de_germe():
 def test_le_c_d_une_grille_ram_est_un_tampon_ewram_plus_son_germe():
     scene = Scene(name="Arena", grids=[_flow_peinte()])
     c = generate_grids_c(emitted_grids(_Projet(scene)))
-    assert '#include "gba_engine.h"' in c            # pour EWRAM_BSS
+    assert "#include <gba_base.h>" in c              # pour EWRAM_BSS
+    assert "gba_engine.h" not in c
     assert "unsigned char g_grid_Arena_Flow[4] EWRAM_BSS;" in c
     assert "const unsigned char g_grid_Arena_Flow_seed[4] = {" in c
     assert "    0, 5," in c and "    0, 0," in c

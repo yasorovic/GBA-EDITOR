@@ -44,13 +44,12 @@ class LuaHighlighter(QSyntaxHighlighter):
         self._rules.append((QRegularExpression(r'"[^"\\]*(\\.[^"\\]*)*"'), self._str_fmt))
         self._rules.append((QRegularExpression(r"'[^'\\]*(\\.[^'\\]*)*'"), self._str_fmt))
         self._cmt_fmt = fmt(C.SYNTAX_COMMENT, italic=True)
-        self._rules.append((QRegularExpression(r"--[^\n]*"), self._cmt_fmt))
 
     # Le début d'un commentaire : `--`, suivi ou non d'un crochet long
     # (`--[[`, `--[=[`, `--[==[`…). Le groupe capturé dit lequel des deux :
     # vide, le commentaire s'arrête en fin de ligne ; plein, il court jusqu'au
     # crochet fermant de MÊME niveau, des lignes plus bas s'il le faut.
-    _COMMENT_START = QRegularExpression(r"--(\[(=*)\[)?")
+    _LONG_COMMENT_OPEN = re.compile(r"--\[(=*)\[")
 
     def highlightBlock(self, text: str):
         for rx, fmt in self._rules:
@@ -74,14 +73,13 @@ class LuaHighlighter(QSyntaxHighlighter):
         depart = 0
         while True:
             if niveau < 0:
-                m = self._COMMENT_START.match(text, depart)
-                if not m.hasMatch():
+                comment = self._comment_start(text, depart)
+                if comment is None:
                     return
-                if not m.captured(1):
-                    return      # un `--` simple : la ligne est déjà commentée
-                niveau = len(m.captured(2))
-                depart = m.capturedStart()
-                apres = m.capturedEnd()
+                depart, niveau, apres = comment
+                if niveau is None:
+                    self.setFormat(depart, len(text) - depart, self._cmt_fmt)
+                    return
             else:
                 apres = depart
             ferme = QRegularExpression(r"\]" + "=" * niveau + r"\]").match(text, apres)
@@ -92,6 +90,35 @@ class LuaHighlighter(QSyntaxHighlighter):
             self.setFormat(depart, ferme.capturedEnd() - depart, self._cmt_fmt)
             depart = ferme.capturedEnd()
             niveau = -1
+
+    @classmethod
+    def _comment_start(cls, text: str, start: int) -> tuple[int, int | None, int] | None:
+        """Renvoie le premier commentaire Lua hors d'une chaîne citée."""
+        quote = ""
+        escaped = False
+        index = start
+        while index < len(text):
+            char = text[index]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = ""
+                index += 1
+                continue
+            if char in "\"'":
+                quote = char
+                index += 1
+                continue
+            if text.startswith("--", index):
+                match = cls._LONG_COMMENT_OPEN.match(text, index)
+                if match:
+                    return index, len(match.group(1)), match.end()
+                return index, None, len(text)
+            index += 1
+        return None
 
 
 # ─── Marge des numéros de ligne ───────────────────────────────────────
@@ -283,26 +310,25 @@ class LuaEditor(QPlainTextEdit):
 
     # `--`, suivi ou non d'un crochet long. Le même motif que le colorateur :
     # un `--` simple commente sa ligne, un `--[[` ouvre un bloc.
-    _COMMENT_MARK = re.compile(r"--(\[(=*)\[)?")
-
     def _long_comment_end(self, line: int) -> int | None:
         """Le dernier bloc d'un commentaire `--[[ ]]` ouvert par `line`, ou None.
 
         Un commentaire de plusieurs lignes se replie comme un bloc, alors qu'il
         n'indente rien : c'est souvent la plus longue chose à passer dans un
-        fichier. Un commentaire jamais refermé court jusqu'à la fin."""
+        fichier. Sans fermeture, la coloration reste ouverte pendant la frappe,
+        mais il n'y a pas de bloc valide à replier."""
         doc = self.document()
-        m = self._COMMENT_MARK.search(doc.findBlockByNumber(line).text())
-        if m is None or not m.group(1):
+        comment = LuaHighlighter._comment_start(doc.findBlockByNumber(line).text(), 0)
+        if comment is None or comment[1] is None:
             return None
-        ferme = "]" + "=" * len(m.group(2)) + "]"
-        if ferme in doc.findBlockByNumber(line).text()[m.end():]:
+        _, niveau, apres = comment
+        ferme = "]" + "=" * niveau + "]"
+        if ferme in doc.findBlockByNumber(line).text()[apres:]:
             return None                     # ouvert et refermé sur sa ligne
         for n in range(line + 1, doc.blockCount()):
             if ferme in doc.findBlockByNumber(n).text():
                 return n
-        dernier = doc.blockCount() - 1
-        return dernier if dernier > line else None
+        return None
 
     def folded_lines(self) -> set[int]:
         return {c.blockNumber() for c in self._folds}
@@ -488,11 +514,19 @@ class LuaEditor(QPlainTextEdit):
                 edit.removeSelectedText()
         cur.endEditBlock()
 
+    _BLOCK_OPEN = re.compile(
+        r"^(?:(?:local\s+)?function\b(?!.*\bend\b).*|"
+        r"(?:if|elseif)\b.*\bthen(?!.*\bend\b).*|"
+        r"(?:for|while)\b.*\bdo(?!.*\bend\b).*|else|do)\s*$"
+    )
+
     def insert_newline_keeping_indent(self):
-        """Retour à la ligne qui CONSERVE l'indentation de la ligne courante —
-        sans ça, `Entrée` ramène le curseur tout à gauche. Reproduit le blanc de
-        tête (espaces/tabulations) de la ligne, rien de plus : garder
-        l'indentation courante, pas en ajouter un niveau après `then`/`do`.
+        """Retour à la ligne avec l'indentation que la structure appelle.
+
+        Le blanc de tête est conservé dans le cas courant. Après un ouvreur Lua
+        (`then`, `do`, `function`, `else`), l'éditeur ajoute un niveau pour que
+        l'auteur écrive directement le corps. Entrée n'ajoute pas de `end` :
+        elle ne doit pas modifier une structure encore incomplète.
 
         Le point unique du retour à la ligne : l'éditeur l'appelle quand le popup
         est fermé, le completer quand il est ouvert sans sélection — pour que les
@@ -500,6 +534,11 @@ class LuaEditor(QPlainTextEdit):
         cur = self.textCursor()
         line = cur.block().text()
         indent = line[:len(line) - len(line.lstrip(" \t"))]
+        prefix = line[:cur.positionInBlock()]
+        comment = LuaHighlighter._comment_start(prefix, 0)
+        code = (prefix if comment is None else prefix[:comment[0]]).strip()
+        if self._BLOCK_OPEN.search(code):
+            indent += " " * self._TAB_WIDTH
         cur.insertText("\n" + indent)
         self.setTextCursor(cur)
         self.ensureCursorVisible()

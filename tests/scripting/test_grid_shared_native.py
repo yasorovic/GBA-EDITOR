@@ -91,7 +91,7 @@ def test_un_script_ecrit_la_grille_ram_de_scene_un_autre_la_relit(tmp_path):
     # avec EWRAM_BSS et le germe ROM).
     write_grids(tmp_path, _Projet(_scene()))
     # EWRAM_BSS vient de libgba au build ; pour l'hôte, un en-tête neutre le vide.
-    (tmp_path / "gba_engine.h").write_text("#define EWRAM_BSS\n", encoding="utf-8")
+    (tmp_path / "gba_base.h").write_text("#define EWRAM_BSS\n", encoding="utf-8")
     (tmp_path / "grid_inline.h").write_text(_inline_du_moteur(), encoding="utf-8")
 
     write_rect = _ligne("data.grid.Flow:fill_rect(x, y, w, h, v)", "grid_fill_rect(")

@@ -230,11 +230,12 @@ def generate_grids_c(pairs: list[tuple]) -> str:
         '#include "grids.h"',
     ]
     # Une grille RAM se définit avec EWRAM_BSS (sinon le .bss part en IWRAM, les
-    # 32 Kio précieux) : il faut alors le macro, apporté par gba_engine.h, comme
-    # dans main.c. On ne l'inclut que si une grille RAM existe, pour garder
-    # grids.c sans dépendance libgba quand tout est en ROM.
+    # 32 Kio précieux). gba_engine.h est une implémentation monofichier, incluse
+    # uniquement depuis main.c : grids.c prend donc la macro directement dans
+    # gba_base.h de libgba. On ne l'inclut que si une grille RAM existe,
+    # pour garder grids.c sans dépendance libgba quand tout est en ROM.
     if any(getattr(grid, "ram", False) for _scene, grid in pairs):
-        lines.append('#include "gba_engine.h"')
+        lines.append("#include <gba_base.h>")
     lines.append("")
     for scene, grid in pairs:
         n = grid.cols * grid.rows

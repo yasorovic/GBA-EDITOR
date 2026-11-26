@@ -127,3 +127,24 @@ def test_la_premiere_frappe_efface_le_surlignage(qapp):
     ed.insert_at_cursor("x")
     qapp.processEvents()
     assert ed.extraSelections() == []
+
+
+def test_entree_apres_then_indente_le_corps(qapp):
+    ed = _editor(qapp, 'if state == "ground" then')
+    ed.moveCursor(ed.textCursor().MoveOperation.End)
+    ed.insert_newline_keeping_indent()
+    assert ed.toPlainText() == 'if state == "ground" then\n    '
+
+
+def test_entree_apres_then_dans_un_commentaire_ne_creuse_pas(qapp):
+    ed = _editor(qapp, '-- then')
+    ed.moveCursor(ed.textCursor().MoveOperation.End)
+    ed.insert_newline_keeping_indent()
+    assert ed.toPlainText() == '-- then\n'
+
+
+def test_entree_apres_un_bloc_ferme_sur_sa_ligne_ne_creuse_pas(qapp):
+    ed = _editor(qapp, 'if state == "ground" then end')
+    ed.moveCursor(ed.textCursor().MoveOperation.End)
+    ed.insert_newline_keeping_indent()
+    assert ed.toPlainText() == 'if state == "ground" then end\n'
