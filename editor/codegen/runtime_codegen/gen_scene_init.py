@@ -26,6 +26,7 @@ from codegen.runtime_codegen.gen_ui_scene import scene_ui_lines
 from codegen.runtime_codegen.physics.body import support_normal
 from codegen.runtime_codegen.gen_vram_layout import layer_base_bank
 from codegen.runtime_codegen.sound_emit import scene_music_lines
+from codegen.runtime_codegen.waypoint_paths import path_data_lines, path_init_lines
 from core.models.field_value import FieldValue, var_names_from_project
 from core.models.scene import Scene
 from core.project import Project
@@ -63,6 +64,7 @@ def gen_scene_init(
     tanims = [a for a in scene_anim_descriptors(p, scene, bgi) if a["shared"]]
     L: list[str] = []
     L += appearance_table_lines(sym, alay)
+    L += path_data_lines(scene)
     L += _image_data_lines(scene, sym)
     L += _bg_anim_data_lines(sym, anims, tanims)
     singleton_groups = scene_oam_layout(p, scene).singleton_groups
@@ -165,6 +167,7 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     # `actor:get(i)`/`actor:count()`. Les slots [0, placed) tiennent exactement ces
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.
     L.append(f"    g_scene_placed = {len(scene_actors)};")
+    L += path_init_lines(scene, scene_actors, actor_offset)
     L += area_init_lines(p, scene, scene_actors, actor_offset)
     L += emitter_init_lines(p, scene)
     # Tout acteur repart SANS entrée OAM (-1) ; le lien est posé plus bas, pour les

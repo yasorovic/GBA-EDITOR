@@ -146,6 +146,10 @@ def is_actor_call(expr, actor_names=frozenset()) -> bool:
     reconnaît qu'à son récepteur : `self`, `other`, `who`, un nom que le script tient pour un acteur (`actor_names`), ou
     une autre expression qui rend un acteur ; `global.parent` ou `data.Table[1].parent` n'en sont pas."""
     if isinstance(expr, ExprIndex):
+        if isinstance(expr.obj, ExprName):
+            prop = RUNTIME_PROPS.get(f"{expr.obj.name}.{expr.field}")
+            if prop is not None and prop.ref == REF_ACTOR:
+                return True
         if expr.field not in ACTOR_NAV_PROPS:
             return False
         obj = expr.obj

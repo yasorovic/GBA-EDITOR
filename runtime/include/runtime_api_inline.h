@@ -28,6 +28,22 @@
 
 /* Globaux définis dans main.c, visibles par tous les scripts */
 extern Actor g_actors[];
+/* Les Paths sont des points de scène immuables en ROM, plus une origine Q8
+   éventuellement recomposée depuis un acteur parent. La progression n'est PAS
+   sur le Path : elle est propre à chaque acteur qui le suit. */
+typedef struct {
+    int x, y;
+    const Vec2* points;
+    u8 count, mode;
+    u16 parent;                 /* slot + 1, 0 sans parent */
+} Path;
+typedef struct {
+    u16 gen;
+    u8 path, point;
+    s8 direction;
+} PathFollow;
+extern Path g_paths[];
+extern PathFollow g_path_follow[];
 extern u16 *g_actor_floor;
 extern u8 *g_drop_through;   /* frames restantes où un corps ignore les faces à sens unique, par `Actor.slot_index` */
 extern u8 g_drop_live;       /* au moins un compteur ci-dessus est non nul : le décompte de la frame ne tourne que alors */
@@ -1406,6 +1422,51 @@ extern void collision_sample(unsigned char *out, int cols, int rows, int step);
 /* Déplace l'acteur de `delta` (px) puis le repousse des murs (couche mouvement).
    Définie avec la physique, après `resolve_actor_tiles`. Rend 1 si un mur a buté. */
 extern int actor_move_and_collide(Actor* s, Vec2 delta);
+
+/* Path : une référence est le rang dans g_paths + 1. Les indices Lua sont
+   volontairement 1-based : path:point(1) désigne le premier point visible. */
+static inline Path* _path_of(int h) { return h > 0 ? &g_paths[h - 1] : (Path*)0; }
+static inline int path_by_name(int h) { return h; }
+static inline int path_count(int h) { Path* p = _path_of(h); return p ? p->count : 0; }
+static inline Vec2 path_point(int h, int index) {
+    Path* p = _path_of(h);
+    if (!p || index < 1 || index > p->count) return (Vec2){0, 0};
+    int x = p->x, y = p->y;
+    if (p->parent) {
+        Actor* parent = &g_actors[p->parent - 1];
+        if (!parent->active || !parent->alive) return (Vec2){0, 0};
+        x += parent->x; y += parent->y;
+    }
+    return (Vec2){(x >> 8) + p->points[index - 1].x, (y >> 8) + p->points[index - 1].y};
+}
+/* Une arrivée est signalée une fois, sur la frame qui atteint le point. Si la
+   carte stoppe le déplacement, le curseur ne progresse pas. */
+static inline int actor_follow_path(Actor* s, int h, int speed) {
+    Path* p = _path_of(h);
+    if (!s || !s->active || !p || !p->count) return 0;
+    PathFollow* f = &g_path_follow[s->slot_index];
+    if (f->gen != s->gen || f->path != h) {
+        f->gen = s->gen; f->path = h; f->point = 0; f->direction = 1;
+    }
+    if (p->mode == 0 && f->direction == 0) return 0;
+    Vec2 target = path_point(h, f->point + 1);
+    int dx = target.x - (s->x >> 8), dy = target.y - (s->y >> 8);
+    int dist = isqrt(dx * dx + dy * dy);
+    if (speed < 0) speed = 0;
+    if (dist > speed && dist) { dx = dx * speed / dist; dy = dy * speed / dist; }
+    if (actor_move_and_collide(s, (Vec2){dx, dy})) return 0;
+    if (dist > speed) return 0;
+    if (p->count == 1) { if (p->mode == 0) f->direction = 0; return 1; }
+    if (p->mode == 1) f->point = (u8)((f->point + 1) % p->count);
+    else if (p->mode == 2) {
+        int next = (int)f->point + f->direction;
+        if (next >= p->count) { f->direction = -1; next = p->count - 2; }
+        else if (next < 0) { f->direction = 1; next = 1; }
+        f->point = (u8)next;
+    } else if (f->point + 1 < p->count) f->point++;
+    else f->direction = 0;
+    return 1;
+}
 
 /* Grille de valeurs d'une scène — la case qui contient un point du monde.
    Le build passe le tableau, sa géométrie et son décalage, tous connus à la

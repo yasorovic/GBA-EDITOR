@@ -53,7 +53,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_ACTOR_PROPS, 
                   API_MODULES, module_members, REF_TYPES, REF_TYPE_TABLE,
                   ref_member, ref_lineage, REF_ACTOR, STATELESS_MODULES, module_call_form, LAYER_NUMBERS,
                   modernize_message, REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY,
-                  REF_AREA, AREA_EVENTS, AREA_PARAM, DOMAIN_AREA_NAME)
+                  REF_AREA, AREA_EVENTS, AREA_PARAM, DOMAIN_AREA_NAME, DOMAIN_PATH_NAME)
 
 from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
@@ -144,6 +144,7 @@ class BuildContext:
     music_section_names: list[str] = None  # noms de section des musiques (music.set_section)
     actor_names:  list[str]  = None    # noms des actors de la scène (pour actor.get)
     area_names:   list[str]  = None    # noms des Areas de la scène (pour area:get et area.name)
+    path_names:   list[str]  = None    # noms des Paths de la scène (pour path:get)
     prefab_names: list[str]  = None    # noms de Prefab du projet (pour actor.spawn)
     pooled_prefab_names: list[str] = None  # prefabs poolés dans CETTE scène (ils seuls ont un ACTOR_*)
     # Exports par prefab, utilisés pour valider `actor:spawn`.
@@ -3696,6 +3697,15 @@ class Checker:
                 f"{', '.join(self.ctx.area_names) or 'none'}.",
             ))
 
+    def _check_path_name(self, call_key: str, name: str):
+        """Le nom d'un Path de cette scène, résolu par une constante PATH_* au build."""
+        if self.ctx.path_names is not None and name not in self.ctx.path_names:
+            self.errors.append(CheckError(
+                "error",
+                f"{call_key} == '{name}': no Path named '{name}' in this scene. Paths of the scene: "
+                f"{', '.join(self.ctx.path_names) or 'none'}.",
+            ))
+
     def _check_box_tag(self, call_key: str, name: str):
         """Le tag d'une boîte de collision : `Project.collision_tags()`. Sans lui
         le `#define BOXTAG_*` n'existe pas et gcc échoue sur la ligne générée.
@@ -3850,6 +3860,7 @@ _DOMAIN_CHECKS: dict = {
     DOMAIN_ACTOR_NAME:     lambda c, key, val, p, a: c._check_actor_name(key, val),
     DOMAIN_BOX_TAG: lambda c, key, val, p, a: c._check_box_tag(key, val),
     DOMAIN_AREA_NAME: lambda c, key, val, p, a: c._check_area_name(key, val),
+    DOMAIN_PATH_NAME: lambda c, key, val, p, a: c._check_path_name(key, val),
     DOMAIN_GLOBAL:  lambda c, key, val, p, a: c._check_global(key, val),
     DOMAIN_SEQUENCE: lambda c, key, val, p, a: c._check_sequence(key, val),
     # Énumérations matérielles : une seule vérification pour les six, puisque

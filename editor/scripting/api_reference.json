@@ -48,6 +48,11 @@
       ]
     },
     {
+      "name": "Path",
+      "group": "gameplay",
+      "entries": []
+    },
+    {
       "name": "Physics",
       "group": "gameplay",
       "entries": [

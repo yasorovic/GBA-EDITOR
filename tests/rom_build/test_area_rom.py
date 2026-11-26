@@ -17,7 +17,9 @@ pytestmark = [
                        reason=f"devkitPro non prêt ({Toolchain().devkitpro_state})"),
 ]
 
-HERO = """function on_area_enter(area, my_box)
+HERO = """local kick_target = nil
+
+function on_area_enter(area, my_box)
   if area.tag == "door" and my_box.tag == "body" then
     local door = area:get("Door")
     if area.name == "Door" and door:overlaps(self) then
@@ -28,6 +30,7 @@ HERO = """function on_area_enter(area, my_box)
     if boss then
       boss:show()
     end
+    kick_target = area.parent
     self:hide()
   end
 end
@@ -36,6 +39,9 @@ function on_area_exit(area, my_box)
   local quiet = area:get("Quiet")
   if quiet.active and quiet.bounds.w > 0 then
     quiet:deactivate()
+  end
+  if kick_target then
+    kick_target:show()
   end
   self:show()
 end
@@ -110,6 +116,9 @@ def test_un_projet_avec_areas_se_compile_et_emet_les_contacts_poses_et_pool(tmp_
     sources = "\n".join(c.read_text(encoding="utf-8") for c in (projet.root / "build").rglob("*.c"))
     assert "area_by_name(AREA_SCENE_01_DOOR)" in sources and "area_get_name(area) == AREA_SCENE_01_DOOR" in sources
     assert "area_overlaps_actor(door, self)" in sources and "area_set_active(quiet, 0)" in sources
+    assert "Actor* boss = area_get_parent(area);" in sources
+    assert "kick_target = actor_ref_make(area_get_parent(area));" in sources
+    assert "actor_set_visible(actor_ref_get(kick_target), 1);" in sources
     # Une Area qui suit un acteur : le parent est posé à l'entrée de scène, la position recomposée après les acteurs.
     assert "g_areas[0].parent=2;" in main_c and "g_areas[1].parent" not in main_c          # le héros est l'emplacement 1
     assert "g_areas[0].held = !(g_actors[1].active && g_actors[1].alive);" in main_c

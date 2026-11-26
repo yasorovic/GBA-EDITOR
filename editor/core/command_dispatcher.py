@@ -44,6 +44,7 @@ import copy
 from core.resources import asset_reconciliation
 from core.events import EventEmitter
 from core.models.scene import Actor, Area, Prefab
+from core.models.waypoint_path import WaypointPath
 from core.models.unique_name import copy_name, unique_name
 from core.history import get_history, AddActorCmd
 from core.text_table_link import TableSync
@@ -237,6 +238,7 @@ class CommandDispatcher(EventEmitter):
             names |= actor_descendant_names(scene.actors, a.name)
         victims = [a for a in scene.actors if a.name in names]
         followers = area_descendants(scene.areas, names)
+        path_followers = [path for path in scene.paths if path.parent in names]
 
         def persist():
             get_bus().clear()
@@ -249,6 +251,8 @@ class CommandDispatcher(EventEmitter):
         cmds = [RemoveListItemsCmd(scene.actors, victims, label=label)]
         if followers:
             cmds.append(RemoveListItemsCmd(scene.areas, followers, label=label))
+        if path_followers:
+            cmds.append(RemoveListItemsCmd(scene.paths, path_followers, label=label))
         get_history().push(RefreshAfterCmd(MacroCmd(cmds, label), persist))
         self._emit("status_message", f"Deleted actor: {victims[0].name}" if n == 1 and not m else label)
 
@@ -482,6 +486,63 @@ class CommandDispatcher(EventEmitter):
         return copies
 
     def persist_areas(self):
+        self._save_scene()
+        self._emit("actors_list_changed")
+        self._emit("scene_sprites_changed")
+
+    # -- Paths -------------------------------------------------------
+    # Un Path est un membre de scene, comme une Area, mais sans composants : il
+    # porte uniquement une origine et des points lus par le runtime.
+
+    def add_path(self, x: int = 120, y: int = 80) -> Optional[WaypointPath]:
+        from core.history import AddListItemsCmd
+        if not self._project or not self._project.active_scene:
+            return None
+        scene = self._project.active_scene
+        path = WaypointPath(name=unique_name("Path", {p.name for p in scene.paths}), x=x, y=y)
+        get_history().push(AddListItemsCmd(scene.paths, [path], persist_fn=self.persist_paths,
+                                           label=f"Created path {path.name}"))
+        get_bus().select(path)
+        self._emit("status_message", f"Path created: {path.name}")
+        return path
+
+    def rename_path(self, path: WaypointPath, new_name: str) -> bool:
+        from core.history import SetFieldCmd
+        scene = self._project.active_scene if self._project else None
+        new_name = new_name.strip()
+        if (scene is None or not new_name or new_name == path.name
+                or any(other is not path and other.name == new_name for other in scene.paths)):
+            return False
+        get_history().push(SetFieldCmd(path, "name", path.name, new_name, label=f"Rename path {path.name}",
+                                       persist_fn=self.persist_paths))
+        return True
+
+    def set_path_parent(self, path: WaypointPath, parent: Optional[str]) -> bool:
+        from core.history import SetFieldCmd
+        scene = self._project.active_scene if self._project else None
+        if scene is None or path.parent == parent or (parent and parent not in {a.name for a in scene.actors}):
+            return False
+        get_history().push(SetFieldCmd(path, "parent", path.parent, parent, label=f"{path.name}.parent",
+                                       persist_fn=self.persist_paths))
+        return True
+
+    def delete_paths(self, paths: list):
+        from core.history import RemoveListItemsCmd
+        if not self._project or not self._project.active_scene:
+            return
+        scene = self._project.active_scene
+        victims = [path for path in paths if any(item is path for item in scene.paths)]
+        if not victims:
+            return
+
+        def persist():
+            get_bus().clear()
+            self.persist_paths()
+
+        get_history().push(RemoveListItemsCmd(scene.paths, victims, persist_fn=persist,
+                                               label=f"Deleted {len(victims)} path(s)"))
+
+    def persist_paths(self):
         self._save_scene()
         self._emit("actors_list_changed")
         self._emit("scene_sprites_changed")

@@ -26,6 +26,7 @@ from core.models.collision_tiles import TILE_EMPTY, COLLISION_TILE_SIZE
 # feuille, lu par ce modèle, par le canvas qui les peindra et par le codegen
 # qui les émettra en C.
 from core.models.grid import Grid
+from core.models.waypoint_path import WaypointPath
 from core.models import asset_extensions
 
 # ── Slots BG valides par mode vidéo ───────────────────────────────
@@ -735,6 +736,9 @@ class Scene(Resource):
     windows: list = field(default_factory=list)  # list[WindowSlot]
     # Zones de jeu posées dans cette scène (cf. Area). Liste vide = aucune.
     areas: list = field(default_factory=list)  # list[Area]
+    # Itinéraires posés dans cette scène. Les points sont locaux à leur
+    # origine, et peuvent suivre un acteur parent (cf. WaypointPath).
+    paths: list = field(default_factory=list)  # list[WaypointPath]
     scroll_h: bool = True  # défilement horizontal activé (mode "follow")
     scroll_v: bool = True  # défilement vertical activé (mode "follow") — par défaut pour une NOUVELLE scène ; un fichier sans la clé reste à False (cf. from_dict)
     # Mode vidéo GBA de la scène (0-5). 0 = 4 fonds tuilés réguliers (défaut) ;
@@ -851,6 +855,8 @@ class Scene(Resource):
         # Même invariant pour les grilles : un dict (constructeur direct, code
         # hérité) devient une `Grid`.
         self.grids = [g if isinstance(g, Grid) else Grid.from_dict(g) for g in self.grids]
+        self.paths = [p if isinstance(p, WaypointPath) else WaypointPath.from_dict(p)
+                      for p in self.paths]
 
     # ── Mélange : lectures dérivées ───────────────────────────────
     def blend_layers(self, role: str) -> list:
@@ -895,7 +901,8 @@ class Scene(Resource):
 
     def members(self) -> list:
         """Tout ce qui est posé dans la scène et porte un en-tête `name`/`id`/`source`."""
-        return [*self.actors, *self.areas, *self.background_layers, *self.cameras, *self.windows, *self.ui_layouts]
+        return [*self.actors, *self.areas, *self.paths, *self.background_layers,
+                *self.cameras, *self.windows, *self.ui_layouts]
 
     def ensure_member_names(self) -> None:
         """Un calque ou une interface sans nom en reçoit un, unique parmi les siens : celui de l'asset qu'il
@@ -926,6 +933,9 @@ class Scene(Resource):
             "actors": [a.to_dict() for a in self.actors],
             # Absente tant que la scène n'a pas d'Area : une scène existante ne gagne pas de clé.
             **({"areas": [a.to_dict() for a in self.areas]} if self.areas else {}),
+            # Même règle : un projet existant ne gagne pas de clé tant qu'il
+            # ne pose pas explicitement un itinéraire.
+            **({"paths": [p.to_dict() for p in self.paths]} if self.paths else {}),
             "cameras": [{**c.header(), **c.body()} for c in self.cameras],
             "camera": self.camera,
             "windows": [
@@ -1008,6 +1018,7 @@ class Scene(Resource):
             background_layers=bg_layers,
             actors=actors,
             areas=[Area.from_dict(a) for a in d.get("areas", [])],
+            paths=[WaypointPath.from_dict(p) for p in d.get("paths", [])],
             cameras=[_camera_from_dict(c) for c in d.get("cameras", [])],
             # Les anciens champs `cam_*` inline ne sont PAS relus : la maison
             # ne migre pas les formats (cf. core/project.py). Une scène

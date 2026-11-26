@@ -37,6 +37,7 @@ PARAM_RECT         = "rect"
 REF_SFX = "sfx"                   # un effet EN TRAIN de jouer : un mm_sfxhand
 REF_COLLISION_SHAPE = "collision_shape"  # une boîte de collision d'un acteur : un rang, 0 = absente
 REF_AREA = "area"                 # une Area de la scène : son rang dans `g_areas` plus un, 0 = absente
+REF_PATH = "path"                 # un Path de la scène : son rang dans `g_paths` plus un, 0 = absent
 REF_PHYSICS_BODY = "physics_body"    # l'état physique d'un acteur : le même Actor* sous une API dédiée
 REF_UI_ELEMENT = "ui_element"     # un élément d'interface : son index, connu au build
 # Les éléments d'interface héritent de `ui_element`.
@@ -90,6 +91,8 @@ REF_TYPE_TABLE: dict[str, RefType] = {
     REF_COLLISION_SHAPE: RefType(c_type="int", prefix="collision_shape"),
     REF_AREA: RefType(c_type="int", prefix="area",
                       hint="An Area is received by the `on_area_*` events (`function on_area_enter(area, my_box)`), and is `self` in the script of an Area."),
+    REF_PATH: RefType(c_type="int", prefix="path",
+                      hint="A Path is acquired from its scene: `local route = path:get(\"Patrol\")`."),
     REF_PHYSICS_BODY: RefType(
         c_type="Actor*", prefix="body",
         hint="A PhysicsBody is acquired from its actor: `local body = self:physics_body()`."),
@@ -204,6 +207,7 @@ DOMAIN_BOX_ID = "box_id"
 DOMAIN_BOX_TAG = "box_tag"
 # Nom d'une Area de la scène : `area:get("Door")` et `area.name == "Door"` (AREA_<SCÈNE>_<NOM>, la référence elle-même).
 DOMAIN_AREA_NAME = "area_name"
+DOMAIN_PATH_NAME = "path_name"
 DOMAIN_SCENE  = "scene"   # SCENE_IDX_{name}
 DOMAIN_CAMERA = "camera"  # CAM_{SCÈNE}_{name} : caméra de la scène
 # Chaque boîte sonore possède son propre espace de noms d'états.
@@ -459,6 +463,14 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc=("Moves this frame by at most `speed` px toward the position `target` (a "
              "vec2); stops exactly on it without overshooting."),
     ),
+    "actor:follow_path": ApiFunc(
+        lua_name="actor:follow_path", c_func="actor_follow_path",
+        params=[Param("path", REF_PATH, doc="A Path acquired with path:get"), Param("speed", PARAM_INT)],
+        ret="bool", self_first=True,
+        doc=("Moves toward the current waypoint of `path`, then advances its own cursor. The Path decides whether "
+             "the end stops, loops or reverses. Returns true on the frame a waypoint is reached. Ex: "
+             "local patrol = path:get(\"Patrol\"); self:follow_path(patrol, 2)"),
+    ),
     "actor:move_and_collide": ApiFunc(
         lua_name="actor:move_and_collide", c_func="actor_move_and_collide",
         params=[Param("delta", PARAM_VEC2)], ret="bool", self_first=True,
@@ -704,6 +716,22 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc="An Area of the scene, by NAME (literal, resolved at compile time): local door = area:get(\"Door\"). "
             "Areas are named in the scene, and the name is local to the scene. The reference is valid for the "
             "whole time the scene is running.",
+    ),
+    "path.get": ApiFunc(
+        lua_name="path.get", c_func="path_by_name",
+        params=[Param("name", PARAM_STR, DOMAIN_PATH_NAME, doc="Name of a Path in the scene")], ret=REF_PATH,
+        doc="A Path of the scene, by NAME (literal, resolved at build time). Its points can be read and it can be "
+            "given to self:follow_path. Ex: local patrol = path:get(\"Patrol\")",
+    ),
+    f"{REF_PATH}:count": ApiFunc(
+        lua_name="path:count", c_func="path_count", params=[], ret="int", self_first=True,
+        doc="Number of waypoints in this Path. Ex: for i = 1, patrol:count() do ... end",
+    ),
+    f"{REF_PATH}:point": ApiFunc(
+        lua_name="path:point", c_func="path_point",
+        params=[Param("index", PARAM_INT, doc="Waypoint index, starting at 1")], ret=PARAM_VEC2, self_first=True,
+        doc="World position of a waypoint. Indices start at 1; an out-of-range index returns vec2(0, 0). "
+            "Ex: local first = patrol:point(1)",
     ),
     f"{REF_AREA}:activate": ApiFunc(
         lua_name="area:activate", c_func="area_set_active", params=[], self_first=True, fixed_args=(1,),
@@ -3000,6 +3028,13 @@ def area_name_constant(area_name: str, scene_sym: str = "") -> str:
     if scene_sym:
         return f"AREA_{(scene_sym + '_' + c_sym(area_name)).upper()}"
     return f"AREA_{c_ident(area_name)}"
+
+
+def path_name_constant(path_name: str, scene_sym: str = "") -> str:
+    """'Patrol' -> 'PATH_<SCENE>_PATROL', the scene-local Path handle."""
+    if scene_sym:
+        return f"PATH_{(scene_sym + '_' + c_sym(path_name)).upper()}"
+    return f"PATH_{c_ident(path_name)}"
 
 
 def box_tag_constant(tag: str) -> str:

@@ -55,6 +55,7 @@ from .api import (
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
     DOMAIN_MUSIC_SECTION, music_section_constant,
     DOMAIN_CAMERA, camera_constant, DOMAIN_BOX_ID, DOMAIN_BOX_TAG, box_tag_constant, DOMAIN_AREA_NAME, area_name_constant,
+    DOMAIN_PATH_NAME, path_name_constant,
     window_region_constant,
     DOMAIN_TEXT, DOMAIN_FONT, DOMAIN_IMAGE_STATE,
     DOMAIN_PALETTE, DOMAIN_UI_ELEMENT, ui_list_constant,
@@ -883,12 +884,10 @@ class CodeGen:
         acteur ; `self.Canon` nomme un enfant, qui en est un aussi."""
         if value is None:
             return False
-        if isinstance(value, ExprCall) and self._call_key(value.func) in ("actor.get", "actor.spawn"):
-            return True
-        if isinstance(value, ExprName) and value.name in (self._held_refs | self._export_actors):
-            return True
-        return (isinstance(value, ExprIndex) and isinstance(value.obj, ExprName)
-                and value.obj.name == "self" and value.field in (self.ctx.child_refs or {}))
+        if isinstance(value, ExprName):
+            return (value.name in (self._held_refs | self._export_actors)
+                    or self._ref_types.get(value.name) == REF_ACTOR)
+        return infer_ref_type(value, self._kinds, self._ref_types) == REF_ACTOR
 
     def _state_ref(self, field: str) -> str:
         """Où vit ce morceau d'état : dans le bloc de l'emplacement de l'instance pour un prefab,
@@ -3511,6 +3510,7 @@ _DOMAIN_CONSTANT: dict = {
     DOMAIN_BOX_ID: lambda g, name: str(g.ctx.box_ids.index(name) if name in g.ctx.box_ids else 0),
     DOMAIN_BOX_TAG: lambda g, name: box_tag_constant(name),
     DOMAIN_AREA_NAME: lambda g, name: area_name_constant(name, g.ctx.scene_sym),
+    DOMAIN_PATH_NAME: lambda g, name: path_name_constant(name, g.ctx.scene_sym),
     DOMAIN_SCENE:   lambda g, name: scene_constant(name),
     DOMAIN_LANG:    lambda g, name: lang_constant(name),
     DOMAIN_CAMERA:  lambda g, name: camera_constant(name, g.ctx.scene_sym),

@@ -8,6 +8,7 @@ from codegen.runtime_codegen.physics.areas import area_globals_lines
 from codegen.runtime_codegen.physics.audio_emitters import emitter_globals_lines, project_has_emitters
 from codegen.runtime_codegen.physics.body import project_has_one_way
 from codegen.runtime_codegen.physics.floor import project_has_floors
+from codegen.runtime_codegen.waypoint_paths import path_globals_lines
 
 
 def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int, n_oam_entries: int,
@@ -21,6 +22,7 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
     # au code et aux petits états runtime.
     L += [
         f"Actor g_actors[{n_actors}] EWRAM_BSS;",
+        *path_globals_lines(all_scene_data, n_actors),
         *area_globals_lines(p, all_scene_data, n_actors),
         *(emitter_globals_lines(p, all_scene_data) if project_has_emitters(p) else []),
         f"u16 g_actor_floor_store[{n_actors if project_has_floors(p) else 1}] EWRAM_BSS;",

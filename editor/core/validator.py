@@ -426,6 +426,7 @@ def _check_each_scene(ctx: ValidationContext):
             ctx.warn(None, "The scene has no actor, script or interface: it will do nothing.")
         _check_actors(ctx)
         _check_areas(ctx, scene)
+        _check_paths(ctx, scene)
         _check_area_handlers(ctx, scene)
         _check_backgrounds(ctx)
         _check_collision_map(ctx)
@@ -500,6 +501,27 @@ def _check_areas(ctx: ValidationContext, scene):
             ctx.warn(area, "The Area has no active collision shape: it covers nothing.")
         _check_components(ctx, area, area.components)
     _check_audio_emitters(ctx, scene)
+
+
+def _check_paths(ctx: ValidationContext, scene):
+    """Un Path est référencé dans le C par son symbole scène-local et ses points
+    tiennent dans un compteur u8 : le build doit refuser les deux cas ambigus."""
+    from codegen.c_names import sym as c_sym
+    seen: dict[str, str] = {}
+    actor_names = {actor.name for actor in scene.actors}
+    for path in scene.paths:
+        symbol = c_sym(path.name)
+        if symbol in seen:
+            ctx.warn(path, f"Paths \"{seen[symbol]}\" and \"{path.name}\" share the C symbol `{symbol}` in scene "
+                           f"'{scene.name}'. Rename one of them.")
+        seen.setdefault(symbol, path.name)
+        if path.parent and path.parent not in actor_names:
+            ctx.error(path, f"Path \"{path.name}\" has parent \"{path.parent}\", which is not an actor of this scene. "
+                            "A parent is chosen within the same scene.")
+        if not path.points:
+            ctx.warn(path, f"Path \"{path.name}\" has no waypoint.")
+        if len(path.points) > 255:
+            ctx.error(path, f"Path \"{path.name}\" has {len(path.points)} waypoints; the runtime limit is 255.")
 
 
 def _check_audio_emitters(ctx: ValidationContext, scene):

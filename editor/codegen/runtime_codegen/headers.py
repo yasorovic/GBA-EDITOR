@@ -18,7 +18,7 @@ import codegen.build_output as build_output
 from codegen.runtime_codegen.gen_camera import scene_cameras_indexed
 from codegen.oam_alloc import scene_oam_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
-from scripting.api import area_name_constant, camera_constant
+from scripting.api import area_name_constant, path_name_constant, camera_constant
 
 
 def actorname_ids(p: Project) -> dict:
@@ -93,6 +93,10 @@ def generate_actor_types(p: Project) -> None:
         # valeur que `area:get("Nom")` et `area.name` rendent au script.
         for rank, area in enumerate(sc.areas):
             h.append(f"#define {area_name_constant(area.name, c_sym(sc.name))} {rank + 1}")
+        # Les Paths suivent le même contrat que les Areas : une référence est
+        # leur rang dans la table de la scène, plus un (zéro = absent).
+        for rank, path in enumerate(sc.paths):
+            h.append(f"#define {path_name_constant(path.name, c_sym(sc.name))} {rank + 1}")
         for pl in lay.pools:
             u = pl.sym.upper()
             if pl.shared:

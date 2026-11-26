@@ -62,7 +62,7 @@ _FALLBACK_GROUP: dict[str, str] = {
 # labels.json, français dans labels_fr.json) : la sidebar traduit, cette couche
 # ne code pas de texte visible en dur.
 SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("scrsb.sec.gameplay", ("Actor", "Instance", "Transform", "Movement", "Physics", "CollisionShape", "Collision", "Navigation", "Area", "Sprite", "Animation", "Juiciness", "Input")),
+    ("scrsb.sec.gameplay", ("Actor", "Instance", "Transform", "Movement", "Physics", "CollisionShape", "Collision", "Navigation", "Area", "Path", "Sprite", "Animation", "Juiciness", "Input")),
     ("scrsb.sec.scene",   ("Scene", "Layer", "Palette", "Window", "Blend")),
     ("scrsb.sec.camera",  ("Camera",)),
     ("scrsb.sec.sound",   ("Audio",)),
@@ -204,6 +204,7 @@ _FUNC_HOME: dict[str, str] = {
     # que move et move_to. Sans ce rangement, il retombe dans Instance car les
     # appels actor:* sont volontairement ambigus entre Actor et Instance.
     "actor:move_and_collide": "Movement",
+    "actor:follow_path": "Movement",
     # La vélocité est un état de Physics ; l'appliquer est le geste qui le
     # transforme en déplacement, pas une opération générique d'Actor.
     "actor:apply_velocity": "Physics",
@@ -257,6 +258,7 @@ _FUNC_HOME: dict[str, str] = {
     "collision.set_tile": "Collision",
     "collision.fill_rect": "Collision",
     "area.get": "Area", "area:activate": "Area", "area:deactivate": "Area", "area:overlaps": "Area",
+    "path.get": "Path", "path:count": "Path", "path:point": "Path",
 }
 
 # Dans « Actor » et « Instance », l'ordre du dictionnaire technique ne raconte pas
