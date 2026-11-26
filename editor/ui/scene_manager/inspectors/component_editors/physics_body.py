@@ -17,7 +17,11 @@ from . import BaseComponentEditor, register, LABEL_WIDTH
 
 @register("physics_body")
 class PhysicsBodyEditor(BaseComponentEditor):
-    def build(self, comp, row, layout):
+    def meta_inline(self, comp):
+        """Le Mode (nature du corps) prend la place de l'id — un physics body est
+        unique par acteur, donc sans id. Construit avant la barre meta, son
+        `FieldBinder` est réutilisé par `build`."""
+        self.comp = comp
         self._fields = FieldBinder(lambda field, value: self.set_field(self.comp, field, value))
         mode = QComboBox()
         labels = {
@@ -30,7 +34,18 @@ class PhysicsBodyEditor(BaseComponentEditor):
             mode.addItem(labels[value], value)
         self._fields.bind("mode", mode, values=list(PHYSICS_BODY_MODES))
         mode.setToolTip(tooltip(title=label("comped.physics_mode"), body=label("comped.physics_mode_tip")))
-        W.row(label("comped.physics_mode"), mode, layout, LABEL_WIDTH)
+        self._mode = mode
+        # La réaction d'affichage (show_mode) est branchée par `build`, qui la
+        # définit avec les lignes qu'elle montre ou cache.
+        return label("comped.physics_mode"), mode
+
+    def build(self, comp, row, layout):
+        # Normalement le Mode est déjà posé dans la barre meta (meta_inline, appelé
+        # par l'inspecteur). Sans elle (construction directe), on le remet en ligne
+        # pour que l'éditeur reste complet à lui seul.
+        if not getattr(self, "_mode", None):
+            inline_label, mode = self.meta_inline(comp)
+            W.row(inline_label, mode, layout, LABEL_WIDTH)
 
         def colliders():
             owner = getattr(self.insp, "_actor", None)
@@ -99,8 +114,10 @@ class PhysicsBodyEditor(BaseComponentEditor):
             for widget in (mass_row, sleep_row):
                 widget.setVisible(is_rigid)
 
-        mode.currentIndexChanged.connect(lambda _: show_mode(mode.currentData()))
-        use_gravity.toggled.connect(lambda _: show_mode(mode.currentData()))
+        # Le combo Mode vit dans la barre meta (meta_inline) ; sa réaction d'affichage
+        # et celle de la gravité de scène sont branchées ici, où show_mode est défini.
+        self._mode.currentIndexChanged.connect(lambda _: show_mode(self._mode.currentData()))
+        use_gravity.toggled.connect(lambda _: show_mode(self._mode.currentData()))
         self._show_mode = show_mode
         self.reload(comp)
 

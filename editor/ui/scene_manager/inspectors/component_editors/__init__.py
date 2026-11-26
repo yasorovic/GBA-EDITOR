@@ -30,7 +30,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
-    from PyQt6.QtWidgets import QVBoxLayout
+    from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 _REGISTRY: dict[str, type["BaseComponentEditor"]] = {}
 
@@ -84,6 +84,14 @@ class BaseComponentEditor:
         cette cible, jamais capturer le composant de la première construction.
         """
         return False
+
+    def meta_inline(self, comp) -> tuple[str | None, "QWidget"] | None:
+        """Champ (label, widget) à loger dans la barre meta, à la place de l'espace
+        d'id qu'un composant unique par acteur laisse vide. Appelé AVANT `build`,
+        pour un composant sans id ; `None` = rien, l'espace reste vide (défaut).
+        L'éditeur qui en construit un peut y créer son `FieldBinder` et le réutiliser
+        dans `build` (cf. PhysicsBodyEditor)."""
+        return None
 
     # ── Helpers partagés (délèguent à l'inspector) ───────────────────
 

@@ -532,11 +532,14 @@ class _W:
                  field_syncers: dict,
                  set_comp_fn: Callable,
                  layout: QVBoxLayout,
-                 show_id: bool = True) -> tuple[QLineEdit | None, QCheckBox]:
+                 show_id: bool = True,
+                 inline: tuple[str | None, QWidget] | None = None) -> tuple[QLineEdit | None, QCheckBox]:
         """
         Barre horizontale compacte :  id [ … ]  ☑ Active
         Enregistre automatiquement les syncers pour 'id' et 'active'.
         `show_id=False` : pas de champ id (composant unique par acteur), seul Active reste.
+        `inline=(label, widget)` : un composant sans id loge ce champ dans l'espace
+        libéré à gauche (cf. PhysicsBodyEditor.meta_inline), au lieu de le laisser vide.
         Retourne (id_edit, active_cb).
         """
         meta = QWidget()
@@ -564,6 +567,13 @@ class _W:
 
         if show_id:
             ml.addWidget(id_lbl); ml.addWidget(id_edit, 1)
+        elif inline is not None:
+            inline_label, inline_widget = inline
+            if inline_label:
+                lab = QLabel(inline_label); lab.setFont(_FONT_UI_SM)
+                lab.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent; border:none;")
+                ml.addWidget(lab)
+            ml.addWidget(inline_widget); ml.addStretch(1)
         else:
             ml.addStretch(1)
         ml.addWidget(active_cb)

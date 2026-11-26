@@ -1443,8 +1443,12 @@ class ActorInspector(QWidget):
             editor.comp = comp
         # L'en-tête suit la cible de CET éditeur, même après sa réutilisation.
         set_comp = (lambda _comp, field, value: self._set_comp(editor.comp, field, value)) if editor else self._set_comp
+        is_singleton = component_type_name(comp) in SINGLETON_COMPONENTS
+        # Un composant sans id peut loger un champ dans l'espace laissé vide par l'id
+        # (ex. le Mode du physics body). Construit AVANT la barre, réutilisé par build.
+        inline = editor.meta_inline(comp) if (editor is not None and is_singleton) else None
         _W.meta_bar(comp, self._field_syncers, set_comp, self._editor_layout,
-                    show_id=component_type_name(comp) not in SINGLETON_COMPONENTS)
+                    show_id=not is_singleton, inline=inline)
         _W.separator(self._editor_layout, margin_v=2)
 
         if editor is not None:

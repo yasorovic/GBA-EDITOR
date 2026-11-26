@@ -87,3 +87,41 @@ def test_l_editeur_affiche_et_ecrit_les_quatre_noms_canoniques(qapp):
     can_sleep.setChecked(False)
     assert (comp.mass, comp.gravity_scale, comp.can_sleep) == (2.5, 0.5, False)
     assert written[-3:] == [("mass", 2.5), ("gravity_scale", 0.5), ("can_sleep", False)]
+
+
+def test_meta_inline_donne_le_mode_pour_la_barre(qapp):
+    """L'éditeur propose le Mode comme champ inline (à loger à la place de l'id) :
+    un combo des quatre noms canoniques, qui écrit `mode`."""
+    written = []
+    comp = PhysicsBodyComponent()
+    actor = Actor(name="Hero", components=[comp])
+    inspector = SimpleNamespace(
+        _set_comp=lambda c, f, v: (written.append((f, v)), setattr(c, f, v)),
+        _field_syncers={}, _actor=actor)
+
+    inline = PhysicsBodyEditor(inspector).meta_inline(comp)
+    assert inline is not None
+    lab, combo = inline
+    assert isinstance(combo, QComboBox)
+    assert [combo.itemData(i) for i in range(combo.count())] == \
+        ["StaticBody", "CharacterBody", "KinematicBody", "RigidBody"]
+    combo.setCurrentIndex(combo.findData("KinematicBody"))
+    assert comp.mode == "KinematicBody" and written[-1] == ("mode", "KinematicBody")
+
+
+def test_meta_bar_loge_le_champ_inline_a_la_place_de_l_id(qapp):
+    """`meta_bar(show_id=False, inline=(label, widget))` pose le champ dans l'espace
+    de l'id, à côté d'Active, sans champ id."""
+    from PyQt6.QtWidgets import QCheckBox, QComboBox, QLineEdit
+
+    host = QWidget()
+    layout = QVBoxLayout(host)
+    comp = SimpleNamespace(id="", active=True)
+    probe = QComboBox()
+    W.meta_bar(comp, {}, lambda *a: None, layout,
+               show_id=False, inline=("Mode", probe))
+
+    meta = probe.parentWidget()
+    assert meta.findChild(QCheckBox) is not None     # Active est dans la même barre
+    assert meta.findChild(QLineEdit) is None          # pas de champ id
+    assert host.findChild(QComboBox) is probe
