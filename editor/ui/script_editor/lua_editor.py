@@ -4,7 +4,7 @@ import re
 from PyQt6.QtWidgets import QPlainTextEdit, QTextEdit, QWidget
 from PyQt6.QtGui import (QColor, QFont, QPainter, QPolygon, QSyntaxHighlighter,
                          QTextCharFormat, QTextCursor, QTextFormat)
-from PyQt6.QtCore import Qt, QPoint, QRect, QRegularExpression, QSize
+from PyQt6.QtCore import Qt, QPoint, QRect, QMimeData, QRegularExpression, QSize
 
 from scripting import completion
 from ui.common.theme import C, T
@@ -519,29 +519,112 @@ class LuaEditor(QPlainTextEdit):
         r"(?:if|elseif)\b.*\bthen(?!.*\bend\b).*|"
         r"(?:for|while)\b.*\bdo(?!.*\bend\b).*|else|do)\s*$"
     )
+    _BLOCK_CLOSE = re.compile(r"^(?:end|else|elseif\b.*\bthen)\s*$")
+    _BLOCK_BRANCH = re.compile(r"^(?:else|elseif\b.*\bthen)\s*$")
+
+    @staticmethod
+    def _code_before_comment(text: str) -> str:
+        comment = LuaHighlighter._comment_start(text, 0)
+        return (text if comment is None else text[:comment[0]]).strip()
+
+    def _block_depth_before(self, line: int) -> int:
+        """La profondeur Lua déterminée par les lignes qui précèdent `line`.
+
+        L'auto-indentation ne prolonge pas le blanc déjà présent, qui peut venir
+        d'un collage ou d'une ancienne frappe. Une ligne ordinaire garde la
+        profondeur structurale courante ; seul un ouvreur ajoute un niveau.
+        """
+        depth = 0
+        doc = self.document()
+        for number in range(line):
+            code = self._code_before_comment(doc.findBlockByNumber(number).text())
+            if self._BLOCK_BRANCH.fullmatch(code):
+                continue                    # ferme puis rouvre : profondeur inchangée
+            if self._BLOCK_CLOSE.fullmatch(code):
+                depth = max(0, depth - 1)
+            elif self._BLOCK_OPEN.fullmatch(code):
+                depth += 1
+        return depth
+
+    @staticmethod
+    def _set_line_indent(cursor: QTextCursor, indent: str):
+        """Remplace le blanc de tête de la ligne, sans toucher à son code."""
+        text = cursor.block().text()
+        leading = len(text) - len(text.lstrip(" \t"))
+        if text[:leading] == indent:
+            return
+        edit = QTextCursor(cursor.block())
+        edit.movePosition(QTextCursor.MoveOperation.Right,
+                          QTextCursor.MoveMode.KeepAnchor, leading)
+        edit.insertText(indent)
 
     def insert_newline_keeping_indent(self):
         """Retour à la ligne avec l'indentation que la structure appelle.
 
-        Le blanc de tête est conservé dans le cas courant. Après un ouvreur Lua
-        (`then`, `do`, `function`, `else`), l'éditeur ajoute un niveau pour que
-        l'auteur écrive directement le corps. Entrée n'ajoute pas de `end` :
-        elle ne doit pas modifier une structure encore incomplète.
+        La profondeur vient des blocs Lua déjà ouverts, jamais du blanc de la
+        ligne courante. Après un ouvreur (`then`, `do`, `function`, `else`),
+        l'éditeur ajoute un niveau pour le corps. `end`, `else` et `elseif`
+        sont d'abord ramenés sur leur ouvreur.
 
         Le point unique du retour à la ligne : l'éditeur l'appelle quand le popup
         est fermé, le completer quand il est ouvert sans sélection — pour que les
         deux indentent pareil."""
         cur = self.textCursor()
         line = cur.block().text()
-        indent = line[:len(line) - len(line.lstrip(" \t"))]
         prefix = line[:cur.positionInBlock()]
-        comment = LuaHighlighter._comment_start(prefix, 0)
-        code = (prefix if comment is None else prefix[:comment[0]]).strip()
-        if self._BLOCK_OPEN.search(code):
-            indent += " " * self._TAB_WIDTH
-        cur.insertText("\n" + indent)
+        code = self._code_before_comment(prefix)
+        depth = self._block_depth_before(cur.blockNumber())
+        if self._BLOCK_CLOSE.fullmatch(code):
+            depth = max(0, depth - 1)
+            line_indent = " " * (depth * self._TAB_WIDTH)
+            self._set_line_indent(cur, line_indent)
+            next_depth = depth + 1 if self._BLOCK_BRANCH.fullmatch(code) else depth
+        elif self._BLOCK_OPEN.search(code):
+            line_indent = " " * (depth * self._TAB_WIDTH)
+            self._set_line_indent(cur, line_indent)
+            next_depth = depth + 1
+        else:
+            line_indent = " " * (depth * self._TAB_WIDTH)
+            self._set_line_indent(cur, line_indent)
+            next_depth = depth
+        cur.insertText("\n" + " " * (next_depth * self._TAB_WIDTH))
         self.setTextCursor(cur)
         self.ensureCursorVisible()
+
+    def insertFromMimeData(self, source: QMimeData):
+        """Colle un bloc Lua à la profondeur de la ligne d'accueil.
+
+        Qt insère le premier caractère collé APRÈS le blanc déjà présent, puis
+        les lignes suivantes telles quelles. Coller un bloc déjà indenté sur une
+        ligne vide décalait donc sa première ligne d'un niveau supplémentaire.
+        On retire le préfixe commun du bloc, puis on reporte l'indentation de la
+        ligne d'accueil sur chaque ligne collée. Hors début de ligne, le collage
+        natif reste intact.
+        """
+        if not source.hasText() or self.textCursor().hasSelection():
+            super().insertFromMimeData(source)
+            return
+        cur = self.textCursor()
+        before = cur.block().text()[:cur.positionInBlock()]
+        if before.strip(" \t"):
+            super().insertFromMimeData(source)
+            return
+        rows = source.text().replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        meaningful = [row for row in rows if row.strip(" \t")]
+        if len(rows) == 1 or not meaningful:
+            super().insertFromMimeData(source)
+            return
+        common = meaningful[0][:len(meaningful[0]) - len(meaningful[0].lstrip(" \t"))]
+        for row in meaningful[1:]:
+            white = row[:len(row) - len(row.lstrip(" \t"))]
+            while common and not white.startswith(common):
+                common = common[:-1]
+        rows = [row[len(common):] if row.strip(" \t") else row for row in rows]
+        indent = before
+        text = rows[0] + "".join("\n" + (indent + row if row else "")
+                                    for row in rows[1:])
+        cur.insertText(text)
+        self.setTextCursor(cur)
 
     # ── Autocomplétion ─────────────────────────────────────────────
     # Les touches du popup OUVERT (Tab, Entrée, Échap, ↑/↓) sont tenues par le

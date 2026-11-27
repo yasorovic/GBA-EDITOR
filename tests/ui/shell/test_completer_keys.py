@@ -12,7 +12,7 @@ popup à qui la touche revienne.
 from __future__ import annotations
 
 from PyQt6.QtGui import QTextCursor, QKeyEvent
-from PyQt6.QtCore import Qt, QEvent
+from PyQt6.QtCore import Qt, QEvent, QMimeData
 
 
 def _at_end(ed):
@@ -68,6 +68,24 @@ def test_entree_conserve_lindentation_popup_ferme(qapp):
     ed.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return,
                                Qt.KeyboardModifier.NoModifier))
     assert ed.toPlainText() == "function f()\n    local x = 1\n    "
+
+
+def test_coller_un_bloc_indente_ne_cumule_pas_son_indentation(qapp):
+    from ui.script_editor.lua_editor import LuaEditor
+    ed = LuaEditor()
+    ed.setPlainText("if state then\n    \nend")
+    cur = ed.textCursor()
+    cur.setPosition(ed.document().findBlockByNumber(1).position() + 4)
+    ed.setTextCursor(cur)
+    mime = QMimeData()
+    mime.setText("        self.anim_speed = 5\n        self:play_anim(\"Run\")")
+    ed.insertFromMimeData(mime)
+    assert ed.toPlainText() == (
+        "if state then\n"
+        "    self.anim_speed = 5\n"
+        "    self:play_anim(\"Run\")\n"
+        "end"
+    )
 
 
 def test_fleche_puis_entree_valide_la_selection(qapp):

@@ -148,3 +148,24 @@ def test_entree_apres_un_bloc_ferme_sur_sa_ligne_ne_creuse_pas(qapp):
     ed.moveCursor(ed.textCursor().MoveOperation.End)
     ed.insert_newline_keeping_indent()
     assert ed.toPlainText() == 'if state == "ground" then end\n'
+
+
+def test_entree_apres_end_realigne_la_fermeture(qapp):
+    ed = _editor(qapp, "if state then\n    value = 1\n        end")
+    ed.moveCursor(ed.textCursor().MoveOperation.End)
+    ed.insert_newline_keeping_indent()
+    assert ed.toPlainText() == "if state then\n    value = 1\nend\n"
+
+
+def test_entree_apres_else_realigne_et_rentre_dans_la_branche(qapp):
+    ed = _editor(qapp, "if state then\n    value = 1\n    else")
+    ed.moveCursor(ed.textCursor().MoveOperation.End)
+    ed.insert_newline_keeping_indent()
+    assert ed.toPlainText() == "if state then\n    value = 1\nelse\n    "
+
+
+def test_entree_apres_une_ligne_normale_ne_cumule_pas_les_espaces(qapp):
+    ed = _editor(qapp, "if state then\n    value = 1\n        other = 2")
+    ed.moveCursor(ed.textCursor().MoveOperation.End)
+    ed.insert_newline_keeping_indent()
+    assert ed.toPlainText() == "if state then\n    value = 1\n    other = 2\n    "
