@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ScriptTemplateContext:
-    """kind: "scene" | "camera" | "actor" | "area" | "behavior" | "empty" """
+    """kind: "scene" | "camera" | "actor" | "area" | "module" | "behavior" | "empty" """
     kind: str = "empty"
     name: str = ""                 # nom du script (sans .lua)
     scene_name: str = ""           # pour kind="scene"
@@ -36,6 +36,8 @@ def generate_script_template(ctx: ScriptTemplateContext) -> str:
         return _generate_area_template(ctx)
     if ctx.kind == "behavior":
         return _generate_behavior_template(ctx)
+    if ctx.kind == "module":
+        return _generate_module_template(ctx)
     return ""   # "empty" : fichier vide
 
 
@@ -51,6 +53,16 @@ def _generate_behavior_template(ctx: ScriptTemplateContext) -> str:
     from core.lua_scripts import BEHAVIOR_MARKER
     return (
         f"{BEHAVIOR_MARKER}\n"
+        "local M = {}\n\n"
+        "function M.update(actor)\nend\n\n"
+        "return M\n"
+    )
+
+
+def _generate_module_template(ctx: ScriptTemplateContext) -> str:
+    from core.lua_scripts import MODULE_MARKER
+    return (
+        f"{MODULE_MARKER}\n"
         "local M = {}\n\n"
         "function M.update(actor)\nend\n\n"
         "return M\n"

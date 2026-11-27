@@ -303,6 +303,7 @@ class Checker:
                            if s is not None]
         self._assigned = assigned_names(script)
         for loc in script.locals:
+            self._check_static_require(loc.value)
             self._check_array_decl(loc.name, loc.value)
             self._check_grid_decl(loc.name, loc.value)
             self._check_literals_in(loc.value)
@@ -865,6 +866,27 @@ class Checker:
             self._module_functions[module] = [
                 fn.name[len(prefix):] for fn in script.functions
                 if fn.name.startswith(prefix)]
+
+    @staticmethod
+    def _is_require_call(value) -> bool:
+        return (isinstance(value, ExprCall)
+                and isinstance(value.func, ExprName)
+                and value.func.name == REQUIRE_FN)
+
+    def _check_static_require(self, value):
+        """`require` n'est pas un appel Lua embarqué : son nom est résolu au build."""
+        if not self._is_require_call(value):
+            return
+        target = require_target(value)
+        if target is None:
+            self.errors.append(CheckError(
+                "error", "require() expects one quoted library name, for example "
+                '`require("PlayerMovement")`.'))
+            return
+        from core.lua_scripts import require_name
+        if not require_name(target):
+            self.errors.append(CheckError(
+                "error", f'require("{target}"): use the library name only, without a folder or extension.'))
 
     def _check_array_decl(self, name: str, value):
         """Ce qui rend une déclaration de tableau invalide, et le dit sur la
@@ -1986,8 +2008,8 @@ class Checker:
                 "error",
                 f"Unknown function '{fn.name}': a top-level function is an event handler "
                 f"({', '.join(admitted[:5])}…), a sequence ({SEQUENCE_PREFIX}<name>), or an EventCall named by a frame of "
-                "this actor's sprite. For shared code, use a behavior: a script whose first line is "
-                "`-- @behavior`, imported with require(\"behaviors/name\").",
+                "this actor's sprite. For shared code, use a static library: a script whose first line is "
+                "`-- @module` or `-- @behavior`, imported with require(\"Name\").",
             ))
         if seq is not None:
             self._check_sequence_waits(fn, seq)
@@ -2302,6 +2324,11 @@ class Checker:
             self._mark_spawn_stmt(s.call)
             self._check_expr(s.call)
         elif isinstance(s, StmtLocalAssign):
+            if self._is_require_call(s.value) and self._current_function:
+                self.errors.append(CheckError(
+                    "error", "require() is resolved at build: declare its alias at the top level of the script, not inside a function."))
+                return
+            self._check_static_require(s.value)
             self._check_array_decl(s.name, s.value)
             self._check_grid_decl(s.name, s.value)
             self._mark_spawn_stmt(s.value)

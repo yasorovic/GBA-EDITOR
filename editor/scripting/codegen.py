@@ -323,6 +323,9 @@ class CodegenContext:
     # une constante du fichier, puisque le script est compilé une fois par Area.
     area_ref: int = 0
     behavior_paths: dict | None = None  # {nom: fichier} des behaviors du projet, pour résoudre les require()
+    # {nom logique: fichier}. Le vieux champ ci-dessus reste un repli pour les
+    # tests et anciens appelants.
+    module_paths: dict | None = None
     # Prefab : les variables de tête que le script ÉCRIT deviennent un champ de sa structure d'état,
     # rangée dans le bloc de l'emplacement de chaque instance (cf. _emit_pool_state).
     is_pooled: bool = False
@@ -486,6 +489,7 @@ class CodeGen:
         self._lua_file = ctx.lua_file   # le script dont on émet les statements (un behavior le change)
         self._block_depth = 0
         self._required_behaviors: dict[str, str] = {}  # alias Lua → sym C
+        self._module_sources: dict[str, tuple] = {}    # cible -> (sym, path, AST, alias->sym)
         self._helpers: dict[str, LuaFunction] = {}
         self._in_helper = False
         # Prefab poolé : état par instance : nom Lua → champ de `<sym>State`.
@@ -1070,81 +1074,102 @@ class CodeGen:
         self._w("")
 
     def _emit_inlined_behaviors(self, script: LuaScript):
-        """Parse et transpile les behaviors requis en fonctions C statiques inline."""
+        """Emet le graphe de Behaviors et modules prives, dependances d'abord."""
         from .parser import parse as lua_parse, LuaParseError
-        if not self._required_behaviors or self.ctx.behavior_paths is None:
+        from core.lua_scripts import require_name
+
+        if not self._required_behaviors:
             return
-        self._w("/* ── Inlined behaviors ── */")
-        for alias, sym in self._required_behaviors.items():
-            stem = sym[len("beh_"):]          # "paddle_ai"
-            beh_path = self.ctx.behavior_paths.get(stem)
-            if beh_path is None or not beh_path.exists():
-                msg = f"behavior '{stem}' not found (no script starting with `-- @behavior` has this name)"
-                self._w(f"/* {msg} */")
-                self.warnings.append(msg)
-                continue
-            beh_src = beh_path.read_text(encoding="utf-8")
+
+        def symbol(target: str) -> str:
+            return f"library_{require_name(target)}"
+
+        def locate(target: str):
+            if self.ctx.module_paths is not None:
+                return self.ctx.module_paths.get(target)
+            if self.ctx.behavior_paths is not None:
+                return self.ctx.behavior_paths.get(require_name(target))
+            return None
+
+        self._w("/* Inlined static modules */")
+        ordered: list[str] = []
+        visiting: list[str] = []
+
+        def collect(target: str):
+            if target in self._module_sources:
+                return
+            if target in visiting:
+                self.warnings.append("static import cycle: " + " -> ".join(
+                    visiting[visiting.index(target):] + [target]))
+                return
+            path = locate(target)
+            if path is None or not path.exists():
+                self.warnings.append(f"static library '{target}' not found")
+                return
+            visiting.append(target)
             try:
-                beh_ast = lua_parse(beh_src)
-            except LuaParseError as ex:
-                ou = f"{stem}.lua:{ex.line}" if ex.line else f"behavior '{stem}'"
-                msg = f"{ou} : {ex}"
-                self._w(f"/* {msg} */")
-                self.warnings.append(msg)
-                continue
-            # Validation basique (mêmes vérifs que les scripts actor/scène/prefab,
-            # avec le contexte de l'actor qui inline ce behavior : pas de vérif de
-            # plage sur les globals ici).
+                ast = lua_parse(path.read_text(encoding="utf-8"))
+            except (LuaParseError, UnicodeDecodeError) as ex:
+                self.warnings.append(f"{path.name}: {ex}")
+                visiting.pop()
+                return
+            aliases = {name: symbol(target) for name in ast.module_names}
+            for loc in ast.locals:
+                imported = require_target(loc.value)
+                if imported is not None:
+                    aliases[loc.name] = symbol(imported)
+                    collect(imported)
+            self._module_sources[target] = (symbol(target), path, ast, aliases)
+            visiting.pop()
+            ordered.append(target)
+
+        roots = {loc.name: require_target(loc.value) for loc in script.locals}
+        for alias in self._required_behaviors:
+            target = roots.get(alias)
+            if target:
+                collect(target)
+
+        for target in ordered:
+            sym, _path, ast, _aliases = self._module_sources[target]
+            for fn in ast.functions:
+                params = ", ".join(f"Actor* {p}" if i == 0 else f"int {p}"
+                                   for i, p in enumerate(fn.params)) or "void"
+                self._w(f"static int {sym}_{fn.name.split('.')[-1]}({params});")
+        self._w("")
+
+        for target in ordered:
+            sym, path, ast, aliases = self._module_sources[target]
             check_ctx = _BuildContext(
-                actor_name   = self.ctx.actor_name,
-                owner_kind   = "behavior",
-                anim_names   = self.ctx.anim_names,
-                sprite_ids   = self.ctx.sprite_ids,
-                box_ids      = self.ctx.box_ids,
-                sfx_names    = self.ctx.sfx_names,
-                music_names  = self.ctx.music_names,
-                jingle_names = self.ctx.jingle_names,
-                music_section_names = self.ctx.music_section_names,
-                scene_names  = self.ctx.scene_names,
-                global_names = list(self.ctx.global_names) if self.ctx.global_names else None,
-                const_names  = list(self.ctx.const_names) if self.ctx.const_names else None,
-                sfx_component_name = self.ctx.sfx_component_name,
-                save_slots   = self.ctx.save_slots,
-                has_persistent = self.ctx.has_persistent,
-                data_tables  = self.ctx.data_tables or None,
-                ref_kinds    = self.ctx.ref_kinds,
-                image_states = self.ctx.image_states or None,
-            )
-            for err in _lua_check(beh_ast, check_ctx, check_event_names=False):
-                self.warnings.append(f"behavior '{stem}': {err.message}")
-            # Émettre chaque fonction du module comme helper C statique préfixé
-            for fn in beh_ast.functions:
-                # Ignore le nom de module (M.update → beh_paddle_ai_update)
-                func_name = fn.name.split(".")[-1] if "." in fn.name else fn.name
-                c_name    = f"{sym}_{func_name}"
-                # Signature : premier param est l'actor receveur (conventionnellement "actor" ou "self")
-                params_c  = ", ".join(
-                    f"Actor* {p}" if i == 0 else f"int {p}"
-                    for i, p in enumerate(fn.params)
-                )
-                self._w(f"static void {c_name}({params_c}) {{")
+                actor_name=self.ctx.actor_name, owner_kind="behavior", anim_names=self.ctx.anim_names,
+                sprite_ids=self.ctx.sprite_ids, box_ids=self.ctx.box_ids, sfx_names=self.ctx.sfx_names,
+                music_names=self.ctx.music_names, jingle_names=self.ctx.jingle_names,
+                music_section_names=self.ctx.music_section_names, scene_names=self.ctx.scene_names,
+                global_names=list(self.ctx.global_names) if self.ctx.global_names else None,
+                const_names=list(self.ctx.const_names) if self.ctx.const_names else None,
+                sfx_component_name=self.ctx.sfx_component_name, save_slots=self.ctx.save_slots,
+                has_persistent=self.ctx.has_persistent, data_tables=self.ctx.data_tables or None,
+                ref_kinds=self.ctx.ref_kinds, image_states=self.ctx.image_states or None)
+            for err in _lua_check(ast, check_ctx, check_event_names=False):
+                self.warnings.append(f"static module '{target}': {err.message}")
+            previous = self._required_behaviors
+            self._required_behaviors = aliases
+            for fn in ast.functions:
+                params = ", ".join(f"Actor* {p}" if i == 0 else f"int {p}"
+                                   for i, p in enumerate(fn.params)) or "void"
+                self._w(f"static int {sym}_{fn.name.split('.')[-1]}({params}) {{")
                 self._indent += 1
-                # Le receveur d'un behavior n'est pas forcément nommé `self` :
-                # si son corps touche l'état de l'hôte (un homonyme d'une
-                # variable de tête), c'est SON premier paramètre qui donne
-                # l'instance. Limite connue : cette substitution se fait
-                # par nom.
                 mark = self._open_state_scope()
-                host_file, self._lua_file = self._lua_file, (
-                    beh_path.name if self._lua_file else "")
+                host_file, self._lua_file = self._lua_file, (path.name if self._lua_file else "")
                 self._emit_block(fn.body)
                 self._lua_file = host_file
                 if fn.params:
                     self._close_state_scope(mark, receiver=fn.params[0])
                 self._state_touched = False
+                self._w("return 0;")
                 self._indent -= 1
                 self._w("}")
                 self._w("")
+            self._required_behaviors = previous
 
     # ── En-tête ───────────────────────────────────────────────────
 
@@ -1316,7 +1341,7 @@ class CodeGen:
             if target is None:
                 non_require.append(loc)
             else:
-                self._required_behaviors[loc.name] = f"beh_{require_name(target)}"
+                self._required_behaviors[loc.name] = f"library_{require_name(target)}"
         # Ce qui change appartient à l'INSTANCE, ce qui ne change pas appartient
         # au PREFAB. Un `local FX_POP = 1` qu'aucune ligne n'assigne est une
         # constante : la recopier dans chaque slot du pool ferait payer seize
@@ -1800,11 +1825,11 @@ class CodeGen:
             self._w(f"{tgt} = {val};")
 
         elif isinstance(s, StmtLocalAssign):
-            # local M = require("behaviors/foo") → enregistre l'alias, pas de
-            # déclaration C : le behavior est inliné dans l'en-tête.
+            # local M = require("Mouvement") : enregistre l'alias, pas de
+            # déclaration C, la bibliothèque statique est inlinée dans l'en-tête.
             target = require_target(s.value)
             if target is not None:
-                self._required_behaviors[s.name] = f"beh_{require_name(target)}"
+                self._required_behaviors[s.name] = f"library_{require_name(target)}"
                 return
             # Une variable de séquence qui traverse une attente est DÉJÀ
             # déclarée, dans l'état : son `local` n'est plus qu'une affectation.

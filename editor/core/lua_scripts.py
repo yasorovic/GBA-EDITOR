@@ -5,9 +5,10 @@ Un script Lua se range où l'auteur veut sous `assets/`. Son RÔLE ne vient donc
 son contenu : un behavior (un module que d'autres scripts importent) commence par la ligne
 `-- @behavior`. Tout autre `.lua` est un script, qu'on attache à un acteur, une scène ou une caméra.
 
-`require("behaviors/<nom>")` reste l'appel écrit : `behaviors/` y est un espace de noms, plus un dossier, et
-`<nom>` se résout PAR NOM parmi les behaviors du projet, où qu'ils soient. Deux behaviors de même nom ne se
-départagent pas : c'est une erreur de build (`core.validator`).
+`require("Nom")` désigne une bibliothèque par son nom logique. Le dossier ne fait pas partie de cette
+référence : déplacer le fichier ne change donc pas ses importeurs. Les Behaviors et les modules privés partagent
+un même espace de noms, car l'import ne doit pas dépendre de leur nature. Deux bibliothèques de même nom sont une
+erreur de build (`core.validator`).
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 BEHAVIOR_MARKER = "-- @behavior"
-_NAMESPACE = "behaviors"
+MODULE_MARKER = "-- @module"
 
 
 def is_behavior(path) -> bool:
@@ -23,6 +24,15 @@ def is_behavior(path) -> bool:
     try:
         with open(path, encoding="utf-8-sig") as handle:
             return handle.readline().strip() == BEHAVIOR_MARKER
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def is_private_module(path) -> bool:
+    """La premiere ligne marque-t-elle un module prive importable ?"""
+    try:
+        with open(path, encoding="utf-8-sig") as handle:
+            return handle.readline().strip() == MODULE_MARKER
     except (OSError, UnicodeDecodeError):
         return False
 
@@ -62,9 +72,14 @@ def behavior_files(project) -> list[Path]:
     return [path for path in lua_files(project) if is_behavior(path)]
 
 
+def private_module_files(project) -> list[Path]:
+    return [path for path in lua_files(project) if is_private_module(path)]
+
+
 def script_files(project) -> list[Path]:
-    """Les scripts qu'on peut attacher : les `.lua` qui ne sont pas des behaviors."""
-    return [path for path in lua_files(project) if not is_behavior(path)]
+    """Les scripts qu'on peut attacher, distincts des bibliotheques importables."""
+    return [path for path in lua_files(project)
+            if not is_behavior(path) and not is_private_module(path)]
 
 
 def behaviors_by_name(project) -> dict[str, list[Path]]:
@@ -81,7 +96,23 @@ def behavior_paths(project) -> dict[str, Path]:
     return {name: paths[0] for name, paths in behaviors_by_name(project).items()}
 
 
+def private_modules_by_name(project) -> dict[str, list[Path]]:
+    found: dict[str, list[Path]] = {}
+    for path in private_module_files(project):
+        found.setdefault(path.stem, []).append(path)
+    return found
+
+
+def library_paths(project) -> dict[str, Path]:
+    """Nom logique de bibliothèque -> fichier, toutes natures confondues."""
+    found: dict[str, Path] = {}
+    for name, paths in behaviors_by_name(project).items():
+        found[name] = paths[0]
+    for name, paths in private_modules_by_name(project).items():
+        found.setdefault(name, paths[0])
+    return found
+
+
 def require_name(target: str) -> str:
-    """`"behaviors/paddle_ai"` → `"paddle_ai"`."""
-    prefix = f"{_NAMESPACE}/"
-    return target[len(prefix):] if target.startswith(prefix) else Path(target).stem
+    """Un import est un nom logique, jamais un chemin ou un espace de noms."""
+    return target if target and "/" not in target and "\\" not in target else ""

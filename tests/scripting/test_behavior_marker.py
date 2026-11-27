@@ -1,4 +1,4 @@
-"""Le rôle d'un script vient de son contenu (`-- @behavior`), pas de son dossier ; un behavior se résout par NOM."""
+"""Le rôle d'un script vient de son contenu, son import de son nom logique."""
 import importlib.util
 import json
 from pathlib import Path
@@ -53,8 +53,19 @@ def test_scripts_and_behaviors_are_told_apart_wherever_they_are_stored(tmp_path:
 
 
 def test_require_names_resolve_by_name_whatever_the_folder_prefix_says():
-    assert lua_scripts.require_name("behaviors/paddle_ai") == "paddle_ai"
     assert lua_scripts.require_name("paddle_ai") == "paddle_ai"
+    assert lua_scripts.require_name("behaviors/paddle_ai") == ""
+    assert lua_scripts.require_name("modules/player_movement") == ""
+
+
+def test_private_module_is_not_attachable_and_keeps_a_logical_name(tmp_path: Path):
+    p = _project(tmp_path)
+    private = _write(p.user_library_dir / "Hero" / "player_movement.lua", "-- @module\n" + MODULE)
+
+    assert lua_scripts.is_private_module(private)
+    assert private not in p.script_files()
+    assert p.private_module_files() == [private]
+    assert lua_scripts.library_paths(p) == {"player_movement": private}
 
 
 def test_the_template_of_a_new_behavior_carries_the_marker(tmp_path: Path):
@@ -63,36 +74,82 @@ def test_the_template_of_a_new_behavior_carries_the_marker(tmp_path: Path):
     assert lua_scripts.is_behavior(path)
 
 
+def test_the_template_of_a_new_private_module_carries_its_marker(tmp_path: Path):
+    from scripting.script_templates import ScriptTemplateContext, generate_script_template
+    path = _write(tmp_path / "x.lua", generate_script_template(ScriptTemplateContext(kind="module", name="x")))
+    assert lua_scripts.is_private_module(path)
+
+
 def test_a_behavior_stored_anywhere_is_inlined_by_its_name(tmp_path: Path):
     from scripting.codegen import CodegenContext, generate
     from scripting.parser import parse
-    src = 'local IA = require("behaviors/ia")\nfunction on_update()\n    IA.update(self)\nend\n'
+    src = 'local IA = require("ia")\nfunction on_update()\n    IA.update(self)\nend\n'
     behavior = _write(tmp_path / "Somewhere" / "ia.lua", "-- @behavior\n" + MODULE)
     ctx = CodegenContext(actor_name="Guard", actor_sym="Scene_Guard", anim_names=[], sfx_names=[],
                          music_names=[], global_names=set(), const_names=set(),
                          all_actor_syms=["Scene_Guard"], is_pooled=False,
                          behavior_paths={"ia": behavior})
     code, warnings, _ = generate(parse(src), ctx)
-    assert "beh_ia" in code and not any("not found" in w for w in warnings)
+    assert "library_ia" in code and not any("not found" in w for w in warnings)
+
+
+def test_private_modules_are_inlined_in_dependency_order(tmp_path: Path):
+    from scripting.codegen import CodegenContext, generate
+    from scripting.parser import parse
+
+    movement = _write(tmp_path / "player_movement.lua",
+                      "-- @module\nlocal M = {}\n\nfunction M.step(actor)\nend\n\nreturn M\n")
+    combat = _write(tmp_path / "player_combat.lua",
+                    "-- @module\nlocal M = {}\nlocal movement = require(\"player_movement\")\n\n"
+                    "function M.update(actor)\n    movement.step(actor)\nend\n\nreturn M\n")
+    src = ('local combat = require("player_combat")\n'
+           'function on_update()\n    combat.update(self)\nend\n')
+    ctx = CodegenContext(actor_name="Hero", actor_sym="Scene_Hero", anim_names=[], sfx_names=[],
+                         music_names=[], global_names=set(), const_names=set(), all_actor_syms=["Scene_Hero"],
+                         is_pooled=False, module_paths={"player_movement": movement,
+                                                        "player_combat": combat})
+
+    code, warnings, _ = generate(parse(src), ctx)
+
+    assert "library_player_movement_step" in code
+    assert "library_player_combat_update" in code
+    assert code.index("library_player_movement_step") < code.index("library_player_combat_update")
+    assert not warnings
+
+
+def test_static_import_cycle_is_a_build_error(tmp_path: Path):
+    p = _project(tmp_path)
+    a = _write(p.user_library_dir / "a.lua", "-- @module\nlocal M = {}\nlocal b = require(\"b\")\nfunction M.go(actor) end\nreturn M\n")
+    _write(p.user_library_dir / "b.lua", "-- @module\nlocal M = {}\nlocal a = require(\"a\")\nfunction M.go(actor) end\nreturn M\n")
+    actor_script = _write(p.user_library_dir / "Hero.lua", "local a = require(\"a\")\nfunction on_update() a.go(self) end\n")
+    from core.models.scene import Scene
+    scene = Scene(name="Level")
+    scene.script = p.asset_rel(actor_script)
+    p.scenes.append(scene)
+    p.save_scene(scene)
+
+    errors = _errors(p)
+
+    assert any("Static import cycle" in error and "a -> b -> a" in error for error in errors)
 
 
 def test_a_missing_behavior_is_reported_with_the_way_to_make_one():
     from scripting.codegen import CodegenContext, generate
     from scripting.parser import parse
-    src = 'local IA = require("behaviors/ia")\nfunction on_update()\n    IA.update(self)\nend\n'
+    src = 'local IA = require("ia")\nfunction on_update()\n    IA.update(self)\nend\n'
     ctx = CodegenContext(actor_name="Guard", actor_sym="Scene_Guard", anim_names=[], sfx_names=[],
                          music_names=[], global_names=set(), const_names=set(),
                          all_actor_syms=["Scene_Guard"], is_pooled=False, behavior_paths={})
     _code, warnings, _ = generate(parse(src), ctx)
-    assert any("'ia'" in w and "@behavior" in w for w in warnings)
+    assert any("'ia'" in w and "not found" in w for w in warnings)
 
 
-def test_two_behaviors_with_the_same_name_are_a_build_error(tmp_path: Path):
+def test_two_static_libraries_with_the_same_name_are_a_build_error(tmp_path: Path):
     p = _project(tmp_path)
     _write(p.user_library_dir / "A" / "ia.lua", "-- @behavior\n" + MODULE)
-    _write(p.user_library_dir / "B" / "ia.lua", "-- @behavior\n" + MODULE)
+    _write(p.user_library_dir / "B" / "ia.lua", "-- @module\n" + MODULE)
 
-    errors = [e for e in _errors(p) if "Behavior \"ia\"" in e]
+    errors = [e for e in _errors(p) if "Static library \"ia\"" in e]
 
     assert len(errors) == 1 and "A/ia.lua" in errors[0] and "B/ia.lua" in errors[0]
 

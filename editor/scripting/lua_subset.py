@@ -156,7 +156,8 @@ REFUSED: dict[str, Refusal] = {
         "function objet:methode() … end",
         "the subset has no table or object to attach a method to. The only methods "
         "are those of an actor (`self:play_anim(\"walk\")`), provided by the engine; "
-        "shared code goes through a behavior (`require(\"behaviors/name\")`)."),
+        "shared code goes through a static library (`require(\"Name\")`), marked "
+        "`-- @module` or `-- @behavior`."),
 
     "AnonymousFunction": Refusal(
         "local f = function() … end",
@@ -275,8 +276,7 @@ STDLIB_MODULES: dict[str, Refusal] = {
     "package": Refusal(
         "package.path",
         "there is no `package` module: nothing is loaded at run time. "
-        "`require(\"behaviors/name\")` is the only form of import, and it is resolved "
-        "at build."),
+        "`require(\"Name\")` is the only import form, resolved at build."),
 }
 
 
@@ -383,20 +383,17 @@ STDLIB: dict[str, Refusal] = {
     "load": Refusal(
         "load(src)",
         "code is not loaded at run time: everything is transpiled to C and baked into"
-        " the ROM. `require(\"behaviors/name\")` is the only form of import, resolved "
-        "at build."),
+        " the ROM. Static `require(\"Name\")` imports are resolved at build."),
     "loadstring": Refusal(
         "loadstring(src)",
         "code is not loaded at run time: everything is transpiled to C and baked into"
         " the ROM."),
     "dofile": Refusal(
         "dofile(chemin)",
-        "there is no file system in a ROM. `require(\"behaviors/name\")` imports a "
-        "behavior, at build."),
+        "there is no file system in a ROM. Static require imports a module or behavior at build."),
     "loadfile": Refusal(
         "loadfile(chemin)",
-        "there is no file system in a ROM. `require(\"behaviors/name\")` imports a "
-        "behavior, at build."),
+        "there is no file system in a ROM. Static require imports a module or behavior at build."),
 
     # ── `math`, le faux ami ───────────────────────────────────────
     # Le module existe, sous le même nom, avec un AUTRE contenu : le pire cas
@@ -480,13 +477,13 @@ def unknown_call_message(key: str) -> str:
     if "." in key:
         module = key.split(".", 1)[0]
         return (f"`{key}()`: the module `{module}` does not exist. The available modules are "
-                "those of the catalogue (API panel of the Script Editor); a behavior "
-                "is imported with `require(\"behaviors/name\")` and called through its "
+                "those of the catalogue (API panel of the Script Editor); a module is imported "
+                "with `require(\"Name\")` and called through its "
                 "alias.")
     return (f"`{key}()`: unknown function. A script has no functions of its own : the "
             "possible calls are those of the catalogue, the language constructors "
             "(`vec2`, `vec3`, `rect`, `array`), `require`, and the methods of an "
-            "imported behavior.")
+            "imported static library.")
 
 
 # ─── Contrôle de couverture ───────────────────────────────────────

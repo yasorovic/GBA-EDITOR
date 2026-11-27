@@ -188,6 +188,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_script_owner_families(ctx)
     _check_behaviors_without_self(ctx)
     _check_duplicate_behaviors(ctx)
+    _check_static_imports(ctx)
     _check_window_regions(ctx)
     _check_actor_name_collisions(ctx)
     _check_asset_symbol_collisions(ctx)
@@ -1761,14 +1762,76 @@ def _check_scripts_parse(ctx: ValidationContext):
 
 
 def _check_duplicate_behaviors(ctx: ValidationContext):
-    """`require("behaviors/<nom>")` résout par NOM parmi les fichiers marqués `-- @behavior`, où qu'ils soient :
-    deux behaviors de même nom ne se départagent pas, et le build ne choisira pas pour l'auteur."""
+    """`require("Nom")` résout une bibliothèque par nom, indépendamment de son dossier ou de sa nature."""
     from core import lua_scripts
     root = ctx.project.root
-    for name, paths in sorted(lua_scripts.behaviors_by_name(ctx.project).items()):
+    libraries: dict[str, list[Path]] = {}
+    for paths_by_name in (lua_scripts.behaviors_by_name(ctx.project),
+                          lua_scripts.private_modules_by_name(ctx.project)):
+        for name, paths in paths_by_name.items():
+            libraries.setdefault(name, []).extend(paths)
+    for name, paths in sorted(libraries.items()):
         if len(paths) > 1:
             where = ", ".join(p.relative_to(root).as_posix() for p in paths)
-            ctx.error(None, f"Behavior \"{name}\" is defined by {len(paths)} files ({where}): `require(\"behaviors/{name}\")` cannot tell them apart. Rename one.")
+            ctx.error(None, f"Static library \"{name}\" is defined by {len(paths)} files ({where}): `require(\"{name}\")` cannot tell them apart. Rename one.")
+
+
+def _check_static_imports(ctx: ValidationContext):
+    """Le graphe `require` est entierement resolu au build, jamais par la ROM."""
+    from core import lua_scripts
+    from core.script_owners import script_attachments
+    from scripting.parser import parse as lua_parse, LuaParseError, require_target
+
+    project = ctx.project
+    paths = lua_scripts.library_paths(project)
+    roots: list[Path] = []
+    for rel in script_attachments(project):
+        path = project.asset_abs(rel)
+        if path is not None and Path(path).suffix.lower() == ".lua":
+            roots.append(Path(path))
+
+    done: set[Path] = set()
+    visiting: list[Path] = []
+
+    def walk(path: Path):
+        resolved = path.resolve()
+        if resolved in done:
+            return
+        if resolved in visiting:
+            cycle = visiting[visiting.index(resolved):] + [resolved]
+            shown = " -> ".join(item.stem for item in cycle)
+            ctx.error(None, f"Static import cycle: {shown}. Break the cycle: modules cannot import each other recursively.", file=path.name)
+            return
+        try:
+            script = lua_parse(path.read_text(encoding="utf-8"))
+        except LuaParseError as exc:
+            # Les scripts attachés passent déjà par `_check_scripts_parse`, mais
+            # un module privé n'est lu que lorsqu'il est importé ici.
+            ctx.error(None, str(exc), file=path.name)
+            return
+        except (OSError, UnicodeDecodeError) as exc:
+            ctx.error(None, f"Cannot read static module: {exc}", file=path.name)
+            return
+        visiting.append(resolved)
+        for local in script.locals:
+            target = require_target(local.value)
+            if target is None:
+                continue
+            if not lua_scripts.require_name(target):
+                ctx.error(None,
+                    f"require(\"{target}\"): use the library name only, without a folder or extension.",
+                    file=path.name)
+                continue
+            child = paths.get(target)
+            if child is None:
+                ctx.error(None, f"require(\"{target}\"): no marked static module has this name.", file=path.name)
+                continue
+            walk(child)
+        visiting.pop()
+        done.add(resolved)
+
+    for root in roots:
+        walk(root)
 
 
 def _check_behaviors_without_self(ctx: ValidationContext):
@@ -1780,15 +1843,20 @@ def _check_behaviors_without_self(ctx: ValidationContext):
     from scripting.parser import parse as lua_parse, LuaParseError
     from scripting.checker import uses_self
 
-    for path in ctx.project.behavior_files():
+    from core import lua_scripts
+
+    entries = ((path, "Behavior") for path in ctx.project.behavior_files())
+    entries = list(entries) + [(path, "Private module")
+                               for path in lua_scripts.private_module_files(ctx.project)]
+    for path, kind in entries:
         try:
             script = lua_parse(path.read_text(encoding="utf-8"))
         except (LuaParseError, OSError, UnicodeDecodeError):  # tolerated: _check_scripts_parse reports it
             continue
         if uses_self(script):
             ctx.error(None,
-                f"Behavior \"{path.stem}\": `self` is reserved for the instance a script is "
-                "attached to. A behavior receives its actor as first parameter: name "
+                f"{kind} \"{path.stem}\": `self` is reserved for the instance a script is "
+                "attached to. A static module receives its actor as first parameter: name "
                 "it something else, `function M.update(actor)`.")
 
 

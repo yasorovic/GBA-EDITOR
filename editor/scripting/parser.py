@@ -688,7 +688,7 @@ REQUIRE_FN = "require"
 
 
 def require_target(expr) -> Optional[str]:
-    """`require("behaviors/paddle_ai")` → "behaviors/paddle_ai", sinon None."""
+    """`require("PaddleAI")` → "PaddleAI", sinon None."""
     if (isinstance(expr, ExprCall)
             and isinstance(expr.func, ExprName)
             and expr.func.name == REQUIRE_FN

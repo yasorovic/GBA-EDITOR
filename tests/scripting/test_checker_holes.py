@@ -150,7 +150,7 @@ def test_le_meme_nom_pose_seul_dit_la_meme_chose():
     # Un acteur nommé du projet, en récepteur de propriété.
     "function on_update()\n    local p = paddle.position\nend\n",
     # L'alias d'un behavior importé.
-    'local AI = require("behaviors/ai")\nfunction on_update()\n    AI.update(self)\nend\n',
+    'local AI = require("ai")\nfunction on_update()\n    AI.update(self)\nend\n',
     # Les deux formes légitimes sur une référence d'élément.
     'function on_update()\n    interface:get("Cursor"):show()\nend\n',
     # Et la façon de déplacer une image.

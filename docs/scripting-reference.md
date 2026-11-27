@@ -460,7 +460,7 @@ La bibliothèque standard de Lua n'est pas embarquée dans la ROM. Les cas usuel
 | Afficher une trace | `debug:log(...)`, visible dans mGBA et retiré des builds release. |
 | Gérer une erreur ou une exception | Un `if` qui contrôle et corrige la valeur. |
 | Choisir entre plusieurs valeurs (`switch`) | `if x == 1 then … elseif x == 2 then … else … end`. Le `else` joue le rôle de `default`. |
-| Charger un behavior | `require("behaviors/nom")`, résolu au build par NOM parmi les scripts dont la première ligne est `-- @behavior`, où qu'ils soient rangés. Deux behaviors de même nom : erreur de build. |
+| Charger une bibliothèque statique | `require("Nom")`, résolu au build par nom logique, sans dépendre du dossier qui contient le fichier. Un script marqué `-- @module` découpe un script long ; `-- @behavior` désigne une logique partagée. Les deux sont appelés explicitement, par exemple `movement.step(self)`. Deux bibliothèques de même nom, quelle que soit leur nature, sont une erreur de build. |
 
 Il n'y a pas de `string`, `table`, `os`, `io`, `coroutine`, `utf8`, métatable, fonction de réflexion ni chargement de code à l'exécution.
 

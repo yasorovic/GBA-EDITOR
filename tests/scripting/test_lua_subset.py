@@ -340,7 +340,7 @@ def test_helper_prive_verifie_arite_et_recursion():
 # behavior lui-même.
 
 def test_alias_de_behavior_accepte():
-    src = ('local IA = require("behaviors/ia")\n'
+    src = ('local IA = require("ia")\n'
            'function on_update()\n    IA.update(self, 3)\nend\n')
     assert _errors(src) == []
 
