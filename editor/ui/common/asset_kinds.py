@@ -171,7 +171,13 @@ def _rename_script(project, path: Path, new_text: str) -> str:
                 else path.parent / f"{new_text}{path.suffix}")
     if new_path == path:
         return path.name
-    get_history().push(RenameFileCmd(path, new_path))
+    from core.disk_commands import RenameScriptReferencesCmd
+    from core.history import MacroCmd
+    old_name, new_name = path.stem, new_path.stem
+    command = RenameFileCmd(path, new_path)
+    if path.suffix.lower() == ".lua" and old_name != new_name:
+        command = MacroCmd([command, RenameScriptReferencesCmd(project, old_name, new_name)], command.label)
+    get_history().push(command)
     return new_path.name
 
 

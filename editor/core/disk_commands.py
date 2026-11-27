@@ -186,3 +186,40 @@ class RenamePathCmd(Command):
         if self.renamed is not None:
             with self._around():
                 disk_move.rename_in_place(self._project, self.renamed, self._path.name)
+
+
+class RenameScriptReferencesCmd(Command):
+    """Met à jour les liens logiques et les imports d'un script renommé."""
+
+    def __init__(self, project, old: str, new: str):
+        self._project, self._old, self._new = project, old, new
+        self.label = history_label("history.rename_resource", name=old)
+
+    def execute(self):
+        self._rename(self._old, self._new)
+
+    def undo(self):
+        self._rename(self._new, self._old)
+
+    def _rename(self, old: str, new: str):
+        from scripting.refactor import rename_requires_in_files, script_paths
+
+        for scene in self._project.scenes:
+            touched = False
+            if getattr(scene, "script", "") == old:
+                scene.script, touched = new, True
+            for camera in scene.cameras:
+                if getattr(camera, "script", "") == old:
+                    camera.script, touched = new, True
+            for member in (*scene.actors, *scene.areas):
+                component = member.get_component("script")
+                if component is not None and component.script == old:
+                    component.script, touched = new, True
+            if touched:
+                self._project.save_scene(scene)
+        for prefab in self._project.prefabs:
+            component = prefab.get_component("script")
+            if component is not None and component.script == old:
+                component.script = new
+                self._project.prefabs.save(prefab)
+        rename_requires_in_files(script_paths(self._project), old, new)

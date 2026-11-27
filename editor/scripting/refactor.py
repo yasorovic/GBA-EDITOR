@@ -263,6 +263,43 @@ def rename_in_text(text: str, domain: str, old: str, new: str) -> tuple[str, int
     return out, len(refs)
 
 
+def rename_requires_in_text(text: str, old: str, new: str) -> tuple[str, int]:
+    """Réécrit seulement `require("Ancien")`, jamais une chaîne homonyme."""
+    if old not in text or not _LUAPARSER_OK:
+        return text, 0
+    try:
+        tree = raw_tree(text)
+    except Exception:  # tolerated: le validateur signale le script invalide
+        return text, 0
+    refs = []
+    for node in _lua_ast.walk(tree):
+        if not isinstance(node, _nodes.Call) or not isinstance(node.func, _nodes.Name):
+            continue
+        args = node.args or []
+        if node.func.id == "require" and args and isinstance(args[0], _nodes.String) and args[0].raw == old:
+            refs.append(args[0])
+    out = text
+    for ref in sorted(refs, key=lambda item: item.start_char, reverse=True):
+        literal = out[ref.start_char:ref.stop_char + 1]
+        out = out[:ref.start_char] + f"{literal[0]}{new}{literal[0]}" + out[ref.stop_char + 1:]
+    return out, len(refs)
+
+
+def rename_requires_in_files(paths, old: str, new: str) -> dict[Path, int]:
+    """Réécrit les imports statiques dans les fichiers donnés, de façon structurelle."""
+    changed: dict[Path, int] = {}
+    for path in paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        fresh, count = rename_requires_in_text(text, old, new)
+        if count:
+            atomic_write(path, fresh)
+            changed[path] = count
+    return changed
+
+
 # ── Portée projet ─────────────────────────────────────────────────
 
 def script_paths(project) -> list[Path]:
