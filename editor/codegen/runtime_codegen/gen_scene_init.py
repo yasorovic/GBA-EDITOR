@@ -11,7 +11,7 @@ from codegen.oam_alloc import scene_oam_layout
 from codegen.palette_alloc import scene_bank_layout
 from codegen.runtime_codegen.gen_actor_init import actor_init_lines
 from codegen.runtime_codegen.gen_appearance import appearance_layout, appearance_table_lines
-from codegen.runtime_codegen.gen_camera import scene_camera_index
+from codegen.runtime_codegen.gen_camera import camera_background_lines, camera_initial_pose_lines, scene_camera_index
 from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
 from codegen.runtime_codegen.gen_actor_hierarchy import link_depth, placed_link_lines
 from codegen.runtime_codegen.gen_pool import dispatch_sym
@@ -97,6 +97,8 @@ def gen_scene_init(
     L += placed_link_lines(scene_actors, actor_offset)
     L += _start_lines(p, scene, sym, scene_actors, actor_offset, lua_idx, pi, has_sound, sound_assets,
                       actor_defined_events)
+    L += camera_initial_pose_lines(p, scene, scene_actors, actor_offset)
+    L += camera_background_lines(bgi)
     L.append("}")
     L.append("")
     return L
@@ -212,6 +214,8 @@ def _scene_state_lines(scene, sym: str, cam_idx: int) -> list[str]:
     # Caméra de démarrage. L'activation pose cadrage ET bornes, et rejoue le
     # on_start de la caméra : une scène n'hérite donc jamais du cadrage de la
     # précédente, et un script peut basculer ailleurs ensuite (camera.switch).
+    # Le suivi lui-même est volontairement différé après les acteurs et leurs
+    # on_start : cf. camera_initial_pose_lines à la fin de scene_init.
     # Le WIN0 qu'elle pose ici (cf. camera_switch()) sera effacé par
     # dispcnt_set() plus bas et reposé après — voir ce commentaire-là.
     _cam_name = getattr(scene, "camera", "") or "(default)"

@@ -128,6 +128,33 @@ def test_un_axe_sans_defilement_ne_recule_pas_la_camera(tmp_path):
     assert "camera_follow((Vec2){cam_x, ((g_actors[0].y>>8)+16)}, 0, g_cam_margin_y+16)" in ligne
 
 
+def test_scene_init_pose_la_camera_apres_les_acteurs_et_leurs_on_start(tmp_path):
+    """La caméra est activée tôt pour son cadrage et son on_start, puis son suivi attend que sa cible existe et que
+    l'initialisation de scène ait pu la déplacer. Sinon la première image est à l'origine et le premier tick saute."""
+    from codegen.runtime_codegen.gen_scene_init import gen_scene_init
+    from core.models.camera import Camera, CAM_FOLLOW
+    from core.models.scene import Actor, Scene
+    from core.project import Project
+
+    project = Project(tmp_path)
+    hero = Actor(name="Hero")
+    scene = Scene(name="S", actors=[hero], cameras=[Camera(name="Cam", mode=CAM_FOLLOW, follow_target="Hero")],
+                  camera="Cam")
+    project.scenes.items = [scene]
+    lines = gen_scene_init(project, scene, 0, [], [(hero, None)], set(), [], {}, 0, False, None)
+    source = "\n".join(lines)
+
+    activation = source.index("camera_switch(1);")
+    actor = source.index("actor_init_slot(")
+    follow = source.rindex("switch(g_cam_active){")
+    clamp = source.index("camera_apply_bounds();", follow)
+    assert activation < actor < follow < clamp
+
+    from codegen.runtime_codegen.gen_camera import camera_background_lines
+    offsets = "\n".join(camera_background_lines([{"bg": 2}]))
+    assert "BGOFS(2)" in offsets and "BGVOFS(2)" in offsets
+
+
 def test_le_vide_laisse_au_bord_est_le_meme_des_deux_cotes(positions):
     """Le défaut corrigé : le coin était borné, le personnage entrait donc
     dans la bande de droite (et du bas) de toute sa largeur."""

@@ -111,6 +111,43 @@ def camera_follow_lines(p, scene, scene_actors: list, actor_offset: int) -> list
     return ["    switch(g_cam_active){"] + cases + ["        default: break;", "    }"]
 
 
+def camera_initial_pose_lines(p, scene, scene_actors: list, actor_offset: int) -> list[str]:
+    """Pose la caméra de départ après l'initialisation complète de la scène.
+
+    `camera_switch()` doit rester au début de `scene_init` : il initialise les bornes, le cadre et le `on_start` de la
+    caméra. En revanche, une cible de suivi n'existe qu'après la construction des acteurs, et son `on_start` peut encore
+    la déplacer. Rejouer seulement le suivi et le clamp à la fin évite une première image à l'origine, suivie d'un saut
+    au premier tick. Le `on_update` de la caméra attend la première frame, comme pour une scène déjà en cours.
+    """
+    return [
+        "    /* Pose finale de la caméra : les acteurs et leurs on_start sont prêts, donc le premier rendu ne montre",
+        "       jamais la position d'auteur avant que le suivi rejoigne sa cible au tick suivant. */",
+        *camera_follow_lines(p, scene, scene_actors, actor_offset),
+        "    camera_apply_bounds();",
+    ]
+
+
+def camera_background_lines(bgi: list[dict]) -> list[str]:
+    """Applique le scroll initial de caméra aux fonds pendant `scene_init`.
+
+    `display_reset()` remet les offsets matériels à zéro pendant `scene_init`, alors que la caméra vient déjà d'être
+    posée sur sa cible. Sans ces écritures initiales, le tick suivant corrige le scroll une frame trop tard et crée une
+    image transitoire à l'origine lors d'une entrée de scène.
+    """
+    lines: list[str] = []
+    for bi in bgi:
+        if bi.get("stream"):
+            lines.append(f"    bg_stream_update(MAP_RAM({bi['sbb']}), {bi['sym']}Map, "
+                         f"{bi['tw']}, {bi['th']}, {bi['win_w']}, {bi['win_h']}, "
+                         f"{int(bi['stream_h'])}, {int(bi['stream_v'])}, cam_x, cam_y, "
+                         f"{bi['sym']}BlankTile);")
+        lines.append(f"    BGOFS({bi['bg']})=(u16)(((cam_x*layer_get_speed({bi['bg']}))>>8)+"
+                     f"layer_get_scroll_x({bi['bg']}));")
+        lines.append(f"    BGVOFS({bi['bg']})=(u16)(((cam_y*layer_get_speed({bi['bg']}))>>8)+"
+                     f"layer_get_scroll_y({bi['bg']}));")
+    return lines
+
+
 def camera_table_lines(p) -> list[str]:
     """Les `extern` des scripts de caméra et la table `g_cam_table` du projet."""
     L: list[str] = []
