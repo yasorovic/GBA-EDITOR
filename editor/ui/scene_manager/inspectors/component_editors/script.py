@@ -60,7 +60,7 @@ class ScriptEditor(BaseComponentEditor):
         same_comp = self.comp is comp
         self.comp = comp
         proj = self.insp._project
-        path = proj.asset_abs(comp.script) if proj and comp.script else None
+        path = proj.script_path(comp.script) if proj and comp.script else None
         variables = parse_exports(path) if path else []
         self._slot.set_value(comp.script)
         self._loading = True

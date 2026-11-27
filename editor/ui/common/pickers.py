@@ -82,7 +82,7 @@ def attached_script_slot(
     comme *Create blank* (dossier affiché par l'onglet Disk, annulable, nom pris : suffixé), avec le modèle
     `template` (« actor », « scene », « camera »).
 
-    La valeur du slot est le chemin relatif du script. L'appelant range la valeur (`on_assigned(chemin)`,
+    La valeur du slot est le nom logique du script. L'appelant range la valeur (`on_assigned(nom)`,
     `on_cleared()`) et repose le slot depuis son modèle (`set_value`). `project` est lu au moment du geste."""
     from pathlib import Path
 
@@ -90,14 +90,15 @@ def attached_script_slot(
         proj = project()
         if proj is None:
             return []
-        return [PickerEntry(f.name, proj.asset_rel(f)) for f in proj.script_files()]
+        return [PickerEntry(f.stem, proj.script_reference(f)) for f in proj.script_files()
+                if proj.script_reference(f) is not None]
 
     def describe(rel):
         if not rel:
             return None
         proj = project()
-        path = proj.asset_abs(rel) if proj is not None else None
-        name = Path(rel).name
+          path = proj.script_path(rel) if proj is not None else None
+          name = rel
         if path is None or not path.exists():
             return PickerEntry(label('pick.name_missing', name=name), rel, missing=True)
         return PickerEntry(name, rel)
@@ -119,25 +120,25 @@ def attached_script_slot(
         gesture = asset_creation.create_blank(proj, "script", folder, name=name, template=template)
         get_history().push(RefreshAfterCmd(gesture.command, get_dispatcher().notify_disk_changed))
         path = folder / f"{gesture.names[0]}.lua"
-        slot.pick(proj.asset_rel(path))
+        slot.pick(proj.script_reference(path))
         get_dispatcher().notify_scripts_changed()
         open_file(str(path))
 
     def _open():
         proj, rel = project(), slot.value()
-        path = proj.asset_abs(rel) if proj is not None and rel else None
+          path = proj.script_path(rel) if proj is not None and rel else None
         if path is not None and path.exists():
             open_file(str(path))
 
     def _dropped(mime) -> Optional[str]:
-        """Un seul script attachable glissé depuis l'onglet Disk : son chemin relatif, sinon None."""
+        """Un seul script attachable glissé depuis Disk : son nom logique, sinon None."""
         from ui.common.disk_view import dropped_paths
         proj, paths = project(), dropped_paths(mime)
         if proj is None or len(paths) != 1:
             return None
         wanted = Path(paths[0]).resolve()
         path = next((f for f in proj.script_files() if f.resolve() == wanted), None)
-        return proj.asset_rel(path) if path is not None else None
+        return proj.script_reference(path)
 
     slot = PickerSlot(add_label, icons.COLOR_SCRIPT, entries, describe, on_assigned,
                       on_cleared=on_cleared, on_open=_open,

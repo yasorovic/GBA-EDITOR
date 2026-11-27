@@ -82,6 +82,39 @@ def script_files(project) -> list[Path]:
             if not is_behavior(path) and not is_private_module(path)]
 
 
+def scripts_by_name(project) -> dict[str, list[Path]]:
+    """Nom logique d'un script attachable -> fichiers qui le portent."""
+    found: dict[str, list[Path]] = {}
+    for path in script_files(project):
+        found.setdefault(path.stem, []).append(path)
+    return found
+
+
+def script_path(project, reference: str | None) -> Path | None:
+    """Résout une référence de script actuelle ou l'ancien chemin stocké par un projet.
+
+    Un nom logique est la forme écrite depuis ce chantier. Une référence qui contient
+    un séparateur ou l'extension `.lua` est un ancien chemin, seulement lu pour que
+    l'ouverture d'un projet existant reste possible jusqu'à sa prochaine sauvegarde.
+    """
+    if not reference:
+        return None
+    if "/" in reference or "\\" in reference or reference.lower().endswith(".lua"):
+        path = project.asset_abs(reference)
+        return path if path and path.suffix.lower() == ".lua" else None
+    paths = scripts_by_name(project).get(reference, [])
+    return paths[0] if len(paths) == 1 else None
+
+
+def script_reference(project, path: Path | None) -> str | None:
+    """Le nom logique à écrire pour un script attachable, ou None s'il est ambigu."""
+    if path is None:
+        return None
+    target = path.resolve()
+    paths = scripts_by_name(project).get(path.stem, [])
+    return path.stem if len(paths) == 1 and paths[0].resolve() == target else None
+
+
 def behaviors_by_name(project) -> dict[str, list[Path]]:
     """`{nom: [fichiers]}` ; plus d'un fichier pour un nom = ambigu."""
     found: dict[str, list[Path]] = {}

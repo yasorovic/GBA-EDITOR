@@ -129,6 +129,16 @@ class ProjectPathsMixin:
         from core import lua_scripts
         return lua_scripts.script_files(self)
 
+    def script_path(self, reference: str | None) -> Path | None:
+        """Le fichier d'un script attaché, résolu par nom logique ou ancien chemin."""
+        from core import lua_scripts
+        return lua_scripts.script_path(self, reference)
+
+    def script_reference(self, path: Path | None) -> str | None:
+        """Le nom logique persistant d'un script attachable."""
+        from core import lua_scripts
+        return lua_scripts.script_reference(self, path)
+
     def behavior_files(self) -> list[Path]:
         from core import lua_scripts
         return lua_scripts.behavior_files(self)

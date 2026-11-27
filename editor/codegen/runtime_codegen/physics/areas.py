@@ -40,7 +40,7 @@ def scripted_areas(p, scene) -> list[tuple[int, object, Path]]:
         comp = area.get_component("script")
         if not (comp and comp.active and comp.script):
             continue
-        sp = p.asset_abs(comp.script)
+        sp = p.script_path(comp.script)
         if sp is not None and sp.exists() and sp.suffix.lower() == ".lua":
             out.append((i, area, sp))
     return out

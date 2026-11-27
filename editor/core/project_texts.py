@@ -176,7 +176,7 @@ class ProjectTextsMixin:
                          if isinstance(c, ScriptComponent)), None)
             if not comp or not getattr(comp, "script", None):
                 continue
-            sp = self.asset_abs(comp.script)
+            sp = self.script_path(comp.script)
             if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
                 continue
             str_names = {e["name"] for e in parse_exports(sp)

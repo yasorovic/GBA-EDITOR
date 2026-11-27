@@ -553,7 +553,7 @@ def _check_area_handlers(ctx: ValidationContext, scene):
     from scripting.api import AREA_EVENTS, AREA_SCRIPT_CONTACT_EVENTS
     for area in scene.areas:
         comp = area.get_component("script")
-        path = ctx.project.asset_abs(comp.script) if comp and comp.active and comp.script else None
+        path = ctx.project.script_path(comp.script) if comp and comp.active and comp.script else None
         if path and path.suffix.lower() == ".lua" and not (area.is_trigger() and area.shape() is not None):
             handled = [ev for ev in AREA_SCRIPT_CONTACT_EVENTS if ev in ctx.script_functions(path)]
             if handled:
@@ -563,7 +563,7 @@ def _check_area_handlers(ctx: ValidationContext, scene):
         return
     for actor in scene.actors:
         comp = actor.get_component("script")
-        path = ctx.project.asset_abs(comp.script) if comp and comp.active and comp.script else None
+        path = ctx.project.script_path(comp.script) if comp and comp.active and comp.script else None
         if path and path.suffix.lower() == ".lua":
             handled = [ev for ev in AREA_EVENTS if ev in ctx.script_functions(path)]
             if handled:
@@ -808,7 +808,7 @@ def _check_script(ctx, actor, comp):
     if not comp.script:
         ctx.warn(actor, "ScriptComponent without an assigned script.")
         return
-    sp = proj.asset_abs(comp.script)
+    sp = proj.script_path(comp.script)
     if not sp or not sp.exists():
         ctx.error(actor, f"Script not found: {comp.script}")
 
@@ -2190,8 +2190,8 @@ def _check_interactive(ctx: ValidationContext):
         handlers = None            # None : le script n'est pas un .lua lisible, on ne conclut rien
         if script is None:
             handlers = set()
-        elif hasattr(ctx.project, "asset_abs"):
-            path = ctx.project.asset_abs(script.script)
+        elif hasattr(ctx.project, "script_path"):
+            path = ctx.project.script_path(script.script)
             if path and path.suffix.lower() == ".lua":
                 handlers = ctx.script_functions(path)
         active = [c for c in comps if c.active]

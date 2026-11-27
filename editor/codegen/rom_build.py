@@ -1040,7 +1040,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
                 if sc and sc.script:
                     _collect_events(f"{scene_sym}_{c_sym(pf.name)}",
-                                    p.asset_abs(sc.script))
+                                    p.script_path(sc.script))
 
         return names
 

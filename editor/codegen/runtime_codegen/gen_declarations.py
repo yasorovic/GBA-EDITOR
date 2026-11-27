@@ -87,7 +87,7 @@ def extern_lines(p, all_scene_data: list[dict], scene_pis: list, actor_defined_e
             s = scene_actor_sym(sc.name, actor.name)
             script_path = actor_script(actor)
             if script_path:
-                abs_sp = p.asset_abs(script_path)
+                abs_sp = p.script_path(script_path)
                 if abs_sp and abs_sp.suffix.lower() == ".lua":
                     for ev in ("on_start", "on_update", "on_late_update", "on_tile_collide", "on_crushed",
                                "on_collision_enter", "on_collide", "on_collision_exit", *AREA_EVENTS, "on_interact"):

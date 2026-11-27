@@ -448,7 +448,7 @@ class AudioEmitterComponent:
 class ScriptComponent:
     id: str = "script"
     active: bool = True
-    script: Optional[str] = None        # chemin relatif vers le .lua
+    script: Optional[str] = None        # nom logique du script attaché
     exports_values: dict = field(default_factory=dict)  # valeurs overrides par instance
 
 

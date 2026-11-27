@@ -187,10 +187,9 @@ SCRIPTS = AssetKind(
     add_tooltip_key = 'akind.new_script',
     add_menu      = True,                    # script ou behavior : le « + » déroule un menu
     # Glisser un script sur un actor lui attache un ScriptComponent. La charge
-    # utile est le chemin RELATIF au projet : un chemin absolu ne survivrait pas
-    # au déplacement du dossier de projet.
+    # utile est son nom logique : son dossier ne fait pas partie de son identité.
     mime          = (MIME_SCRIPT,
-                     lambda project, path: (project.asset_rel(path)
+                     lambda project, path: (project.script_reference(path)
                                             if project else path)),
     file_of       = own_path,
     duplicate     = _duplicate_scripts,

@@ -57,7 +57,7 @@ def actors_and_prefabs_of_script(project, path: Path) -> list:
 
     def uses(owner) -> bool:
         comp = owner.get_component("script")
-        abs_path = project.asset_abs(comp.script) if comp and comp.active and comp.script else None
+        abs_path = project.script_path(comp.script) if comp and comp.active and comp.script else None
         return abs_path is not None and Path(abs_path).resolve() == target
 
     return ([a for scene in project.scenes for a in scene.actors if uses(a)]
@@ -70,7 +70,7 @@ def family_of_script(project, path: Path) -> str | None:
     target = Path(path).resolve()
     families: set[str] = set()
     for rel, by_family in script_attachments(project).items():
-        abs_path = project.asset_abs(rel)
+        abs_path = project.script_path(rel)
         if abs_path is not None and Path(abs_path).resolve() == target:
             families.update(by_family)
     return next(iter(families)) if len(families) == 1 else None

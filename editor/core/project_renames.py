@@ -280,7 +280,7 @@ class ProjectRenameMixin:
                 if comp.exports_values[key] == old_name:
                     comp.exports_values[key] = new_name
                     changed = True
-                    path = self.asset_abs(comp.script)
+                    path = self.script_path(comp.script)
                     touched[path] = touched.get(path, 0) + 1
             return changed
 

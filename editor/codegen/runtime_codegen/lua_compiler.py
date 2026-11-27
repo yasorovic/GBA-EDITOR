@@ -220,7 +220,7 @@ def prefab_lua_script(p, pf):
     sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
     if not sc or not sc.script:
         return None
-    path = p.asset_abs(sc.script)
+    path = p.script_path(sc.script)
     if not path or not path.exists() or path.suffix.lower() != ".lua":
         return None
     return path
@@ -232,7 +232,7 @@ def script_exports(p, script_path) -> dict:
     from scripting.parser import parse as lua_parse
     if not script_path:
         return {}
-    sp = p.asset_abs(script_path)
+    sp = p.script_path(script_path)
     if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
         return {}
     try:
@@ -695,7 +695,7 @@ def transpile_all(
         script_path = _actor_script(actor)
         if not script_path:
             continue
-        sp = p.asset_abs(script_path)
+        sp = p.script_path(script_path)
         if not sp or not sp.exists():
             continue
 
@@ -862,7 +862,7 @@ def transpile_all(
     scene_script_file = None
     scene_script_path = getattr(scene, "script", "")
     if scene_script_path:
-        sp = p.asset_abs(scene_script_path)
+        sp = p.script_path(scene_script_path)
         if sp and sp.exists() and sp.suffix.lower() == ".lua":
             scene_script_ast, ok = _compile_script(sp, scene_ctx_check, emit)
             if not ok:
@@ -1220,7 +1220,7 @@ def transpile_all(
         if not getattr(cam, "script", ""):
             continue
         cam_sym = camera_sym(scene.name, cam.name)
-        sp = p.asset_abs(cam.script)
+        sp = p.script_path(cam.script)
         if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
             continue
         ctx_check = BuildContext(

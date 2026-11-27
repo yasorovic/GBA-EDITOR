@@ -153,7 +153,10 @@ def scene_graph(project) -> SceneGraph:
             comp = member.get_component("script") if hasattr(member, "get_component") else None
             if not comp or not getattr(comp, "active", True) or not getattr(comp, "script", ""):
                 continue
-            path = Path(project.asset_abs(comp.script)).resolve()     # résolu, comme `scene_compiled_scripts`
+            resolved = project.script_path(comp.script)
+            path = resolved.resolve() if resolved is not None else None
+            if path is None:
+                continue
             if path not in export_calls:
                 continue
             values = getattr(comp, "exports_values", None) or {}

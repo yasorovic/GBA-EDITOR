@@ -63,19 +63,19 @@ def _iter_script_paths(p):
         for actor in getattr(scene, "actors", []) or []:
             comp = actor.get_component("script") if hasattr(actor, "get_component") else None
             if comp and getattr(comp, "active", True) and getattr(comp, "script", ""):
-                yield p.asset_abs(comp.script)
+                yield p.script_path(comp.script)
         scene_script = getattr(scene, "script", "")
         if scene_script:
-            yield p.asset_abs(scene_script)
+            yield p.script_path(scene_script)
         for area in getattr(scene, "areas", []) or []:
             comp = area.get_component("script")
             if comp and comp.active and comp.script:
-                yield p.asset_abs(comp.script)
+                yield p.script_path(comp.script)
     for pf in getattr(p, "prefabs", []) or []:
         sc = next((c for c in getattr(pf, "components", []) or []
                   if isinstance(c, ScriptComponent)), None)
         if sc and getattr(sc, "script", ""):
-            yield p.asset_abs(sc.script)
+            yield p.script_path(sc.script)
 
 
 def _scan_buffered(p):

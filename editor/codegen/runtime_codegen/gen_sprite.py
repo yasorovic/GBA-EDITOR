@@ -92,7 +92,7 @@ def _actor_script_functions(p: Project, actor: Actor) -> set[str]:
     comp = actor.get_component("script")
     if not comp or not comp.active or not comp.script:
         return set()
-    sp = p.asset_abs(comp.script)
+    sp = p.script_path(comp.script)
     if not sp or not sp.exists():
         return set()
     key = str(sp)

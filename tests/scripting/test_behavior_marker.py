@@ -170,12 +170,12 @@ def test_a_behavior_using_self_is_refused_wherever_it_lives(tmp_path: Path):
     assert any("Behavior \"bad\"" in e and "`self` is reserved" in e for e in _errors(p))
 
 
-def test_moving_a_script_rewrites_every_reference_to_it(tmp_path: Path):
+def test_moving_a_script_keeps_its_logical_reference(tmp_path: Path):
     from core.models.scene import Scene
     p = _project(tmp_path)
     script = _write((p.user_library_dir / "scripts") / "Level.lua", "function on_start()\nend\n")
     scene = Scene(name="Level")
-    scene.script = p.asset_rel(script)
+    scene.script = p.script_reference(script)
     p.scenes.append(scene)
     p.save_scene(scene)
     target = p.user_library_dir / "Levels"
@@ -184,9 +184,9 @@ def test_moving_a_script_rewrites_every_reference_to_it(tmp_path: Path):
     result = disk_move.move_to_folder(p, [script], target)
 
     assert result.refused == [] and (target / "Level.lua").is_file()
-    assert scene.script == "assets/Levels/Level.lua"
+    assert scene.script == "Level"
     reopened = Project.open(p.root)
-    assert reopened.scenes.get("Level").script == "assets/Levels/Level.lua"
+    assert reopened.scenes.get("Level").script == "Level"
 
 
 def _migration():
