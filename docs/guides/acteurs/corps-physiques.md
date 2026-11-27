@@ -93,7 +93,8 @@ function on_crushed(obstacle)
 end
 ```
 
-`body.floor` rend l'acteur qui porte le Character, ce qui permet de reconnaître une plateforme précise.
+`body.floor` rend l'acteur qui porte le Character, y compris une caisse Rigid. Seul un Kinematic transporte
+réellement son passager, ce qui permet de reconnaître une plateforme précise sans confondre les deux comportements.
 
 ## 4. Caisses et piles (RigidBody)
 

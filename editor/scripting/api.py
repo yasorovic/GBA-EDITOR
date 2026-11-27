@@ -2115,8 +2115,8 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     f"{REF_PHYSICS_BODY}.grounded": ApiProp(
         lua_name="physics_body.grounded", c_getter="actor_on_ground", ptype=PARAM_BOOL,
         self_first=True, read_only=True,
-        doc="True if this body was resting on the collision map, a StaticBody, or a "
-            "KinematicBody at the end of the previous frame, on the side gravity pulls it towards "
+        doc="True if this body was resting on the collision map, a StaticBody, a KinematicBody, or a "
+            "RigidBody at the end of the previous frame, on the side gravity pulls it towards "
             "(below under the usual downward gravity, to the right under a rightward one). A scene with "
             "no gravity keeps the bottom as the supporting side. Read-only.",
     ),

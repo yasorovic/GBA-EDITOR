@@ -40,7 +40,7 @@ def project_has_floors(p) -> bool:
     if PHYSICS_BODY_RIGID in modes:
         return True
     return PHYSICS_BODY_CHARACTER in modes and bool(
-        modes & {PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC})
+        modes & {PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID})
 
 
 def floor_helper_lines() -> list[str]:
@@ -178,10 +178,11 @@ def floor_tick_lines(p, scene_actors, scene=None, pi=(), resolve_initial_appeara
 
     def pairs(owner, sprite, support_kind) -> list[tuple[int, int, int, int]]:
         """Les couples (boîte de corps, boîte d'appui, garde, sens unique) de ce corps sur ce type d'appui. Un Character
-        ne repose que sur un Static ou un Kinematic ; un Rigid sur tout corps."""
+        repose sur un Static, un Kinematic ou un Rigid ; un Rigid sur tout corps."""
         mode = physics_body_mode(owner)
         support_mode = physics_body_mode(owners[support_kind][0])
-        if not (mode == PHYSICS_BODY_RIGID or support_mode in (PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC)):
+        if not (mode == PHYSICS_BODY_RIGID or support_mode in (
+                PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID)):
             return []
         return [(cb, sb, guard, int(oneway)) for cb, box in physics_collider_entries(owner, sprite)
                 for sb, floor, guard, oneway in floors[support_kind]

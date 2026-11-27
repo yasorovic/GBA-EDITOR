@@ -43,11 +43,10 @@ le moteur appliquer la gravité à votre place (case cochée), voir [Corps physi
 ## 2. Savoir si l'acteur est au sol
 
 Après la résolution des collisions, le moteur met à jour `body.grounded` : `true` quand la boîte
-solide repose sur la carte de collision, un StaticBody ou un KinematicBody posé, `false` dans les
-airs. Cette propriété empêche de sauter à chaque frame : le joueur ne saute que depuis le sol.
+solide repose sur la carte de collision, un StaticBody, un KinematicBody ou un RigidBody, `false`
+dans les airs. Cette propriété empêche de sauter à chaque frame : le joueur ne saute que depuis le sol.
 
-`body.floor` donne l'Actor qui porte actuellement le personnage (StaticBody, KinematicBody, ou un autre corps
-sur lequel il repose).
+`body.floor` donne l'Actor qui porte actuellement le personnage (StaticBody, KinematicBody ou RigidBody).
 Il vaut `nil` quand le personnage repose sur la carte ou se trouve dans les airs. Vous pouvez ainsi
 identifier une plateforme particulière sans refaire un test de collision :
 

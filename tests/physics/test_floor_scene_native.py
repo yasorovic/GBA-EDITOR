@@ -29,7 +29,24 @@ SCENARIOS = {
 
 # (mode du corps, mode de l'appui)
 COUPLES = [("CharacterBody", "StaticBody"), ("CharacterBody", "KinematicBody"), ("RigidBody", "RigidBody"),
-           ("RigidBody", "StaticBody")]
+           ("CharacterBody", "RigidBody"), ("RigidBody", "StaticBody")]
+
+
+def test_un_projet_character_rigid_alloue_le_stockage_floor(tmp_path):
+    from codegen.runtime_codegen.physics.floor import project_has_floors
+    from core.models.components import PhysicsBodyComponent
+    from core.models.scene import Prefab, Scene
+    from core.project import Project
+
+    character = Prefab(name="Character")
+    character.actor.components.append(PhysicsBodyComponent(mode="CharacterBody"))
+    rigid = Prefab(name="Rigid")
+    rigid.actor.components.append(PhysicsBodyComponent(mode="RigidBody"))
+    project = Project(tmp_path)
+    project.scenes.items = [Scene(name="S")]
+    project.prefabs.items = [character, rigid]
+
+    assert project_has_floors(project)
 
 SONDE = r"""
 #include <stdio.h>

@@ -1,10 +1,10 @@
 """Le transport par une plateforme Kinematic, sur le C émis pour une vraie scène.
 
-La plateforme (KinematicBody) et son passager (CharacterBody) naissent dans le pool partagé ; un posé prend le même
-chemin (`SLOT_EACH`, type lu à l'emplacement). Les lignes C sont celles de `kinematic_tick_parts`, compilées avec l'aide
-C réelle (`kinematic_carry_all`) ; à chaque image la plateforme avance de sa vitesse, puis le passager est porté. La
-sonde rapporte la position du passager et le déplacement porté (celui que la résolution contre la carte ajoute à sa
-vitesse). L'écrasement est dans `test_crush_scene_native.py`.
+La plateforme (KinematicBody) et son passager (CharacterBody ou RigidBody) naissent dans le pool partagé ; un posé prend
+le même chemin (`SLOT_EACH`, type lu à l'emplacement). Les lignes C sont celles de `kinematic_tick_parts`, compilées
+avec l'aide C réelle (`kinematic_carry_all`) ; à chaque image la plateforme avance de sa vitesse, puis le passager est
+porté. La sonde rapporte la position du passager et le déplacement porté (celui que la résolution contre la carte ajoute
+à sa vitesse). L'écrasement est dans `test_crush_scene_native.py`.
 """
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ int main(void){
 """
 
 
-def _emissions(tmp_path) -> dict:
+def _emissions(tmp_path, rider_mode: str = "CharacterBody") -> dict:
     """(avant, après, types) que le générateur émet pour une vraie scène où `Plateforme` et `Passager` sont spawnés."""
     from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import resolve_initial_appearance
@@ -87,7 +87,7 @@ def _emissions(tmp_path) -> dict:
     plateforme.actor.components += [CollisionShapeComponent(solid=False, response="block"),
                                     PhysicsBodyComponent(mode="KinematicBody")]
     passager = Prefab(name="Passager")
-    passager.actor.components += [CollisionShapeComponent(solid=True), PhysicsBodyComponent(mode="CharacterBody")]
+    passager.actor.components += [CollisionShapeComponent(solid=True), PhysicsBodyComponent(mode=rider_mode)]
     scene = Scene(name="S", physics_enabled=True, actors=[])
     project = Project(tmp_path)
     project.scenes.items = [scene]
@@ -101,15 +101,14 @@ def _emissions(tmp_path) -> dict:
             "a": models["Passager"]["root_type_id"], "start": spool["start"], "slots": spool["end"]}
 
 
-@pytest.fixture(scope="module")
-def etats(tmp_path_factory):
+def _etats(tmp_path_factory, rider_mode: str) -> dict[str, list[tuple[int, ...]]]:
     """Par scénario, image par image : (x, y du passager en Q8, déplacement porté x, y)."""
     compilateur = compilateur_hote()
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; le transport est vérifié en CI")
     from codegen.runtime_codegen.physics.kinematic import kinematic_helper_lines
 
-    e = _emissions(tmp_path_factory.mktemp("transport_scene_projet"))
+    e = _emissions(tmp_path_factory.mktemp(f"transport_scene_projet_{rider_mode}"), rider_mode)
     assert any("kinematic_carry_all" in ligne for ligne in e["after"]), (
         "aucun transport émis : la sonde ne vérifierait rien")
     assert e["slots"] >= e["start"] + 2
@@ -119,7 +118,7 @@ def etats(tmp_path_factory):
               .replace("@TYPE_K@", str(e["k"])).replace("@TYPE_A@", str(e["a"]))
               .replace("@START@", str(e["start"])).replace("@SLOTS@", str(e["slots"]))
               .replace("@FRAMES@", str(FRAMES)).replace("@RUNS@", runs))
-    dossier = tmp_path_factory.mktemp("transport_scene")
+    dossier = tmp_path_factory.mktemp(f"transport_scene_{rider_mode}")
     (dossier / "probe.c").write_text(source, encoding="utf-8")
     binaire = dossier / "probe"
     construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),
@@ -136,6 +135,12 @@ def etats(tmp_path_factory):
     return etats
 
 
+@pytest.fixture(scope="module")
+def etats(tmp_path_factory):
+    """Par scénario, image par image : (x, y du passager Character Q8, déplacement porté x, y)."""
+    return _etats(tmp_path_factory, "CharacterBody")
+
+
 def test_une_plateforme_qui_glisse_porte_son_passager_a_chaque_image(etats):
     glisse = etats["glisse_a_droite"]
     assert all(e[2:] == (512, 0) for e in glisse)
@@ -144,6 +149,16 @@ def test_une_plateforme_qui_glisse_porte_son_passager_a_chaque_image(etats):
 
 def test_une_plateforme_qui_monte_porte_son_passager_a_chaque_image(etats):
     monte = etats["monte"]
+    assert all(e[2:] == (0, -256) for e in monte)
+    assert monte[-1][:2] == (48 << 8, (42 << 8) - FRAMES * 256)
+
+
+def test_une_plateforme_transporte_aussi_un_rigid(tmp_path_factory):
+    etats_rigid = _etats(tmp_path_factory, "RigidBody")
+    glisse = etats_rigid["glisse_a_droite"]
+    monte = etats_rigid["monte"]
+    assert all(e[2:] == (512, 0) for e in glisse)
+    assert glisse[-1][:2] == ((48 << 8) + FRAMES * 512, 42 << 8)
     assert all(e[2:] == (0, -256) for e in monte)
     assert monte[-1][:2] == (48 << 8, (42 << 8) - FRAMES * 256)
 
