@@ -76,6 +76,10 @@ def extern_lines(p, all_scene_data: list[dict], scene_pis: list, actor_defined_e
             return True
         return ev in actor_defined_events.get(sym, set())
 
+    def _signals(sym):
+        return actor_defined_events is None or any(
+            name.startswith("on_signal_") for name in actor_defined_events.get(sym, set()))
+
     for d, _spi in zip(all_scene_data, scene_pis):
         sc = d["scene"]
         sc_sym = c_sym(sc.name)
@@ -102,12 +106,16 @@ def extern_lines(p, all_scene_data: list[dict], scene_pis: list, actor_defined_e
                                 L.append(f"extern void {s}_{ev}(Actor*,Area*,u8);")
                             else:
                                 L.append(f"extern void {s}_{ev}(Actor*);")
+                    if _signals(s):
+                        L.append(f"extern void {s}_on_signal(Actor*,int,Actor*,int);")
         if getattr(sc, "script", ""):
             L += [
                 f"extern void {sc_sym}_scene_on_start(void);",
                 f"extern void {sc_sym}_scene_on_update(void);",
                 f"extern void {sc_sym}_scene_on_late_update(void);",
             ]
+            if _signals(f"{sc_sym}_scene"):
+                L.append(f"extern void {sc_sym}_scene_on_signal(int,Actor*,int);")
         L += area_extern_lines(p, sc)
     L.append("")
     return L

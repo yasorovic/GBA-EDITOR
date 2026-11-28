@@ -191,6 +191,8 @@ def generate_runtime_api(
         "/* Internal support for the `$local` markers in text.draw literals. */",
         "extern void text_args_clear(void);",
         "extern void text_arg_set(int n, int value);",
+        "/* Signal bus: storage and delivery live in main.c, scripts only enqueue. */",
+        "int signal_emit(int signal, Actor* emitter, int value);",
         "",
         '#include "runtime_api_inline.h"',
         "",

@@ -1,4 +1,7 @@
-# Python cache — généré automatiquement, jamais besoin de commiter
+# Tout le cache et temporaire des tests va dans .tmp/ (cache pytest, bytecode,
+# ruff, basetemp) ; cf. .claude/CLAUDE.md, « Tests et build ». Les motifs
+# suivants restent un filet de sécurité si un cache atterrit ailleurs.
+.tmp/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -14,6 +17,11 @@ build-out/
 # Python de la CI (3.12) pour tester un build de release sans toucher à
 # l'interpréteur du poste cf. packaging/nuitka_build.py.
 .venv*/
+
+# Python de base recopié dans le dépôt pour que `.venv-build312` tourne
+# entièrement depuis le workspace (bac à sable de Codex qui refuse l'accès au
+# Python de base hors projet) ; voir AGENTS.md, section Python et tests.
+.python-base-312/
 
 # Packaging : sorties générées par le build (voir packaging/), quel que
 # soit le dossier depuis lequel la commande est lancée (racine ou packaging/)

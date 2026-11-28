@@ -444,6 +444,15 @@ SCREEN_CONSTANTS: dict[str, int] = {
 
 RUNTIME_API: dict[str, ApiFunc] = {
 
+    # La chaîne est résolue au build. Le bus est local à la scène et livre au
+    # début de l'image suivante, jamais pendant l'appel qui l'émet.
+    "signal.emit": ApiFunc(
+        lua_name="signal:emit", c_func="signal_emit",
+        params=[Param("name", PARAM_STR_LITERAL)], variadic=True,
+        ret="bool",
+        doc="Queues a scene-local signal for the next frame. Returns false when its 16-slot queue is full.",
+    ),
+
     # ── Transform : position ─────────────────────────────────────────
     # Ce sont des ÉTATS de l'actor : des PROPRIÉTÉS (self.position, et
     # self.sprite_rotation, self.sprite_scale pour son sprite : cf. RUNTIME_PROPS), pas des appels get/set.

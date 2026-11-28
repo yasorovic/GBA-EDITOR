@@ -116,6 +116,9 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
     def _def(sym, ev):
         if actor_defined_events is None:
             return True
+        if ev == "__signal__":
+            return any(name.startswith("on_signal_")
+                       for name in actor_defined_events.get(sym, set()))
         return ev in actor_defined_events.get(sym, set())
 
     L = ["/* ── Spawn helpers (pooled prefabs) ────────────────────── */"]
@@ -151,6 +154,8 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
         ]:
             if _def(s, ev):
                 L.append(sig)
+        if _def(s, "__signal__"):
+            L.append(f"extern void {s}_on_signal(Actor* self, int signal, Actor* emitter, int value);")
 
         # La table du modèle : l'emplacement et l'entrée d'état de ses instances POSÉES. Le spawn la parcourt
         # avant le pool, `actor:count/get("M", i)` aussi.

@@ -50,6 +50,7 @@ from codegen.runtime_codegen.input_layout import compute_input_layout
 from codegen.runtime_codegen.interact_gen import interact_helper_lines, project_has_interactive
 from codegen.runtime_codegen.lua_compiler import read_state_stride, state_cost_line
 from codegen.runtime_codegen.main_checks import check_main
+from codegen.runtime_codegen.signals import signal_runtime_lines
 from codegen.runtime_codegen.sound_emit import (
     music_runtime_lines, music_runtime_stub_lines, music_transition_tick_lines, sound_box_lines,
 )
@@ -67,6 +68,7 @@ def generate_main(
     prefabs,
     emit,
     actor_defined_events: dict[str, set[str]] | None = None,
+    scene_signal_names: dict[str, list[str]] | None = None,
 ) -> bool:
     """Génère main.c multi-scène et le copie dans p.src_dir/."""
     prefab_actor_sprites = prefab_actor_sprites or []
@@ -146,6 +148,7 @@ def generate_main(
 
     L: list[str] = include_lines(p, all_scene_data, scene_bgi, prefab_actor_sprites, has_sound, soundbank_h)
     L += extern_lines(p, all_scene_data, scene_pis, actor_defined_events)
+    L += signal_runtime_lines()
     L += camera_table_lines(p)
 
     # ── Polices + table des textes ───────────────────────────────
@@ -254,6 +257,7 @@ def generate_main(
             actor_defined_events=actor_defined_events,
             affine_info=compute_affine_info(act_off, sa, _var_names(p)),
             input_layout=_input_layout,
+            signal_names=(scene_signal_names or {}).get(sc.name, []),
         )
 
     # ── Table des scènes, acteur par nom, fondu ───────────────────

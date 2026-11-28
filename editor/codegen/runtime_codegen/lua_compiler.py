@@ -499,12 +499,14 @@ def transpile_all(
     precomputed_global_names: list[str] | None = None,
     precomputed_const_names: list[str] | None = None,
     sound_assets: dict | None = None,
+    signal_names: list[str] | None = None,
 ) -> bool:
     """
     Compile tous les scripts Lua de la scène en C.
 
     Retourne False si une erreur bloquante est trouvée.
     """
+    signal_ids = {name: i for i, name in enumerate(signal_names or ())}
     # L'ORDRE fait foi ici aussi, mais il ne nous appartient PAS : c'est mmutil
     # qui numérote les sons, dans l'ordre où le build les lui passe. `SFX_X` et
     # `MUSIC_X` doivent donc être des rangs dans les listes RÉELLEMENT émises
@@ -901,6 +903,7 @@ def transpile_all(
             actor_sym     = s,
             is_pooled     = actor.name in _singleton_reps,
             scene_sym     = c_sym(scene.name),
+            signal_ids    = signal_ids,
             input_masks   = input_layout.masks,
             input_sequences = input_layout.sequences,
             input_buffered_bits = input_layout.buffered_bits,
@@ -1060,6 +1063,7 @@ def transpile_all(
             actor_name    = pf.name,
             actor_sym     = pf_sym,
             scene_sym     = scene_sym,
+            signal_ids    = signal_ids,
             input_masks   = input_layout.masks,
             input_sequences = input_layout.sequences,
             input_buffered_bits = input_layout.buffered_bits,
@@ -1140,6 +1144,7 @@ def transpile_all(
         actor_name    = scene.name,
         actor_sym     = scene_s,
         scene_sym     = scene_s,
+        signal_ids    = signal_ids,
         input_masks   = input_layout.masks,
         input_sequences = input_layout.sequences,
         input_buffered_bits = input_layout.buffered_bits,
@@ -1287,6 +1292,7 @@ def transpile_all(
             actor_name    = cam.name,
             actor_sym     = cam_sym,
             scene_sym     = c_sym(scene.name),
+            signal_ids    = signal_ids,
             input_masks   = input_layout.masks,
             input_sequences = input_layout.sequences,
             input_buffered_bits = input_layout.buffered_bits,

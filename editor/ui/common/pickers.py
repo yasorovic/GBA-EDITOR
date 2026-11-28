@@ -97,8 +97,8 @@ def attached_script_slot(
         if not rel:
             return None
         proj = project()
-          path = proj.script_path(rel) if proj is not None else None
-          name = rel
+        path = proj.script_path(rel) if proj is not None else None
+        name = rel
         if path is None or not path.exists():
             return PickerEntry(label('pick.name_missing', name=name), rel, missing=True)
         return PickerEntry(name, rel)
@@ -126,7 +126,7 @@ def attached_script_slot(
 
     def _open():
         proj, rel = project(), slot.value()
-          path = proj.script_path(rel) if proj is not None and rel else None
+        path = proj.script_path(rel) if proj is not None and rel else None
         if path is not None and path.exists():
             open_file(str(path))
 

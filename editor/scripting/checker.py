@@ -29,7 +29,7 @@ from .parser import (
     ARRAY_CTOR, array_dims, GRID_CTOR, GRID_STEPS, grid_dims,
     DATA_NS, DATA_TABLE_NS, data_grid_ref, data_kind_alone,
     data_legacy_ref, data_table_ref, REQUIRE_FN, require_target, local_names,
-    assigned_names, sequence_name, wait_call, WAIT_FN, WAIT_UNTIL_FN, WAIT_FNS,
+    assigned_names, sequence_name, signal_name, wait_call, WAIT_FN, WAIT_UNTIL_FN, WAIT_FNS,
     SEQUENCE_PREFIX,
 )
 from . import lua_subset
@@ -37,7 +37,7 @@ from .exports_parser import KNOWN_TYPES as KNOWN_EXPORT_TYPES
 # Boutons GBA : liste unique définie dans `core.models`.
 from core.models.settings import BUTTON_NAMES
 from codegen.c_names import c_ident
-from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_ACTOR_PROPS, REMOVED_EVENTS, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND,
+from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_ACTOR_PROPS, REMOVED_EVENTS, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND, Param,
                   ALL_KNOWN_EVENTS, OWNER_KINDS_WITH_SELF, DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX,
                   DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE,
                   DOMAIN_MUSIC_BOX_TRIGGER, DOMAIN_MUSIC_SECTION,
@@ -288,6 +288,7 @@ class Checker:
                 fn for fn in script.functions
                 if ("." not in fn.name
                     and sequence_name(fn.name) is None
+                    and signal_name(fn.name) is None
                     and fn.name not in ALL_KNOWN_EVENTS
                     and fn.name not in (self.ctx.frame_event_names or ()))
             ]
@@ -478,7 +479,7 @@ class Checker:
             # Un événement RETIRÉ a déjà son diagnostic, qui dit quoi écrire à la place (`_check_function`) : un second
             # message, générique, le noierait.
             if ("." in name or name in ALL_KNOWN_EVENTS or name in frame_events or name in REMOVED_EVENTS
-                    or sequence_name(name) is not None):
+                    or sequence_name(name) is not None or signal_name(name) is not None):
                 continue
             camel = len(name) > 2 and name[:2].lower() == "on" and name[2].isupper()
             if not (name.startswith("on_") or camel):
@@ -1989,6 +1990,7 @@ class Checker:
     def _check_function(self, fn: LuaFunction, check_event_names: bool = True):
         # Les fonctions de behavior ne sont pas des gestionnaires d'événements.
         seq = sequence_name(fn.name)
+        signal = signal_name(fn.name)
         is_frame_event = fn.name in (self.ctx.frame_event_names or ())
         is_helper = fn.name in self._helpers
         admitted = self._admitted_events()
@@ -2002,7 +2004,7 @@ class Checker:
                 "error",
                 f"Event '{fn.name}' is not available for a "
                 f"{_OWNER_LABELS.get(self.ctx.owner_kind, self.ctx.owner_kind)} script: the events allowed here are {', '.join(admitted)}."))
-        elif check_event_names and not is_helper and seq is None and fn.name not in admitted and not is_frame_event:
+        elif check_event_names and not is_helper and seq is None and signal is None and fn.name not in admitted and not is_frame_event:
             # Un nom inconnu produit du code mort ou une erreur C. Les événements d'animation sont admis.
             self.errors.append(CheckError(
                 "error",
@@ -2015,10 +2017,27 @@ class Checker:
             self._check_sequence_waits(fn, seq)
         if is_helper:
             self._check_helper_returns(fn)
-        is_event = fn.name in ALL_KNOWN_EVENTS or seq is not None or is_frame_event
+        is_event = fn.name in ALL_KNOWN_EVENTS or seq is not None or signal is not None or is_frame_event
         self._check_control_flow(fn.body, in_loop=False, returns_nothing=is_event and not is_helper)
         if check_event_names and fn.name in EVENT_REGISTRY:
             self._check_event_params(fn)
+        if signal is not None:
+            if self.ctx.owner_kind in ("area", "camera"):
+                self.errors.append(CheckError(
+                    "error", f"`{fn.name}`: signals are received by actor, prefab and scene scripts in this first tranche."))
+            if not re.fullmatch(r"[a-z][a-z0-9_]*", signal):
+                self.errors.append(CheckError(
+                    "error", f"`{fn.name}`: a signal name uses lowercase letters, digits and underscores."))
+            extra = fn.params[2:]
+            if extra:
+                self.errors.append(CheckError(
+                    "error", f"{fn.name}(): a signal provides at most `emitter` and `value`, not {', '.join(extra)}."))
+            if fn.params[:2] not in ([], ["emitter"], ["emitter", "value"]):
+                self.errors.append(CheckError(
+                    "error", f"{fn.name}(): signal parameters are `emitter, value` in that order."))
+            for name, typ in (("emitter", REF_ACTOR),):
+                if name in fn.params:
+                    self._ref_types[name] = typ
         # Les attentes sont autorisées uniquement au premier niveau d'une séquence.
         previous, self._current_function = self._current_function, fn.name
         # Les paramètres d'événement de contact sont des références de boîte.
@@ -2033,6 +2052,8 @@ class Checker:
         self._check_block(fn.body, seq_top=seq is not None)
         for name in box_params:
             self._ref_types.pop(name, None)
+        if signal is not None and "emitter" in fn.params:
+            self._ref_types.pop("emitter", None)
         self._current_function = previous
 
     def _check_control_flow(self, stmts: list, in_loop: bool, returns_nothing: bool) -> None:
@@ -3071,6 +3092,18 @@ class Checker:
         `other`. `library` est celle d'un ENFANT (`self.Canon`) : ses sprites sont
         connus au build, le nom se juge contre eux."""
         if key in ("actor.get", "actor.count", "actor.clear") and self._check_model_instances(key, args):
+            return
+        if key == "signal.emit":
+            if not 1 <= len(args) <= 3:
+                self.errors.append(CheckError(
+                    "error", f"signal:emit(): 1 to 3 argument(s) expected, {len(args)} given."))
+                return
+            if not isinstance(args[0], ExprString):
+                self.errors.append(CheckError("error", "signal:emit(): `name` is a string literal."))
+            if len(args) >= 2:
+                self._check_arg_type(key, Param("emitter", REF_ACTOR), args[1])
+            if len(args) >= 3:
+                self._check_arg_type(key, Param("value", "int"), args[2])
             return
         expected = len(api.params)
         got      = len(args)

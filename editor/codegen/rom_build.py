@@ -453,9 +453,10 @@ class BuildWorker(EventEmitter, threading.Thread):
 
             # Collecte des events définis + écriture globals.h/c depuis project.globals
             actor_defined_events: dict[str, set[str]] = {}
+            scene_signal_names: dict[str, list[str]] = {}
             global_names: list[str] = []
             if ok:
-                global_names = self._write_project_globals(p, all_scene_data, actor_defined_events)
+                global_names = self._write_project_globals(p, all_scene_data, actor_defined_events, scene_signal_names)
             if ok: self._emit("progress", 0.60)
 
             # Écriture constants.h depuis project.constants
@@ -490,6 +491,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                         # Les #define SFX_*/MUSIC_* sont des rangs dans ce que
                         # mmutil a reçu, pas dans le catalogue du projet.
                         sound_assets=sound_assets,
+                        signal_names=scene_signal_names.get(d["scene"].name, []),
                     )
             if ok: self._emit("progress", 0.80)
 
@@ -498,6 +500,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                     p, all_scene_data, sound_assets,
                     prefab_actor_sprites=prefab_actor_sprites,
                     actor_defined_events=actor_defined_events,
+                    scene_signal_names=scene_signal_names,
                 )
             if ok: self._emit("progress", 0.88)
             # Le balayage remplace le rmtree que `prepare_build` faisait en tête
@@ -979,7 +982,8 @@ class BuildWorker(EventEmitter, threading.Thread):
     # ── Globals projet + collecte des events définis ──────────────────
 
     def _write_project_globals(self, p, all_scene_data,
-                                actor_defined_events: dict | None = None) -> list[str]:
+                                actor_defined_events: dict | None = None,
+                                scene_signal_names: dict | None = None) -> list[str]:
         """
         Génère globals.h/c depuis project.globals (source de vérité explicite).
         Parse aussi les scripts pour collecter actor_defined_events (events implémentés).
@@ -998,11 +1002,13 @@ class BuildWorker(EventEmitter, threading.Thread):
             return names
 
         from scripting.parser import sequence_name as _sequence_name
+        import re
 
-        def _collect_events(sym, sp):
+        def _collect_events(sym, sp, scene_name):
             if sp and sp.exists() and sp.suffix.lower() == ".lua":
                 try:
-                    ast = _parse(sp.read_text(encoding="utf-8"))
+                    source = sp.read_text(encoding="utf-8")
+                    ast = _parse(source)
                     events = {fn.name for fn in ast.functions}
                     # Une séquence avance à la fin d'`on_update` : un script qui
                     # n'en écrit pas mais déclare une séquence a quand même
@@ -1011,6 +1017,11 @@ class BuildWorker(EventEmitter, threading.Thread):
                     if any(_sequence_name(n) is not None for n in events):
                         events.add("on_update")
                     actor_defined_events[sym] = events
+                    if scene_signal_names is not None:
+                        signals = scene_signal_names.setdefault(scene_name, [])
+                        signals.extend(fn.name[len("on_signal_"):] for fn in ast.functions
+                                       if fn.name.startswith("on_signal_"))
+                        signals.extend(re.findall(r'signal\s*:\s*emit\s*\(\s*["\']([a-z][a-z0-9_]*)["\']', source))
                 except LuaParseError:  # tolerated: a syntax error is reported by the script validator
                     pass
 
@@ -1019,13 +1030,13 @@ class BuildWorker(EventEmitter, threading.Thread):
             for actor, _ in d["scene_actors"]:
                 comp = actor.get_component("script")
                 if comp and comp.active and comp.script:
-                    _collect_events(scene_actor_sym(scene.name, actor.name), p.asset_abs(comp.script))
+                    _collect_events(scene_actor_sym(scene.name, actor.name), p.asset_abs(comp.script), scene.name)
             scene_script = getattr(scene, "script", "")
             if scene_script:
-                _collect_events(c_sym(scene.name) + "_scene", p.asset_abs(scene_script))
+                _collect_events(c_sym(scene.name) + "_scene", p.asset_abs(scene_script), scene.name)
             # Les scripts d'Area : la clé est le préfixe de leurs points d'entrée (`<Scène>_<Area>_area`).
             for _rank, area, area_sp in scripted_areas(p, scene):
-                _collect_events(area_hook_prefix(scene, area), area_sp)
+                _collect_events(area_hook_prefix(scene, area), area_sp, scene.name)
 
         # Prefabs poolés : les fonctions émises sont PER-SCÈNE (`<Scène>_<Prefab>`),
         # donc les events se collectent sous cette même clé,
@@ -1040,7 +1051,27 @@ class BuildWorker(EventEmitter, threading.Thread):
                 sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
                 if sc and sc.script:
                     _collect_events(f"{scene_sym}_{c_sym(pf.name)}",
-                                    p.script_path(sc.script))
+                                    p.script_path(sc.script), d["scene"].name)
+
+        # Un module ou Behavior est inliné dans le script qui le requiert. Son
+        # émission doit donc recevoir le même id que son propriétaire, même si
+        # le collecteur léger ne suit pas encore le graphe des require.
+        from core import lua_scripts
+        module_signals: set[str] = set()
+        for module_path in lua_scripts.library_paths(p).values():
+            try:
+                module_signals.update(re.findall(
+                    r'signal\s*:\s*emit\s*\(\s*["\']([a-z][a-z0-9_]*)["\']',
+                    module_path.read_text(encoding="utf-8")))
+            except OSError:
+                continue
+        if scene_signal_names is not None and module_signals:
+            for scene in all_scene_data:
+                scene_signal_names.setdefault(scene["scene"].name, []).extend(module_signals)
+
+        if scene_signal_names is not None:
+            for scene_name, signals in scene_signal_names.items():
+                scene_signal_names[scene_name] = sorted(set(signals))
 
         return names
 
@@ -1071,24 +1102,26 @@ class BuildWorker(EventEmitter, threading.Thread):
 
     def _step_transpile_scripts(self, p, scene, scene_actors, scene_names=None,
                                  precomputed_global_names=None, precomputed_const_names=None,
-                                 sound_assets=None):
+                                 sound_assets=None, signal_names=None):
         return transpile_all(
             p, scene, scene_actors, self.project.prefabs, self._emit,
             scene_names=scene_names,
             precomputed_global_names=precomputed_global_names,
             precomputed_const_names=precomputed_const_names,
             sound_assets=sound_assets,
+            signal_names=signal_names,
         )
 
     # ── Génération de main.c ──────────────────────────────────────────
 
     def _step_gen_main(self, p, all_scene_data,
                        sound_assets=None, prefab_actor_sprites=None,
-                       actor_defined_events=None):
+                       actor_defined_events=None, scene_signal_names=None):
         return generate_main(
             p, all_scene_data, sound_assets,
             prefab_actor_sprites or [], self.project.prefabs, self._emit,
             actor_defined_events=actor_defined_events,
+            scene_signal_names=scene_signal_names,
         )
 
     # ── Étape 4 : make ────────────────────────────────────────────

@@ -45,6 +45,7 @@ def gen_scene_tick(
     actor_defined_events: dict[str, set[str]] | None = None,
     affine_info: dict | None = None,
     input_layout=None,
+    signal_names: list[str] | None = None,
 ) -> list[str]:
     """Génère le tick d'une scène : QUATRE fonctions de phase (`scene_tick_<scène>_<phase>`) et le répartiteur
     `scene_tick_<scène>` qui les appelle dans l'ordre.
@@ -71,7 +72,29 @@ def gen_scene_tick(
     def _def(s, ev):
         if actor_defined_events is None:
             return True
+        if ev == "__signal__":
+            return any(name.startswith("on_signal_")
+                       for name in actor_defined_events.get(s, set()))
         return ev in actor_defined_events.get(s, set())
+
+    # Les signaux de l'image précédente sont livrés AVANT les on_update. Ils
+    # ne peuvent donc pas modifier la physique de l'image qui les a émis.
+    any_actor_signal = any(_def(m["sym"], "__signal__") for m in shared_pool_gen.shared_models(pi))
+    any_actor_signal = any_actor_signal or any(
+        _def(_dsym(scene.name, actor.name), "__signal__")
+        for actor, _sprite in scene_actors)
+    scene_signal = _def(f"{sym}_scene", "__signal__")
+    if signal_names:
+        L += ["    signal_begin_frame();", "    int _sig_id, _sig_value; Actor* _sig_emitter;",
+              "    while(signal_next(&_sig_id, &_sig_emitter, &_sig_value)) {"]
+        if any_actor_signal:
+            L += ["        SLOT_EACH(_k){", "            Actor* _a=&g_actors[_k];",
+                  f"            const ModelDesc* _d=&{model_desc_sym(scene)}[_a->type_id];",
+                  "            if(_d->on_signal) _d->on_signal(_a, _sig_id, _sig_emitter, _sig_value);",
+                  "        }"]
+        if scene_signal:
+            L.append(f"        {sym}_scene_on_signal(_sig_id, _sig_emitter, _sig_value);")
+        L.append("    }")
 
     # Le code Lua de chaque posé : celui de son modèle pour une instance liée (`_dsym`), None sans script.
     placed_scripts = [_dsym(scene.name, actor.name) if actor_offset + j in lua_idx else None

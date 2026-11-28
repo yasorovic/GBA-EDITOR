@@ -128,6 +128,8 @@ def model_desc_lines(p, scene, scene_actors, pi, placed_scripts=None, has_event=
                              ("on_late_update", "on_late_update")):
             if script and has_event(script, event):
                 out[field] = f"{script}_{event}"
+        if script and has_event(script, "__signal__"):
+            out["on_signal"] = f"{script}_on_signal"
         if script and physics_body_mode(owner) == PHYSICS_BODY_CHARACTER and has_event(script, "on_crushed"):
             out["on_crushed"] = f"{script}_on_crushed"
         contact = [f"{script}_{ev}" if script and has_event(script, ev) else "0" for ev in CONTACT_EVENTS]

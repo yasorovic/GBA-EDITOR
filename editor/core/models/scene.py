@@ -757,7 +757,7 @@ class Scene(Resource):
     # la piste courante) : nommer explicitement le thème dans douze salles se
     # comporte donc comme l'héritage, et non comme douze redémarrages.
     music: str = MUSIC_INHERIT
-    script: str = ""       # chemin relatif vers le script Lua de la scène ("" = aucun)
+    script: str = ""       # nom logique du script Lua de la scène ("" = aucun)
     # Le slot BG de l'UI vit sur CHAQUE nœud (`InterfaceNode.bg_slot`), plus au
     # niveau scène : l'ancien `Scene.text_bg` a été retiré (v0.12). La lecture des
     # anciens fichiers seed encore `bg_slot` depuis la clé JSON `text_bg`

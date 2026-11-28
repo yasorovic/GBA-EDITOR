@@ -705,6 +705,7 @@ def require_target(expr) -> Optional[str]:
 # `rom_build` (savoir qu'un script sans `on_update` a quand même quelque chose
 # à faire à chaque frame).
 SEQUENCE_PREFIX = "on_sequence_"
+SIGNAL_PREFIX = "on_signal_"
 WAIT_FN         = "wait"
 WAIT_UNTIL_FN   = "wait_until"
 WAIT_FNS        = (WAIT_FN, WAIT_UNTIL_FN)
@@ -714,6 +715,13 @@ def sequence_name(fn_name: str) -> Optional[str]:
     """`on_sequence_intro` → "intro", sinon None."""
     if fn_name.startswith(SEQUENCE_PREFIX) and len(fn_name) > len(SEQUENCE_PREFIX):
         return fn_name[len(SEQUENCE_PREFIX):]
+    return None
+
+
+def signal_name(fn_name: str) -> Optional[str]:
+    """`on_signal_door_opened` -> `door_opened`, sinon None."""
+    if fn_name.startswith(SIGNAL_PREFIX) and len(fn_name) > len(SIGNAL_PREFIX):
+        return fn_name[len(SIGNAL_PREFIX):]
     return None
 
 

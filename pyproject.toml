@@ -5,6 +5,8 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q -rs -m 'not slow'"
+# Tout le cache vit dans .tmp/ (git-ignoré) ; cf. .claude/CLAUDE.md, « Tests et build ».
+cache_dir = ".tmp/pytest"
 markers = [
     "slow: construit un vrai projet de bout en bout avec devkitPro (quelques minutes) ; exclus par défaut, `pytest -m slow` les lance",
     "native: compile et exécute une sonde C avec le compilateur de la machine (posé par tests/conftest.py)",
@@ -16,5 +18,8 @@ markers = [
 # sont déjà vérifiés par tools/check_architecture.py (ruff y voit à tort les
 # annotations en chaîne) ; imports inutilisés et variables mortes (F401, F841,
 # ~200 relevés) sont laissés de côté tant qu'ils ne sont pas nettoyés.
+[tool.ruff]
+cache-dir = ".tmp/ruff"
+
 [tool.ruff.lint]
 select = ["E9", "F63", "F7"]

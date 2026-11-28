@@ -4,6 +4,24 @@ Cette référence complète le [guide de scripting](scripting.md). Utilisez-la l
 
 Le catalogue exhaustif des fonctions du moteur (arguments, exemples) est tenu à jour dans le panneau **API** de l'éditeur, pas ici — cette page explique ce qui ne se lit pas d'un coup d'œil sur une fiche de fonction : la grammaire du langage, les pièges, les cas qui traversent plusieurs fonctions. Elle suit les **huit mêmes sections** que la barre latérale du panneau **API**, dans le même ordre, pour qu'apprendre par l'une n'oblige pas à réapprendre par l'autre.
 
+## Signaux
+
+Un signal annonce un fait de jeu aux scripts de la scène, sans imposer un ordre d'appel direct. Il est reçu à l'image suivante, avant `on_update`.
+
+```lua
+function on_interact(who)
+    signal:emit("lever_pulled", self, 2)
+end
+
+function on_signal_lever_pulled(emitter, value)
+    if value == 2 then
+        self:play_anim("open")
+    end
+end
+```
+
+Les noms utilisent les minuscules et `_`. La file est locale à la scène, limitée à 16 signaux par image et vidée à la transition. `signal:emit` renvoie `false` si elle est pleine. Un Behavior reste appelé explicitement par son script propriétaire.
+
 ## Le langage
 
 Un script contient des variables, des événements proposés dans le panneau **Events**, des séquences `on_sequence_<nom>` et des fonctions privées déclarées au premier niveau.
@@ -307,6 +325,23 @@ Une grille est un **type de donnée** : lire, écrire, découper. L'**analyse de
 
 Ce qui étend le script lui-même : variables réglables par instance, séquences, fonctions mathématiques.
 
+### Bibliothèques et scripts attachés
+
+Un script attaché à une scène, un Actor, une Area, une caméra ou un Prefab est référencé par son **nom logique**,
+sans chemin ni extension. Son fichier peut être rangé ou déplacé librement dans les dossiers de scripts : ses attaches
+ne changent pas tant que son nom reste le même.
+
+Les bibliothèques statiques s'importent avec la même règle :
+
+```lua
+local patrol = require("Patrol")
+```
+
+Un fichier marqué `-- @module` sert à découper un script long. Un fichier marqué `-- @behavior` désigne une logique
+de gameplay partagée. Les deux sont appelés explicitement par le script propriétaire, par exemple
+`patrol.update(self)`. Leur nom doit être unique, quelle que soit leur nature. Renommer un script propage son nouveau
+nom aux attaches et aux imports `require("Nom")` du projet.
+
 ### Variables exposées (`exports`)
 
 Une table `exports` déclarée au premier niveau expose des variables **réglables par instance** depuis l'inspecteur. Des acteurs ou des Areas qui partagent un script peuvent donner des valeurs différentes à ses exports. Par exemple, trois gardes peuvent utiliser le même `Patrol.lua`, chacun avec sa vitesse.
@@ -460,7 +495,7 @@ La bibliothèque standard de Lua n'est pas embarquée dans la ROM. Les cas usuel
 | Afficher une trace | `debug:log(...)`, visible dans mGBA et retiré des builds release. |
 | Gérer une erreur ou une exception | Un `if` qui contrôle et corrige la valeur. |
 | Choisir entre plusieurs valeurs (`switch`) | `if x == 1 then … elseif x == 2 then … else … end`. Le `else` joue le rôle de `default`. |
-| Charger une bibliothèque statique | `require("Nom")`, résolu au build par nom logique, sans dépendre du dossier qui contient le fichier. Un script marqué `-- @module` découpe un script long ; `-- @behavior` désigne une logique partagée. Les deux sont appelés explicitement, par exemple `movement.step(self)`. Deux bibliothèques de même nom, quelle que soit leur nature, sont une erreur de build. |
+| Charger une bibliothèque statique | `require("Nom")`. Voir [Bibliothèques et scripts attachés](#bibliothèques-et-scripts-attachés). |
 
 Il n'y a pas de `string`, `table`, `os`, `io`, `coroutine`, `utf8`, métatable, fonction de réflexion ni chargement de code à l'exécution.
 

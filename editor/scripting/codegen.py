@@ -29,7 +29,7 @@ from .parser import (
     ExprNumber, ExprBool, ExprNil, ExprString, ExprName, ExprUnsupported,
     ExprIndex, ExprIndexAt, ExprTable, ExprInvoke, ExprCall, ExprBinop, ExprUnop,
     array_dims, grid_dims, require_target, DATA_NS, data_grid_ref, data_table_ref,
-    assigned_names, sequence_name, wait_call, WAIT_FN, WAIT_UNTIL_FN,
+    assigned_names, sequence_name, signal_name, wait_call, WAIT_FN, WAIT_UNTIL_FN,
     local_names,
 )
 # Les volumes du modèle sont des POURCENTAGES ; chaque appel maxmod a sa
@@ -303,6 +303,7 @@ class CodegenContext:
     # Fonctions citées par une frame de sprite : elles sont appelées depuis
     # main.c et doivent donc rester publiques, pas devenir des helpers static.
     frame_event_names: list[str] = field(default_factory=list)
+    signal_ids: dict[str, int] = field(default_factory=dict)
     # `id` des composants sprite de ce propriétaire (ses apparences), dans l'ordre :
     # SPRITE_<ACTEUR>_<ID> = le rang que `OamEntry.appearance` désigne.
     sprite_ids: list[str] = field(default_factory=list)
@@ -615,6 +616,7 @@ class CodeGen:
             else:
                 self._emit_function(fn)
                 defined.add(fn.name)
+        self._emit_signal_dispatch(script)
         # Stubs vides pour les events non définis (évite les erreurs de linker)
         known = self._known_hooks()
         for event in known:
@@ -645,7 +647,8 @@ class CodeGen:
         return ("." not in fn.name
                 and fn.name not in known
                 and fn.name not in (self.ctx.frame_event_names or ())
-                and sequence_name(fn.name) is None)
+                and sequence_name(fn.name) is None
+                and signal_name(fn.name) is None)
 
     def _helper_signature(self, fn: LuaFunction) -> str:
         params = [f"int {p}" for p in fn.params]
@@ -1675,6 +1678,26 @@ class CodeGen:
     # ── Fonctions / handlers ──────────────────────────────────────
 
     def _emit_function(self, fn: LuaFunction):
+        signal = signal_name(fn.name)
+        if signal is not None:
+            if self.ctx.has_self:
+                sig = f"static void {self.ctx.actor_sym}_{fn.name}(Actor* self, Actor* emitter, int value)"
+            else:
+                sig = f"static void {self.ctx.actor_sym}_scene_{fn.name}(Actor* emitter, int value)"
+            self._w(sig + " {")
+            self._indent += 1
+            if "emitter" in fn.params:
+                self._ref_types["emitter"] = REF_ACTOR
+            # Un handler de signal d'un Prefab peut lire ou écrire son état par
+            # instance, exactement comme un hook normal.
+            mark = self._open_state_scope()
+            self._emit_block(fn.body)
+            self._close_state_scope(mark)
+            self._ref_types.pop("emitter", None)
+            self._indent -= 1
+            self._w("}")
+            self._w("")
+            return
         if not self.ctx.has_self:
             sym = self.ctx.actor_sym
             if fn.name in self._known_hooks():
@@ -1725,6 +1748,31 @@ class CodeGen:
         self._w("")
 
     # ── Blocs et statements ───────────────────────────────────────
+
+    def _emit_signal_dispatch(self, script: LuaScript):
+        handlers = [(signal_name(fn.name), fn) for fn in script.functions]
+        handlers = [(name, fn) for name, fn in handlers if name in self.ctx.signal_ids]
+        if not handlers:
+            return
+        if self.ctx.has_self:
+            sig = f"void {self.ctx.actor_sym}_on_signal(Actor* self, int signal, Actor* emitter, int value)"
+        else:
+            sig = f"void {self.ctx.actor_sym}_scene_on_signal(int signal, Actor* emitter, int value)"
+        self._w(sig + " {")
+        self._indent += 1
+        self._w("switch(signal) {")
+        self._indent += 1
+        for name, fn in handlers:
+            target = (f"{self.ctx.actor_sym}_{fn.name}" if self.ctx.has_self
+                      else f"{self.ctx.actor_sym}_scene_{fn.name}")
+            args = "self, emitter, value" if self.ctx.has_self else "emitter, value"
+            self._w(f"case {self.ctx.signal_ids[name]}: {target}({args}); break;")
+        self._w("default: break;")
+        self._indent -= 1
+        self._w("}")
+        self._indent -= 1
+        self._w("}")
+        self._w("")
 
     def _emit_block(self, stmts: list):
         self._block_depth += 1
@@ -2739,6 +2787,16 @@ class CodeGen:
                 and expr.obj.name == "self"
                 and expr.field in (self.ctx.child_refs or {}))
 
+    def _emit_signal_emit(self, args: list) -> str:
+        if not args or not isinstance(args[0], ExprString):
+            return "0"
+        ident = self.ctx.signal_ids.get(args[0].value)
+        if ident is None:
+            return "0"
+        emitter = self._expr(args[1]) if len(args) > 1 else "0"
+        value = self._expr(args[2]) if len(args) > 2 else "0"
+        return f"signal_emit({ident}, {emitter}, {value})"
+
     def _call(self, e: ExprCall) -> str:
         """func(args) ou module.func(args)"""
         key = self._call_key(e.func)
@@ -3614,6 +3672,7 @@ def covered_domains() -> frozenset:
 _CALL_CUSTOM: dict = {
     "array":       CodeGen._emit_array_misuse,
     "grid":        CodeGen._emit_grid_misuse,
+    "signal.emit": CodeGen._emit_signal_emit,
     "navigation.sample_collision": CodeGen._emit_nav_sample_collision,
     "navigation.line_of_sight":    CodeGen._emit_nav_line_of_sight,
     "navigation.spread_from":      CodeGen._emit_nav_spread_from,

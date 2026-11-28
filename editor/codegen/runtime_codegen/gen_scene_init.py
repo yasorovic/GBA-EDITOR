@@ -152,6 +152,7 @@ def _bg_anim_data_lines(sym: str, anims: list[dict], tanims: list[dict]) -> list
 def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay) -> list[str]:
     """Taille du monde, acteurs posés, remise à zéro des acteurs, des entrées OAM et des tables de la scène précédente."""
     L: list[str] = []
+    L.append("    signal_reset();")
     # Taille du monde (canvas) — lue par scene.size.w/.h côté script. Posée à
     # chaque activation, une scène peut donc faire avancer son monde.
     # Taille du monde (canvas) — lue par scene.size.w/.h côté script. Posée à
