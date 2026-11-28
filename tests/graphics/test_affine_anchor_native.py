@@ -27,6 +27,7 @@ TOLERANCE = 1.5      # px : table de sinus en Q8 et divisions entières
 
 class _Forme:
     frame_w = frame_h = FRAME
+    oam_w = oam_h = FRAME          # forme OAM (padded) : 16x16 contient déjà la frame
     oam_shape, oam_size = 2, 1
     tiles_per_frame = 4
 

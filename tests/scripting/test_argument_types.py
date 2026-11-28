@@ -123,7 +123,7 @@ def test_un_argument_bien_type_ou_inconnu_passe(call):
 # ── Complétude : tout le catalogue ──────────────────────────────────────────
 
 _WRONG = {"int": '"x"', "bool": "7", "str": "5", "str_literal": "5", "actor": "5",
-          "vec2": "5", "vec3": "5", "rect": "5"}
+          "vec2": "5", "vec3": "5", "rect": "5", "path": "5"}
 
 
 def test_chaque_type_de_parametre_du_catalogue_a_une_regle():
@@ -151,6 +151,11 @@ def _module_cases():
         # est couvert dans `test_grid_ram.py`. Hors de ce test générique, comme les
         # méthodes récepteur à « : ».
         if key.startswith("navigation."):
+            continue
+        # `signal.emit` est une forme spéciale (1 à 3 arguments, le nom est un
+        # littéral), jugée à part par `checker._check_args` ; sa couverture par
+        # argument vit dans `test_signals.py`, comme pour `navigation`.
+        if key.startswith("signal."):
             continue
         for i, p in enumerate(api.params):
             yield pytest.param(key, i, id=f"{key}[{p.name}:{p.ptype}]")

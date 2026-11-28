@@ -674,7 +674,13 @@ body {
 }
 
 @media (pointer: coarse) {
-  :is(#fullscreen, #controls-toggle, .controls-panel) {
+  :is(#controls-toggle, .controls-panel) {
+    display: none;
+  }
+
+  /* itch.io prend d�j� en charge son propre plein �cran mobile. Les autres
+     h�tes, dont la documentation Backstage, gardent le bouton du lecteur. */
+  .backstage-host-itch #fullscreen {
     display: none;
   }
 

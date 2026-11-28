@@ -1074,8 +1074,16 @@ class PickerSlot(QWidget):
         popup.show_below(self)
 
     def _created(self, name: str):
-        self.set_value(name)
+        # `_on_new` est l'autorité : pour un slot de script, il crée le fichier
+        # puis choisit sa référence (`pick`), ce qui notifie. Poser la valeur
+        # AVANT l'appel la ferait coïncider avec cette référence (le nom logique
+        # vaut le nom tapé) et `pick`, qui ne renotifie pas une valeur inchangée,
+        # n'avertirait jamais l'appelant. On ne pose donc la valeur d'affichage
+        # que si `_on_new` n'en a choisi aucune lui-même (slots pilotés par signal).
+        before = self._value
         self._on_new(name)
+        if self._value == before:
+            self.set_value(name)
 
     def _click_name(self):
         if self._on_open is not None:

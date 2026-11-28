@@ -68,7 +68,8 @@ def test_validateur_bloque_un_behavior_qui_ecrit_self(tmp_path):
     (tmp_path / "bon.lua").write_text("local M = {}\nfunction M.f(actor)\nend\nreturn M\n")
     (tmp_path / "mauvais.lua").write_text(_BEHAVIOR_SELF_PARAMETRE)
     msgs: list[str] = []
-    _check_behaviors_without_self(NS(project=NS(behavior_files=lambda: [tmp_path / "bon.lua", tmp_path / "mauvais.lua"]),
+    _check_behaviors_without_self(NS(project=NS(behavior_files=lambda: [tmp_path / "bon.lua", tmp_path / "mauvais.lua"],
+                                                user_library_dir=tmp_path),
                                      error=lambda _o, m, *_: msgs.append(m)))
     assert len(msgs) == 1 and "mauvais" in msgs[0]
 

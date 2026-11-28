@@ -178,11 +178,12 @@ def floor_tick_lines(p, scene_actors, scene=None, pi=(), resolve_initial_appeara
 
     def pairs(owner, sprite, support_kind) -> list[tuple[int, int, int, int]]:
         """Les couples (boîte de corps, boîte d'appui, garde, sens unique) de ce corps sur ce type d'appui. Un Character
-        repose sur un Static, un Kinematic ou un Rigid ; un Rigid sur tout corps."""
+        repose sur un Static ou un Kinematic ; un Rigid sur tout corps (le solveur d'impulsions le laisse au contact
+        d'un Character ou d'un autre Rigid, sans que le Character, lui, se pose sur le Rigid)."""
         mode = physics_body_mode(owner)
         support_mode = physics_body_mode(owners[support_kind][0])
         if not (mode == PHYSICS_BODY_RIGID or support_mode in (
-                PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID)):
+                PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC)):
             return []
         return [(cb, sb, guard, int(oneway)) for cb, box in physics_collider_entries(owner, sprite)
                 for sb, floor, guard, oneway in floors[support_kind]

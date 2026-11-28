@@ -131,6 +131,7 @@ def test_la_boite_de_collision_a_sa_case_de_blocage(qapp):
         setattr(c, field, value)
 
     insp._set_comp = set_comp
+    insp.is_child_actor = lambda: False
     comp = CollisionShapeComponent()
     host = QWidget()
     layout = QVBoxLayout(host)

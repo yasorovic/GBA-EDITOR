@@ -102,7 +102,8 @@ def _messages(components, lua: str | None = None, tmp_path=None):
     hero = SimpleNamespace(name="Hero", components=[], is_player=True)
     project = SimpleNamespace(scenes=[SimpleNamespace(name="S", actors=[actor, hero])], prefabs=[],
                               sfx=[SimpleNamespace(name="Open")],
-                              asset_abs=lambda rel: root / rel)
+                              asset_abs=lambda rel: root / rel,
+                              script_path=lambda ref: (root / ref) if ref else None)
     ctx = ValidationContext.__new__(ValidationContext)
     ctx.project, ctx._msgs, ctx._focus, ctx._scripts = project, [], "", {}
     _check_interactive(ctx)

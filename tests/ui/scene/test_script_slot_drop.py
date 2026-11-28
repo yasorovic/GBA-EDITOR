@@ -29,7 +29,7 @@ def test_only_one_attachable_script_dropped_from_disk_is_attached(tmp_path, qapp
     assert slot._resolve_drop(disk_mime([chase])) is None          # un behavior ne s'attache à rien
     assert slot._resolve_drop(disk_mime([door, door])) is None     # plusieurs fichiers
     slot.pick(slot._resolve_drop(disk_mime([door])))
-    assert assigned == [p.asset_rel(door)]
+    assert assigned == [p.script_reference(door)]
 
 
 def test_a_new_scene_script_is_born_from_the_scene_template_and_undone(tmp_path, qapp, monkeypatch):
@@ -49,7 +49,7 @@ def test_a_new_scene_script_is_born_from_the_scene_template_and_undone(tmp_path,
     shown[0]._on_new()
 
     created = p.user_library_dir / "Level.lua"
-    assert assigned == [p.asset_rel(created)] and opened == [str(created)]
+    assert assigned == [p.script_reference(created)] and opened == [str(created)]
     assert created.read_text(encoding="utf-8") == "function on_update()\nend\n"
     history.undo()
     assert not created.exists()
@@ -71,7 +71,7 @@ def test_a_new_area_script_is_born_from_the_area_template_and_undone(tmp_path, q
     shown[0]._on_new()
 
     created = p.user_library_dir / "Door.lua"
-    assert assigned == [p.asset_rel(created)] and opened == [str(created)]
+    assert assigned == [p.script_reference(created)] and opened == [str(created)]
     assert created.read_text(encoding="utf-8") == "function on_actor_enter(other, other_box)\nend\n"
     history.undo()
     assert not created.exists()

@@ -6,6 +6,7 @@
   "Collision": "Lire la carte de collision du décor, tuile par tuile.",
   "Navigation": "Analyser une grille pour un passage : échantillonner la collision, propager un coût, en tirer un chemin ou un champ de directions, tester une ligne de vue.",
   "Area": "Les zones de jeu de la scène : les retrouver par leur nom, les activer, les déplacer, les tester.",
+  "Path": "Les chemins de points de la scène : retrouver un chemin par son nom et lire ses points de passage en coordonnées monde.",
   "Sprite": "L'apparence d'un acteur : sprite actif, rotation, échelle et décalage.",
   "Animation": "Lancer une animation et lire son état.",
   "Juiciness": "Des effets de ressenti sur le sprite : écrasement, étirement, rebond, secousse.",
@@ -35,5 +36,6 @@
   "Grid": "Déclarer une grille d'entiers en RAM : la lire case par case, la remplir, et la découper en régions.",
   "Math": "Les fonctions mathématiques sur des entiers.",
   "Sequences": "Lancer, arrêter et suivre des séquences d'actions dans le temps.",
+  "Signal": "Émettre un signal nommé que les autres acteurs reçoivent par leurs handlers on_signal.",
   "Debug": "Écrire dans le journal de mGBA, jamais à l'écran."
 }

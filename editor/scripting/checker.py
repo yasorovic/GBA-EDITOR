@@ -53,7 +53,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_ACTOR_PROPS, 
                   API_MODULES, module_members, REF_TYPES, REF_TYPE_TABLE,
                   ref_member, ref_lineage, REF_ACTOR, STATELESS_MODULES, module_call_form, LAYER_NUMBERS,
                   modernize_message, REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY,
-                  REF_AREA, AREA_EVENTS, AREA_PARAM, DOMAIN_AREA_NAME, DOMAIN_PATH_NAME)
+                  REF_AREA, AREA_EVENTS, AREA_PARAM, DOMAIN_AREA_NAME, DOMAIN_PATH_NAME, REF_PATH)
 
 from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
@@ -3974,6 +3974,7 @@ _PARAM_TYPE_RULES: dict = {
     "str":         ("a string", {"string"}),
     "str_literal": ("a string", {"string"}),
     "actor":       ("an actor (or a collision shape)", {"actor", REF_COLLISION_SHAPE}),
+    "path":        ("a path", {REF_PATH}),
 }
 
 

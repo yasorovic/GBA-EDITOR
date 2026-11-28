@@ -1844,7 +1844,9 @@ def _check_static_imports(ctx: ValidationContext):
     roots: list[Path] = []
     for rel in script_attachments(project):
         path = project.asset_abs(rel)
-        if path is not None and Path(path).suffix.lower() == ".lua":
+        # Un script attaché absent est signalé par `_check_script` ; ne pas le
+        # relire ici évite une seconde erreur, brute et sans contexte de scène.
+        if path is not None and Path(path).suffix.lower() == ".lua" and Path(path).exists():
             roots.append(Path(path))
 
     done: set[Path] = set()

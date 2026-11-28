@@ -23,6 +23,7 @@ const frameFile = document.querySelector("#frame-file");
 const frameStatus = document.querySelector("#frame-status");
 const touchPointer = matchMedia("(pointer: coarse)");
 const isItch = /(^|\.)itch\.(io|zone)$/.test(location.hostname);
+document.documentElement.classList.toggle("backstage-host-itch", isItch);
 const isFirefoxAndroid = /\bAndroid\b.*\bFirefox\//.test(navigator.userAgent);
 const landscapeViewport = matchMedia("(orientation: landscape)");
 const gamepadStatus = document.querySelector("#gamepad-status");

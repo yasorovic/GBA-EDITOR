@@ -55,7 +55,7 @@ def test_une_grille_lue_par_un_behavior_n_est_pas_dite_inutilisee(tmp_path):
     _script(project, "Terrain.lua", "-- @behavior\nlocal M = {}\nfunction M.update()\n"
             "  local value = data.grid.Terrain:at(0, 0)\nend\nreturn M\n")
     project.active_scene.script = _script(
-        project, "Scene.lua", "local terrain = require(\"behaviors/Terrain\")\n"
+        project, "Scene.lua", "local terrain = require(\"Terrain\")\n"
         "function on_update()\nend\n")
 
     assert not any("never read" in message for message in _messages(project))

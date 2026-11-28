@@ -143,6 +143,10 @@ class ProjectPathsMixin:
         from core import lua_scripts
         return lua_scripts.behavior_files(self)
 
+    def private_module_files(self) -> list[Path]:
+        from core import lua_scripts
+        return lua_scripts.private_module_files(self)
+
     @property
     def build_dir(self) -> Path:
         return self.root / "build"

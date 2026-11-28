@@ -46,7 +46,8 @@ def test_une_edition_cree_une_entree_annulable(qapp, history):
 
     assert cam.margin_x == 50
     assert history.can_undo
-    assert history.undo_label == "Camera margins"
+    from ui.common.labels import history_text
+    assert history_text(history.undo_label) == "Change Cam Camera margins"
 
 
 def test_undo_restaure_et_linspecteur_le_reflete(qapp, history):

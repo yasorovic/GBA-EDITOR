@@ -68,7 +68,7 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("scrsb.sec.sound",   ("Audio",)),
     ("scrsb.sec.text_ui", ("Text", "Interface", "Language")),
     ("scrsb.sec.data",    ("Save", "Grid", "Tilemap")),
-    ("scrsb.sec.script",  ("Math", "Sequences", "Debug")),
+    ("scrsb.sec.script",  ("Math", "Sequences", "Signal", "Debug")),
 )
 
 # ─── La couche MOTEUR : repliée sous « Aller plus loin » ────────────
@@ -259,6 +259,10 @@ _FUNC_HOME: dict[str, str] = {
     "collision.fill_rect": "Collision",
     "area.get": "Area", "area:activate": "Area", "area:deactivate": "Area", "area:overlaps": "Area",
     "path.get": "Path", "path:count": "Path", "path:point": "Path",
+    # Le module `signal` : émettre un signal nommé que les acteurs reçoivent par
+    # leurs handlers `on_signal_*`. Nouveau, aucune catégorie du JSON ne dit où
+    # il vit, donc on le range à la main sous « Signal » (section Script).
+    "signal.emit": "Signal",
 }
 
 # Dans « Actor » et « Instance », l'ordre du dictionnaire technique ne raconte pas
