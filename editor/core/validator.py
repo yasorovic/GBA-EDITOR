@@ -429,6 +429,7 @@ def _check_each_scene(ctx: ValidationContext):
         _check_areas(ctx, scene)
         _check_paths(ctx, scene)
         _check_area_handlers(ctx, scene)
+        _check_signal_handlers(ctx, scene)
         _check_backgrounds(ctx)
         _check_collision_map(ctx)
         _check_frame_events(ctx)
@@ -569,6 +570,62 @@ def _check_area_handlers(ctx: ValidationContext, scene):
             if handled:
                 ctx.warn(actor, f"{', '.join(handled)} will never be called: the scene has no Area with an active "
                                 "Trigger. Add a Trigger to an Area, or remove the handler.")
+
+
+def _check_signal_handlers(ctx: ValidationContext, scene):
+    """Signale les deux extrémités orphelines du bus de signaux d'une scène.
+
+    Le build compile les scripts des acteurs posés, de la scène et des modèles
+    que cette scène peut instancier. Les bibliothèques Lua sont volontairement
+    vues comme des émetteurs possibles dans chaque scène, comme lors de la
+    collecte des identifiants de signaux du build.
+    """
+    from codegen.oam_alloc import scene_has_model
+    from core import lua_scripts
+    from core.models.components import ScriptComponent
+    from scripting.parser import signal_name
+
+    emitted: dict[str, list] = {}
+    handled: dict[str, list] = {}
+
+    def collect(owner, path):
+        if not path or path.suffix.lower() != ".lua":
+            return
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            return
+        functions = ctx.script_functions(path)
+        for function in functions:
+            if name := signal_name(function):
+                handled.setdefault(name, []).append(owner)
+        for name in re.findall(r'signal\s*:\s*emit\s*\(\s*["\']([a-z][a-z0-9_]*)["\']', source):
+            emitted.setdefault(name, []).append(owner)
+
+    collect(scene, ctx.project.script_path(getattr(scene, "script", "")))
+    for actor in scene.actors:
+        if not actor.active:
+            continue
+        script = actor.get_component("script")
+        if script and script.active:
+            collect(actor, ctx.project.script_path(script.script))
+    for prefab in ctx.project.prefabs:
+        if not scene_has_model(ctx.project, scene, prefab):
+            continue
+        script = prefab.get_component("script")
+        if script and script.active:
+            collect(prefab, ctx.project.script_path(script.script))
+    for path in lua_scripts.library_paths(ctx.project).values():
+        collect(None, path)
+
+    for name, owners in emitted.items():
+        if name not in handled:
+            ctx.warn(owners[0], f'signal:emit("{name}") has no receiver in scene "{scene.name}". '
+                                f'Add on_signal_{name}(emitter, value), or remove the emit.')
+    for name, owners in handled.items():
+        if name not in emitted:
+            ctx.warn(owners[0], f'on_signal_{name} will never be called in scene "{scene.name}": '
+                                f'no script emits "{name}". Add signal:emit("{name}"), or remove the handler.')
 
 
 def _check_components(ctx: ValidationContext, owner, components):
