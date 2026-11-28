@@ -160,3 +160,56 @@ def test_runtime_delivers_the_next_frame_and_bounds_its_queue(tmp_path):
     assert build.returncode == 0, build.stderr + probe
     run = subprocess.run([str(binary)], capture_output=True, text=True, env=env)
     assert run.returncode == 0, run.stderr
+
+
+def test_signal_dispatch_reaches_each_instance_of_a_prefab(tmp_path):
+    """La passe de scène appelle le routeur de chaque emplacement actif."""
+    compiler = compilateur_hote()
+    if compiler is None:
+        pytest.skip("no host C compiler: prefab signal dispatch was not verified")
+
+    from codegen.runtime_codegen.signals import signal_runtime_lines
+
+    probe = "\n".join([
+        "#include <assert.h>",
+        "typedef struct Actor { int alive; int type_id; } Actor;",
+        "typedef struct { void (*on_signal)(Actor*, int, Actor*, int); } ModelDesc;",
+        *signal_runtime_lines(),
+        "static Actor g_actors[2] = {{1, 1}, {1, 1}};",
+        "static int received[2];",
+        "static void prefab_on_signal(Actor* self, int id, Actor* emitter, int value) {",
+        "    (void)id; (void)emitter; (void)value; received[self - g_actors]++;",
+        "}",
+        "static const ModelDesc g_model_desc[2] = {{0}, {prefab_on_signal}};",
+        "#define SLOT_EACH(k) for(int k = 0; k < 2; k++) if(g_actors[k].alive)",
+        "static void scene_deliver_signals(void) {",
+        "    int _sig_id, _sig_value; Actor* _sig_emitter;",
+        "    signal_begin_frame();",
+        "    while(signal_next(&_sig_id, &_sig_emitter, &_sig_value)) {",
+        "        SLOT_EACH(_k){",
+        "            Actor* _a=&g_actors[_k];",
+        "            const ModelDesc* _d=&g_model_desc[_a->type_id];",
+        "            if(_d->on_signal) _d->on_signal(_a, _sig_id, _sig_emitter, _sig_value);",
+        "        }",
+        "    }",
+        "}",
+        "int main(void) {",
+        "    signal_reset();",
+        "    assert(signal_emit(3, &g_actors[0], 7));",
+        "    scene_deliver_signals();",
+        "    assert(received[0] == 1 && received[1] == 1);",
+        "    return 0;",
+        "}",
+    ])
+    source = tmp_path / "signal_prefab_probe.c"
+    binary = tmp_path / "signal_prefab_probe"
+    source.write_text(probe, encoding="utf-8")
+    env = environnement(compiler)
+    for variable in ("TMP", "TEMP", "TMPDIR"):
+        env[variable] = str(tmp_path)
+    build = subprocess.run(
+        [compiler, "-std=c11", "-Wall", "-Werror", "-O0", "-o", str(binary), str(source)],
+        capture_output=True, text=True, env=env)
+    assert build.returncode == 0, build.stderr + probe
+    run = subprocess.run([str(binary)], capture_output=True, text=True, env=env)
+    assert run.returncode == 0, run.stderr
